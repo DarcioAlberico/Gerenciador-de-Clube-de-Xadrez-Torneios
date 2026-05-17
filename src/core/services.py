@@ -6,6 +6,7 @@ import json
 import logging
 import math
 import secrets
+import shutil
 import sqlite3
 import unicodedata
 from datetime import date, datetime, time, timedelta
@@ -1578,6 +1579,25 @@ class SecurityService:
     def create_backup(self, reason: str = "manual") -> dict[str, Any]:
         path = self.db.backup(reason)
         deleted = self.enforce_backup_retention()
+        
+        cloud_sync_dir = self.db.get_app_settings().get("cloud_sync_dir", "").strip()
+        cloud_status = "not_configured"
+        cloud_path = ""
+        
+        if cloud_sync_dir:
+            cloud_dir_path = Path(cloud_sync_dir)
+            if cloud_dir_path.exists() and cloud_dir_path.is_dir():
+                try:
+                    cloud_target = cloud_dir_path / path.name
+                    shutil.copy2(path, cloud_target)
+                    cloud_status = "success"
+                    cloud_path = str(cloud_target)
+                except Exception as exc:
+                    logger.error("Falha ao copiar backup para nuvem %s: %s", cloud_sync_dir, exc)
+                    cloud_status = f"error: {exc}"
+            else:
+                cloud_status = "invalid_directory"
+        
         self.audit(
             "backup_created",
             entity_type="backup",
@@ -1586,10 +1606,12 @@ class SecurityService:
                 "path": str(path),
                 "reason": reason,
                 "deleted_by_retention": [str(item) for item in deleted],
+                "cloud_sync_status": cloud_status,
+                "cloud_path": cloud_path,
             },
         )
-        logger.info("Backup criado por SecurityService: %s", path)
-        return {"path": path, "deleted": deleted}
+        logger.info("Backup criado por SecurityService: %s (Cloud: %s)", path, cloud_status)
+        return {"path": path, "deleted": deleted, "cloud_status": cloud_status}
 
     def restore_backup(self, backup_path: Path | str) -> Path:
         source = Path(backup_path)

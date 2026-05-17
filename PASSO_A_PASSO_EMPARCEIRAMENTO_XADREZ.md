@@ -978,9 +978,9 @@ Se houver arquivos extras, como banco inicial, imagens e temas, configurar o `.s
 ## 23. Melhorias futuras
 
 **Integrações Externas:**
-- [ ] Atualização Automática de Rating (Importação da lista FIDE/CBX).
-- [ ] Exportação de arquivos compatíveis com federações e Chess-Results.
-- [ ] Exportação PGN das partidas do torneio.
+- [x] Atualização Automática de Rating (Importação da lista FIDE/CBX).
+- [x] Exportação de arquivos compatíveis com federações e Chess-Results.
+- [x] Exportação PGN das partidas do torneio.
 
 **Sistemas de Torneio e Partidas:**
 - [x] Sistema Schuring (Round-Robin / Todos contra todos).
@@ -991,8 +991,8 @@ Se houver arquivos extras, como banco inicial, imagens e temas, configurar o `.s
 ### Opção A: Gestão Visual e Arbitragem
 - [x] Dashboards Visuais (Gráficos) sobre alunos, despesas e receitas.
 - [x] Cadastro de Árbitros (Gestão e Associação a torneios).
-- [ ] Backup automático ou manual em Nuvem (Google Drive, Dropbox, ou S3).
-- [ ] Premiação e controle inteligente por faixa de rating e categorias (emissão automática de diplomas do Top N por categoria).
+- [x] Backup automático ou manual em Nuvem (Google Drive, Dropbox, ou S3).
+- [x] Premiação e controle inteligente por faixa de rating e categorias (emissão automática de diplomas do Top N por categoria).
 
 **Interface e Usabilidade:**
 - [x] Tema claro/escuro.

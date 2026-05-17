@@ -93,12 +93,41 @@ class SettingsPagesMixin:
             sticky="ew",
         )
 
+
+        ctk.CTkLabel(settings_panel, text="Pasta de Nuvem (Google Drive/Dropbox)").grid(
+            row=8,
+            column=0,
+            padx=16,
+            pady=(8, 4),
+            sticky="w",
+        )
+        cloud_dir_entry = ctk.CTkEntry(settings_panel, width=320)
+        cloud_dir_entry.grid(row=15, column=0, padx=16, pady=(0, 8), sticky="ew")
+        cloud_dir_entry.insert(0, str(settings.get("cloud_sync_dir", "")))
+
+        def choose_cloud_dir() -> None:
+            directory = filedialog.askdirectory(
+                title="Escolha a pasta sincronizada em nuvem",
+                initialdir="/",
+            )
+            if directory:
+                cloud_dir_entry.delete(0, "end")
+                cloud_dir_entry.insert(0, directory)
+
+        ctk.CTkButton(settings_panel, text="Escolher nuvem", command=choose_cloud_dir).grid(
+            row=16,
+            column=0,
+            padx=16,
+            pady=(0, 14),
+            sticky="ew",
+        )
+
         ctk.CTkLabel(
             settings_panel,
             text="Seguranca operacional",
             font=ctk.CTkFont(size=14, weight="bold"),
             text_color="#0F172A",
-        ).grid(row=8, column=0, padx=16, pady=(6, 4), sticky="w")
+        ).grid(row=17, column=0, padx=16, pady=(6, 4), sticky="w")
         ctk.CTkLabel(settings_panel, text="Operador local").grid(
             row=9,
             column=0,
@@ -224,6 +253,7 @@ class SettingsPagesMixin:
                     "appearance_mode": appearance_values[appearance_option.get()],
                     "default_export_dir": str(export_dir),
                     "backup_dir": str(backup_dir),
+                    "cloud_sync_dir": cloud_dir_entry.get().strip(),
                 }
             )
             self.security_service.save_security_settings(

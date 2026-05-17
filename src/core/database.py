@@ -2583,6 +2583,7 @@ class Database:
             "appearance_mode",
             "default_export_dir",
             "backup_dir",
+            "cloud_sync_dir",
             "operator_name",
             "operator_role",
             "backup_retention_count",
