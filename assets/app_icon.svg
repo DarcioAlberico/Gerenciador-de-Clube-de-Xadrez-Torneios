@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Albericus">
+  <rect width="256" height="256" rx="48" fill="#0f172a"/>
+  <rect x="40" y="40" width="176" height="176" rx="28" fill="#f8fafc"/>
+  <path d="M78 188h100v18H78z" fill="#0f172a"/>
+  <path d="M94 166h68l10 22H84z" fill="#0f172a"/>
+  <path d="M110 91h36l-7 75h-22z" fill="#0f172a"/>
+  <path d="M99 75h58v18H99z" fill="#0f172a"/>
+  <circle cx="128" cy="57" r="16" fill="#0f172a"/>
+  <path d="M73 72h24v24H73zM159 72h24v24h-24zM73 112h24v24H73zM159 112h24v24h-24z" fill="#d1d5db"/>
+</svg>
