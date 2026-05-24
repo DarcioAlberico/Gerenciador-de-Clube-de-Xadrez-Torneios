@@ -219,8 +219,15 @@ O sistema deve passar a gerenciar:
 - Exportar emparceiramentos, resultados, classificacao e informacoes do torneio
   em HTML/CSS para publicar em uma pagina simples.
 - Gerar pacote estatico local pronto para hospedagem.
-- Futuramente, permitir configuracao de pagina publica do clube ou torneio.
+- Exportar `Chess-Results (TRF16)` para o fluxo FIDE/Swiss-Manager/Chess-Results,
+  com cabecalho do torneio, jogadores, equipes quando aplicavel, dados oficiais,
+  pontos, classificacao e resultados por rodada.
+- Validar a exportacao TRF16 antes de gravar, bloqueando dados estruturais
+  ausentes e exibindo avisos para FIDE ID, federacao, rating, nascimento,
+  arbitro-chefe, ritmo e datas de rodadas incompletas.
+- Manter `PGN (Partidas)` como exportacao complementar para partidas/resultados.
 - Manter exportacoes em CSV, XLSX e PDF.
+- Futuramente, permitir configuracao de pagina publica do clube ou torneio.
 
 #### Responsaveis
 

@@ -14,3 +14,5 @@ backups/
 logs/
 exports/*
 !exports/.gitkeep
+FIDE/
+Manual/media__*.png
