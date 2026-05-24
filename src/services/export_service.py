@@ -1821,7 +1821,7 @@ class ExportService:
         path = Path(file_path)
         with path.open("w", encoding="utf-8") as f:
             for round_data in sorted(self.db.list_rounds(tournament_id), key=lambda r: r["number"]):
-                pairings = self.db.list_pairings(round_data["id"])
+                pairings = self.db.get_pairings_for_round(round_data["id"])
                 for p in pairings:
                     if p["is_bye"]:
                         continue
@@ -1847,69 +1847,392 @@ class ExportService:
                     f.write(f'[Result "{res_str}"]\n')
                     f.write(f'\n{res_str}\n\n')
 
-    def export_trf(self, tournament_id: int, file_path: str | Path) -> None:
+    def export_trf(self, tournament_id: int, file_path: str | Path) -> list[str]:
+        return self.export_chess_results_trf(tournament_id, file_path)
+
+    def export_chess_results_trf(self, tournament_id: int, file_path: str | Path) -> list[str]:
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
             raise AppError("Selecione um torneio valido.")
-            
-        players = self.db.list_players(tournament_id)
-        players = sorted(players, key=lambda p: (-int(p.get("rating") or 0), str(p.get("name") or "").casefold()))
-        
+
+        settings = self.db.get_tournament_settings(tournament_id) or {}
+        warnings = self.validate_chess_results_trf(tournament_id)
+        players = sorted(
+            self.db.list_players(tournament_id, active_only=False),
+            key=lambda player: (
+                -self._trf_rating(player),
+                player_pairing_name(player).casefold(),
+                int(player.get("id") or 0),
+            ),
+        )
+        rounds = sorted(self.db.list_rounds(tournament_id), key=lambda round_data: round_data["number"])
+        schedule = {
+            int(item["round_number"]): str(item.get("date") or "").strip()
+            for item in self.db.list_round_schedule(tournament_id)
+        }
+        is_team_tournament = tournament.get("competition_type") == "team"
+        pairings_by_round = self._trf_pairings_by_round(tournament, rounds)
+        player_id_to_start_rank = {int(player["id"]): index for index, player in enumerate(players, start=1)}
+        standings_by_player = self._trf_player_standings(tournament, players)
+        round_count = max(
+            [int(tournament.get("rounds_count") or 0), *(int(round_data["number"]) for round_data in rounds)],
+            default=0,
+        )
+        teams = self.db.list_teams(tournament_id, active_only=False) if is_team_tournament else []
+
         path = Path(file_path)
-        with path.open("w", encoding="utf-8") as f:
-            f.write(f"012 {tournament['name']}\n")
-            f.write(f"022 {tournament.get('location') or ''}\n")
-            f.write("032 \n")
-            start = str(tournament.get('start_date') or '').replace("-", "/")
-            end = str(tournament.get('end_date') or '').replace("-", "/")
-            f.write(f"042 {start}\n")
-            f.write(f"052 {end}\n")
-            f.write(f"062 {len(players)}\n")
-            
-            rounds = sorted(self.db.list_rounds(tournament_id), key=lambda r: r["number"])
-            f.write("132 \n")
-            
-            player_id_to_seq = {p["id"]: i+1 for i, p in enumerate(players)}
-            
-            for i, p in enumerate(players):
-                seq = i + 1
-                name = str(p.get("name") or "")[:32].ljust(33)
-                rating = str(p.get("rating") or "0").rjust(4)
-                fide_id = str(p.get("fide_id") or "").rjust(11)
-                
-                line = f"{seq:4}           {name} {rating}       {fide_id}                      "
-                
-                for r in rounds:
-                    pairings = self.db.list_pairings(r["id"])
-                    my_pairing = next((pa for pa in pairings if pa["white_player_id"] == p["id"] or pa["black_player_id"] == p["id"]), None)
-                    if not my_pairing:
-                        line += "  0000 - - "
+        with path.open("w", encoding="utf-8", newline="") as handle:
+            handle.write(self._trf_tournament_line("012", tournament["name"]))
+            handle.write(self._trf_tournament_line("022", tournament.get("location", "")))
+            handle.write(self._trf_tournament_line("032", settings.get("federation", "")))
+            handle.write(self._trf_tournament_line("042", self._trf_date(tournament.get("start_date"), long_year=True)))
+            handle.write(self._trf_tournament_line("052", self._trf_date(tournament.get("end_date"), long_year=True)))
+            handle.write(self._trf_tournament_line("062", str(len(players))))
+            handle.write(self._trf_tournament_line("072", str(sum(1 for player in players if self._trf_rating(player) > 0))))
+            handle.write(self._trf_tournament_line("082", str(len(teams))))
+            handle.write(self._trf_tournament_line("092", self._trf_tournament_type(tournament, settings)))
+            handle.write(self._trf_tournament_line("102", self._trf_chief_arbiter(tournament_id, settings)))
+            for deputy in self._trf_deputy_arbiters(tournament_id, settings):
+                handle.write(self._trf_tournament_line("112", deputy))
+            handle.write(self._trf_tournament_line("122", tournament.get("time_control", "")))
+            handle.write(self._trf_round_dates_line(round_count, schedule))
+
+            for player in players:
+                handle.write(
+                    self._trf_player_line(
+                        player,
+                        player_id_to_start_rank,
+                        standings_by_player,
+                        pairings_by_round,
+                        round_count,
+                        settings,
+                    )
+                )
+            for team in teams:
+                handle.write(self._trf_team_line(team, player_id_to_start_rank))
+
+        return warnings
+
+    def validate_chess_results_trf(self, tournament_id: int) -> list[str]:
+        tournament = self.db.get_tournament(tournament_id)
+        if not tournament:
+            raise AppError("Selecione um torneio valido.")
+
+        settings = self.db.get_tournament_settings(tournament_id) or {}
+        players = self.db.list_players(tournament_id, active_only=False)
+        rounds = self.db.list_rounds(tournament_id)
+        warnings: list[str] = []
+
+        if not players:
+            raise AppError("Cadastre jogadores antes de exportar para Chess-Results/TRF16.")
+        if not str(tournament.get("name") or "").strip():
+            raise AppError("Informe o nome do torneio antes de exportar para Chess-Results/TRF16.")
+        if tournament.get("competition_type") == "team" and not self.db.list_teams(tournament_id, active_only=False):
+            raise AppError("Cadastre equipes antes de exportar um TRF16 por equipes.")
+
+        required_tournament_fields = [
+            ("location", "cidade/local"),
+            ("start_date", "data de inicio"),
+            ("end_date", "data de termino"),
+            ("time_control", "ritmo de jogo"),
+        ]
+        for field, label in required_tournament_fields:
+            if not str(tournament.get(field) or "").strip():
+                warnings.append(f"Torneio sem {label}.")
+        if not str(settings.get("federation") or "").strip():
+            warnings.append("Torneio sem federacao FIDE.")
+        if not self._trf_chief_arbiter(tournament_id, settings):
+            warnings.append("Torneio sem arbitro-chefe.")
+        if not rounds:
+            warnings.append("Torneio sem rodadas geradas; jogadores serao exportados sem resultados.")
+
+        schedule = {
+            int(item["round_number"]): str(item.get("date") or "").strip()
+            for item in self.db.list_round_schedule(tournament_id)
+        }
+        rounds_count = int(tournament.get("rounds_count") or 0)
+        missing_round_dates = [
+            str(round_number)
+            for round_number in range(1, rounds_count + 1)
+            if not schedule.get(round_number)
+        ]
+        if missing_round_dates:
+            warnings.append(f"Rodadas sem data no calendario: {', '.join(missing_round_dates)}.")
+
+        missing_fide = []
+        missing_birth = []
+        missing_federation = []
+        missing_rating = []
+        for player in players:
+            name = player_pairing_name(player)
+            if not str(player.get("fide_id") or "").strip():
+                missing_fide.append(name)
+            if not str(player.get("birth_date") or "").strip():
+                missing_birth.append(name)
+            if not str(player.get("federation_id") or settings.get("federation") or "").strip():
+                missing_federation.append(name)
+            if self._trf_rating(player) <= 0:
+                missing_rating.append(name)
+
+        warnings.extend(self._trf_missing_field_warnings("FIDE ID", missing_fide))
+        warnings.extend(self._trf_missing_field_warnings("data de nascimento", missing_birth))
+        warnings.extend(self._trf_missing_field_warnings("federacao", missing_federation))
+        warnings.extend(self._trf_missing_field_warnings("rating FIDE", missing_rating))
+        return warnings
+
+    @staticmethod
+    def _trf_clean(value: Any, width: int | None = None) -> str:
+        text = unicodedata.normalize("NFKD", str(value or ""))
+        text = "".join(char for char in text if not unicodedata.combining(char))
+        text = " ".join(text.replace("\r", " ").replace("\n", " ").split())
+        if width is not None:
+            return text[:width].ljust(width)
+        return text
+
+    @staticmethod
+    def _trf_date(value: Any, *, long_year: bool) -> str:
+        raw = str(value or "").strip()
+        if not raw:
+            return ""
+        parsed: datetime | None = None
+        for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%Y.%m.%d", "%d/%m/%Y", "%d. %m. %Y", "%d.%m.%Y"):
+            try:
+                parsed = datetime.strptime(raw, fmt)
+                break
+            except ValueError:
+                continue
+        if not parsed:
+            return raw.replace("-", "/")[:10]
+        return parsed.strftime("%Y/%m/%d" if long_year else "%y/%m/%d")
+
+    @staticmethod
+    def _trf_rating(player: Mapping[str, Any]) -> int:
+        return int(
+            player.get("international_rating")
+            or player.get("rating")
+            or player.get("national_rating")
+            or 0
+        )
+
+    @staticmethod
+    def _trf_points(value: Any) -> str:
+        points = float(value or 0.0)
+        if points >= 100:
+            return f"{points:4.0f}"[:4]
+        return f"{points:4.1f}"[-4:]
+
+    @staticmethod
+    def _trf_missing_field_warnings(field_name: str, player_names: list[str]) -> list[str]:
+        if not player_names:
+            return []
+        shown = ", ".join(player_names[:5])
+        suffix = f" e mais {len(player_names) - 5}" if len(player_names) > 5 else ""
+        return [f"Jogadores sem {field_name}: {shown}{suffix}."]
+
+    @staticmethod
+    def _trf_player_result(result: str, *, is_white: bool, is_bye: bool) -> str:
+        if is_bye:
+            return "U"
+        if result == "1-0":
+            return "1" if is_white else "0"
+        if result == "0-1":
+            return "0" if is_white else "1"
+        if result == "1/2-1/2":
+            return "="
+        if result == "1F-0F":
+            return "+" if is_white else "-"
+        if result == "0F-1F":
+            return "-" if is_white else "+"
+        if result == "0F-0F":
+            return "-"
+        return "Z"
+
+    @staticmethod
+    def _trf_tournament_line(code: str, value: Any) -> str:
+        return f"{code} {ExportService._trf_clean(value)}\r\n"
+
+    def _trf_tournament_type(self, tournament: Mapping[str, Any], settings: Mapping[str, Any]) -> str:
+        profile = str(settings.get("tournament_profile") or "").strip()
+        suffix = "FIDE-rated" if profile == "fide" else "Standard"
+        system = str(tournament.get("system") or "Suico").strip()
+        if tournament.get("competition_type") == "team":
+            return f"Team: {system} ({suffix})"
+        return f"Individual: {system} ({suffix})"
+
+    def _trf_pairings_by_round(
+        self,
+        tournament: Mapping[str, Any],
+        rounds: list[dict[str, Any]],
+    ) -> dict[int, list[dict[str, Any]]]:
+        if tournament.get("competition_type") != "team":
+            return {
+                int(round_data["number"]): self.db.get_pairings_for_round(round_data["id"])
+                for round_data in rounds
+            }
+
+        pairings_by_round: dict[int, list[dict[str, Any]]] = {}
+        for round_data in rounds:
+            board_pairings = []
+            for match in self.db.list_team_matches_for_round(int(round_data["id"])):
+                if match.get("is_bye"):
+                    continue
+                for board in self.db.list_team_boards(int(match["id"])):
+                    if not board.get("white_player_id") or not board.get("black_player_id"):
                         continue
-                        
-                    if my_pairing["is_bye"]:
-                        if my_pairing["white_player_id"] == p["id"]:
-                            line += "  0000 - + " 
-                        else:
-                            line += "  0000 - - "
+                    board_pairings.append(
+                        {
+                            "white_player_id": int(board["white_player_id"]),
+                            "black_player_id": int(board["black_player_id"]),
+                            "result": str(board.get("result") or ""),
+                            "is_bye": 0,
+                        }
+                    )
+            pairings_by_round[int(round_data["number"])] = board_pairings
+        return pairings_by_round
+
+    def _trf_player_standings(
+        self,
+        tournament: Mapping[str, Any],
+        players: list[dict[str, Any]],
+    ) -> dict[int, dict[str, Any]]:
+        if tournament.get("competition_type") != "team":
+            return {
+                int(item["player_id"]): item
+                for item in self.pairing_service.standings(int(tournament["id"]))
+            }
+
+        stats = {
+            int(player["id"]): {
+                "player_id": int(player["id"]),
+                "points": float(player.get("starting_points", 0.0) or 0.0),
+                "position": 0,
+                "rating": self._trf_rating(player),
+                "name": player_pairing_name(player),
+            }
+            for player in players
+        }
+        for round_data in self.db.list_rounds(int(tournament["id"])):
+            for match in self.db.list_team_matches_for_round(int(round_data["id"])):
+                for board in self.db.list_team_boards(int(match["id"])):
+                    white_id = int(board.get("white_player_id") or 0)
+                    black_id = int(board.get("black_player_id") or 0)
+                    result = str(board.get("result") or "")
+                    if not white_id or not black_id or result not in RESULT_POINTS:
                         continue
-                        
-                    is_white = my_pairing["white_player_id"] == p["id"]
-                    color = "w" if is_white else "b"
-                    opp_id = my_pairing["black_player_id"] if is_white else my_pairing["white_player_id"]
-                    opp_seq = player_id_to_seq.get(opp_id, 0)
-                    
-                    res_str = " "
-                    result = my_pairing.get("result")
-                    if result == "1-0":
-                        res_str = "1" if is_white else "0"
-                    elif result == "0-1":
-                        res_str = "0" if is_white else "1"
-                    elif result == "1/2-1/2":
-                        res_str = "="
-                        
-                    line += f"  {opp_seq:04d} {color} {res_str} "
-                    
-                f.write(f"{line}\n")
+                    white_points, black_points = RESULT_POINTS[result]
+                    if white_id in stats:
+                        stats[white_id]["points"] += white_points
+                    if black_id in stats:
+                        stats[black_id]["points"] += black_points
+
+        ordered_stats = sorted(
+            stats.values(),
+            key=lambda item: (-float(item["points"]), -int(item["rating"]), str(item["name"]).casefold()),
+        )
+        for index, item in enumerate(ordered_stats, start=1):
+            item["position"] = index
+        return stats
+
+    def _trf_chief_arbiter(self, tournament_id: int, settings: Mapping[str, Any]) -> str:
+        chief = str(settings.get("chief_arbiter") or "").strip()
+        if chief:
+            return chief
+        for referee in self.db.list_tournament_referees(tournament_id):
+            role = str(referee.get("role") or "").casefold()
+            if "chief" in role or "principal" in role or "arbitro chefe" in role:
+                return str(referee.get("name") or "").strip()
+        return str(settings.get("director") or settings.get("organizer") or "").strip()
+
+    def _trf_deputy_arbiters(self, tournament_id: int, settings: Mapping[str, Any]) -> list[str]:
+        deputies = [
+            item.strip()
+            for item in str(settings.get("arbiters") or "").replace(";", "\n").splitlines()
+            if item.strip()
+        ]
+        chief = self._trf_chief_arbiter(tournament_id, settings).casefold()
+        for referee in self.db.list_tournament_referees(tournament_id):
+            name = str(referee.get("name") or "").strip()
+            if name and name.casefold() != chief and name not in deputies:
+                deputies.append(name)
+        return deputies
+
+    def _trf_round_dates_line(self, round_count: int, schedule: Mapping[int, str]) -> str:
+        line = "132" + (" " * 88)
+        for round_number in range(1, round_count + 1):
+            line += f"{self._trf_date(schedule.get(round_number), long_year=False):<8}  "
+        return f"{line.rstrip()}\r\n"
+
+    def _trf_player_line(
+        self,
+        player: Mapping[str, Any],
+        player_id_to_start_rank: Mapping[int, int],
+        standings_by_player: Mapping[int, Mapping[str, Any]],
+        pairings_by_round: Mapping[int, list[dict[str, Any]]],
+        round_count: int,
+        settings: Mapping[str, Any],
+    ) -> str:
+        player_id = int(player["id"])
+        start_rank = player_id_to_start_rank[player_id]
+        standing = standings_by_player.get(player_id, {})
+        sex = self._trf_clean(str(player.get("sex") or "")[:1].lower(), 1)
+        title = self._trf_clean(str(player.get("title") or "").upper(), 3)
+        name = self._trf_clean(player_pairing_name(player), 33)
+        rating = f"{self._trf_rating(player):4d}"[-4:]
+        federation = self._trf_clean(
+            str(player.get("federation_id") or settings.get("federation") or "").upper(),
+            3,
+        )
+        fide_id = self._trf_clean(player.get("fide_id"))[:11].rjust(11)
+        birth_date = self._trf_clean(self._trf_date(player.get("birth_date"), long_year=True), 10)
+        points = self._trf_points(standing.get("points", player.get("starting_points", 0.0)))
+        rank = int(standing.get("position") or 0)
+        line = (
+            f"001 {start_rank:4d} {sex}{title} {name} {rating} {federation} "
+            f"{fide_id} {birth_date} {points} {rank:4d}  "
+        )
+        for round_number in range(1, round_count + 1):
+            line += self._trf_round_cell(player_id, player_id_to_start_rank, pairings_by_round.get(round_number, []))
+        return f"{line.rstrip()}\r\n"
+
+    def _trf_round_cell(
+        self,
+        player_id: int,
+        player_id_to_start_rank: Mapping[int, int],
+        pairings: list[dict[str, Any]],
+    ) -> str:
+        pairing = next(
+            (
+                item
+                for item in pairings
+                if int(item["white_player_id"]) == player_id
+                or int(item.get("black_player_id") or 0) == player_id
+            ),
+            None,
+        )
+        if not pairing:
+            return "0000 - Z  "
+        is_bye = bool(pairing.get("is_bye"))
+        is_white = int(pairing["white_player_id"]) == player_id
+        if is_bye:
+            return "0000 - U  "
+        opponent_id = int(pairing["black_player_id"] if is_white else pairing["white_player_id"])
+        opponent_rank = player_id_to_start_rank.get(opponent_id, 0)
+        color = "w" if is_white else "b"
+        result = self._trf_player_result(str(pairing.get("result") or ""), is_white=is_white, is_bye=is_bye)
+        return f"{opponent_rank:4d} {color} {result}  "
+
+    def _trf_team_line(
+        self,
+        team: Mapping[str, Any],
+        player_id_to_start_rank: Mapping[int, int],
+    ) -> str:
+        team_name = self._trf_clean(team.get("name"), 32)
+        line = f"013 {team_name}"
+        for assignment in self.db.list_team_players(int(team["id"]), active_only=False):
+            start_rank = player_id_to_start_rank.get(int(assignment["player_id"]))
+            if start_rank:
+                line += f"{start_rank:4d} "
+        return f"{line.rstrip()}\r\n"
 
     def export_member_evolution(self, member_id: int, file_path: str | Path) -> None:
         sections = self._member_evolution_sections(member_id)

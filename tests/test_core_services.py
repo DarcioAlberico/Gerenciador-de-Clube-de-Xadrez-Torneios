@@ -3327,6 +3327,119 @@ class PairingServiceTest(unittest.TestCase):
         self.assertIn("Classificacao", html)
         self.assertIn("Rodada 1", html)
 
+    def test_export_chess_results_trf16_includes_required_fields(self) -> None:
+        tournament_id = self.db.create_tournament(
+            "Aberto Sao Paulo",
+            location="Sao Paulo",
+            rounds_count=1,
+            time_control="90 min + 30 sec",
+            start_date="2026-05-24",
+            end_date="2026-05-24",
+        )
+        self.db.save_tournament_settings(
+            tournament_id,
+            {
+                "federation": "BRA",
+                "chief_arbiter": "Arbitro Chefe",
+                "arbiters": "Adjunto Um",
+                "tournament_profile": "fide",
+            },
+        )
+        self.db.save_round_schedule(
+            tournament_id,
+            [{"round_number": 1, "date": "2026-05-24", "time": "10:00"}],
+        )
+        first_player = self.db.create_player(
+            tournament_id,
+            name="Silva, Ana",
+            surname="Silva",
+            given_name="Ana",
+            title="WFM",
+            sex="w",
+            federation_id="BRA",
+            fide_id="1234567",
+            rating=2100,
+            international_rating=2100,
+            birth_date="2000-01-02",
+        )
+        second_player = self.db.create_player(
+            tournament_id,
+            name="Souza, Bruno",
+            surname="Souza",
+            given_name="Bruno",
+            title="FM",
+            sex="m",
+            federation_id="BRA",
+            fide_id="7654321",
+            rating=2000,
+            international_rating=2000,
+            birth_date="1999-03-04",
+        )
+        round_id = self.db.create_round_with_pairings(
+            tournament_id,
+            1,
+            [
+                {
+                    "board_number": 1,
+                    "white_player_id": first_player,
+                    "black_player_id": second_player,
+                    "result": "1-0",
+                }
+            ],
+        )
+        self.service.close_round(tournament_id, round_id)
+
+        output_path = Path(self.temp_dir.name) / "chess_results.trf"
+        warnings = self.export_service.export_chess_results_trf(tournament_id, output_path)
+        content = output_path.read_text(encoding="utf-8")
+        lines = content.splitlines()
+        player_lines = [line for line in lines if line.startswith("001 ")]
+
+        self.assertEqual(warnings, [])
+        self.assertIn("012 Aberto Sao Paulo", content)
+        self.assertIn("032 BRA", content)
+        self.assertIn("042 2026/05/24", content)
+        self.assertIn("052 2026/05/24", content)
+        self.assertIn("062 2", content)
+        self.assertIn("072 2", content)
+        self.assertIn("082 0", content)
+        self.assertIn("092 Individual: Suico (FIDE-rated)", content)
+        self.assertIn("102 Arbitro Chefe", content)
+        self.assertIn("112 Adjunto Um", content)
+        self.assertIn("122 90 min + 30 sec", content)
+        self.assertEqual(len(player_lines), 2)
+        self.assertIn("wWFM Silva, Ana", player_lines[0])
+        self.assertIn("2100 BRA", player_lines[0])
+        self.assertIn("1234567", player_lines[0])
+        self.assertIn("2000/01/02", player_lines[0])
+        self.assertTrue(player_lines[0].endswith("2 w 1"))
+        self.assertTrue(player_lines[1].endswith("1 b 0"))
+
+    def test_export_chess_results_trf16_supports_team_tournaments(self) -> None:
+        tournament_id, _team_ids = self._create_team_tournament(teams_count=2, boards_count=2)
+        round_data = self.service.generate_next_round(tournament_id)
+        match = self.db.list_team_matches_for_round(round_data["id"])[0]
+        boards = self.db.list_team_boards(int(match["id"]))
+        self.service.update_result(tournament_id, int(boards[0]["id"]), "1-0")
+        self.service.update_result(tournament_id, int(boards[1]["id"]), "1/2-1/2")
+        self.service.close_round(tournament_id, round_data["id"])
+
+        output_path = Path(self.temp_dir.name) / "team_chess_results.trf"
+        warnings = self.export_service.export_chess_results_trf(tournament_id, output_path)
+        content = output_path.read_text(encoding="utf-8")
+        lines = content.splitlines()
+        player_lines = [line for line in lines if line.startswith("001 ")]
+        team_lines = [line for line in lines if line.startswith("013 ")]
+
+        self.assertIn("082 2", content)
+        self.assertIn("092 Team: Suico (Standard)", content)
+        self.assertEqual(len(player_lines), 4)
+        self.assertEqual(len(team_lines), 2)
+        self.assertTrue(any("Equipe 1" in line and "1" in line and "2" in line for line in team_lines))
+        self.assertTrue(any("   3 w 1" in line for line in player_lines))
+        self.assertTrue(any("   4 b =" in line for line in player_lines))
+        self.assertTrue(any("Jogadores sem FIDE ID" in warning for warning in warnings))
+
     def test_export_club_portal_creates_static_html_package(self) -> None:
         club_id = self.club_service.save_profile(
             {

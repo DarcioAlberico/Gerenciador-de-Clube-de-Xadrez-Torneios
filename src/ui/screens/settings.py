@@ -684,6 +684,7 @@ class SettingsPagesMixin:
             "Todas as rodadas",
             "Jogadores",
             "Site HTML",
+            "Chess-Results (TRF16)",
             "TRF FIDE",
             "PGN (Partidas)",
         ]
@@ -725,7 +726,7 @@ class SettingsPagesMixin:
                 round_option.configure(state="normal")
             else:
                 round_option.configure(state="disabled")
-            if report_option.get() in ("Site HTML", "TRF FIDE", "PGN (Partidas)"):
+            if report_option.get() in ("Site HTML", "Chess-Results (TRF16)", "TRF FIDE", "PGN (Partidas)"):
                 format_option.configure(state="disabled")
             else:
                 format_option.configure(state="normal")
@@ -743,6 +744,7 @@ class SettingsPagesMixin:
                 "Todas as rodadas": f"{safe_name}_rodadas",
                 "Jogadores": f"{safe_name}_jogadores",
                 "Equipes": f"{safe_name}_equipes",
+                "Chess-Results (TRF16)": f"{safe_name}_chess_results_trf16",
                 "TRF FIDE": f"{safe_name}_fide",
                 "PGN (Partidas)": f"{safe_name}_partidas",
             }
@@ -755,7 +757,7 @@ class SettingsPagesMixin:
             try:
                 report = report_option.get()
                 extension = format_option.get()
-                if report == "TRF FIDE":
+                if report in ("Chess-Results (TRF16)", "TRF FIDE"):
                     extension = "txt"
                 elif report == "PGN (Partidas)":
                     extension = "pgn"
@@ -792,7 +794,7 @@ class SettingsPagesMixin:
 
                 round_id = export_round_map.get(round_option.get())
 
-                def write_export() -> None:
+                def write_export() -> object:
                     if report == "Completo":
                         self.export_service.export_complete(tournament_id, path)
                     elif report == "Classificacao":
@@ -807,16 +809,26 @@ class SettingsPagesMixin:
                         self.export_service.export_players(tournament_id, path)
                     elif report == "Equipes":
                         self.export_service.export_teams(tournament_id, path)
-                    elif report == "TRF FIDE":
-                        self.export_service.export_trf(tournament_id, path)
+                    elif report in ("Chess-Results (TRF16)", "TRF FIDE"):
+                        return self.export_service.export_chess_results_trf(tournament_id, path)
                     elif report == "PGN (Partidas)":
                         self.export_service.export_pgn(tournament_id, path)
                     else:
                         raise AppError("Tipo de relatorio invalido.")
+                    return None
+
+                def show_export_success(result: object) -> None:
+                    warnings = result if isinstance(result, list) else []
+                    if warnings:
+                        warning_text = "\n".join(str(item) for item in warnings[:8])
+                        extra = f"\n... e mais {len(warnings) - 8} aviso(s)." if len(warnings) > 8 else ""
+                        self._show_info(f"Arquivo exportado:\n{path}\n\nAvisos:\n{warning_text}{extra}")
+                        return
+                    self._show_info(f"Arquivo exportado:\n{path}")
 
                 self._run_background(
                     write_export,
-                    lambda _result: self._show_info(f"Arquivo exportado:\n{path}"),
+                    show_export_success,
                     "Gerando exportacao...",
                 )
             except Exception as exc:
