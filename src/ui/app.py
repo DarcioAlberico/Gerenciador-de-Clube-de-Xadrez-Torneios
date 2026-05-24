@@ -164,8 +164,6 @@ class AlbericusApp(
         menubar = tk.Menu(self)
         self.config(menu=menubar)
         
-        role = self.security_service.current_operator().get("role", "viewer")
-        
         # 1. Clube
         club_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Clube", menu=club_menu)
@@ -206,7 +204,8 @@ class AlbericusApp(
         tools_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Ferramentas", menu=tools_menu)
         tools_menu.add_command(label="Exportar", command=self.show_export)
-        tools_menu.add_command(label="Relatórios", command=self.show_reports)
+        tools_menu.add_command(label="Relatórios Administrativos", command=self.show_administrative_reports)
+        tools_menu.add_command(label="DRE Financeiro", command=self.show_financial_reports)
         tools_menu.add_command(label="Comunicação", command=self.show_communication)
 
         # 6. Configurações
@@ -288,6 +287,24 @@ class AlbericusApp(
             font=ctk.CTkFont(size=12)
         )
         self.status_label.grid(row=0, column=1, padx=10, pady=2, sticky="e")
+
+    def require_permission(self, action: str) -> None:
+        self.security_service.require_permission(action)
+
+    def show_administrative_reports(self) -> None:
+        SettingsPagesMixin.show_reports(self)
+
+    def show_financial_reports(self) -> None:
+        ReportPagesMixin.show_reports(self)
+
+    def show_reports(self) -> None:
+        self.show_administrative_reports()
+
+    def _show_toast(self, message: str, is_error: bool = False) -> None:
+        if is_error:
+            self._show_error(AppError(message))
+        else:
+            self._show_info(message)
 
     def _build_content(self) -> None:
         self.content = ctk.CTkFrame(self, corner_radius=0, fg_color=THEME_APP_BG)

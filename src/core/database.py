@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import ctypes
 import os
 import shutil
 import sqlite3
@@ -7,7 +9,7 @@ import sys
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Iterable, Mapping
+from typing import Any, Iterable, Mapping
 
 from .categories import competition_category_payload, reference_year
 
@@ -1709,6 +1711,8 @@ class Database:
             ).fetchall()
             settings = defaults.copy()
             settings.update({str(row["key"]): row["value"] for row in rows})
+        if "smtp_password" in settings:
+            settings["smtp_password"] = self._unprotect_secret(str(settings.get("smtp_password") or ""))
         settings = self._normalize_legacy_app_settings(settings)
         if settings.get("backup_dir"):
             self.backup_dir = Path(str(settings["backup_dir"]))
@@ -1732,19 +1736,91 @@ class Database:
         except OSError:
             return Path(left).expanduser() == right.expanduser()
 
+    @staticmethod
+    def _protect_secret(value: str) -> str:
+        if not value or value.startswith("dpapi$"):
+            return value
+        if not sys.platform.startswith("win"):
+            return value
+
+        class DataBlob(ctypes.Structure):
+            _fields_ = [("cbData", ctypes.c_uint), ("pbData", ctypes.POINTER(ctypes.c_char))]
+
+        data = value.encode("utf-8")
+        buffer = ctypes.create_string_buffer(data)
+        in_blob = DataBlob(len(data), ctypes.cast(buffer, ctypes.POINTER(ctypes.c_char)))
+        out_blob = DataBlob()
+        crypt32 = ctypes.windll.crypt32
+        kernel32 = ctypes.windll.kernel32
+        if not crypt32.CryptProtectData(
+            ctypes.byref(in_blob),
+            None,
+            None,
+            None,
+            None,
+            0,
+            ctypes.byref(out_blob),
+        ):
+            return value
+        try:
+            encrypted = ctypes.string_at(out_blob.pbData, out_blob.cbData)
+            return "dpapi$" + base64.b64encode(encrypted).decode("ascii")
+        finally:
+            kernel32.LocalFree(out_blob.pbData)
+
+    @staticmethod
+    def _unprotect_secret(value: str) -> str:
+        if not value.startswith("dpapi$"):
+            return value
+        if not sys.platform.startswith("win"):
+            return ""
+
+        class DataBlob(ctypes.Structure):
+            _fields_ = [("cbData", ctypes.c_uint), ("pbData", ctypes.POINTER(ctypes.c_char))]
+
+        try:
+            encrypted = base64.b64decode(value.removeprefix("dpapi$"))
+        except ValueError:
+            return ""
+        buffer = ctypes.create_string_buffer(encrypted)
+        in_blob = DataBlob(len(encrypted), ctypes.cast(buffer, ctypes.POINTER(ctypes.c_char)))
+        out_blob = DataBlob()
+        crypt32 = ctypes.windll.crypt32
+        kernel32 = ctypes.windll.kernel32
+        if not crypt32.CryptUnprotectData(
+            ctypes.byref(in_blob),
+            None,
+            None,
+            None,
+            None,
+            0,
+            ctypes.byref(out_blob),
+        ):
+            return ""
+        try:
+            decrypted = ctypes.string_at(out_blob.pbData, out_blob.cbData)
+            return decrypted.decode("utf-8")
+        finally:
+            kernel32.LocalFree(out_blob.pbData)
+
     def save_app_settings(self, settings: dict[str, Any]) -> None:
         allowed_keys = {
             "appearance_mode",
+            "color_theme",
             "default_export_dir",
             "backup_dir",
             "cloud_sync_dir",
             "operator_name",
             "operator_role",
             "backup_retention_count",
+            "smtp_server",
+            "smtp_port",
+            "smtp_user",
+            "smtp_password",
         }
         now = self.now()
         rows = [
-            (key, str(value), now)
+            (key, self._protect_secret(str(value)) if key == "smtp_password" else str(value), now)
             for key, value in settings.items()
             if key in allowed_keys
         ]
@@ -2056,6 +2132,42 @@ class Database:
     def _fetch_all(self, query: str, params: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
         with self.connect() as conn:
             return self.rows_to_dicts(conn.execute(query, params).fetchall())
+
+    def _fetch_one(self, query: str, params: tuple[Any, ...] = ()) -> dict[str, Any] | None:
+        with self.connect() as conn:
+            row = conn.execute(query, params).fetchone()
+            return dict(row) if row else None
+
+    def _insert(self, table: str, values: Mapping[str, Any]) -> int:
+        if not values:
+            raise ValueError("Informe ao menos um campo para inserir.")
+        columns = list(values.keys())
+        placeholders = ", ".join("?" for _ in columns)
+        column_sql = ", ".join(columns)
+        with self.connect() as conn:
+            cursor = conn.execute(
+                f"INSERT INTO {table} ({column_sql}) VALUES ({placeholders})",
+                tuple(values[column] for column in columns),
+            )
+            return int(cursor.lastrowid)
+
+    def _update(self, table: str, row_id: int, values: Mapping[str, Any]) -> None:
+        if not values:
+            return
+        columns = list(values.keys())
+        assignments = ", ".join(f"{column} = ?" for column in columns)
+        with self.connect() as conn:
+            conn.execute(
+                f"UPDATE {table} SET {assignments} WHERE id = ?",
+                [*(values[column] for column in columns), row_id],
+            )
+
+    def _delete(self, table: str, row_id: int) -> None:
+        with self.connect() as conn:
+            conn.execute(f"DELETE FROM {table} WHERE id = ?", (row_id,))
+
+    def _get_connection(self):
+        return self.connect()
 
     def get_club(self, club_id: int = 1) -> dict[str, Any] | None:
         with self.connect() as connection:

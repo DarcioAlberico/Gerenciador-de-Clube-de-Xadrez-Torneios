@@ -1,8 +1,7 @@
-from src.services.constants import OPERATOR_ROLES
-
 # Matriz de Permissões
 # Mapeia cada role para uma lista de permissões que ela possui.
 # As permissões principais são:
+# - settings_read: Consultar configuracoes, comunicacao e auditoria
 # - tournament_write: Criar/Editar/Apagar torneios e rodadas
 # - member_write: Cadastrar/Editar membros (mas não deletar globalmente)
 # - education_write: Criar aulas, exercícios e gerenciar apostilas
@@ -12,6 +11,7 @@ from src.services.constants import OPERATOR_ROLES
 
 ROLE_PERMISSIONS: dict[str, list[str]] = {
     "admin": [
+        "settings_read",
         "tournament_write",
         "member_write",
         "education_write",
@@ -20,19 +20,22 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
         "delete_records",
     ],
     "arbiter": [
+        "settings_read",
         "tournament_write",
         "member_write",
     ],
     "teacher": [
+        "settings_read",
         "education_write",
         "member_write",
     ],
     "assistant": [
+        "settings_read",
         "member_write",
         "finance_write", # Básico
     ],
     "viewer": [
-        # Apenas consulta, sem permissões de escrita
+        "settings_read",
     ]
 }
 

@@ -6,10 +6,17 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "customtkinter>=5.2.2",
+    "markdown>=3.6",
     "matplotlib>=3.8.0",
     "openpyxl>=3.1.2",
+    "pandas>=2.2.0",
+    "pillow>=10.0.0",
+    "python-chess>=1.999",
     "reportlab>=4.2.0",
     "svglib>=1.6.0",
+    "tkcalendar>=1.6.1",
+    "xhtml2pdf>=0.2.15",
+    "xlrd>=2.0.1",
 ]
 
 [project.optional-dependencies]
@@ -37,6 +44,18 @@ exclude = [
     ".venv",
     "build",
     "dist",
+    "Manual",
+    "FIDE",
+    "backups",
+    "data",
+    "docs",
+    "*.rej",
+    "diff_*.txt",
+    "fix.py",
+    "recover.py",
+    "scratch_*.py",
+    "test_swiss.py",
+    "unmangle.py",
 ]
 
 [tool.ruff.lint]
@@ -50,13 +69,14 @@ select = [
 ignore = ["E501"]
 
 [tool.ruff.lint.per-file-ignores]
-"src/ui.py" = ["F403", "F405"]
-"src/ui_admin.py" = ["F403", "F405"]
-"src/ui_club.py" = ["F403", "F405"]
-"src/ui_pairings.py" = ["F403", "F405"]
-"src/ui_settings.py" = ["F403", "F405"]
-"src/ui_tournaments.py" = ["F403", "F405"]
-"src/ui_support.py" = ["F401"]
+"src/core/services.py" = ["F401", "F403", "I001"]
+"src/services/*.py" = ["F401", "F403", "F405", "I001"]
+"src/ui/app.py" = ["F403", "F405", "I001"]
+"src/ui/screens/*.py" = ["E701", "F401", "F403", "F405", "I001"]
+"src/ui/screens/__init__.py" = ["F401"]
+"src/ui/support.py" = ["F401", "I001"]
+"src/database/migrations/legacy_migrations.py" = ["F401", "I001"]
+"tests/test_pairing.py" = ["E722", "I001"]
 
 [tool.mypy]
 python_version = "3.11"

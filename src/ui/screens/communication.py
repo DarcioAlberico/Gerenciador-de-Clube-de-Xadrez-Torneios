@@ -66,8 +66,8 @@ class CommunicationPagesMixin:
                 try:
                     msg_service.send_email(to_email, subject, body_text)
                     self.after(0, lambda: self._show_info("E-mail enviado com sucesso!"))
-                except Exception as e:
-                    self.after(0, lambda: self._show_error(f"Falha ao enviar: {e}"))
+                except Exception as exc:
+                    self.after(0, lambda error=exc: self._show_error(f"Falha ao enviar: {error}"))
 
             threading.Thread(target=task, daemon=True).start()
 

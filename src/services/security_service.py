@@ -1,9 +1,12 @@
 from __future__ import annotations
 import csv
+import hashlib
+import hmac
 import html
 import json
 import logging
 import math
+import os
 import secrets
 import shutil
 import sqlite3
@@ -32,27 +35,31 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 class SecurityService:
+    _PASSWORD_ALGORITHM = "pbkdf2_sha256"
+    _PASSWORD_ITERATIONS = 210_000
+
     def __init__(self, db: Database) -> None:
         self.db = db
         self._current_user: dict[str, str] | None = None
 
     def login(self, username: str, password_raw: str) -> bool:
-        import hashlib
-        pw_hash = hashlib.sha256(password_raw.encode()).hexdigest()
         with self.db.connect() as conn:
-            cursor = conn.execute(
-                "SELECT id, username, role FROM users WHERE username = ? AND password_hash = ?",
-                (username, pw_hash)
-            )
+            cursor = conn.execute("SELECT id, username, role, password_hash FROM users WHERE username = ?", (username,))
             row = cursor.fetchone()
-            if row:
-                self._current_user = {
-                    "id": str(row["id"]),
-                    "username": row["username"],
-                    "role": row["role"]
-                }
-                self.audit("login", description=f"Usuário {username} fez login.")
-                return True
+            if not row or not self._verify_password(password_raw, str(row["password_hash"] or "")):
+                return False
+            if self._needs_password_rehash(str(row["password_hash"] or "")):
+                conn.execute(
+                    "UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?",
+                    (self._hash_password(password_raw), self.db.now(), row["id"]),
+                )
+            self._current_user = {
+                "id": str(row["id"]),
+                "username": row["username"],
+                "role": row["role"]
+            }
+            self.audit("login", description=f"Usuário {username} fez login.")
+            return True
         return False
 
     def list_users(self) -> list[dict[str, Any]]:
@@ -62,21 +69,32 @@ class SecurityService:
 
     def create_user(self, username: str, password_raw: str, role: str) -> None:
         self.require_permission("settings_write")
-        import hashlib
-        pw_hash = hashlib.sha256(password_raw.encode()).hexdigest()
+        if not username.strip():
+            raise AppError("Informe o nome de usuario.")
+        if not password_raw:
+            raise AppError("Informe a senha.")
+        pw_hash = self._hash_password(password_raw)
+        now = self.db.now()
         try:
             with self.db.connect() as conn:
-                conn.execute("INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)", (username, pw_hash, role))
+                conn.execute(
+                    """
+                    INSERT INTO users (username, password_hash, role, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (username.strip(), pw_hash, role, now, now),
+                )
             self.audit("user_created", description=f"Usuário {username} criado.")
         except sqlite3.IntegrityError:
             raise AppError("Nome de usuário já existe.")
 
     def update_user_password(self, user_id: int, new_password_raw: str) -> None:
         self.require_permission("settings_write")
-        import hashlib
-        pw_hash = hashlib.sha256(new_password_raw.encode()).hexdigest()
+        if not new_password_raw:
+            raise AppError("Informe a nova senha.")
+        pw_hash = self._hash_password(new_password_raw)
         with self.db.connect() as conn:
-            conn.execute("UPDATE users SET password_hash = ? WHERE id = ?", (pw_hash, user_id))
+            conn.execute("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?", (pw_hash, self.db.now(), user_id))
         self.audit("password_updated", entity_id=user_id, description="Senha do usuário atualizada.")
 
     def delete_user(self, user_id: int) -> None:
@@ -123,6 +141,46 @@ class SecurityService:
                 description=f"Acesso negado para ação: {action}"
             )
             raise AppError("Permissão negada para realizar esta ação.")
+
+    @classmethod
+    def _hash_password(cls, password_raw: str) -> str:
+        salt = os.urandom(16)
+        digest = hashlib.pbkdf2_hmac(
+            "sha256",
+            password_raw.encode("utf-8"),
+            salt,
+            cls._PASSWORD_ITERATIONS,
+        )
+        return (
+            f"{cls._PASSWORD_ALGORITHM}${cls._PASSWORD_ITERATIONS}$"
+            f"{salt.hex()}${digest.hex()}"
+        )
+
+    @classmethod
+    def _verify_password(cls, password_raw: str, stored_hash: str) -> bool:
+        parts = stored_hash.split("$")
+        if len(parts) == 4 and parts[0] == cls._PASSWORD_ALGORITHM:
+            try:
+                iterations = int(parts[1])
+                salt = bytes.fromhex(parts[2])
+                expected = bytes.fromhex(parts[3])
+            except ValueError:
+                return False
+            digest = hashlib.pbkdf2_hmac("sha256", password_raw.encode("utf-8"), salt, iterations)
+            return hmac.compare_digest(digest, expected)
+
+        legacy_digest = hashlib.sha256(password_raw.encode()).hexdigest()
+        return hmac.compare_digest(legacy_digest, stored_hash)
+
+    @classmethod
+    def _needs_password_rehash(cls, stored_hash: str) -> bool:
+        parts = stored_hash.split("$")
+        if len(parts) != 4 or parts[0] != cls._PASSWORD_ALGORITHM:
+            return True
+        try:
+            return int(parts[1]) < cls._PASSWORD_ITERATIONS
+        except ValueError:
+            return True
 
     def save_security_settings(self, data: dict[str, Any]) -> dict[str, Any]:
         self.require_permission("settings_write")

@@ -625,7 +625,11 @@ class LegacyMigrations:
         cursor = connection.execute("SELECT COUNT(*) FROM users WHERE role = 'admin'")
         if cursor.fetchone()[0] == 0:
             import hashlib
-            pw_hash = hashlib.sha256("admin".encode()).hexdigest()
+            import os
+            iterations = 210_000
+            salt = os.urandom(16)
+            digest = hashlib.pbkdf2_hmac("sha256", b"admin", salt, iterations)
+            pw_hash = f"pbkdf2_sha256${iterations}${salt.hex()}${digest.hex()}"
             connection.execute(
                 """
                 INSERT INTO users (username, password_hash, role, created_at, updated_at)

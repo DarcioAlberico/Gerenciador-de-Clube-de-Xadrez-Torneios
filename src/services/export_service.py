@@ -1859,7 +1859,7 @@ class ExportService:
         with path.open("w", encoding="utf-8") as f:
             f.write(f"012 {tournament['name']}\n")
             f.write(f"022 {tournament.get('location') or ''}\n")
-            f.write(f"032 \n")
+            f.write("032 \n")
             start = str(tournament.get('start_date') or '').replace("-", "/")
             end = str(tournament.get('end_date') or '').replace("-", "/")
             f.write(f"042 {start}\n")

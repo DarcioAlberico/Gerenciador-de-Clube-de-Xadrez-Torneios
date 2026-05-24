@@ -251,7 +251,7 @@ class OfficialRatingService:
             with z.open(name) as file:
                 # Ler linha por linha
                 lines = io.TextIOWrapper(file, encoding="utf-8-sig", errors="replace")
-                header = next(lines, None) # Ignorar cabeçalho
+                next(lines, None) # Ignorar cabeçalho
                 
                 for line_number, line in enumerate(lines, start=2):
                     if len(line) < 120:
