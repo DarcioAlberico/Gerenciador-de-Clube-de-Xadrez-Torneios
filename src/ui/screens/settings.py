@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .ui_support import *
+from ..support import *
 
 
 class SettingsPagesMixin:
@@ -38,26 +38,43 @@ class SettingsPagesMixin:
         appearance_option.grid(row=1, column=0, padx=16, pady=(0, 12), sticky="ew")
         appearance_option.set(appearance_labels.get(settings.get("appearance_mode", "System"), "Sistema"))
 
-        ctk.CTkLabel(settings_panel, text="Pasta de exportacao").grid(
+        color_theme_labels = {"blue": "Azul (Padrao)", "green": "Verde", "dark-blue": "Azul Escuro"}
+        color_theme_values = {label: value for value, label in color_theme_labels.items()}
+        ctk.CTkLabel(settings_panel, text="Cor de destaque").grid(
             row=2,
             column=0,
             padx=16,
             pady=(8, 4),
             sticky="w",
         )
+        color_theme_option = ctk.CTkOptionMenu(
+            settings_panel,
+            values=list(color_theme_values.keys()),
+            width=250,
+        )
+        color_theme_option.grid(row=3, column=0, padx=16, pady=(0, 12), sticky="ew")
+        color_theme_option.set(color_theme_labels.get(settings.get("color_theme", "blue"), "Azul (Padrao)"))
+
+        ctk.CTkLabel(settings_panel, text="Pasta de exportacao").grid(
+            row=4,
+            column=0,
+            padx=16,
+            pady=(8, 4),
+            sticky="w",
+        )
         export_dir_entry = ctk.CTkEntry(settings_panel, width=320)
-        export_dir_entry.grid(row=3, column=0, padx=16, pady=(0, 8), sticky="ew")
+        export_dir_entry.grid(row=5, column=0, padx=16, pady=(0, 8), sticky="ew")
         export_dir_entry.insert(0, str(settings.get("default_export_dir") or default_export_dir()))
 
         ctk.CTkLabel(settings_panel, text="Pasta de backups").grid(
-            row=5,
+            row=6,
             column=0,
             padx=16,
             pady=(8, 4),
             sticky="w",
         )
         backup_dir_entry = ctk.CTkEntry(settings_panel, width=320)
-        backup_dir_entry.grid(row=6, column=0, padx=16, pady=(0, 8), sticky="ew")
+        backup_dir_entry.grid(row=7, column=0, padx=16, pady=(0, 8), sticky="ew")
         backup_dir_entry.insert(0, str(settings.get("backup_dir") or self.db.backup_dir))
 
         def choose_export_dir() -> None:
@@ -79,14 +96,14 @@ class SettingsPagesMixin:
                 backup_dir_entry.insert(0, directory)
 
         ctk.CTkButton(settings_panel, text="Escolher exportacao", command=choose_export_dir).grid(
-            row=4,
+            row=8,
             column=0,
             padx=16,
             pady=(0, 8),
             sticky="ew",
         )
         ctk.CTkButton(settings_panel, text="Escolher backups", command=choose_backup_dir).grid(
-            row=7,
+            row=11,
             column=0,
             padx=16,
             pady=(0, 14),
@@ -95,14 +112,14 @@ class SettingsPagesMixin:
 
 
         ctk.CTkLabel(settings_panel, text="Pasta de Nuvem (Google Drive/Dropbox)").grid(
-            row=8,
+            row=12,
             column=0,
             padx=16,
             pady=(8, 4),
             sticky="w",
         )
         cloud_dir_entry = ctk.CTkEntry(settings_panel, width=320)
-        cloud_dir_entry.grid(row=15, column=0, padx=16, pady=(0, 8), sticky="ew")
+        cloud_dir_entry.grid(row=13, column=0, padx=16, pady=(0, 8), sticky="ew")
         cloud_dir_entry.insert(0, str(settings.get("cloud_sync_dir", "")))
 
         def choose_cloud_dir() -> None:
@@ -115,7 +132,7 @@ class SettingsPagesMixin:
                 cloud_dir_entry.insert(0, directory)
 
         ctk.CTkButton(settings_panel, text="Escolher nuvem", command=choose_cloud_dir).grid(
-            row=16,
+            row=14,
             column=0,
             padx=16,
             pady=(0, 14),
@@ -127,33 +144,82 @@ class SettingsPagesMixin:
             text="Seguranca operacional",
             font=ctk.CTkFont(size=14, weight="bold"),
             text_color="#0F172A",
-        ).grid(row=17, column=0, padx=16, pady=(6, 4), sticky="w")
-        ctk.CTkLabel(settings_panel, text="Operador local").grid(
-            row=9,
-            column=0,
-            padx=16,
-            pady=(6, 4),
-            sticky="w",
-        )
-        operator_name_entry = ctk.CTkEntry(settings_panel, width=300)
-        operator_name_entry.grid(row=10, column=0, padx=16, pady=(0, 8), sticky="ew")
-        operator_name_entry.insert(0, str(settings.get("operator_name") or "Administrador"))
+        ).grid(row=15, column=0, padx=16, pady=(6, 4), sticky="w")
+        def open_users_manager() -> None:
+            self._show_users_manager()
 
-        ctk.CTkLabel(settings_panel, text="Perfil").grid(row=11, column=0, padx=16, pady=(6, 4), sticky="w")
-        role_option = ctk.CTkOptionMenu(settings_panel, values=list(OPERATOR_ROLE_VALUES.keys()), width=300)
-        role_option.grid(row=12, column=0, padx=16, pady=(0, 8), sticky="ew")
-        role_option.set(OPERATOR_ROLES.get(str(settings.get("operator_role") or "admin"), "Administrador"))
+        ctk.CTkButton(
+            settings_panel,
+            text="Gerenciar Usuarios do Sistema",
+            command=open_users_manager,
+            fg_color="#3B82F6",
+            hover_color="#2563EB",
+        ).grid(row=16, column=0, padx=16, pady=(10, 8), sticky="ew")
 
         ctk.CTkLabel(settings_panel, text="Manter ultimos backups").grid(
-            row=13,
+            row=17,
             column=0,
             padx=16,
             pady=(6, 4),
             sticky="w",
         )
         retention_entry = ctk.CTkEntry(settings_panel, width=120)
-        retention_entry.grid(row=14, column=0, padx=16, pady=(0, 14), sticky="w")
+        retention_entry.grid(row=18, column=0, padx=16, pady=(0, 14), sticky="w")
         retention_entry.insert(0, str(settings.get("backup_retention_count") or "10"))
+
+        ctk.CTkLabel(
+            settings_panel,
+            text="Sincronizacao de Ratings",
+            font=ctk.CTkFont(size=14, weight="bold"),
+            text_color="#0F172A",
+        ).grid(row=19, column=0, padx=16, pady=(16, 4), sticky="w")
+
+        def download_fide() -> None:
+            import threading
+            from tkinter import messagebox
+            
+            def worker():
+                try:
+                    res = self.official_rating_service.import_fide_list_from_url()
+                    msg = f"{res['imported']} jogadores da FIDE importados."
+                    self.after(0, lambda m=msg: messagebox.showinfo("Sucesso", m))
+                except Exception as exc:
+                    err_msg = str(exc)
+                    self.after(0, lambda m=err_msg: messagebox.showerror("Erro", m))
+            
+            threading.Thread(target=worker, daemon=True).start()
+            messagebox.showinfo("Aviso", "Download da FIDE iniciado em segundo plano (pode levar alguns minutos).")
+
+        ctk.CTkButton(
+            settings_panel,
+            text="Baixar e Sincronizar FIDE",
+            command=download_fide,
+            fg_color="#059669",
+            hover_color="#047857",
+        ).grid(row=20, column=0, padx=16, pady=(10, 8), sticky="ew")
+
+        def import_cbx() -> None:
+            from tkinter import filedialog, messagebox
+            path = filedialog.askopenfilename(filetypes=[("Excel", "*.xls;*.xlsx"), ("CSV", "*.csv"), ("XML", "*.xml"), ("Texto", "*.txt")])
+            if not path:
+                return
+            try:
+                suffix = str(path).lower()
+                if suffix.endswith(".xml"):
+                    res = self.official_rating_service.import_official_xml(path, "CBX", "")
+                elif suffix.endswith(".xls") or suffix.endswith(".xlsx"):
+                    res = self.official_rating_service.import_official_excel(path, "CBX", "")
+                else:
+                    res = self.official_rating_service.import_official_csv(path, "CBX", "")
+                messagebox.showinfo("Sucesso", f"{res['imported']} jogadores CBX importados!")
+            except Exception as exc:
+                messagebox.showerror("Erro", str(exc))
+
+        ctk.CTkButton(
+            settings_panel,
+            text="Importar Lista CBX (Excel / CSV / XML)",
+            command=import_cbx,
+        ).grid(row=21, column=0, padx=16, pady=(0, 14), sticky="ew")
 
         backup_panel = self._make_panel(body)
         backup_panel.grid(row=0, column=1, sticky="nsew")
@@ -251,6 +317,7 @@ class SettingsPagesMixin:
             self.db.save_app_settings(
                 {
                     "appearance_mode": appearance_values[appearance_option.get()],
+                    "color_theme": color_theme_values[color_theme_option.get()],
                     "default_export_dir": str(export_dir),
                     "backup_dir": str(backup_dir),
                     "cloud_sync_dir": cloud_dir_entry.get().strip(),
@@ -258,12 +325,14 @@ class SettingsPagesMixin:
             )
             self.security_service.save_security_settings(
                 {
-                    "operator_name": operator_name_entry.get(),
-                    "operator_role": OPERATOR_ROLE_VALUES[role_option.get()],
                     "backup_retention_count": retention_entry.get(),
                 }
             )
             ctk.set_appearance_mode(appearance_values[appearance_option.get()])
+            
+            if settings.get("color_theme") != color_theme_values[color_theme_option.get()]:
+                self._show_info("Reinicie o aplicativo para aplicar o novo tema de cores.")
+
             self.status_label.configure(text=f"Banco: {Path(self.db.db_path).name}")
             load_backups()
             load_audit_logs()
@@ -331,31 +400,23 @@ class SettingsPagesMixin:
                 self._show_error(exc)
 
         actions = ctk.CTkFrame(settings_panel, fg_color="transparent")
-        actions.grid(row=15, column=0, padx=16, pady=(0, 16), sticky="ew")
+        actions.grid(row=19, column=0, padx=16, pady=(0, 16), sticky="ew")
         actions.grid_columnconfigure(0, weight=1)
-        ctk.CTkButton(actions, text="Salvar configuracoes", command=lambda: save_settings()).grid(
-            row=0,
-            column=0,
-            pady=(0, 8),
-            sticky="ew",
-        )
-        ctk.CTkButton(actions, text="Criar backup agora", command=create_backup).grid(
-            row=1,
-            column=0,
-            pady=(0, 8),
-            sticky="ew",
-        )
-        ctk.CTkButton(actions, text="Aplicar retencao", command=apply_retention).grid(
-            row=2,
-            column=0,
-            pady=(0, 8),
-            sticky="ew",
-        )
-        ctk.CTkButton(actions, text="Restaurar selecionado", command=restore_selected).grid(
-            row=3,
-            column=0,
-            sticky="ew",
-        )
+        btn_save = ctk.CTkButton(actions, text="Salvar configuracoes", command=lambda: save_settings())
+        btn_save.grid(row=0, column=0, pady=(0, 8), sticky="ew")
+        self._disable_if_unauthorized(btn_save, "settings_write")
+        
+        btn_backup = ctk.CTkButton(actions, text="Criar backup agora", command=create_backup)
+        btn_backup.grid(row=1, column=0, pady=(0, 8), sticky="ew")
+        self._disable_if_unauthorized(btn_backup, "settings_write")
+        
+        btn_retention = ctk.CTkButton(actions, text="Aplicar retencao", command=apply_retention)
+        btn_retention.grid(row=2, column=0, pady=(0, 8), sticky="ew")
+        self._disable_if_unauthorized(btn_retention, "settings_write")
+        
+        btn_restore = ctk.CTkButton(actions, text="Restaurar selecionado", command=restore_selected)
+        btn_restore.grid(row=3, column=0, sticky="ew")
+        self._disable_if_unauthorized(btn_restore, "settings_write")
 
         load_backups()
         load_audit_logs()
@@ -2123,9 +2184,337 @@ class SettingsPagesMixin:
                 ("Salvar modelo", save_template),
                 ("Salvar como novo", save_template_as_new),
                 ("Gerar PDF", export_certificates),
+                # ("Imprimir", print_certificates),
                 ("Exportar verificador", export_verification_site),
             ],
             start_row=45,
         )
 
+    def _open_user_management_dialog(self) -> None:
+        dialog = ctk.CTkToplevel(self)
+        dialog.title("Gerenciar Usuários")
+        dialog.geometry("600x500")
+        dialog.transient(self)
+        dialog.grab_set()
 
+        tree = self._make_tree(
+            dialog,
+            ["id", "username", "role", "created_at"],
+            {"id": "ID", "username": "Usuário", "role": "Perfil", "created_at": "Criado em"},
+            {"id": 40, "username": 150, "role": 120, "created_at": 150},
+            visible_rows=10,
+        )
+        tree.pack(fill="both", expand=True, padx=20, pady=20)
+
+        def load_users():
+            tree.delete(*tree.get_children())
+            for u in self.security_service.list_users():
+                tree.insert("", "end", values=(u["id"], u["username"], OPERATOR_ROLES.get(u["role"], u["role"]), u["created_at"]))
+
+        load_users()
+
+        btn_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+        btn_frame.pack(fill="x", padx=20, pady=10)
+
+        def create_user():
+            add_dlg = ctk.CTkToplevel(dialog)
+            add_dlg.title("Novo Usuário")
+            add_dlg.geometry("300x350")
+            add_dlg.transient(dialog)
+            add_dlg.grab_set()
+
+            ctk.CTkLabel(add_dlg, text="Usuário:").pack(pady=(10, 0))
+            u_entry = ctk.CTkEntry(add_dlg)
+            u_entry.pack(pady=5)
+
+            ctk.CTkLabel(add_dlg, text="Senha:").pack(pady=(10, 0))
+            p_entry = ctk.CTkEntry(add_dlg, show="*")
+            p_entry.pack(pady=5)
+
+            ctk.CTkLabel(add_dlg, text="Perfil:").pack(pady=(10, 0))
+            r_option = ctk.CTkOptionMenu(add_dlg, values=list(OPERATOR_ROLE_VALUES.keys()))
+            r_option.pack(pady=5)
+
+            def save():
+                try:
+                    role_val = OPERATOR_ROLE_VALUES[r_option.get()]
+                    self.security_service.create_user(u_entry.get().strip(), p_entry.get(), role_val)
+                    load_users()
+                    add_dlg.destroy()
+                except Exception as e:
+                    self._show_error(str(e))
+
+            ctk.CTkButton(add_dlg, text="Salvar", command=save).pack(pady=20)
+
+        def delete_user():
+            sel = tree.selection()
+            if not sel:
+                return
+            uid = tree.item(sel[0])["values"][0]
+            try:
+                self.security_service.delete_user(int(uid))
+                load_users()
+            except Exception as e:
+                self._show_error(str(e))
+
+        ctk.CTkButton(btn_frame, text="Novo Usuário", command=create_user).pack(side="left", padx=5)
+        ctk.CTkButton(btn_frame, text="Deletar Usuário", command=delete_user, fg_color="red").pack(side="left", padx=5)
+
+    def show_membership_plans(self) -> None:
+        self._clear_content()
+        self._page_title(
+            "Planos de Mensalidade",
+            "Cadastre e gerencie os planos de mensalidade oferecidos pelo clube.",
+        )
+
+        top_frame = ctk.CTkFrame(self.content, fg_color="transparent")
+        top_frame.grid(row=1, column=0, padx=22, pady=(0, 10), sticky="ew")
+
+        btn_new = ctk.CTkButton(
+            top_frame,
+            text="Novo Plano",
+            command=self._show_plan_form,
+        )
+        btn_new.pack(side="left")
+
+        body = ctk.CTkFrame(self.content, fg_color="transparent")
+        body.grid(row=2, column=0, padx=22, pady=(0, 22), sticky="nsew")
+        self.content.grid_rowconfigure(2, weight=1)
+
+        columns = ("id", "nome", "valor", "ciclo", "status")
+        self.plans_tree = ttk.Treeview(
+            body,
+            columns=columns,
+            show="headings",
+            style="App.Treeview",
+        )
+        self.plans_tree.heading("id", text="ID")
+        self.plans_tree.heading("nome", text="Nome do Plano")
+        self.plans_tree.heading("valor", text="Valor (R$)")
+        self.plans_tree.heading("ciclo", text="Ciclo")
+        self.plans_tree.heading("status", text="Status")
+        
+        self.plans_tree.column("id", width=50, anchor="center")
+        self.plans_tree.column("nome", width=300, anchor="w")
+        self.plans_tree.column("valor", width=100, anchor="e")
+        self.plans_tree.column("ciclo", width=100, anchor="center")
+        self.plans_tree.column("status", width=100, anchor="center")
+
+        self.plans_tree.pack(fill="both", expand=True)
+        self.plans_tree.bind("<Double-1>", lambda e: self._on_plan_double_click())
+
+        self._load_plans()
+
+    def _load_plans(self) -> None:
+        for row in self.plans_tree.get_children():
+            self.plans_tree.delete(row)
+        plans = self.db.list_membership_plans(active_only=False)
+        for p in plans:
+            status_text = "Ativo" if p["active"] else "Inativo"
+            cycle_map = {"monthly": "Mensal", "yearly": "Anual", "quarterly": "Trimestral"}
+            cycle_text = cycle_map.get(p["billing_cycle"], p["billing_cycle"])
+            self.plans_tree.insert(
+                "",
+                "end",
+                values=(
+                    p["id"],
+                    p["name"],
+                    f"{p['amount']:.2f}",
+                    cycle_text,
+                    status_text
+                ),
+            )
+
+    def _on_plan_double_click(self) -> None:
+        sel = self.plans_tree.selection()
+        if not sel:
+            return
+        plan_id = int(self.plans_tree.item(sel[0])["values"][0])
+        plan = self.db.get_membership_plan(plan_id)
+        if plan:
+            self._show_plan_form(plan)
+
+    def _show_plan_form(self, plan: dict[str, Any] | None = None) -> None:
+        dlg = ctk.CTkToplevel(self)
+        dlg.title("Plano de Mensalidade" if plan else "Novo Plano")
+        dlg.geometry("400x450")
+        dlg.transient(self)
+        dlg.grab_set()
+
+        frame = ctk.CTkFrame(dlg)
+        frame.pack(fill="both", expand=True, padx=20, pady=20)
+
+        ctk.CTkLabel(frame, text="Nome do Plano:").pack(anchor="w", pady=(0, 5))
+        name_entry = ctk.CTkEntry(frame)
+        name_entry.pack(fill="x", pady=(0, 15))
+
+        ctk.CTkLabel(frame, text="Valor (R$):").pack(anchor="w", pady=(0, 5))
+        amount_entry = ctk.CTkEntry(frame)
+        amount_entry.pack(fill="x", pady=(0, 15))
+
+        ctk.CTkLabel(frame, text="Ciclo de Cobrança:").pack(anchor="w", pady=(0, 5))
+        cycle_var = ctk.StringVar(value="monthly")
+        cycle_menu = ctk.CTkOptionMenu(
+            frame,
+            variable=cycle_var,
+            values=["monthly", "quarterly", "yearly"]
+        )
+        cycle_menu.pack(fill="x", pady=(0, 15))
+
+        active_var = ctk.BooleanVar(value=True)
+        active_cb = ctk.CTkCheckBox(frame, text="Plano Ativo", variable=active_var)
+        active_cb.pack(anchor="w", pady=(0, 15))
+
+        if plan:
+            name_entry.insert(0, plan["name"])
+            amount_entry.insert(0, str(plan["amount"]))
+            cycle_var.set(plan["billing_cycle"])
+            active_var.set(bool(plan["active"]))
+
+        def save():
+            try:
+                amount = float(amount_entry.get().replace(",", "."))
+            except ValueError:
+                self._show_error("Valor inválido.")
+                return
+
+            name = name_entry.get().strip()
+            if not name:
+                self._show_error("Nome é obrigatório.")
+                return
+
+            if plan:
+                self.db.update_membership_plan(
+                    plan["id"],
+                    name=name,
+                    amount=amount,
+                    billing_cycle=cycle_var.get(),
+                    active=int(active_var.get()),
+                    notes=""
+                )
+            else:
+                self.db.create_membership_plan(
+                    name=name,
+                    amount=amount,
+                    billing_cycle=cycle_var.get(),
+                    notes=""
+                )
+            self._load_plans()
+            dlg.destroy()
+
+        ctk.CTkButton(frame, text="Salvar", command=save).pack(pady=20)
+
+    def _show_users_manager(self) -> None:
+        if self.security_service.current_operator().get("role") != "admin":
+            self._show_error("Apenas o administrador pode gerenciar usuários.")
+            return
+
+        dlg = ctk.CTkToplevel(self)
+        dlg.title("Gerenciar Usuários")
+        dlg.geometry("700x500")
+        dlg.grab_set()
+
+        frame = ctk.CTkFrame(dlg)
+        frame.pack(fill="both", expand=True, padx=20, pady=20)
+        
+        top_bar = ctk.CTkFrame(frame, fg_color="transparent")
+        top_bar.pack(fill="x", pady=(0, 10))
+
+        tree_frame = ctk.CTkFrame(frame)
+        tree_frame.pack(fill="both", expand=True)
+
+        users_tree = self._make_tree(
+            tree_frame,
+            ["username", "role", "created_at"],
+            {"username": "Usuário", "role": "Perfil", "created_at": "Criado em"},
+            {"username": 200, "role": 150, "created_at": 150}
+        )
+        users_tree.pack(fill="both", expand=True)
+
+        user_ids = {}
+
+        def load_users():
+            users_tree.delete(*users_tree.get_children())
+            user_ids.clear()
+            for user in self.security_service.list_users():
+                row_id = users_tree.insert("", "end", values=(
+                    user["username"],
+                    OPERATOR_ROLES.get(user["role"], user["role"]),
+                    user["created_at"]
+                ))
+                user_ids[row_id] = user["id"]
+
+        load_users()
+
+        def add_user():
+            add_dlg = ctk.CTkToplevel(dlg)
+            add_dlg.title("Novo Usuário")
+            add_dlg.geometry("400x400")
+            add_dlg.grab_set()
+
+            ctk.CTkLabel(add_dlg, text="Nome de Usuário").pack(pady=(20, 5))
+            user_entry = ctk.CTkEntry(add_dlg, width=250)
+            user_entry.pack()
+
+            ctk.CTkLabel(add_dlg, text="Senha Provisória").pack(pady=(15, 5))
+            pwd_entry = ctk.CTkEntry(add_dlg, width=250)
+            pwd_entry.pack()
+
+            ctk.CTkLabel(add_dlg, text="Perfil").pack(pady=(15, 5))
+            role_var = ctk.StringVar(value="teacher")
+            role_combo = ctk.CTkOptionMenu(add_dlg, variable=role_var, values=list(OPERATOR_ROLE_VALUES.keys()))
+            role_combo.pack()
+
+            def save():
+                try:
+                    self.security_service.create_user(
+                        username=user_entry.get().strip(),
+                        password_raw=pwd_entry.get().strip(),
+                        role=OPERATOR_ROLE_VALUES.get(role_var.get(), "teacher")
+                    )
+                    load_users()
+                    add_dlg.destroy()
+                except Exception as e:
+                    self._show_error(str(e))
+
+            ctk.CTkButton(add_dlg, text="Salvar", command=save).pack(pady=30)
+
+        def delete_user():
+            selected = users_tree.selection()
+            if not selected:
+                return
+            uid = user_ids[selected[0]]
+            try:
+                self.security_service.delete_user(uid)
+                load_users()
+            except Exception as e:
+                self._show_error(str(e))
+
+        def change_pwd():
+            selected = users_tree.selection()
+            if not selected:
+                return
+            uid = user_ids[selected[0]]
+            
+            pwd_dlg = ctk.CTkToplevel(dlg)
+            pwd_dlg.title("Redefinir Senha")
+            pwd_dlg.geometry("400x250")
+            pwd_dlg.grab_set()
+
+            ctk.CTkLabel(pwd_dlg, text="Nova Senha").pack(pady=(20, 5))
+            pwd_entry = ctk.CTkEntry(pwd_dlg, width=250)
+            pwd_entry.pack()
+
+            def save():
+                try:
+                    self.security_service.update_user_password(uid, pwd_entry.get().strip())
+                    pwd_dlg.destroy()
+                    self._show_info("Senha atualizada.")
+                except Exception as e:
+                    self._show_error(str(e))
+
+            ctk.CTkButton(pwd_dlg, text="Salvar", command=save).pack(pady=30)
+
+        ctk.CTkButton(top_bar, text="Novo", command=add_user).pack(side="left", padx=5)
+        ctk.CTkButton(top_bar, text="Excluir", command=delete_user, fg_color="red").pack(side="left", padx=5)
+        ctk.CTkButton(top_bar, text="Redefinir Senha", command=change_pwd).pack(side="left", padx=5)

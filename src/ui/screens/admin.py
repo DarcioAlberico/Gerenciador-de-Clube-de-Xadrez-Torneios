@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .ui_support import *
+from ..support import *
 
 
 class AdminPagesMixin:
@@ -127,7 +127,7 @@ class AdminPagesMixin:
         list_form.grid_columnconfigure(0, weight=1)
         list_name_entry = ctk.CTkEntry(list_form, placeholder_text="Nome da lista")
         list_name_entry.grid(row=0, column=0, padx=(12, 6), pady=(10, 4), sticky="ew")
-        list_date_entry = ctk.CTkEntry(list_form, placeholder_text="AAAA-MM-DD", width=112)
+        list_date_entry = self._make_date_entry(list_form, width=12)
         list_date_entry.grid(row=0, column=1, padx=4, pady=(10, 4))
         list_status_option = ctk.CTkOptionMenu(
             list_form,
@@ -591,8 +591,10 @@ class AdminPagesMixin:
         ]
         for index, (key, label) in enumerate(fields):
             ctk.CTkLabel(form, text=label).grid(row=index * 2, column=0, padx=16, pady=(8, 0), sticky="w")
-            placeholder = "AAAA-MM-DD" if key == "acquisition_date" else ""
-            entry = ctk.CTkEntry(form, width=260, placeholder_text=placeholder)
+            if key == "acquisition_date":
+                entry = self._make_date_entry(form, width=30)
+            else:
+                entry = ctk.CTkEntry(form, width=260)
             entry.grid(row=index * 2 + 1, column=0, padx=16, pady=(2, 0), sticky="ew")
             entries[key] = entry
 
@@ -631,11 +633,11 @@ class AdminPagesMixin:
             ("open_maintenance", "Manutencao"),
         ]
         for index, (key, label) in enumerate(summary_items):
-            card = ctk.CTkFrame(summary_panel, fg_color="#F8FAFC", corner_radius=8)
+            card = ctk.CTkFrame(summary_panel, fg_color=THEME_APP_BG, corner_radius=8)
             card.grid(row=0, column=index, padx=8, pady=10, sticky="ew")
             value_label = ctk.CTkLabel(card, text="0", font=ctk.CTkFont(size=18, weight="bold"))
             value_label.pack(anchor="w", padx=12, pady=(10, 0))
-            ctk.CTkLabel(card, text=label, text_color="#64748B").pack(anchor="w", padx=12, pady=(0, 10))
+            ctk.CTkLabel(card, text=label, text_color=THEME_TEXT_SUB).pack(anchor="w", padx=12, pady=(0, 10))
             summary_labels[key] = value_label
 
         controls = ctk.CTkFrame(right_panel, fg_color="transparent")
@@ -1151,7 +1153,10 @@ class AdminPagesMixin:
         ]
         for index, (key, label) in enumerate(fields):
             ctk.CTkLabel(form, text=label).grid(row=index * 2, column=0, padx=16, pady=(8, 0), sticky="w")
-            entry = ctk.CTkEntry(form, width=260, placeholder_text="AAAA-MM-DD" if key == "session_date" else "")
+            if key == "session_date":
+                entry = self._make_date_entry(form, width=30)
+            else:
+                entry = ctk.CTkEntry(form, width=260)
             entry.grid(row=index * 2 + 1, column=0, padx=16, pady=(2, 0), sticky="ew")
             entries[key] = entry
 
@@ -1610,8 +1615,14 @@ class AdminPagesMixin:
             "Controle planos, mensalidades, pagamentos e pendencias dos membros.",
         )
 
-        body = ctk.CTkFrame(self.content, fg_color="transparent")
-        body.grid(row=1, column=0, padx=22, pady=(0, 22), sticky="nsew")
+        tabs = ctk.CTkTabview(self.content)
+        tabs.grid(row=1, column=0, padx=22, pady=(0, 22), sticky="nsew")
+        tab_mensalidades = tabs.add("Mensalidades e Planos")
+        tab_caixa = tabs.add("Fluxo de Caixa")
+        tab_patrocinios = tabs.add("Patrocínios")
+
+        body = ctk.CTkFrame(tab_mensalidades, fg_color="transparent")
+        body.pack(fill="both", expand=True)
         body.grid_columnconfigure(1, weight=1)
         body.grid_rowconfigure(0, weight=1)
 
@@ -1627,7 +1638,7 @@ class AdminPagesMixin:
             form,
             text="Plano",
             font=ctk.CTkFont(size=14, weight="bold"),
-            text_color="#0F172A",
+            text_color=THEME_TEXT_MAIN,
         ).grid(row=0, column=0, padx=16, pady=(12, 4), sticky="w")
         plan_entries: dict[str, ctk.CTkEntry] = {}
         plan_fields = [
@@ -1650,7 +1661,7 @@ class AdminPagesMixin:
             form,
             text="Lancamento",
             font=ctk.CTkFont(size=14, weight="bold"),
-            text_color="#0F172A",
+            text_color=THEME_TEXT_MAIN,
         ).grid(row=13, column=0, padx=16, pady=(18, 4), sticky="w")
 
         ctk.CTkLabel(form, text="Membro").grid(row=14, column=0, padx=16, pady=(6, 0), sticky="w")
@@ -1675,8 +1686,10 @@ class AdminPagesMixin:
         for index, (key, label) in enumerate(payment_fields):
             row = base_row + index * 2
             ctk.CTkLabel(form, text=label).grid(row=row, column=0, padx=16, pady=(6, 0), sticky="w")
-            placeholder = "AAAA-MM-DD" if key in {"due_date", "payment_date"} else ""
-            entry = ctk.CTkEntry(form, width=260, placeholder_text=placeholder)
+            if key in {"due_date", "payment_date"}:
+                entry = self._make_date_entry(form, width=30)
+            else:
+                entry = ctk.CTkEntry(form, width=260)
             entry.grid(row=row + 1, column=0, padx=16, pady=(2, 0), sticky="ew")
             payment_entries[key] = entry
 
@@ -1697,18 +1710,18 @@ class AdminPagesMixin:
             summary_panel.grid_columnconfigure(column, weight=1)
         summary_labels: dict[str, ctk.CTkLabel] = {}
         summary_items = [
-            ("paid_amount", "Recebido"),
-            ("pending_amount", "Pendente"),
-            ("late_amount", "Atrasado"),
-            ("paid", "Pagos"),
-            ("late", "Atrasos"),
+            ("net_balance", "Saldo (Líquido)"),
+            ("paid_amount", "Mensalidades"),
+            ("income_amount", "Outras Receitas"),
+            ("expense_amount", "Despesas"),
+            ("late_amount", "Em Atraso"),
         ]
         for index, (key, label) in enumerate(summary_items):
-            card = ctk.CTkFrame(summary_panel, fg_color="#F8FAFC", corner_radius=8)
+            card = ctk.CTkFrame(summary_panel, fg_color=THEME_APP_BG, corner_radius=8)
             card.grid(row=0, column=index, padx=8, pady=10, sticky="ew")
             value_label = ctk.CTkLabel(card, text="0", font=ctk.CTkFont(size=18, weight="bold"))
             value_label.pack(anchor="w", padx=12, pady=(10, 0))
-            ctk.CTkLabel(card, text=label, text_color="#64748B").pack(anchor="w", padx=12, pady=(0, 10))
+            ctk.CTkLabel(card, text=label, text_color=THEME_TEXT_SUB).pack(anchor="w", padx=12, pady=(0, 10))
             summary_labels[key] = value_label
 
         controls = ctk.CTkFrame(right_panel, fg_color="transparent")
@@ -1757,6 +1770,7 @@ class AdminPagesMixin:
                 "plan": 130,
             },
         )
+        payments_tree.tag_configure("late", foreground=THEME_DANGER[0] if ctk.get_appearance_mode() == 'Light' else THEME_DANGER[1])
 
         plans_holder = self._make_panel(right_panel)
         plans_holder.grid(row=3, column=0, sticky="nsew")
@@ -1850,7 +1864,10 @@ class AdminPagesMixin:
             summary = self.finance_service.finance_summary(start_filter.get(), end_filter.get())
             for key, label in summary_labels.items():
                 value = summary.get(key, 0)
-                label.configure(text=f"{value:.2f}" if isinstance(value, float) else str(value))
+                if key in ("net_balance", "paid_amount", "income_amount", "expense_amount", "late_amount", "pending_amount"):
+                    label.configure(text=f"R$ {value:,.2f}")
+                else:
+                    label.configure(text=str(value))
 
         def load_plans() -> None:
             plans_tree.delete(*plans_tree.get_children())
@@ -1888,6 +1905,10 @@ class AdminPagesMixin:
                 ).casefold()
                 if query and query not in searchable:
                     continue
+                tags = ()
+                if payment["effective_status"] == "late":
+                    tags = ("late",)
+
                 payments_tree.insert(
                     "",
                     "end",
@@ -1902,6 +1923,7 @@ class AdminPagesMixin:
                         PAYMENT_STATUSES.get(payment["effective_status"], payment["effective_status"]),
                         payment.get("plan_name") or "",
                     ),
+                    tags=tags,
                 )
             load_summary()
 
@@ -2058,6 +2080,26 @@ class AdminPagesMixin:
             except Exception as exc:
                 self._show_error(exc)
 
+        def print_receipt() -> None:
+            try:
+                import tempfile
+                import os
+                payment_id = selected_payment_id()
+                if not payment_id:
+                    raise AppError("Selecione um pagamento.")
+
+                fd, temp_path_str = tempfile.mkstemp(suffix=".pdf")
+                os.close(fd)
+                path = Path(temp_path_str)
+
+                self._run_background(
+                    lambda: self.export_service.export_payment_receipt(payment_id, path),
+                    lambda result_path: self._print_document(path),
+                    "Preparando impressão...",
+                )
+            except Exception as exc:
+                self._show_error(exc)
+
         plan_buttons = [
             ("Novo plano", clear_plan_form),
             ("Salvar plano", save_plan),
@@ -2072,6 +2114,7 @@ class AdminPagesMixin:
             ("Marcar pago", mark_selected_paid),
             ("Gerar mensalidades", generate_recurring_payments),
             ("Exportar recibo", export_receipt),
+            ("Imprimir recibo", print_receipt),
         ]
         self._grid_form_buttons(form, payment_buttons, payment_button_row)
 
@@ -2090,6 +2133,214 @@ class AdminPagesMixin:
         status_filter.set("Todos")
         load_plans()
         load_payments()
+
+        # --- FLUXO DE CAIXA ---
+        caixa_body = ctk.CTkFrame(tab_caixa, fg_color="transparent")
+        caixa_body.pack(fill="both", expand=True)
+        caixa_body.grid_columnconfigure(1, weight=1)
+        caixa_body.grid_rowconfigure(0, weight=1)
+
+        caixa_form = self._make_scrollable_panel(caixa_body, width=302)
+        caixa_form.grid(row=0, column=0, sticky="ns", padx=(0, 16))
+
+        selected_transaction_id: dict[str, int | None] = {"value": None}
+
+        ctk.CTkLabel(
+            caixa_form, text="Transacao", font=ctk.CTkFont(size=14, weight="bold"), text_color=THEME_TEXT_MAIN
+        ).grid(row=0, column=0, padx=16, pady=(12, 4), sticky="w")
+
+        trans_entries: dict[str, ctk.CTkEntry] = {}
+        trans_fields = [
+            ("description", "Descricao"),
+            ("amount", "Valor"),
+            ("transaction_date", "Data (AAAA-MM-DD)"),
+            ("category", "Categoria"),
+            ("payment_method", "Metodo"),
+            ("notes", "Observacoes"),
+        ]
+        
+        ctk.CTkLabel(caixa_form, text="Tipo").grid(row=1, column=0, padx=16, pady=(6, 0), sticky="w")
+        trans_type_option = ctk.CTkOptionMenu(caixa_form, values=["income", "expense"], width=260)
+        trans_type_option.grid(row=2, column=0, padx=16, pady=(2, 0), sticky="ew")
+
+        base_trans_row = 3
+        for index, (key, label) in enumerate(trans_fields):
+            row = base_trans_row + index * 2
+            ctk.CTkLabel(caixa_form, text=label).grid(row=row, column=0, padx=16, pady=(6, 0), sticky="w")
+            placeholder = "AAAA-MM-DD" if "date" in key else ""
+            entry = ctk.CTkEntry(caixa_form, width=260, placeholder_text=placeholder)
+            entry.grid(row=row + 1, column=0, padx=16, pady=(2, 0), sticky="ew")
+            trans_entries[key] = entry
+
+        caixa_right_panel = ctk.CTkFrame(caixa_body, fg_color="transparent")
+        caixa_right_panel.grid(row=0, column=1, sticky="nsew")
+        caixa_right_panel.grid_columnconfigure(0, weight=1)
+        caixa_right_panel.grid_rowconfigure(0, weight=1)
+
+        trans_holder = self._make_panel(caixa_right_panel)
+        trans_holder.grid(row=0, column=0, sticky="nsew")
+        trans_holder.grid_columnconfigure(0, weight=1)
+        trans_holder.grid_rowconfigure(0, weight=1)
+
+        trans_tree = self._make_tree(
+            trans_holder,
+            ["id", "date", "type", "description", "category", "amount", "method"],
+            {
+                "id": "ID", "date": "Data", "type": "Tipo", "description": "Descricao",
+                "category": "Categoria", "amount": "Valor", "method": "Metodo"
+            },
+            {"id": 55, "date": 90, "type": 80, "description": 250, "category": 120, "amount": 80, "method": 100}
+        )
+
+        def clear_trans_form() -> None:
+            import datetime
+            selected_transaction_id["value"] = None
+            trans_type_option.set("income")
+            for entry in trans_entries.values():
+                entry.delete(0, "end")
+            trans_entries["transaction_date"].insert(0, datetime.date.today().isoformat())
+
+        def trans_payload() -> dict[str, Any]:
+            return {
+                "type": trans_type_option.get(),
+                **{k: v.get() for k, v in trans_entries.items()}
+            }
+
+        def load_transactions() -> None:
+            trans_tree.delete(*trans_tree.get_children())
+            for tx in self.finance_service.list_transactions():
+                trans_tree.insert("", "end", values=(
+                    tx["id"], tx["transaction_date"], tx["type"], tx["description"],
+                    tx["category"], tx["amount"], tx["payment_method"]
+                ))
+            load_summary()
+
+        def on_trans_select(_event: Any = None) -> None:
+            selected = trans_tree.selection()
+            if not selected:
+                return
+            tx_id = int(trans_tree.item(selected[0], "values")[0])
+            tx = next((t for t in self.finance_service.list_transactions() if t["id"] == tx_id), None)
+            if not tx:
+                return
+            selected_transaction_id["value"] = tx_id
+            trans_type_option.set(tx["type"])
+            for key, entry in trans_entries.items():
+                entry.delete(0, "end")
+                entry.insert(0, str(tx.get(key) or ""))
+
+        trans_tree.bind("<<TreeviewSelect>>", on_trans_select)
+
+        def save_trans() -> None:
+            try:
+                self.finance_service.save_transaction(trans_payload(), selected_transaction_id["value"])
+                self._show_toast("Transação salva com sucesso!")
+                clear_trans_form()
+                load_transactions()
+            except Exception as e:
+                self._show_toast(str(e), is_error=True)
+
+        def delete_trans() -> None:
+            tx_id = selected_transaction_id["value"]
+            if not tx_id:
+                return
+            self.finance_service.delete_transaction(tx_id)
+            self._show_toast("Transação excluída!")
+            clear_trans_form()
+            load_transactions()
+
+        # --- PATROCÍNIOS ---
+        sponsors_body = ctk.CTkFrame(tab_patrocinios, fg_color="transparent")
+        sponsors_body.pack(fill="both", expand=True)
+        sponsors_body.grid_columnconfigure(1, weight=1)
+        sponsors_body.grid_rowconfigure(0, weight=1)
+
+        spon_form = self._make_scrollable_panel(sponsors_body, width=302)
+        spon_form.grid(row=0, column=0, sticky="ns", padx=(0, 16))
+
+        selected_sponsor_id: dict[str, int | None] = {"value": None}
+
+        ctk.CTkLabel(spon_form, text="Patrocinador", font=ctk.CTkFont(size=14, weight="bold")).grid(row=0, column=0, padx=16, pady=(12, 4), sticky="w")
+        
+        spon_entries: dict[str, ctk.CTkEntry] = {}
+        spon_fields = [
+            ("name", "Nome/Empresa"),
+            ("sponsor_type", "Tipo (Ex: Empresa, Prefeitura)"),
+            ("contribution_amount", "Valor Contribuição"),
+            ("frequency", "Frequência (Ex: Mensal, Anual)"),
+            ("benefits_notes", "Contrapartidas/Notas"),
+        ]
+        for idx, (key, label) in enumerate(spon_fields):
+            ctk.CTkLabel(spon_form, text=label).grid(row=idx*2+1, column=0, padx=16, pady=(6,0), sticky="w")
+            entry = ctk.CTkEntry(spon_form, width=260)
+            entry.grid(row=idx*2+2, column=0, padx=16, pady=(2,0), sticky="ew")
+            spon_entries[key] = entry
+
+        spon_holder = self._make_panel(sponsors_body)
+        spon_holder.grid(row=0, column=1, sticky="nsew")
+        spon_holder.grid_columnconfigure(0, weight=1)
+        spon_holder.grid_rowconfigure(0, weight=1)
+
+        spon_tree = self._make_tree(
+            spon_holder,
+            ["id", "name", "type", "amount", "frequency"],
+            {"id": "ID", "name": "Nome", "type": "Tipo", "amount": "Valor", "frequency": "Frequência"},
+            {"id": 50, "name": 200, "type": 150, "amount": 100, "frequency": 100}
+        )
+
+        def clear_spon_form() -> None:
+            selected_sponsor_id["value"] = None
+            for entry in spon_entries.values():
+                entry.delete(0, "end")
+
+        def load_sponsors() -> None:
+            spon_tree.delete(*spon_tree.get_children())
+            for sp in self.finance_service.list_sponsors():
+                spon_tree.insert("", "end", values=(
+                    sp["id"], sp["name"], sp["sponsor_type"], sp["contribution_amount"], sp["frequency"]
+                ))
+
+        def on_spon_select(_event: Any = None) -> None:
+            selected = spon_tree.selection()
+            if not selected:
+                return
+            sp_id = int(spon_tree.item(selected[0], "values")[0])
+            sp = next((s for s in self.finance_service.list_sponsors() if s["id"] == sp_id), None)
+            if not sp:
+                return
+            selected_sponsor_id["value"] = sp_id
+            for key, entry in spon_entries.items():
+                entry.delete(0, "end")
+                entry.insert(0, str(sp.get(key) or ""))
+
+        spon_tree.bind("<<TreeviewSelect>>", on_spon_select)
+
+        def save_spon() -> None:
+            try:
+                payload = {k: v.get() for k, v in spon_entries.items()}
+                self.finance_service.save_sponsor(payload, selected_sponsor_id["value"])
+                self._show_toast("Patrocinador salvo com sucesso!")
+                clear_spon_form()
+                load_sponsors()
+            except Exception as e:
+                self._show_toast(str(e), is_error=True)
+
+        def delete_spon() -> None:
+            sp_id = selected_sponsor_id["value"]
+            if not sp_id:
+                return
+            self.finance_service.delete_sponsor(sp_id)
+            self._show_toast("Patrocinador excluído!")
+            clear_spon_form()
+            load_sponsors()
+
+        ctk.CTkButton(spon_form, text="Salvar Patrocinador", command=save_spon).grid(row=20, column=0, padx=16, pady=(16, 8), sticky="ew")
+        ctk.CTkButton(spon_form, text="Novo", command=clear_spon_form, fg_color="transparent", border_width=1).grid(row=21, column=0, padx=16, pady=4, sticky="ew")
+        ctk.CTkButton(spon_form, text="Excluir", command=delete_spon, fg_color=THEME_DANGER, hover_color="#C0392B").grid(row=22, column=0, padx=16, pady=4, sticky="ew")
+
+        load_sponsors()
+        clear_trans_form()
+        load_transactions()
 
     def show_calendar(self) -> None:
         self._clear_content()
@@ -2117,7 +2368,10 @@ class AdminPagesMixin:
         ]
         for index, (key, label) in enumerate(fields):
             ctk.CTkLabel(form, text=label).grid(row=index * 2, column=0, padx=16, pady=(8, 0), sticky="w")
-            entry = ctk.CTkEntry(form, width=260, placeholder_text="AAAA-MM-DD" if key == "event_date" else "")
+            if key == "event_date":
+                entry = self._make_date_entry(form, width=30)
+            else:
+                entry = ctk.CTkEntry(form, width=260)
             entry.grid(row=index * 2 + 1, column=0, padx=16, pady=(2, 0), sticky="ew")
             entries[key] = entry
 
@@ -2657,6 +2911,30 @@ class AdminPagesMixin:
             except Exception as exc:
                 self._show_error(exc)
 
+        def print_ranking() -> None:
+            try:
+                import tempfile
+                import os
+                category = selected_category()
+                fd, temp_path_str = tempfile.mkstemp(suffix=".pdf")
+                os.close(fd)
+                path = Path(temp_path_str)
+
+                self._run_background(
+                    lambda: self.export_service.export_internal_ranking_report(
+                        path,
+                        category=category,
+                        club_id=selected_club_id(),
+                        class_id=selected_class_id(),
+                        start_date=start_filter.get(),
+                        end_date=end_filter.get(),
+                    ),
+                    lambda _result: self._print_document(path),
+                    "Preparando impressão...",
+                )
+            except Exception as exc:
+                self._show_error(exc)
+
         ctk.CTkButton(toolbar, text="Recalcular", command=load_ranking).grid(
             row=2,
             column=0,
@@ -2685,6 +2963,13 @@ class AdminPagesMixin:
             pady=(0, 12),
             sticky="w",
         )
+        ctk.CTkButton(toolbar, text="Imprimir", command=print_ranking).grid(
+            row=2,
+            column=4,
+            padx=(0, 8),
+            pady=(0, 12),
+            sticky="w",
+        )
 
         category_option.configure(command=lambda _value: load_ranking())
         club_option.configure(command=on_club_change)
@@ -2698,5 +2983,115 @@ class AdminPagesMixin:
         status_option.set("Ativos")
         load_club_options()
         load_ranking()
+
+    def show_communications(self) -> None:
+        self._clear_content()
+        self._page_title("Comunicação e Avisos", "Gerencie murais e envio de boletins.")
+
+        body = ctk.CTkFrame(self.content, fg_color="transparent")
+        body.grid(row=1, column=0, padx=22, pady=(0, 22), sticky="nsew")
+        body.grid_rowconfigure(0, weight=1)
+        body.grid_columnconfigure(0, weight=1)
+        body.grid_columnconfigure(1, weight=1)
+
+        # Painel Esquerdo: Avisos Ativos
+        left_panel = self._make_panel(body)
+        left_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
+        left_panel.grid_rowconfigure(1, weight=1)
+        left_panel.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(left_panel, text="Mural de Avisos", font=("Inter", 16, "bold")).grid(row=0, column=0, padx=16, pady=16, sticky="w")
+        
+        columns = ["id", "title", "category", "expiration_date"]
+        headings = {"id": "ID", "title": "Título", "category": "Categoria", "expiration_date": "Expira em"}
+        widths = {"id": 50, "title": 200, "category": 100, "expiration_date": 100}
+        
+        tree_frame = ctk.CTkFrame(left_panel, fg_color="transparent")
+        tree_frame.grid(row=1, column=0, padx=16, pady=(0, 16), sticky="nsew")
+        tree_frame.grid_rowconfigure(0, weight=1)
+        tree_frame.grid_columnconfigure(0, weight=1)
+        
+        tree = self._make_tree(tree_frame, columns, headings, widths)
+        
+        def load_announcements() -> None:
+            for item in tree.get_children():
+                tree.delete(item)
+            try:
+                announcements = self.communication_service.get_active_announcements()
+                for a in announcements:
+                    tree.insert("", "end", values=(
+                        a.get("id", ""),
+                        a.get("title", ""),
+                        a.get("category", ""),
+                        a.get("expiration_date", "Nunca") or "Nunca"
+                    ))
+            except Exception as e:
+                logger.error(f"Erro ao carregar avisos: {e}")
+
+        def add_announcement() -> None:
+            dialog = ctk.CTkToplevel(self)
+            dialog.title("Novo Aviso")
+            dialog.geometry("400x350")
+            dialog.transient(self)
+            dialog.grab_set()
+
+            ctk.CTkLabel(dialog, text="Título:").pack(pady=(10, 0), padx=10, anchor="w")
+            title_entry = ctk.CTkEntry(dialog, width=380)
+            title_entry.pack(pady=(0, 10), padx=10)
+
+            ctk.CTkLabel(dialog, text="Categoria:").pack(pady=(0, 0), padx=10, anchor="w")
+            cat_entry = ctk.CTkEntry(dialog, width=380, placeholder_text="Ex: Importante, Torneio, Geral")
+            cat_entry.pack(pady=(0, 10), padx=10)
+
+            ctk.CTkLabel(dialog, text="Expira em (YYYY-MM-DD):").pack(pady=(0, 0), padx=10, anchor="w")
+            exp_entry = ctk.CTkEntry(dialog, width=380, placeholder_text="Deixe em branco para aviso permanente")
+            exp_entry.pack(pady=(0, 10), padx=10)
+
+            ctk.CTkLabel(dialog, text="Conteúdo:").pack(pady=(0, 0), padx=10, anchor="w")
+            content_text = ctk.CTkTextbox(dialog, width=380, height=80)
+            content_text.pack(pady=(0, 10), padx=10)
+
+            def save():
+                try:
+                    payload = {
+                        "title": title_entry.get().strip(),
+                        "category": cat_entry.get().strip() or "general",
+                        "expiration_date": exp_entry.get().strip(),
+                        "content": content_text.get("1.0", "end").strip()
+                    }
+                    self.communication_service.save_announcement(payload)
+                    dialog.destroy()
+                    load_announcements()
+                    self._show_info("Aviso salvo com sucesso!")
+                except Exception as e:
+                    self._show_error(e)
+
+            ctk.CTkButton(dialog, text="Salvar", command=save).pack(pady=10)
+
+        def del_announcement() -> None:
+            selected = tree.selection()
+            if not selected:
+                self._show_info("Selecione um aviso para excluir.")
+                return
+            item_id = int(tree.item(selected[0], "values")[0])
+            try:
+                self.communication_service.delete_announcement(item_id)
+                load_announcements()
+            except Exception as e:
+                self._show_error(e)
+
+        btn_frame = ctk.CTkFrame(left_panel, fg_color="transparent")
+        btn_frame.grid(row=2, column=0, padx=16, pady=(0, 16), sticky="ew")
+        ctk.CTkButton(btn_frame, text="Novo Aviso", command=add_announcement).pack(side="left", padx=(0, 10))
+        ctk.CTkButton(btn_frame, text="Excluir Aviso", command=del_announcement, fg_color="#ef4444", hover_color="#dc2626").pack(side="left")
+
+        # Painel Direito: Envio de Mensagens e Logs
+        right_panel = self._make_panel(body)
+        right_panel.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
+        
+        ctk.CTkLabel(right_panel, text="Envio de Mensagens (Logs)", font=("Inter", 16, "bold")).pack(pady=16, padx=16, anchor="w")
+        ctk.CTkLabel(right_panel, text="Em breve: Integração com Email e WhatsApp.\nAtualmente, os registros são feitos automaticamente pelas rotinas financeiras e de secretaria.", text_color="gray", justify="left").pack(padx=16, anchor="w")
+
+        load_announcements()
 
 

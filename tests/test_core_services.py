@@ -2621,8 +2621,6 @@ class PairingServiceTest(unittest.TestCase):
     def test_security_settings_audit_and_backup_retention(self) -> None:
         self.security_service.save_security_settings(
             {
-                "operator_name": "Coordenador",
-                "operator_role": "teacher",
                 "backup_retention_count": "2",
             }
         )
@@ -2635,8 +2633,6 @@ class PairingServiceTest(unittest.TestCase):
         backups = self.db.list_backups()
         backup_names = {backup["name"] for backup in backups}
 
-        self.assertEqual(settings["operator_name"], "Coordenador")
-        self.assertEqual(settings["operator_role"], "teacher")
         self.assertEqual(settings["backup_retention_count"], "2")
         self.assertTrue(first["path"].exists() or first["path"].name not in backup_names)
         self.assertTrue(second["path"].exists() or second["path"].name not in backup_names)

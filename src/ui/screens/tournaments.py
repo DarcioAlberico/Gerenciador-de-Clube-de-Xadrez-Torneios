@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .ui_support import *
+from ..support import *
 
 
 class TournamentPagesMixin:
@@ -31,7 +31,12 @@ class TournamentPagesMixin:
         ]
         for index, (key, label) in enumerate(fields):
             ctk.CTkLabel(form, text=label).grid(row=index * 2, column=0, padx=16, pady=(12, 0), sticky="w")
-            entry = ctk.CTkEntry(form, width=230)
+            if key in ("start_date", "end_date"):
+                entry = self._make_date_entry(form, width=28)
+            elif key == "time_control":
+                entry = self._make_time_control_menu(form, width=230)
+            else:
+                entry = ctk.CTkEntry(form, width=230)
             entry.grid(row=index * 2 + 1, column=0, padx=16, pady=(4, 2), sticky="ew")
             entries[key] = entry
         entries["rounds_count"].insert(0, "5")
@@ -135,13 +140,9 @@ class TournamentPagesMixin:
             except Exception as exc:
                 self._show_error(exc)
 
-        ctk.CTkButton(form, text="Criar torneio", command=create_tournament).grid(
-            row=option_row + 8,
-            column=0,
-            padx=16,
-            pady=18,
-            sticky="ew",
-        )
+        btn_create = ctk.CTkButton(form, text="Criar torneio", command=create_tournament)
+        btn_create.grid(row=option_row + 8, column=0, padx=16, pady=18, sticky="ew")
+        self._disable_if_unauthorized(btn_create, "tournament_write")
 
         list_panel = self._make_panel(body)
         list_panel.grid(row=0, column=1, sticky="nsew")
@@ -273,7 +274,12 @@ class TournamentPagesMixin:
                 pady=(8, 0),
                 sticky="w",
             )
-            entry = ctk.CTkEntry(basic_panel, width=330)
+            if key in ("start_date", "end_date"):
+                entry = self._make_date_entry(basic_panel, width=40)
+            elif key == "time_control":
+                entry = self._make_time_control_menu(basic_panel, width=330)
+            else:
+                entry = ctk.CTkEntry(basic_panel, width=330)
             entry.grid(row=index * 2, column=0, padx=16, pady=(2, 0), sticky="ew")
             entry.insert(0, str(tournament.get(key) or ""))
             tournament_entries[key] = entry
@@ -616,7 +622,10 @@ class TournamentPagesMixin:
                 pady=(0, 2),
                 sticky="w",
             )
-            entry = ctk.CTkEntry(generator_frame, width=width)
+            if key == "start_date":
+                entry = self._make_date_entry(generator_frame, width=15)
+            else:
+                entry = ctk.CTkEntry(generator_frame, width=width)
             entry.grid(
                 row=1,
                 column=column,
@@ -651,7 +660,7 @@ class TournamentPagesMixin:
                 pady=(4, 0),
                 sticky="w",
             )
-            date_entry = ctk.CTkEntry(schedule_panel, width=180)
+            date_entry = self._make_date_entry(schedule_panel, width=20)
             date_entry.grid(row=row_index, column=1, padx=8, pady=(4, 0), sticky="ew")
             date_entry.insert(0, str(item.get("date") or ""))
             time_entry = ctk.CTkEntry(schedule_panel, width=140)
@@ -682,13 +691,9 @@ class TournamentPagesMixin:
             except Exception as exc:
                 self._show_error(exc)
 
-        ctk.CTkButton(generator_frame, text="Preencher agenda", command=apply_auto_schedule).grid(
-            row=2,
-            column=4,
-            padx=(8, 0),
-            pady=(2, 0),
-            sticky="e",
-        )
+        btn_auto = ctk.CTkButton(generator_frame, text="Preencher agenda", command=apply_auto_schedule)
+        btn_auto.grid(row=2, column=4, padx=(8, 0), pady=(2, 0), sticky="e")
+        self._disable_if_unauthorized(btn_auto, "tournament_write")
 
         def save_settings(show_message: bool = True) -> None:
             try:
@@ -745,16 +750,12 @@ class TournamentPagesMixin:
 
         actions = ctk.CTkFrame(body, fg_color="transparent")
         actions.grid(row=2, column=0, columnspan=2, sticky="e")
-        ctk.CTkButton(actions, text="Salvar configuracoes", command=save_settings).pack(
-            side="right",
-            padx=(8, 0),
-            pady=(0, 12),
-        )
-        ctk.CTkButton(actions, text="Equipe de Arbitragem", command=self.show_tournament_referees_dialog).pack(
-            side="right",
-            padx=(8, 0),
-            pady=(0, 12),
-        )
+        btn_save_config = ctk.CTkButton(actions, text="Salvar configuracoes", command=save_settings)
+        btn_save_config.pack(side="right", padx=(8, 0), pady=(0, 12))
+        self._disable_if_unauthorized(btn_save_config, "tournament_write")
+        btn_refs = ctk.CTkButton(actions, text="Equipe de Arbitragem", command=self.show_tournament_referees_dialog)
+        btn_refs.pack(side="right", padx=(8, 0), pady=(0, 12))
+        self._disable_if_unauthorized(btn_refs, "tournament_write")
 
     def show_players(self) -> None:
         if not self._require_tournament():
@@ -775,7 +776,7 @@ class TournamentPagesMixin:
         form = self._make_scrollable_panel(body, width=280)
         form.grid(row=0, column=0, sticky="ns", padx=(0, 16))
 
-        entries: dict[str, ctk.CTkEntry] = {}
+        entries: dict[str, Any] = {}
         player_fields = [
             ("name", "Nome"),
             ("surname", "Sobrenome"),
@@ -793,10 +794,51 @@ class TournamentPagesMixin:
         ]
         for index, (key, label) in enumerate(player_fields):
             ctk.CTkLabel(form, text=label).grid(row=index * 2, column=0, padx=16, pady=(12, 0), sticky="w")
-            entry = ctk.CTkEntry(form, width=240)
+            if key == "birth_date":
+                entry = self._make_date_entry(form, width=28)
+            elif key == "category":
+                from ..support import FIDE_CATEGORIES
+                entry = ctk.CTkOptionMenu(form, values=FIDE_CATEGORIES, width=240)
+                entry.set("")
+            else:
+                entry = ctk.CTkEntry(form, width=240)
             entry.grid(row=index * 2 + 1, column=0, padx=16, pady=(4, 2), sticky="ew")
             entries[key] = entry
-
+            
+            if key in ["fide_id", "cbx_id"]:
+                def autofill_from_official(event, current_key=key):
+                    val = entries[current_key].get().strip()
+                    if not val:
+                        return
+                    
+                    params = {"fide_id": val} if current_key == "fide_id" else {"cbx_id": val}
+                    player = self.db.find_latest_official_player(**params)
+                    if not player:
+                        return
+                        
+                    def update_if_empty(field_name, value):
+                        if field_name in entries and not entries[field_name].get().strip() and value:
+                            entries[field_name].delete(0, "end")
+                            entries[field_name].insert(0, str(value))
+                            
+                    update_if_empty("name", player.get("name"))
+                    update_if_empty("surname", player.get("surname"))
+                    update_if_empty("given_name", player.get("given_name"))
+                    update_if_empty("title", player.get("title"))
+                    update_if_empty("sex", player.get("sex"))
+                    update_if_empty("birth_date", player.get("birth_date"))
+                    update_if_empty("international_rating", player.get("international_rating"))
+                    update_if_empty("national_rating", player.get("national_rating"))
+                    rating_to_use = player.get("standard_rating") or player.get("international_rating") or player.get("national_rating")
+                    if rating_to_use:
+                        update_if_empty("rating", rating_to_use)
+                    
+                    if current_key == "fide_id":
+                        update_if_empty("cbx_id", player.get("cbx_id"))
+                    else:
+                        update_if_empty("fide_id", player.get("fide_id"))
+                        
+                entry.bind("<FocusOut>", autofill_from_official)
         control_row = len(player_fields) * 2
         ctk.CTkLabel(form, text="Buscar na lista").grid(row=control_row, column=0, padx=16, pady=(16, 0), sticky="w")
         search_entry = ctk.CTkEntry(form, width=240, placeholder_text="Nome, clube, categoria ou rating")
@@ -888,7 +930,10 @@ class TournamentPagesMixin:
         def clear_form() -> None:
             selected_player_id["value"] = None
             for entry in entries.values():
-                entry.delete(0, "end")
+                if isinstance(entry, ctk.CTkOptionMenu):
+                    entry.set("")
+                elif hasattr(entry, "delete"):
+                    entry.delete(0, "end")
             player_status_option.set(PLAYER_STATUSES["active"])
 
         def load_players() -> None:
@@ -980,8 +1025,11 @@ class TournamentPagesMixin:
                 for key, _label in player_fields
             }
             for key, value in clear_values.items():
-                entries[key].delete(0, "end")
-                entries[key].insert(0, str(value or ""))
+                if isinstance(entries[key], ctk.CTkOptionMenu):
+                    entries[key].set(str(value or ""))
+                elif hasattr(entries[key], "delete"):
+                    entries[key].delete(0, "end")
+                    entries[key].insert(0, str(value or ""))
 
         def add_player() -> None:
             try:
@@ -1157,7 +1205,7 @@ class TournamentPagesMixin:
                 dialog,
                 text=summary,
                 font=ctk.CTkFont(size=15, weight="bold"),
-                text_color="#0F172A",
+                text_color=THEME_TEXT_MAIN,
             ).grid(row=0, column=0, padx=16, pady=(16, 8), sticky="w")
 
             table_panel = ctk.CTkFrame(dialog, fg_color="transparent")
@@ -1314,7 +1362,7 @@ class TournamentPagesMixin:
             ("Importar CBX", lambda: import_official_ratings("CBX")),
             ("Atualizar ratings oficiais", update_official_ratings),
         ]
-        self._grid_form_buttons(form, button_specs, control_row + 7)
+        self._grid_form_buttons(form, button_specs, control_row + 7, required_action="tournament_write")
 
         load_players()
         load_member_options()
@@ -1347,7 +1395,7 @@ class TournamentPagesMixin:
             ctk.CTkLabel(
                 panel,
                 text="Altere o formato para Equipes na configuracao do torneio para cadastrar equipes.",
-                text_color="#64748B",
+                text_color=THEME_TEXT_SUB,
                 wraplength=420,
                 justify="left",
             ).grid(row=1, column=0, padx=16, pady=(0, 12), sticky="w")
@@ -1748,7 +1796,7 @@ class TournamentPagesMixin:
             ("Atualizar escalacao", update_assignment),
             ("Remover jogador", remove_assignment),
         ]
-        self._grid_form_buttons(form, button_specs, assignment_row + 7)
+        self._grid_form_buttons(form, button_specs, assignment_row + 7, required_action="tournament_write")
 
         load_teams()
         load_player_options()
@@ -1821,3 +1869,113 @@ class TournamentPagesMixin:
         ctk.CTkButton(btn_frame, text="Remover Selecionado", command=remove_referee, fg_color="#ef4444", hover_color="#dc2626").pack(side="right")
         
         load_tournament_refs()
+
+    def _make_time_control_menu(self, parent: ctk.CTkFrame, width: int = 230) -> ctk.CTkOptionMenu:
+        preset_options = [
+            "10 min",
+            "15 min + 10 s",
+            "3 min + 2 s",
+            "90 min + 30 s",
+            "Personalizado..."
+        ]
+        
+        var = ctk.StringVar(value="10 min")
+        menu = ctk.CTkOptionMenu(parent, values=preset_options, variable=var, width=width)
+        
+        def on_change(choice: str) -> None:
+            if choice == "Personalizado...":
+                custom_val = self._open_time_control_builder()
+                if custom_val:
+                    current_values = list(menu.cget("values"))
+                    if custom_val not in current_values:
+                        current_values.insert(0, custom_val)
+                        menu.configure(values=current_values)
+                    var.set(custom_val)
+                else:
+                    var.set("10 min")
+                    
+        menu.configure(command=on_change)
+        
+        def insert_hack(index: int, text: str) -> None:
+            if text:
+                current_values = list(menu.cget("values"))
+                if text not in current_values and text != "Personalizado...":
+                    current_values.insert(0, text)
+                    menu.configure(values=current_values)
+                var.set(text)
+        
+        menu.insert = insert_hack  # type: ignore
+        return menu
+
+    def _open_time_control_builder(self) -> str | None:
+        dialog = ctk.CTkToplevel(self)
+        dialog.title("Construtor de Ritmo")
+        dialog.geometry("450x440")
+        dialog.transient(self)
+        dialog.grab_set()
+
+        result: list[str | None] = [None]
+
+        ctk.CTkLabel(dialog, text="Tempo inicial (minutos):").grid(row=0, column=0, padx=16, pady=(16, 4), sticky="w")
+        base_time = ctk.CTkEntry(dialog, width=100)
+        base_time.grid(row=0, column=1, padx=16, pady=(16, 4), sticky="w")
+
+        ctk.CTkLabel(dialog, text="Incremento por lance (s):").grid(row=1, column=0, padx=16, pady=4, sticky="w")
+        inc_time = ctk.CTkEntry(dialog, width=100)
+        inc_time.grid(row=1, column=1, padx=16, pady=4, sticky="w")
+
+        adv_var = ctk.IntVar(value=0)
+        
+        def toggle_adv() -> None:
+            state = "normal" if adv_var.get() else "disabled"
+            moves_period_1.configure(state=state)
+            time_period_2.configure(state=state)
+            
+        adv_check = ctk.CTkCheckBox(dialog, text="Múltiplos Períodos (Xadrez Clássico)", variable=adv_var, command=toggle_adv)
+        adv_check.grid(row=2, column=0, columnspan=2, padx=16, pady=(16, 4), sticky="w")
+
+        ctk.CTkLabel(dialog, text="Lances do 1º período:").grid(row=3, column=0, padx=16, pady=4, sticky="w")
+        moves_period_1 = ctk.CTkEntry(dialog, width=100, state="disabled")
+        moves_period_1.grid(row=3, column=1, padx=16, pady=4, sticky="w")
+
+        ctk.CTkLabel(dialog, text="Tempo 2º período (minutos):").grid(row=4, column=0, padx=16, pady=4, sticky="w")
+        time_period_2 = ctk.CTkEntry(dialog, width=100, state="disabled")
+        time_period_2.grid(row=4, column=1, padx=16, pady=4, sticky="w")
+        
+        help_text = (
+            "Exemplos comuns gerados:\n"
+            "• 3 min + 2 s (Blitz)\n"
+            "• 10 min (Rápido s/ inc)\n"
+            "• 15 min + 10 s (Rápido)\n"
+            "• 90 min + 30 s (Clássico)\n"
+            "• 90 min / 40 lances + 30 min + 30 s"
+        )
+        help_label = ctk.CTkLabel(dialog, text=help_text, justify="left", text_color="gray", font=ctk.CTkFont(size=12))
+        help_label.grid(row=5, column=0, columnspan=2, padx=16, pady=(15, 0), sticky="w")
+
+        def save() -> None:
+            try:
+                base = base_time.get().strip() or "0"
+                inc = inc_time.get().strip() or "0"
+                if adv_var.get():
+                    m1 = moves_period_1.get().strip() or "0"
+                    t2 = time_period_2.get().strip() or "0"
+                    out = f"{base} min / {m1} lances + {t2} min"
+                    if inc != "0":
+                        out += f" + {inc} s"
+                else:
+                    out = f"{base} min"
+                    if inc != "0":
+                        out += f" + {inc} s"
+                result[0] = out
+                dialog.destroy()
+            except Exception:
+                pass
+
+        btn_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+        btn_frame.grid(row=6, column=0, columnspan=2, pady=20)
+        ctk.CTkButton(btn_frame, text="Cancelar", command=dialog.destroy, width=100, fg_color="gray").pack(side="left", padx=10)
+        ctk.CTkButton(btn_frame, text="Confirmar", command=save, width=100).pack(side="left", padx=10)
+
+        dialog.wait_window()
+        return result[0]

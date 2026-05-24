@@ -2,15 +2,17 @@ from __future__ import annotations
 
 import logging
 import sys
+import os
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from typing import Any, Callable
 
 import customtkinter as ctk
+from tkcalendar import DateEntry
 
-from .core.database import BASE_DIR, Database, default_backup_dir, default_export_dir
-from .core.logging_config import configure_logging, current_log_path
-from .core.services import (
+from src.core.database import BASE_DIR, Database, default_backup_dir, default_export_dir
+from src.core.logging_config import configure_logging, current_log_path
+from src.core.services import (
     ATTENDANCE_STATUSES,
     BILLING_CYCLES,
     CERTIFICATE_ORIENTATIONS,
@@ -41,8 +43,11 @@ from .core.services import (
     TRAINING_SESSION_STATUSES,
     TRAINING_SESSION_TYPES,
     AppError,
+    CalendarService,
     CertificateService,
+    LibraryService,
     ClubService,
+    CommunicationService,
     DashboardService,
     EventService,
     ExerciseService,
@@ -65,6 +70,18 @@ from .core.services import (
     player_full_name,
     player_pairing_name,
 )
+
+# Tema Antigravity (Light / Dark)
+THEME_APP_BG = ("#F8FAFC", "#0B0F19")
+THEME_PANEL_BG = ("#FFFFFF", "#1E293B")
+THEME_TEXT_MAIN = ("#0F172A", "#F1F5F9")
+THEME_TEXT_SUB = ("#64748B", "#94A3B8")
+THEME_STATUSBAR_BG = ("#E2E8F0", "#0F172A")
+THEME_TREE_BG = ("#FFFFFF", "#1E293B")
+THEME_TREE_FG = ("#0F172A", "#F1F5F9")
+THEME_ACCENT = ("#3B82F6", "#38BDF8")
+THEME_DANGER = ("#EF4444", "#F87171")
+THEME_INFO = ("#10B981", "#34D399")
 
 logger = logging.getLogger("src.ui")
 
@@ -125,6 +142,27 @@ INVENTORY_MAINTENANCE_STATUS_VALUES = {
 }
 OPERATOR_ROLE_LABELS = {value: label for value, label in OPERATOR_ROLES.items()}
 OPERATOR_ROLE_VALUES = {label: value for value, label in OPERATOR_ROLE_LABELS.items()}
+
+FIDE_CATEGORIES = [
+    "",
+    "Absoluto",
+    "Feminino",
+    "Sub-8 (U8)",
+    "Sub-10 (U10)",
+    "Sub-12 (U12)",
+    "Sub-14 (U14)",
+    "Sub-16 (U16)",
+    "Sub-18 (U18)",
+    "Sub-20 (U20)",
+    "Sênior 50+",
+    "Sênior 65+",
+    "Escolar Sub-7 (U7)",
+    "Escolar Sub-9 (U9)",
+    "Escolar Sub-11 (U11)",
+    "Escolar Sub-13 (U13)",
+    "Escolar Sub-15 (U15)",
+    "Escolar Sub-17 (U17)",
+]
 COMPETITION_TYPE_VALUES = {label: value for value, label in COMPETITION_TYPES.items()}
 TEAM_PAIRING_METHOD_VALUES = {label: value for value, label in TEAM_PAIRING_METHODS.items()}
 TEAM_PLAYER_ROLE_VALUES = {label: value for value, label in TEAM_PLAYER_ROLES.items()}
@@ -142,6 +180,16 @@ TOURNAMENT_SCOPE_VALUES = {label: value for value, label in TOURNAMENT_SCOPES.it
 PAIRING_METHOD_VALUES = {label: value for value, label in PAIRING_METHODS.items()}
 
 class ErrorCatchingMixin:
+    def _disable_if_unauthorized(self, widget: ctk.CTkBaseClass, action: str) -> None:
+        """Verifica se o operador atual tem permissão, se não tiver, desabilita o botão/widget."""
+        if hasattr(self, "security_service"):
+            if not self.security_service.has_permission(action):
+                if hasattr(widget, "configure"):
+                    try:
+                        widget.configure(state="disabled")
+                    except Exception:
+                        pass
+                        
     def _show_error(self, message_or_exception: str | Exception) -> None:
         message = str(message_or_exception)
         logger.error("Erro na interface: %s", message, exc_info=True)
@@ -159,6 +207,16 @@ class ErrorCatchingMixin:
     def _ask_string(self, title: str, prompt: str) -> str | None:
         dialog = ctk.CTkInputDialog(text=prompt, title=title)
         return dialog.get_input()
+
+    def _print_document(self, path: Path) -> None:
+        try:
+            if hasattr(os, "startfile"):
+                os.startfile(str(path), "print")
+            else:
+                self._show_info("A impressão direta só é suportada nativamente no Windows por enquanto.")
+        except Exception as exc:
+            self._show_error(f"Não foi possível iniciar a impressão: {exc}")
+
         
 class UIBuilderMixin(ErrorCatchingMixin):
     def _clear_content(self) -> None:
@@ -180,6 +238,34 @@ class UIBuilderMixin(ErrorCatchingMixin):
     def _make_scrollable_panel(self, parent: ctk.CTkFrame, width: int = 260) -> ctk.CTkScrollableFrame:
         return ctk.CTkScrollableFrame(parent, width=width, corner_radius=8)
 
+    def _make_date_entry(self, parent: Any, width: int = 20) -> DateEntry:
+        # width em DateEntry e medido em caracteres, o padrao de 20 e suficiente
+        # Ajustamos a estetica para ficar proxima do tema Antigravity
+        entry = DateEntry(
+            parent,
+            width=width,
+            background="#3B82F6", # THEME_ACCENT light
+            foreground="white",
+            headersbackground="#1E293B", # THEME_PANEL_BG dark
+            headersforeground="white",
+            selectbackground="#38BDF8", # THEME_ACCENT dark
+            selectforeground="black",
+            normalbackground="#FFFFFF",
+            normalforeground="#0F172A",
+            weekendbackground="#FFFFFF",
+            weekendforeground="#0F172A",
+            othermonthforeground="#94A3B8",
+            othermonthbackground="#FFFFFF",
+            othermonthweforeground="#94A3B8",
+            othermonthwebackground="#FFFFFF",
+            date_pattern="y-mm-dd",
+            showweeknumbers=False,
+            font=("Inter", 10),
+            borderwidth=1,
+            relief="solid",
+        )
+        return entry
+
     def _make_tree(
         self,
         parent: ctk.CTkFrame,
@@ -195,6 +281,7 @@ class UIBuilderMixin(ErrorCatchingMixin):
         scrollbar_y = ctk.CTkScrollbar(parent, command=tree.yview)
         scrollbar_x = ctk.CTkScrollbar(parent, command=tree.xview, orientation="horizontal")
         tree.configure(yscrollcommand=scrollbar_y.set, xscrollcommand=scrollbar_x.set)
+        tree.grid(row=0, column=0, sticky="nsew")
         scrollbar_y.grid(row=0, column=1, sticky="ns")
         scrollbar_x.grid(row=1, column=0, sticky="ew")
         return tree
@@ -204,8 +291,12 @@ class UIBuilderMixin(ErrorCatchingMixin):
         parent: ctk.CTkFrame,
         button_specs: list[tuple[str, Callable[[], None]]],
         start_row: int,
+        required_action: str = ""
     ) -> None:
         frame = ctk.CTkFrame(parent, fg_color="transparent")
         frame.grid(row=start_row, column=0, padx=16, pady=24, sticky="ew")
         for i, (text, cmd) in enumerate(button_specs):
-            ctk.CTkButton(frame, text=text, command=cmd).pack(fill="x", pady=(0 if i == 0 else 8, 0))
+            btn = ctk.CTkButton(frame, text=text, command=cmd)
+            btn.pack(fill="x", pady=(0 if i == 0 else 8, 0))
+            if required_action:
+                self._disable_if_unauthorized(btn, required_action)

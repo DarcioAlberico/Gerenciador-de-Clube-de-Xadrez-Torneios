@@ -1,4 +1,4 @@
-from src.ui import AlbericusApp
+from src.ui.app import AlbericusApp
 
 if __name__ == "__main__":
     app = AlbericusApp()

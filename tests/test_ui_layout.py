@@ -3,14 +3,14 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
-from tkinter import TclError
+from tkinter import TclError, ttk
 from unittest import mock
 
 import customtkinter as ctk
 
 from src.core.database import Database
 from src.core.services import AppError, TeamService, TournamentService
-from src.ui import AlbericusApp
+from src.ui.app import AlbericusApp
 
 
 class UiLayoutSmokeTest(unittest.TestCase):
@@ -54,6 +54,14 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.app._show_info = self.messages.append
         self.app._show_error = self._raise_ui_error
         self.app._run_background = self._run_background_now
+        
+        self.app.security_service.login("admin", "admin")
+        if hasattr(self.app, "login_frame"):
+            self.app.login_frame.destroy()
+            self.app._build_menu()
+            self.app._build_statusbar()
+            self.app._build_content()
+            self.app.show_club()
 
     def tearDown(self) -> None:
         if hasattr(self, "app"):
@@ -114,7 +122,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
 
         self.app.show_players()
         self.app.update()
-        with mock.patch("src.ui_tournaments.filedialog.askopenfilename", return_value=str(csv_path)):
+        with mock.patch("src.ui.screens.tournaments.filedialog.askopenfilename", return_value=str(csv_path)):
             self._click_button("Importar CSV")
         self.app.update()
 
@@ -324,7 +332,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
         output_path.parent.mkdir(parents=True, exist_ok=True)
         self.app.show_export()
         self.app.update()
-        with mock.patch("src.ui_settings.filedialog.asksaveasfilename", return_value=str(output_path)):
+        with mock.patch("src.ui.screens.settings.filedialog.asksaveasfilename", return_value=str(output_path)):
             self._click_button("Gerar arquivo")
         self.app.update()
 
@@ -364,7 +372,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
         root_right = root_left + self.app.winfo_width()
         offenders = []
         for widget in self._walk(self.app):
-            if not isinstance(widget, (ctk.CTkButton, ctk.CTkOptionMenu, ctk.CTkEntry)):
+            if not isinstance(widget, (ctk.CTkButton, ctk.CTkOptionMenu, ctk.CTkEntry, ttk.Entry)):
                 continue
             if not widget.winfo_ismapped():
                 continue
@@ -400,12 +408,15 @@ class UiLayoutSmokeTest(unittest.TestCase):
         target_row = int(label_grid["row"]) + 1
         target_column = int(label_grid["column"])
         for widget in label.master.winfo_children():
-            if not isinstance(widget, ctk.CTkEntry):
+            if not isinstance(widget, (ctk.CTkEntry, ttk.Entry, ctk.CTkOptionMenu)):
                 continue
             grid = widget.grid_info()
             if int(grid.get("row", -1)) == target_row and int(grid.get("column", -1)) == target_column:
-                widget.delete(0, "end")
-                widget.insert(0, value)
+                if isinstance(widget, ctk.CTkOptionMenu):
+                    widget.set(value)
+                else:
+                    widget.delete(0, "end")
+                    widget.insert(0, value)
                 return
         self.fail(f"Entrada nao encontrada para o campo {label_text!r}")
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .ui_support import *
+from ..support import *
 
 
 class PairingPagesMixin:
@@ -461,7 +461,7 @@ class PairingPagesMixin:
             ctk.CTkLabel(
                 panel,
                 text="A classificacao esta oculta nas configuracoes do torneio.",
-                text_color="#64748B",
+                text_color=THEME_TEXT_SUB,
             ).pack(anchor="w", padx=16, pady=16)
             return
 

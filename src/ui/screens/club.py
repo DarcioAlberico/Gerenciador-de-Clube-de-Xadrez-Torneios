@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .ui_support import *
+from ..support import *
 
 
 class ClubPagesMixin:
@@ -69,14 +69,14 @@ class ClubPagesMixin:
             ("Backups", dashboard["backups_count"]),
         ]
         for index, (label, value) in enumerate(cards):
-            card = ctk.CTkFrame(summary_panel, fg_color="#F8FAFC", corner_radius=8)
+            card = ctk.CTkFrame(summary_panel, fg_color=THEME_APP_BG, corner_radius=8)
             card.grid(row=0, column=index, padx=6, pady=8, sticky="ew")
             ctk.CTkLabel(card, text=str(value), font=ctk.CTkFont(size=18, weight="bold")).pack(
                 anchor="w",
                 padx=10,
                 pady=(8, 0),
             )
-            ctk.CTkLabel(card, text=label, text_color="#64748B").pack(anchor="w", padx=10, pady=(0, 8))
+            ctk.CTkLabel(card, text=label, text_color=THEME_TEXT_SUB).pack(anchor="w", padx=10, pady=(0, 8))
 
         dashboard_panel = self._make_panel(right_panel)
         dashboard_panel.grid(row=1, column=0, sticky="ew", pady=(0, 12))
@@ -90,7 +90,7 @@ class ClubPagesMixin:
                 section,
                 text=title,
                 font=ctk.CTkFont(size=13, weight="bold"),
-                text_color="#0F172A",
+                text_color=THEME_TEXT_MAIN,
             ).pack(anchor="w")
             if not lines:
                 lines = ["Sem registros"]
@@ -357,6 +357,20 @@ class ClubPagesMixin:
             padx=(4, 0),
             sticky="ew",
         )
+        def jump_to_members() -> None:
+            if not selected_class_id["value"]:
+                self._show_error(AppError("Selecione uma turma primeiro."))
+                return
+            self.show_members(initial_class_id=selected_class_id["value"])
+
+        ctk.CTkButton(class_actions, text="Lista de alunos", fg_color=THEME_ACCENT, command=jump_to_members).grid(
+            row=1,
+            column=0,
+            columnspan=2,
+            padx=0,
+            pady=(8, 0),
+            sticky="ew",
+        )
 
         club_tree.bind("<<TreeviewSelect>>", on_club_select)
         class_tree.bind("<<TreeviewSelect>>", on_class_select)
@@ -508,7 +522,7 @@ class ClubPagesMixin:
         tree.bind("<<TreeviewSelect>>", on_select)
         load_levels()
 
-    def show_members(self) -> None:
+    def show_members(self, initial_class_id: int | None = None) -> None:
         self._clear_content()
         self._page_title(
             "Membros",
@@ -520,10 +534,30 @@ class ClubPagesMixin:
         body.grid_columnconfigure(1, weight=1)
         body.grid_rowconfigure(0, weight=1)
 
-        form = self._make_scrollable_panel(body, width=292)
-        form.grid(row=0, column=0, sticky="ns", padx=(0, 16))
+        tabview = ctk.CTkTabview(body, width=320)
+        tabview.grid(row=0, column=0, sticky="ns", padx=(0, 16))
+        
+        tab_dados = tabview.add("Dados Pessoais")
+        tab_freq = tabview.add("Frequência")
+        tab_titles = tabview.add("Títulos")
+        tab_deslig = tabview.add("Desligamentos")
+        tab_patrimonio = tabview.add("Patrimônio (Empréstimos)")
+        tab_integracao = tabview.add("Integracao")
+        tab_contato = tabview.add("Contato")
 
-        entries: dict[str, ctk.CTkEntry] = {}
+        form = self._make_scrollable_panel(tab_dados, width=300)
+        form.pack(fill="both", expand=True)
+
+        financial_alert_label = ctk.CTkLabel(
+            form, 
+            text="", 
+            text_color="#ff4444", 
+            font=ctk.CTkFont(size=14, weight="bold")
+        )
+        financial_alert_label.grid(row=0, column=0, columnspan=2, padx=16, pady=(10, 0), sticky="ew")
+        financial_alert_label.grid_remove()  # Oculta por padrao
+
+        entries: dict[str, Any] = {}
         fields = [
             ("name", "Nome"),
             ("surname", "Sobrenome"),
@@ -540,7 +574,14 @@ class ClubPagesMixin:
         ]
         for index, (key, label) in enumerate(fields):
             ctk.CTkLabel(form, text=label).grid(row=index * 2, column=0, padx=16, pady=(8, 0), sticky="w")
-            entry = ctk.CTkEntry(form, width=250)
+            if key == "birth_date":
+                entry = self._make_date_entry(form, width=30)
+            elif key == "category":
+                from ..support import FIDE_CATEGORIES
+                entry = ctk.CTkOptionMenu(form, values=FIDE_CATEGORIES, width=250)
+                entry.set("")
+            else:
+                entry = ctk.CTkEntry(form, width=250)
             entry.grid(row=index * 2 + 1, column=0, padx=16, pady=(2, 0), sticky="ew")
             entries[key] = entry
 
@@ -577,6 +618,286 @@ class ClubPagesMixin:
         class_filter_map: dict[str, int] = {}
         learning_level_option_map: dict[str, int | None] = {"Sem nivel": None}
         learning_level_filter_map: dict[str, int] = {}
+
+        # Frequência Tab
+        freq_frame = ctk.CTkFrame(tab_freq, fg_color="transparent")
+        freq_frame.pack(fill="both", expand=True, padx=5, pady=5)
+        
+        freq_tree = ttk.Treeview(freq_frame, columns=("id", "data", "evento"), show="headings", height=8)
+        freq_tree.heading("id", text="ID")
+        freq_tree.heading("data", text="Data")
+        freq_tree.heading("evento", text="Evento")
+        freq_tree.column("id", width=30)
+        freq_tree.column("data", width=80)
+        freq_tree.column("evento", width=120)
+        freq_tree.pack(fill="x", pady=5)
+
+        freq_date_entry = self._make_date_entry(freq_frame, width=200)
+        freq_date_entry.pack(pady=2)
+        freq_date_entry.insert(0, "DD/MM/AAAA")
+        freq_event_entry = ctk.CTkEntry(freq_frame, placeholder_text="Evento/Aula", width=200)
+        freq_event_entry.pack(pady=2)
+        
+        def add_presence():
+            mid = selected_member_id["value"]
+            if not mid: return
+            d = freq_date_entry.get().strip()
+            e = freq_event_entry.get().strip()
+            if d and e:
+                self.member_service.register_presence(mid, d, e)
+                load_freq()
+                freq_event_entry.delete(0, "end")
+        
+        def delete_presence():
+            sel = freq_tree.selection()
+            if sel:
+                pid = int(freq_tree.item(sel[0])["values"][0])
+                self.member_service.remove_presence(pid)
+                load_freq()
+
+        freq_btns = ctk.CTkFrame(freq_frame, fg_color="transparent")
+        freq_btns.pack(pady=5)
+        ctk.CTkButton(freq_btns, text="Add", width=80, command=add_presence).pack(side="left", padx=2)
+        ctk.CTkButton(freq_btns, text="Del", width=80, fg_color="red", command=delete_presence).pack(side="left", padx=2)
+
+        def load_freq():
+            freq_tree.delete(*freq_tree.get_children())
+            mid = selected_member_id["value"]
+            if not mid: return
+            for p in self.member_service.list_presences(mid):
+                freq_tree.insert("", "end", values=(p["id"], p["presence_date"], p["event_type"]))
+
+        # Títulos Tab
+        titles_frame = ctk.CTkFrame(tab_titles, fg_color="transparent")
+        titles_frame.pack(fill="both", expand=True, padx=5, pady=5)
+        
+        titles_tree = ttk.Treeview(titles_frame, columns=("id", "titulo", "data"), show="headings", height=8)
+        titles_tree.heading("id", text="ID")
+        titles_tree.heading("titulo", text="Título")
+        titles_tree.heading("data", text="Data")
+        titles_tree.column("id", width=30)
+        titles_tree.column("titulo", width=120)
+        titles_tree.column("data", width=80)
+        titles_tree.pack(fill="x", pady=5)
+
+        title_name_entry = ctk.CTkEntry(titles_frame, placeholder_text="Título", width=200)
+        title_name_entry.pack(pady=2)
+        title_date_entry = self._make_date_entry(titles_frame, width=200)
+        title_date_entry.pack(pady=2)
+        title_date_entry.insert(0, "DD/MM/AAAA")
+        title_issuer_entry = ctk.CTkEntry(titles_frame, placeholder_text="Emissor", width=200)
+        title_issuer_entry.pack(pady=2)
+
+        def add_title_action():
+            mid = selected_member_id["value"]
+            if not mid: return
+            n = title_name_entry.get().strip()
+            d = title_date_entry.get().strip()
+            i = title_issuer_entry.get().strip()
+            if n:
+                self.member_service.add_title(mid, n, d, i)
+                load_titles()
+                title_name_entry.delete(0, "end")
+                title_issuer_entry.delete(0, "end")
+
+        def delete_title_action():
+            sel = titles_tree.selection()
+            if sel:
+                tid = int(titles_tree.item(sel[0])["values"][0])
+                self.member_service.remove_title(tid)
+                load_titles()
+
+        titles_btns = ctk.CTkFrame(titles_frame, fg_color="transparent")
+        titles_btns.pack(pady=5)
+        ctk.CTkButton(titles_btns, text="Add", width=80, command=add_title_action).pack(side="left", padx=2)
+        ctk.CTkButton(titles_btns, text="Del", width=80, fg_color="red", command=delete_title_action).pack(side="left", padx=2)
+
+        def load_titles():
+            titles_tree.delete(*titles_tree.get_children())
+            mid = selected_member_id["value"]
+            if not mid: return
+            for t in self.member_service.list_titles(mid):
+                titles_tree.insert("", "end", values=(t["id"], t["title_name"], t["date_earned"]))
+
+        # Desligamentos Tab
+        deslig_frame = ctk.CTkFrame(tab_deslig, fg_color="transparent")
+        deslig_frame.pack(fill="both", expand=True, padx=5, pady=5)
+
+        ctk.CTkLabel(deslig_frame, text="Data de Desligamento").pack(anchor="w", pady=(5,0))
+        deslig_date = self._make_date_entry(deslig_frame, width=250)
+        deslig_date.pack(fill="x")
+        
+        ctk.CTkLabel(deslig_frame, text="Motivo").pack(anchor="w", pady=(10,0))
+        deslig_reason = ctk.CTkEntry(deslig_frame, width=250)
+        deslig_reason.pack(fill="x")
+        
+        ctk.CTkLabel(deslig_frame, text="Notas (Transferência)").pack(anchor="w", pady=(10,0))
+        deslig_notes = ctk.CTkEntry(deslig_frame, width=250)
+        deslig_notes.pack(fill="x")
+
+        def do_deactivate():
+            mid = selected_member_id["value"]
+            if not mid: return
+            try:
+                self.member_service.deactivate_member(
+                    mid,
+                    reason=deslig_reason.get().strip(),
+                    date=deslig_date.get().strip(),
+                    notes=deslig_notes.get().strip()
+                )
+                self._show_info("Membro desligado com sucesso.")
+                load_members()
+            except Exception as e:
+                self._show_error(str(e))
+
+        ctk.CTkButton(deslig_frame, text="Desligar Membro", fg_color="red", command=do_deactivate).pack(pady=20)
+
+        def load_deslig(member: dict[str, Any]):
+            deslig_date.delete(0, "end")
+            deslig_reason.delete(0, "end")
+            deslig_notes.delete(0, "end")
+            deslig_date.insert(0, str(member.get("departure_date") or ""))
+            deslig_reason.insert(0, str(member.get("departure_reason") or ""))
+            deslig_notes.insert(0, str(member.get("transfer_notes") or ""))
+
+        # TAB PATRIMONIO
+        pat_holder = self._make_panel(tab_patrimonio)
+        pat_holder.pack(fill="both", expand=True, padx=16, pady=(16, 8))
+        pat_holder.grid_rowconfigure(0, weight=1)
+        pat_holder.grid_columnconfigure(0, weight=1)
+        pat_tree = self._make_tree(
+            pat_holder,
+            ["id", "item", "qty", "loan", "due", "status"],
+            {
+                "id": "ID",
+                "item": "Item",
+                "qty": "Qtd",
+                "loan": "Data Empréstimo",
+                "due": "Data Devolução",
+                "status": "Status",
+            },
+            {"id": 40, "item": 180, "qty": 40, "loan": 90, "due": 90, "status": 90},
+        )
+        def load_patrimonio(member_id: int):
+            pat_tree.delete(*pat_tree.get_children())
+            if not member_id:
+                return
+            loans = self.db.list_inventory_loans(member_id=member_id)
+            for loan in loans:
+                pat_tree.insert(
+                    "",
+                    "end",
+                    values=(
+                        loan["id"],
+                        loan.get("item_name") or "",
+                        loan["quantity"],
+                        loan.get("loan_date") or "",
+                        loan.get("due_date") or "",
+                        INVENTORY_LOAN_STATUS_LABELS.get(loan["status"], loan["status"]),
+                    ),
+                )
+
+        # Integração Online Tab
+        integracao_frame = self._make_scrollable_panel(tab_integracao, width=300)
+        integracao_frame.pack(fill="both", expand=True)
+
+        ctk.CTkLabel(integracao_frame, text="Lichess Username").grid(row=0, column=0, padx=16, pady=(16, 0), sticky="w")
+        lichess_entry = ctk.CTkEntry(integracao_frame, width=250)
+        lichess_entry.grid(row=1, column=0, padx=16, pady=(2, 0), sticky="ew")
+        entries["lichess_username"] = lichess_entry
+
+        ctk.CTkLabel(integracao_frame, text="Chess.com Username").grid(row=2, column=0, padx=16, pady=(16, 0), sticky="w")
+        chesscom_entry = ctk.CTkEntry(integracao_frame, width=250)
+        chesscom_entry.grid(row=3, column=0, padx=16, pady=(2, 0), sticky="ew")
+        entries["chesscom_username"] = chesscom_entry
+
+        ctk.CTkLabel(integracao_frame, text="Rating Online Blitz").grid(row=4, column=0, padx=16, pady=(16, 0), sticky="w")
+        blitz_entry = ctk.CTkEntry(integracao_frame, width=150)
+        blitz_entry.grid(row=5, column=0, padx=16, pady=(2, 0), sticky="w")
+        entries["online_blitz_rating"] = blitz_entry
+
+        ctk.CTkLabel(integracao_frame, text="Rating Online Rapid").grid(row=6, column=0, padx=16, pady=(16, 0), sticky="w")
+        rapid_entry = ctk.CTkEntry(integracao_frame, width=150)
+        rapid_entry.grid(row=7, column=0, padx=16, pady=(2, 16), sticky="w")
+        entries["online_rapid_rating"] = rapid_entry
+
+        def sync_online_ratings():
+            lichess_user = lichess_entry.get().strip()
+            chesscom_user = chesscom_entry.get().strip()
+            if not lichess_user and not chesscom_user:
+                self._show_info("Informe pelo menos um username (Lichess ou Chess.com).")
+                return
+            
+            self._show_info("Iniciando sincronizacao com plataformas...")
+            
+            def run_sync():
+                from src.services.integration_service import IntegrationService
+                service = IntegrationService()
+                
+                blitz_max = 0
+                rapid_max = 0
+                
+                if lichess_user:
+                    l_ratings = service.fetch_lichess_ratings(lichess_user)
+                    blitz_max = max(blitz_max, l_ratings["blitz"])
+                    rapid_max = max(rapid_max, l_ratings["rapid"])
+                
+                if chesscom_user:
+                    c_ratings = service.fetch_chesscom_ratings(chesscom_user)
+                    blitz_max = max(blitz_max, c_ratings["blitz"])
+                    rapid_max = max(rapid_max, c_ratings["rapid"])
+                    
+                def apply_ratings(result=None):
+                    blitz_entry.delete(0, "end")
+                    blitz_entry.insert(0, str(blitz_max))
+                    rapid_entry.delete(0, "end")
+                    rapid_entry.insert(0, str(rapid_max))
+                    self._show_info(f"Sincronizacao concluida!\nBlitz: {blitz_max} | Rapid: {rapid_max}\n(Clique em Salvar para persistir)")
+                self.after(0, apply_ratings)
+
+            import threading
+            threading.Thread(target=run_sync, daemon=True).start()
+
+        ctk.CTkButton(integracao_frame, text="Sincronizar Rating Online", command=sync_online_ratings, fg_color=THEME_ACCENT).grid(
+            row=8, column=0, padx=16, pady=16, sticky="ew"
+        )
+
+        # Contato Tab
+        contato_frame = self._make_scrollable_panel(tab_contato, width=300)
+        contato_frame.pack(fill="both", expand=True)
+
+        ctk.CTkLabel(contato_frame, text="Acoes Rapidas", font=ctk.CTkFont(weight="bold")).grid(row=0, column=0, padx=16, pady=(16, 8), sticky="w")
+
+        def open_whatsapp():
+            phone = entries.get("phone")
+            if not phone:
+                return
+            num = "".join(filter(str.isdigit, phone.get()))
+            if not num:
+                self._show_info("Membro nao possui telefone valido.")
+                return
+            if not num.startswith("55"):
+                num = "55" + num
+            import webbrowser
+            webbrowser.open(f"https://wa.me/{num}")
+
+        def open_email():
+            email_field = entries.get("email")
+            if not email_field:
+                return
+            email = email_field.get().strip()
+            if not email:
+                self._show_info("Membro nao possui email.")
+                return
+            import webbrowser
+            webbrowser.open(f"mailto:{email}")
+
+        ctk.CTkButton(contato_frame, text=" Abrir WhatsApp", command=open_whatsapp, fg_color="#25D366", hover_color="#128C7E").grid(
+            row=1, column=0, padx=16, pady=8, sticky="ew"
+        )
+        ctk.CTkButton(contato_frame, text=" Enviar E-mail", command=open_email).grid(
+            row=2, column=0, padx=16, pady=8, sticky="ew"
+        )
 
         list_panel = self._make_panel(body)
         list_panel.grid(row=0, column=1, sticky="nsew")
@@ -700,7 +1021,7 @@ class ClubPagesMixin:
             history_header,
             text="Historico de torneios do membro selecionado",
             font=ctk.CTkFont(size=14, weight="bold"),
-            text_color="#0F172A",
+            text_color=THEME_TEXT_MAIN,
         ).grid(row=0, column=0, sticky="w")
 
         history_holder = ctk.CTkFrame(list_panel, fg_color="transparent")
@@ -775,16 +1096,22 @@ class ClubPagesMixin:
             )
             class_option.set(chosen)
 
-        def load_class_filter_options(club_id: int | None = None) -> None:
+        def load_class_filter_options(club_id: int | None = None, initial_set_id: int | None = None) -> None:
             class_filter_map.clear()
             values = ["Todas turmas"]
+            chosen = "Todas turmas"
             for class_data in self.db.list_classes(club_id=club_id, active_only=True):
                 label = f"{class_data['id']} - {class_data['name']}"
                 values.append(label)
                 class_filter_map[label] = int(class_data["id"])
+                if initial_set_id == int(class_data["id"]):
+                    chosen = label
             current_filter = class_filter.get()
             class_filter.configure(values=values)
-            class_filter.set(current_filter if current_filter in values else "Todas turmas")
+            if initial_set_id is not None:
+                class_filter.set(chosen)
+            else:
+                class_filter.set(current_filter if current_filter in values else "Todas turmas")
 
         def load_learning_level_options(selected_id: int | None = None) -> None:
             learning_level_option_map.clear()
@@ -878,8 +1205,12 @@ class ClubPagesMixin:
 
         def clear_form() -> None:
             selected_member_id["value"] = None
-            for entry in entries.values():
-                entry.delete(0, "end")
+            financial_alert_label.grid_remove()
+            for key, entry in entries.items():
+                if isinstance(entry, ctk.CTkOptionMenu):
+                    entry.set("")
+                elif hasattr(entry, "delete"):
+                    entry.delete(0, "end")
             member_type_option.set(MEMBER_TYPE_LABELS["socio"])
             status_option.set(MEMBER_STATUS_LABELS["active"])
             load_club_options()
@@ -1044,14 +1375,29 @@ class ClubPagesMixin:
                 return
             selected_member_id["value"] = member["id"]
             for key, entry in entries.items():
-                entry.delete(0, "end")
-                entry.insert(0, str(member.get(key) or ""))
+                if isinstance(entry, ctk.CTkOptionMenu):
+                    entry.set(str(member.get(key) or ""))
+                elif hasattr(entry, "delete"):
+                    entry.delete(0, "end")
+                    entry.insert(0, str(member.get(key) or ""))
             member_type_option.set(MEMBER_TYPE_LABELS.get(member["member_type"], MEMBER_TYPE_LABELS["socio"]))
             status_option.set(MEMBER_STATUS_LABELS.get(member["status"], MEMBER_STATUS_LABELS["active"]))
+            
+            fin_status = self.finance_service.member_financial_status(member["id"])
+            if fin_status["status"] == "late":
+                financial_alert_label.configure(text=f"ÔÜá INADIMPLENTE: R$ {fin_status['late_amount']:.2f} atrasado")
+                financial_alert_label.grid()
+            else:
+                financial_alert_label.grid_remove()
+                
             load_club_options(int(member.get("club_id") or 1))
             load_class_options(int(member.get("club_id") or 1), member.get("active_class_id"))
             load_learning_level_options(member.get("learning_level_id"))
             load_member_history(member["id"])
+            load_freq()
+            load_titles()
+            load_deslig(member)
+            load_patrimonio(member["id"])
 
         def add_member() -> None:
             try:
@@ -1130,6 +1476,7 @@ class ClubPagesMixin:
                 except Exception as exc:
                     self._show_error(exc)
 
+
             btn_frame = ctk.CTkFrame(dialog, fg_color="transparent")
             btn_frame.pack(pady=10)
             ctk.CTkButton(btn_frame, text="FIDE", command=lambda: do_import("fide"), width=100).pack(side="left", padx=10)
@@ -1151,7 +1498,22 @@ class ClubPagesMixin:
         status_filter.set("Todos os status")
         load_category_filter()
         load_learning_level_filter_options()
-        load_members()
+        def initialize_filters() -> None:
+            if initial_class_id:
+                cls_data = self.db.get_class(initial_class_id)
+                if cls_data:
+                    club_id = int(cls_data["club_id"])
+                    # Find club label
+                    club_label_str = next((label for label, cid in club_option_map.items() if cid == club_id), None)
+                    if club_label_str:
+                        club_filter.set(club_label_str)
+                    load_class_filter_options(club_id, initial_set_id=initial_class_id)
+                    load_members()
+                    return
+            load_class_filter_options()
+            load_members()
+
+        initialize_filters()
 
     def show_guardians(self) -> None:
         self._clear_content()
@@ -1284,7 +1646,7 @@ class ClubPagesMixin:
             minors_header,
             text="Alunos menores sem responsavel",
             font=ctk.CTkFont(size=14, weight="bold"),
-            text_color="#0F172A",
+            text_color=THEME_TEXT_MAIN,
         ).grid(row=0, column=0, sticky="w")
 
         minors_holder = self._make_panel(right_panel)

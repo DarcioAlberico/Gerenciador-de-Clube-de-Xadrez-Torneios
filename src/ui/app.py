@@ -6,17 +6,23 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
 
-from .ui_admin import AdminPagesMixin
-from .ui_club import ClubPagesMixin
-from .ui_dashboard import DashboardPagesMixin
-from .ui_pairings import PairingPagesMixin
-from .ui_referees import RefereePagesMixin
-from .ui_settings import SettingsPagesMixin
-from .ui_support import *
-from .ui_tournaments import TournamentPagesMixin
+from .screens.admin import AdminPagesMixin
+from .screens.club import ClubPagesMixin
+from .screens.dashboard import DashboardPagesMixin
+from .screens.library import LibraryMixin
+from .screens.pairings import PairingPagesMixin
+from .screens.referees import RefereePagesMixin
+from .screens.settings import SettingsPagesMixin
+from .support import *
+from .screens.tournaments import TournamentPagesMixin
+from .screens.reports import ReportPagesMixin
+from .screens.audit import AuditPagesMixin
+from .screens.communication import CommunicationPagesMixin
+from src.services.report_engine import ReportEngine
 
 
 class AlbericusApp(
+    UIBuilderMixin,
     ClubPagesMixin,
     DashboardPagesMixin,
     AdminPagesMixin,
@@ -24,6 +30,10 @@ class AlbericusApp(
     TournamentPagesMixin,
     PairingPagesMixin,
     SettingsPagesMixin,
+    LibraryMixin,
+    ReportPagesMixin,
+    AuditPagesMixin,
+    CommunicationPagesMixin,
     ctk.CTk,
 ):
     def __init__(self, db: Database | None = None) -> None:
@@ -33,7 +43,7 @@ class AlbericusApp(
         ctk.set_appearance_mode("System")
         ctk.set_default_color_theme("blue")
 
-        self.title("Albericus - Emparceiramento de Xadrez")
+        self.title("Albericus - Emparceiramento de Xadrez v1.0")
         self.geometry("1180x760")
         self.minsize(980, 640)
 
@@ -60,6 +70,10 @@ class AlbericusApp(
         self.internal_rating_service = InternalRatingService(self.db)
         self.export_service = ExportService(self.db, self.pairing_service)
         self.certificate_service = CertificateService(self.db, self.pairing_service)
+        self.communication_service = CommunicationService(self.db)
+        self.calendar_service = CalendarService(self.db)
+        self.library_service = LibraryService(self.db)
+        self.report_engine = ReportEngine(self.db, self.finance_service, self.member_service, self.tournament_service)
 
         self.current_tournament_id: int | None = None
         self.current_round_id: int | None = None
@@ -69,10 +83,50 @@ class AlbericusApp(
 
         self._configure_grid()
         self._configure_tree_style()
-        self._build_menu()
-        self._build_statusbar()
-        self._build_content()
-        self.show_club()
+        self.protocol("WM_DELETE_WINDOW", self._on_closing)
+        self._build_login_screen()
+
+    def _on_closing(self) -> None:
+        try:
+            self.security_service.create_backup("auto_shutdown")
+        except Exception as exc:
+            logger.error("Erro ao gerar backup no fechamento: %s", exc)
+        self.destroy()
+
+    def _build_login_screen(self) -> None:
+        self.login_frame = ctk.CTkFrame(self, corner_radius=10)
+        self.login_frame.place(relx=0.5, rely=0.5, anchor="center")
+
+        ctk.CTkLabel(self.login_frame, text="Albericus", font=ctk.CTkFont(size=24, weight="bold")).pack(pady=(20, 10))
+        ctk.CTkLabel(self.login_frame, text="Acesso Restrito", font=ctk.CTkFont(size=14)).pack(pady=(0, 20))
+
+        self.username_entry = ctk.CTkEntry(self.login_frame, placeholder_text="Usuário", width=200)
+        self.username_entry.pack(pady=10, padx=20)
+
+        self.password_entry = ctk.CTkEntry(self.login_frame, placeholder_text="Senha", show="*", width=200)
+        self.password_entry.pack(pady=10, padx=20)
+        
+        self.login_error_label = ctk.CTkLabel(self.login_frame, text="", text_color="red")
+        self.login_error_label.pack()
+
+        def try_login(event=None):
+            user = self.username_entry.get().strip()
+            pwd = self.password_entry.get().strip()
+            if not user or not pwd:
+                self.login_error_label.configure(text="Preencha usuário e senha.")
+                return
+            if self.security_service.login(user, pwd):
+                self.login_frame.destroy()
+                self._build_menu()
+                self._build_statusbar()
+                self._build_content()
+                self.show_club()
+            else:
+                self.login_error_label.configure(text="Credenciais inválidas.")
+
+        self.password_entry.bind("<Return>", try_login)
+        ctk.CTkButton(self.login_frame, text="Entrar", command=try_login, width=200).pack(pady=(10, 20), padx=20)
+        self.username_entry.focus()
 
     def _configure_grid(self) -> None:
         self.grid_columnconfigure(0, weight=1)
@@ -89,14 +143,28 @@ class AlbericusApp(
             "Treeview",
             rowheight=28,
             font=("Segoe UI", 10),
-            background="#FFFFFF",
-            fieldbackground="#FFFFFF",
         )
         style.configure("Treeview.Heading", font=("Segoe UI", 10, "bold"))
+        self._update_tree_colors(style)
+        ctk.AppearanceModeTracker.add(self._on_appearance_change, self)
+
+    def _on_appearance_change(self, new_appearance_mode: str) -> None:
+        style = ttk.Style(self)
+        self._update_tree_colors(style)
+
+    def _update_tree_colors(self, style: ttk.Style) -> None:
+        mode = ctk.get_appearance_mode()
+        bg = THEME_TREE_BG[0] if mode == "Light" else THEME_TREE_BG[1]
+        fg = THEME_TREE_FG[0] if mode == "Light" else THEME_TREE_FG[1]
+        style.configure("Treeview", background=bg, fieldbackground=bg, foreground=fg)
+        style.configure("Treeview.Heading", background=bg, foreground=fg)
+
 
     def _build_menu(self) -> None:
         menubar = tk.Menu(self)
         self.config(menu=menubar)
+        
+        role = self.security_service.current_operator().get("role", "viewer")
         
         # 1. Clube
         club_menu = tk.Menu(menubar, tearoff=0)
@@ -139,11 +207,63 @@ class AlbericusApp(
         menubar.add_cascade(label="Ferramentas", menu=tools_menu)
         tools_menu.add_command(label="Exportar", command=self.show_export)
         tools_menu.add_command(label="Relatórios", command=self.show_reports)
+        tools_menu.add_command(label="Comunicação", command=self.show_communication)
 
         # 6. Configurações
         settings_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Configurações", menu=settings_menu)
         settings_menu.add_command(label="Config. App", command=self.show_app_settings)
+        settings_menu.add_command(label="Auditoria Completa", command=self.show_audit_logs)
+
+        # 7. Ajuda
+        help_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="Ajuda", menu=help_menu)
+        
+        def show_donation_modal() -> None:
+            modal = ctk.CTkToplevel(self)
+            modal.title("Apoie o Projeto")
+            modal.geometry("400x350")
+            modal.grab_set()
+            modal.resizable(False, False)
+
+            ctk.CTkLabel(
+                modal, 
+                text="❤ Apoie o Desenvolvimento", 
+                font=ctk.CTkFont(size=20, weight="bold")
+            ).pack(pady=(20, 10))
+
+            ctk.CTkLabel(
+                modal, 
+                text="O Albericus é um projeto independente.\nSe o software tem ajudado você e o seu clube,\nconsidere pagar um café para o desenvolvedor!",
+                justify="center"
+            ).pack(pady=(0, 20))
+            
+            ctk.CTkLabel(modal, text="Chave PIX:", font=ctk.CTkFont(weight="bold")).pack()
+            pix_key = "30436841843"
+            
+            entry = ctk.CTkEntry(modal, width=250, justify="center")
+            entry.pack(pady=(5, 15))
+            entry.insert(0, pix_key)
+            entry.configure(state="readonly")
+
+            def copy_pix():
+                self.clipboard_clear()
+                self.clipboard_append(pix_key)
+                self.update()
+                copy_btn.configure(text="Copiado!", fg_color="#25D366")
+                self.after(2000, lambda: copy_btn.configure(text="Copiar Chave PIX", fg_color=THEME_ACCENT))
+
+            copy_btn = ctk.CTkButton(modal, text="Copiar Chave PIX", command=copy_pix, fg_color=THEME_ACCENT)
+            copy_btn.pack(pady=10)
+
+            def open_livepix():
+                import webbrowser
+                webbrowser.open("https://livepix.gg/darcioalberico")
+
+            livepix_btn = ctk.CTkButton(modal, text="Cartão / Internacional (LivePix)", command=open_livepix, fg_color="#8a2be2", hover_color="#5c1d96")
+            livepix_btn.pack(pady=(0, 10))
+
+        help_menu.add_command(label="❤ Apoie o Projeto", command=show_donation_modal)
 
     def _build_statusbar(self) -> None:
         self.statusbar = ctk.CTkFrame(self, height=28, corner_radius=0, fg_color=("gray85", "gray15"))
@@ -154,7 +274,7 @@ class AlbericusApp(
         self.tournament_label = ctk.CTkLabel(
             self.statusbar,
             text="Nenhum torneio selecionado",
-            text_color="#64748B",
+            text_color=THEME_TEXT_SUB,
             justify="left",
             font=ctk.CTkFont(size=12)
         )
@@ -163,14 +283,14 @@ class AlbericusApp(
         self.status_label = ctk.CTkLabel(
             self.statusbar,
             text=f"Banco: {Path(self.db.db_path).name}",
-            text_color="#64748B",
+            text_color=THEME_TEXT_SUB,
             justify="right",
             font=ctk.CTkFont(size=12)
         )
         self.status_label.grid(row=0, column=1, padx=10, pady=2, sticky="e")
 
     def _build_content(self) -> None:
-        self.content = ctk.CTkFrame(self, corner_radius=0, fg_color="#F8FAFC")
+        self.content = ctk.CTkFrame(self, corner_radius=0, fg_color=THEME_APP_BG)
         self.content.grid(row=0, column=0, sticky="nsew")
         self.content.grid_columnconfigure(0, weight=1)
         self.content.grid_rowconfigure(1, weight=1)
@@ -188,19 +308,19 @@ class AlbericusApp(
             header,
             text=title,
             font=ctk.CTkFont(size=22, weight="bold"),
-            text_color="#0F172A",
+            text_color=THEME_TEXT_MAIN,
         ).grid(row=0, column=0, sticky="w")
         if subtitle:
             ctk.CTkLabel(
                 header,
                 text=subtitle,
-                text_color="#64748B",
+                text_color=THEME_TEXT_SUB,
                 wraplength=760,
                 justify="left",
             ).grid(row=1, column=0, pady=(2, 0), sticky="w")
 
     def _make_panel(self, parent: ctk.CTkBaseClass | None = None) -> ctk.CTkFrame:
-        panel = ctk.CTkFrame(parent or self.content, fg_color="#FFFFFF", corner_radius=8)
+        panel = ctk.CTkFrame(parent or self.content, fg_color=THEME_PANEL_BG, corner_radius=8)
         return panel
 
     def _make_scrollable_panel(
@@ -210,7 +330,7 @@ class AlbericusApp(
     ) -> ctk.CTkScrollableFrame:
         panel = ctk.CTkScrollableFrame(
             parent or self.content,
-            fg_color="#FFFFFF",
+            fg_color=THEME_PANEL_BG,
             corner_radius=8,
             width=width,
         )
@@ -295,6 +415,9 @@ class AlbericusApp(
         try:
             settings = self.db.get_app_settings()
             ctk.set_appearance_mode(str(settings.get("appearance_mode") or "System"))
+            color_theme = settings.get("color_theme")
+            if color_theme and color_theme in ["blue", "green", "dark-blue"]:
+                ctk.set_default_color_theme(color_theme)
         except Exception:
             logger.exception("Falha ao aplicar configuracoes do aplicativo")
 
@@ -425,12 +548,16 @@ class AlbericusApp(
         buttons: list[tuple[str, Callable[[], None]]],
         start_row: int,
         padx: int = 16,
+        required_action: str = "",
     ) -> None:
         for offset, (label, command) in enumerate(buttons):
-            ctk.CTkButton(parent, text=label, command=command).grid(
+            btn = ctk.CTkButton(parent, text=label, command=command)
+            btn.grid(
                 row=start_row + offset,
                 column=0,
                 padx=padx,
                 pady=(8 if offset == 0 else 4, 0),
                 sticky="ew",
             )
+            if required_action:
+                self._disable_if_unauthorized(btn, required_action)

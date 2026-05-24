@@ -1,3 +1,6 @@
 customtkinter>=5.2.2
 openpyxl>=3.1.2
+python-chess==1.11.2
+pyinstaller==6.20.0
 reportlab>=4.2.0
+tkcalendar>=1.6.1

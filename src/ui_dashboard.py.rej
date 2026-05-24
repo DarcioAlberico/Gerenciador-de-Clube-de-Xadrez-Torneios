@@ -1,0 +1,10 @@
+diff a/src/ui_dashboard.py b/src/ui_dashboard.py	(rejected hunks)
+@@ -13,7 +13,7 @@ class DashboardPagesMixin:
+         self._clear_content()
+         self._page_title(
+             "Dashboard Visual",
+-            "Visao geral grafica do clube e finan├ºas.",
++            "Vis├úo geral do clube, finan├ºas e avisos.",
+         )
+ 
+         body = ctk.CTkFrame(self.content, fg_color="transparent")

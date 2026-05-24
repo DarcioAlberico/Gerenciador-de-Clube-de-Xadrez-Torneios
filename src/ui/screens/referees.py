@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import customtkinter as ctk
 from typing import Any
-from .ui_support import AppError
+from ..support import AppError
 
 
 class RefereePagesMixin:
