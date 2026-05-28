@@ -182,7 +182,7 @@ class IntegrationPagesMixin:
                     "notifications_enabled": notifications_enabled_var.get(),
                 }
             )
-            self._show_info("Configurações de integração salvas.")
+            self._show_toast("Configurações de integração salvas.", kind="success")
 
         def sync_pending() -> None:
             try:
@@ -276,7 +276,7 @@ class IntegrationPagesMixin:
                 return
             alerts = self.clock_integration_service.anomaly_alerts(int(self.current_tournament_id))
             if not alerts:
-                self._show_info("Nenhum alerta operacional encontrado.")
+                self._show_toast("Nenhum alerta operacional encontrado.", kind="info")
                 return
             text = "\n".join(f"- {item['message']}" for item in alerts[:12])
             extra = f"\n... e mais {len(alerts) - 12} alerta(s)." if len(alerts) > 12 else ""

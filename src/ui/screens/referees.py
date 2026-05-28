@@ -111,7 +111,7 @@ class RefereePagesMixin:
                 
                 clear_form()
                 load_list()
-                self._show_info("Arbitro salvo com sucesso.")
+                self._show_toast("Arbitro salvo com sucesso.", kind="success")
             except Exception as exc:
                 self._show_error(exc)
 

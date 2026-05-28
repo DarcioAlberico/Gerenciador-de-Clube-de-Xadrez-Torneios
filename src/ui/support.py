@@ -253,7 +253,7 @@ class ErrorCatchingMixin:
             print_command = shutil.which("lp") or shutil.which("lpr")
             if print_command:
                 subprocess.Popen([print_command, str(document_path)])
-                self._show_info("Documento enviado para a impressora padrão.")
+                self._show_toast("Documento enviado para a impressora padrão.", kind="success")
                 return
 
             if sys.platform == "darwin":

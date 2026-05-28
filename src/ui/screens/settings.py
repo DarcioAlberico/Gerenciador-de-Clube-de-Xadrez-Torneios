@@ -353,7 +353,7 @@ class SettingsPagesMixin:
             try:
                 persist_settings()
                 if show_message:
-                    self._show_info("Configuracoes salvas.")
+                    self._show_toast("Configuracoes salvas.", kind="success")
             except Exception as exc:
                 self._show_error(exc)
 
@@ -407,7 +407,7 @@ class SettingsPagesMixin:
                 deleted = self.security_service.enforce_backup_retention()
                 load_backups()
                 load_audit_logs()
-                self._show_info(f"Retencao aplicada. {len(deleted)} backup(s) removido(s).")
+                self._show_toast(f"Retencao aplicada. {len(deleted)} backup(s) removido(s).", kind="success")
             except Exception as exc:
                 self._show_error(exc)
 
@@ -1320,7 +1320,7 @@ class SettingsPagesMixin:
                     raise AppError("Selecione um modelo.")
                 self.certificate_service.update_template(template_id, current_template_payload())
                 reload_templates(template_id)
-                self._show_info("Modelo salvo.")
+                self._show_toast("Modelo salvo.", kind="success")
             except Exception as exc:
                 self._show_error(exc)
 
@@ -1328,7 +1328,7 @@ class SettingsPagesMixin:
             try:
                 template_id = self.certificate_service.create_template(current_template_payload())
                 reload_templates(template_id)
-                self._show_info("Modelo criado.")
+                self._show_toast("Modelo criado.", kind="success")
             except Exception as exc:
                 self._show_error(exc)
 
@@ -2170,7 +2170,7 @@ class SettingsPagesMixin:
                     raise AppError("Selecione um modelo.")
                 self.certificate_service.update_template(template_id, current_template_payload())
                 reload_templates(template_id)
-                self._show_info("Modelo salvo.")
+                self._show_toast("Modelo salvo.", kind="success")
             except Exception as exc:
                 self._show_error(exc)
 
@@ -2178,7 +2178,7 @@ class SettingsPagesMixin:
             try:
                 template_id = self.certificate_service.create_template(current_template_payload())
                 reload_templates(template_id)
-                self._show_info("Modelo criado.")
+                self._show_toast("Modelo criado.", kind="success")
             except Exception as exc:
                 self._show_error(exc)
 
@@ -2622,7 +2622,7 @@ class SettingsPagesMixin:
                 try:
                     self.security_service.update_user_password(uid, pwd_entry.get().strip())
                     pwd_dlg.destroy()
-                    self._show_info("Senha atualizada.")
+                    self._show_toast("Senha atualizada.", kind="success")
                 except Exception as e:
                     self._show_error(str(e))
 

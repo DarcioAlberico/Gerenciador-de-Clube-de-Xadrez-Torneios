@@ -171,7 +171,7 @@ class LibraryMixin:
             }
             try:
                 self.library_service.save_item(payload, selected_item_id["value"])
-                self._show_info("Item salvo com sucesso na biblioteca!")
+                self._show_toast("Item salvo com sucesso na biblioteca!", kind="success")
                 load_items()
                 clear_form()
             except Exception as exc:
@@ -227,7 +227,7 @@ class LibraryMixin:
                     if selected_item_id["value"] not in items:
                         items.append(selected_item_id["value"])
                         self.library_service.save_collection({"name": c_data["name"], "description": c_data["description"], "items": items}, c_id)
-                        self._show_info("Adicionado com sucesso!")
+                        self._show_toast("Adicionado com sucesso!", kind="success")
                 dialog.destroy()
 
             ctk.CTkButton(dialog, text="Adicionar", command=do_add).pack(pady=10)
@@ -362,7 +362,7 @@ class LibraryMixin:
                 return
             try:
                 count = self.library_service.import_pgn(content)
-                self._show_info(f"{count} posições foram importadas com sucesso!")
+                self._show_toast(f"{count} posições foram importadas com sucesso!", kind="success")
                 pgn_text.delete("1.0", "end")
             except Exception as e:
                 self._show_error(e)

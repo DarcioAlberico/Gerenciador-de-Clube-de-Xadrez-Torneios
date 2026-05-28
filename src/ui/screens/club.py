@@ -294,7 +294,7 @@ class ClubPagesMixin:
                 selected_club_id["value"] = saved_id
                 load_clubs()
                 load_classes(saved_id)
-                self._show_info("Unidade salva.")
+                self._show_toast("Unidade salva.", kind="success")
             except Exception as exc:
                 self._show_error(exc)
 
@@ -734,7 +734,7 @@ class ClubPagesMixin:
                     date=deslig_date.get().strip(),
                     notes=deslig_notes.get().strip()
                 )
-                self._show_info("Membro desligado com sucesso.")
+                self._show_toast("Membro desligado com sucesso.", kind="success")
                 load_members()
             except Exception as e:
                 self._show_error(str(e))
@@ -817,7 +817,7 @@ class ClubPagesMixin:
                 self._show_info("Informe pelo menos um username (Lichess ou Chess.com).")
                 return
             
-            self._show_info("Iniciando sincronizacao com plataformas...")
+            self._show_toast("Iniciando sincronizacao com plataformas...", kind="info")
             
             def run_sync():
                 from src.services.integration_service import IntegrationService

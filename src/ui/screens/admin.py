@@ -3062,7 +3062,7 @@ class AdminPagesMixin:
                     self.communication_service.save_announcement(payload)
                     dialog.destroy()
                     load_announcements()
-                    self._show_info("Aviso salvo com sucesso!")
+                    self._show_toast("Aviso salvo com sucesso!", kind="success")
                 except Exception as e:
                     self._show_error(e)
 

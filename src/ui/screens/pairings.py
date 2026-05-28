@@ -219,7 +219,7 @@ class PairingPagesMixin:
                     int(self.current_tournament_id),
                     str(issue.get("issue_key") or ""),
                 )
-                self._show_info("Pendencia marcada como ciente.")
+                self._show_toast("Pendencia marcada como ciente.", kind="success")
                 self.show_arbitration_issues()
             except Exception as exc:
                 self._show_error(exc)
@@ -1225,12 +1225,12 @@ class PairingPagesMixin:
             self._load_selected_round_pairings()
         except Exception:
             pass
-        self._show_info("Resultado QR aprovado.")
+        self._show_toast("Resultado QR aprovado.", kind="success")
 
     def _reject_qr_submission(self, submission_id: int) -> None:
         reviewer, _role = self.db._operator_context()
         self.qr_result_service.reject_submission(submission_id, reviewer=reviewer)
-        self._show_info("Resultado QR rejeitado.")
+        self._show_toast("Resultado QR rejeitado.", kind="success")
 
     def _open_qr_submissions_queue(self) -> None:
         try:
@@ -1544,7 +1544,7 @@ class PairingPagesMixin:
                 raise AppError("Selecione uma rodada.")
             self.pairing_service.close_round(self.current_tournament_id, self.current_round_id)
             self._load_round_options()
-            self._show_info("Rodada fechada.")
+            self._show_toast("Rodada fechada.", kind="success")
         except Exception as exc:
             self._show_error(exc)
 

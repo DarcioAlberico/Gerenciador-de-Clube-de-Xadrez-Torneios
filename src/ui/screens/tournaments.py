@@ -252,7 +252,7 @@ class TournamentPagesMixin:
                     self.current_round_id = None
                     self.tournament_label.configure(text="Nenhum torneio selecionado")
                 load_tournaments()
-                self._show_info("Torneio excluido.")
+                self._show_toast("Torneio excluido.", kind="success")
             except Exception as exc:
                 self._show_error(exc)
 
@@ -902,7 +902,7 @@ class TournamentPagesMixin:
                 )
                 self._set_current_tournament(self.current_tournament_id)
                 if show_message:
-                    self._show_info("Configuracoes do torneio salvas.")
+                    self._show_toast("Configuracoes do torneio salvas.", kind="success")
                 self.show_tournament_settings()
             except Exception as exc:
                 self._show_error(exc)
@@ -1370,7 +1370,7 @@ class TournamentPagesMixin:
                 clear_form()
                 load_players()
                 load_member_options()
-                self._show_info("Jogador excluido do torneio.")
+                self._show_toast("Jogador excluido do torneio.", kind="success")
             except Exception as exc:
                 self._show_error(exc)
 
@@ -1985,7 +1985,7 @@ class TournamentPagesMixin:
                 selected_team_id["value"] = team_id
                 load_teams()
                 load_team_players()
-                self._show_info("Equipe criada.")
+                self._show_toast("Equipe criada.", kind="success")
             except Exception as exc:
                 self._show_error(exc)
 
@@ -1996,7 +1996,7 @@ class TournamentPagesMixin:
                     raise AppError("Selecione uma equipe.")
                 self.team_service.update_team(team_id, team_payload())
                 load_teams()
-                self._show_info("Equipe atualizada.")
+                self._show_toast("Equipe atualizada.", kind="success")
             except Exception as exc:
                 self._show_error(exc)
 
@@ -2013,7 +2013,7 @@ class TournamentPagesMixin:
                 self.team_service.delete_team(team_id)
                 clear_team_form()
                 load_teams()
-                self._show_info("Equipe excluida.")
+                self._show_toast("Equipe excluida.", kind="success")
             except Exception as exc:
                 self._show_error(exc)
 

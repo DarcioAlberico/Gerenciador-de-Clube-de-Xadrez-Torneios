@@ -65,7 +65,7 @@ class CommunicationPagesMixin:
             def task():
                 try:
                     msg_service.send_email(to_email, subject, body_text)
-                    self.after(0, lambda: self._show_info("E-mail enviado com sucesso!"))
+                    self.after(0, lambda: self._show_toast("E-mail enviado com sucesso!", kind="success"))
                 except Exception as exc:
                     self.after(0, lambda error=exc: self._show_error(f"Falha ao enviar: {error}"))
 
@@ -130,7 +130,7 @@ class CommunicationPagesMixin:
                 "smtp_user": user_entry.get().strip(),
                 "smtp_password": pass_entry.get().strip()
             })
-            self._show_info("Configurações SMTP salvas com sucesso.")
+            self._show_toast("Configurações SMTP salvas com sucesso.", kind="success")
 
         btn = ctk.CTkButton(form, text="Salvar Configurações", command=save_smtp)
         btn.grid(row=8, column=0, padx=16, pady=(0, 16), sticky="w")

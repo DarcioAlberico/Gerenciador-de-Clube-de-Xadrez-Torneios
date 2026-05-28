@@ -55,6 +55,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.app.current_tournament_id = self.tournament_id
         self.messages: list[str] = []
         self.app._show_info = self.messages.append
+        self.app._show_toast = lambda msg, *a, **kw: self.messages.append(msg)
         self.app._show_error = self._raise_ui_error
         self.app._run_background = self._run_background_now
         
