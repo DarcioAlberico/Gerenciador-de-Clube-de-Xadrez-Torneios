@@ -1785,6 +1785,14 @@ class PairingPagesMixin:
             if not standings:
                 self._show_info("Nao ha componentes de desempate para este jogador.")
                 return
+
+            narrative = self.pairing_service.tiebreak_narrative(
+                int(self.current_tournament_id),
+                int(player_id),
+            )
+            lines: list[str] = list(narrative.get("lines") or [])
+
+            # Detalhes técnicos do(s) critério(s) — abaixo da narrativa.
             components = standings[0].get("tiebreak_components") or {}
             keys = [criterion] if criterion else [
                 "buchholz",
@@ -1794,25 +1802,31 @@ class PairingPagesMixin:
                 "wins",
                 "performance",
             ]
-            lines = [f"{standings[0]['name']} - {standings[0]['points']} ponto(s)"]
+            detail_lines: list[str] = []
             for key in keys:
                 component = components.get(key) or {}
                 if not component:
                     continue
-                lines.append("")
-                lines.append(f"{component.get('label', key)}: {component.get('value', '')}")
-                lines.append(str(component.get("formula", "")))
+                detail_lines.append("")
+                detail_lines.append(f"{component.get('label', key)}: {component.get('value', '')}")
+                detail_lines.append(str(component.get("formula", "")))
                 for opponent in component.get("opponents", [])[:8]:
                     value = opponent.get("contribution", opponent.get("points", ""))
-                    lines.append(f"- {opponent.get('opponent_name', '')}: {value}")
+                    detail_lines.append(f"- {opponent.get('opponent_name', '')}: {value}")
                 if "used_scores" in component:
-                    lines.append(f"- Usados: {component.get('used_scores', [])}")
+                    detail_lines.append(f"- Usados: {component.get('used_scores', [])}")
                     if component.get("cut_low") is not None:
-                        lines.append(f"- Corte menor: {component.get('cut_low')}")
+                        detail_lines.append(f"- Corte menor: {component.get('cut_low')}")
                     if component.get("cut_high") is not None:
-                        lines.append(f"- Corte maior: {component.get('cut_high')}")
+                        detail_lines.append(f"- Corte maior: {component.get('cut_high')}")
                 for game in component.get("games", [])[:8]:
-                    lines.append(f"- {game.get('opponent_name', '')}: {game.get('earned', '')}")
+                    detail_lines.append(f"- {game.get('opponent_name', '')}: {game.get('earned', '')}")
+
+            if detail_lines:
+                lines.append("")
+                lines.append("— Detalhes técnicos —")
+                lines.extend(detail_lines)
+
             self._show_info("\n".join(lines))
 
         ctk.CTkButton(

@@ -1720,6 +1720,112 @@ class PairingService:
                 )
         return rows
 
+    def tiebreak_narrative(
+        self,
+        tournament_id: int,
+        player_id: int,
+    ) -> dict[str, Any]:
+        """Gera explicação textual da posição do jogador na classificação.
+
+        Identifica o grupo empatado em pontos, percorre os critérios de desempate
+        na ordem oficial e indica qual critério decidiu a posição, com os valores
+        dos demais empatados. Devolve linhas prontas para exibição.
+        """
+        full = self.tiebreak_report(tournament_id)
+        target = next(
+            (row for row in full if int(row.get("player_id") or 0) == int(player_id)),
+            None,
+        )
+        if target is None:
+            return {"lines": ["Jogador não encontrado na classificação."], "decisive": None}
+
+        position = int(target.get("position") or 0)
+        points = float(target.get("points") or 0)
+        name = target.get("name") or ""
+        components = target.get("tiebreak_components") or {}
+
+        tied_group = [
+            row for row in full
+            if float(row.get("points") or 0) == points
+            and int(row.get("player_id") or 0) != int(player_id)
+        ]
+        tied_names = [row.get("name") or "?" for row in tied_group]
+
+        def pluralize(n: int, singular: str, plural: str) -> str:
+            return singular if n == 1 else plural
+
+        lines: list[str] = [
+            f"{position}º — {name} — {points:g} {pluralize(int(points), 'ponto', 'pontos')}",
+            "",
+            "Por que está nesta posição?",
+            "",
+        ]
+
+        if not tied_group:
+            lines.append(f"• Pontos: único com {points:g}. Sem necessidade de desempate.")
+            return {"lines": lines, "tied_group_size": 1, "decisive": None}
+
+        if len(tied_names) == 1:
+            lines.append(f"• Pontos: empate com {tied_names[0]}.")
+        elif len(tied_names) == 2:
+            lines.append(f"• Pontos: empate com {tied_names[0]} e {tied_names[1]}.")
+        else:
+            lines.append(
+                "• Pontos: empate com " + ", ".join(tied_names[:-1]) + f" e {tied_names[-1]}."
+            )
+
+        criteria_order = [
+            "buchholz",
+            "buchholz_median",
+            "sonneborn_berger",
+            "direct_encounter",
+            "wins",
+            "performance",
+        ]
+        ordinals = ["1º", "2º", "3º", "4º", "5º", "6º"]
+
+        decisive: str | None = None
+        for index, key in enumerate(criteria_order):
+            comp = components.get(key) or {}
+            value = comp.get("value")
+            label = comp.get("label", key)
+            if value in (None, "", 0) and key not in {"wins"}:
+                # Critério sem valor utilizável — pula.
+                continue
+
+            others: list[tuple[str, Any]] = []
+            for row in tied_group:
+                other_comp = (row.get("tiebreak_components") or {}).get(key) or {}
+                other_value = other_comp.get("value")
+                if other_value in (None, ""):
+                    continue
+                others.append((row.get("name") or "?", other_value))
+
+            if not others:
+                continue
+
+            ordinal = ordinals[index] if index < len(ordinals) else f"{index + 1}º"
+            lines.append(f"• {ordinal} desempate ({label}): {value}.")
+            for other_name, other_value in others:
+                lines.append(f"     – {other_name}: {other_value}")
+
+            all_different = all(value != other_value for _, other_value in others)
+            if all_different:
+                decisive = key
+                lines.append("")
+                lines.append(f"Decidido por: {label}.")
+                break
+
+        if decisive is None:
+            lines.append("")
+            lines.append("Empate persistente em todos os critérios disponíveis.")
+
+        return {
+            "lines": lines,
+            "tied_group_size": len(tied_group) + 1,
+            "decisive": decisive,
+        }
+
     def _player_tiebreak_components(
         self,
         player_stat: dict[str, Any],
