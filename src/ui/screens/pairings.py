@@ -1446,7 +1446,7 @@ class PairingPagesMixin:
                 except Exception as exc:
                     self._show_error(exc)
 
-            ctk.CTkButton(actions, text="Cancelar", fg_color="#64748B", command=dialog.destroy).pack(
+            ctk.CTkButton(actions, text="Cancelar", fg_color=THEME_NEUTRAL, hover_color=THEME_NEUTRAL_HOVER, command=dialog.destroy).pack(
                 side="left",
                 padx=(0, 8),
             )
@@ -1529,7 +1529,7 @@ class PairingPagesMixin:
                 except Exception as exc:
                     self._show_error(exc)
 
-            ctk.CTkButton(actions, text="Cancelar", fg_color="#64748B", command=dialog.destroy).pack(
+            ctk.CTkButton(actions, text="Cancelar", fg_color=THEME_NEUTRAL, hover_color=THEME_NEUTRAL_HOVER, command=dialog.destroy).pack(
                 side="left",
                 padx=(0, 8),
             )

@@ -111,6 +111,10 @@ THEME_ACCENT = ("#3B82F6", "#38BDF8")
 THEME_DANGER = ("#EF4444", "#F87171")
 THEME_DANGER_HOVER = ("#DC2626", "#B91C1C")
 THEME_INFO = ("#10B981", "#34D399")
+THEME_SUCCESS = ("#059669", "#34D399")        # botão de ação positiva (verde escuro/claro)
+THEME_SUCCESS_HOVER = ("#047857", "#10B981")
+THEME_NEUTRAL = ("#64748B", "#475569")        # botão secundário / Cancelar
+THEME_NEUTRAL_HOVER = ("#475569", "#334155")
 
 logger = logging.getLogger("src.ui")
 

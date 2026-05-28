@@ -197,8 +197,8 @@ class SettingsPagesMixin:
             settings_panel,
             text="Baixar e Sincronizar FIDE",
             command=download_fide,
-            fg_color="#059669",
-            hover_color="#047857",
+            fg_color=THEME_SUCCESS,
+            hover_color=THEME_SUCCESS_HOVER,
         ).grid(row=22, column=0, padx=16, pady=(10, 8), sticky="ew")
 
         def import_cbx() -> None:

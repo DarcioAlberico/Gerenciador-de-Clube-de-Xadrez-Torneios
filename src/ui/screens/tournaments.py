@@ -1495,7 +1495,7 @@ class TournamentPagesMixin:
                     "Importando inscricoes online...",
                 )
 
-            ctk.CTkButton(actions, text="Cancelar", fg_color="#64748B", command=dialog.destroy).pack(
+            ctk.CTkButton(actions, text="Cancelar", fg_color=THEME_NEUTRAL, hover_color=THEME_NEUTRAL_HOVER, command=dialog.destroy).pack(
                 side="left",
                 padx=(0, 8),
             )
