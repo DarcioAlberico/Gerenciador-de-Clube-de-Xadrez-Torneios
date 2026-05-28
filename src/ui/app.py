@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import threading
 import tkinter as tk
 from datetime import datetime
@@ -128,6 +129,7 @@ class AlbericusApp(
                 self._build_menu()
                 self._build_statusbar()
                 self._build_content()
+                self._register_shortcuts()
                 self.show_club()
             else:
                 self.login_error_label.configure(text="Credenciais inválidas.")
@@ -177,7 +179,7 @@ class AlbericusApp(
         # 1. Clube
         club_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Clube", menu=club_menu)
-        club_menu.add_command(label="Dashboard Visual", command=self.show_visual_dashboard)
+        club_menu.add_command(label="Dashboard Visual", command=self.show_visual_dashboard, accelerator="Ctrl+1")
         club_menu.add_command(label="Perfil do Clube", command=self.show_club)
         club_menu.add_command(label="Membros", command=self.show_members)
         club_menu.add_command(label="Níveis", command=self.show_learning_levels)
@@ -201,15 +203,15 @@ class AlbericusApp(
         # 4. Torneio
         tourn_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Torneio", menu=tourn_menu)
-        tourn_menu.add_command(label="Torneios", command=self.show_tournaments)
-        tourn_menu.add_command(label="Central do Torneio", command=self.show_tournament_dashboard)
+        tourn_menu.add_command(label="Torneios", command=self.show_tournaments, accelerator="Ctrl+2")
+        tourn_menu.add_command(label="Central do Torneio", command=self.show_tournament_dashboard, accelerator="Ctrl+3")
         tourn_menu.add_command(label="Painel do Árbitro", command=self.show_arbitration_panel)
         tourn_menu.add_command(label="Config. Torneio", command=self.show_tournament_settings)
         tourn_menu.add_separator()
         tourn_menu.add_command(label="Jogadores", command=self.show_players)
         tourn_menu.add_command(label="Equipes", command=self.show_teams)
-        tourn_menu.add_command(label="Rodadas", command=self.show_pairings)
-        tourn_menu.add_command(label="Classificação", command=self.show_standings)
+        tourn_menu.add_command(label="Rodadas", command=self.show_pairings, accelerator="Ctrl+4")
+        tourn_menu.add_command(label="Classificação", command=self.show_standings, accelerator="Ctrl+5")
         tourn_menu.add_command(label="Diplomas", command=self.show_certificates)
 
         # 5. Ferramentas
@@ -224,7 +226,7 @@ class AlbericusApp(
         # 6. Configurações
         settings_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Configurações", menu=settings_menu)
-        settings_menu.add_command(label="Config. App", command=self.show_app_settings)
+        settings_menu.add_command(label="Config. App", command=self.show_app_settings, accelerator="Ctrl+,")
         settings_menu.add_command(label="Auditoria Completa", command=self.show_audit_logs)
 
         # 7. Ajuda
@@ -276,6 +278,34 @@ class AlbericusApp(
             livepix_btn.pack(pady=(0, 10))
 
         help_menu.add_command(label="❤ Apoie o Projeto", command=show_donation_modal)
+
+    def _register_shortcuts(self) -> None:
+        """Atalhos globais. Disponíveis depois do login."""
+        bindings: list[tuple[str, Callable[[Any], None]]] = [
+            ("<F5>", lambda _e: self._refresh_current_view()),
+            ("<Control-Key-1>", lambda _e: self._navigate("show_visual_dashboard")),
+            ("<Control-Key-2>", lambda _e: self._navigate("show_tournaments")),
+            ("<Control-Key-3>", lambda _e: self._navigate("show_tournament_dashboard")),
+            ("<Control-Key-4>", lambda _e: self._navigate("show_pairings")),
+            ("<Control-Key-5>", lambda _e: self._navigate("show_standings")),
+            ("<Control-comma>", lambda _e: self._navigate("show_app_settings")),
+        ]
+        for sequence, handler in bindings:
+            self.bind_all(sequence, handler)
+
+    def _navigate(self, method_name: str) -> None:
+        method = getattr(self, method_name, None)
+        if callable(method):
+            method()
+
+    def _refresh_current_view(self) -> None:
+        method_name = getattr(self, "_current_view_method", None)
+        if not method_name:
+            self._show_toast("Nada para recarregar.", kind="info", duration_ms=1500)
+            return
+        method = getattr(self, method_name, None)
+        if callable(method):
+            method()
 
     def _build_statusbar(self) -> None:
         self.statusbar = ctk.CTkFrame(self, height=28, corner_radius=0, fg_color=THEME_STATUSBAR_BG)
@@ -382,6 +412,12 @@ class AlbericusApp(
 
     def _clear_content(self) -> None:
         self._pairing_shortcuts_enabled = False
+        # Rastreia o show_* que disparou esta limpeza para o F5 saber o que recarregar.
+        caller = inspect.currentframe().f_back
+        if caller is not None:
+            name = caller.f_code.co_name
+            if name.startswith("show_"):
+                self._current_view_method = name
         for child in self.content.winfo_children():
             child.destroy()
 
