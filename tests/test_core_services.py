@@ -43,6 +43,50 @@ from src.services.result_server import LocalResultServer
 from tests.fixtures import load_tournament_fixture
 
 
+class RolePermissionMatrixTest(unittest.TestCase):
+    """Spec §14.1 — perfis capitao/jogador e matriz de permissões."""
+
+    def test_new_roles_exist_in_operator_roles(self) -> None:
+        from src.services.constants import OPERATOR_ROLES
+        self.assertIn("capitao", OPERATOR_ROLES)
+        self.assertIn("jogador", OPERATOR_ROLES)
+        # 'publico' propositalmente NÃO é login role (portal anônimo).
+        self.assertNotIn("publico", OPERATOR_ROLES)
+
+    def test_capitao_can_submit_lineup_and_request_substitution(self) -> None:
+        from src.config.permissions import get_permissions_for_role
+        perms = get_permissions_for_role("capitao")
+        self.assertIn("team_lineup_submit", perms)
+        self.assertIn("team_substitution_request", perms)
+        self.assertIn("own_data_read", perms)
+        # NÃO pode mexer em config nem em outros membros
+        self.assertNotIn("settings_write", perms)
+        self.assertNotIn("member_write", perms)
+        self.assertNotIn("tournament_write", perms)
+
+    def test_jogador_has_only_read_own_and_presence(self) -> None:
+        from src.config.permissions import get_permissions_for_role
+        perms = get_permissions_for_role("jogador")
+        self.assertEqual({"own_data_read", "presence_confirm"}, set(perms))
+
+    def test_admin_inherits_all_new_permissions(self) -> None:
+        from src.config.permissions import get_permissions_for_role
+        perms = set(get_permissions_for_role("admin"))
+        for action in (
+            "team_lineup_submit",
+            "team_substitution_request",
+            "own_data_read",
+            "presence_confirm",
+        ):
+            self.assertIn(action, perms)
+
+    def test_arbiter_can_act_on_lineups_and_substitutions(self) -> None:
+        from src.config.permissions import get_permissions_for_role
+        perms = get_permissions_for_role("arbiter")
+        self.assertIn("team_lineup_submit", perms)
+        self.assertIn("team_substitution_request", perms)
+
+
 class TeamRosterPolicyValidatorTest(unittest.TestCase):
     """Spec §6.2 — validador de policy de escalação retorna warnings."""
 

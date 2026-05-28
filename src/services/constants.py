@@ -236,6 +236,11 @@ OPERATOR_ROLES = {
     "teacher": "Professor",
     "assistant": "Assistente",
     "viewer": "Consulta",
+    # Spec §14.1 — perfis específicos de torneio
+    "capitao": "Capitão de equipe",
+    "jogador": "Jogador",
+    # "publico" não é login role: o portal público é servido por rotas
+    # anônimas (export_site / LocalResultServer), não por sessão autenticada.
 }
 TOURNAMENT_FLAG_FIELDS = {
     "allow_public_registration",
