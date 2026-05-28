@@ -465,7 +465,7 @@ class IntegrationPagesMixin:
         modal.grid_columnconfigure(0, weight=1)
         modal.grid_rowconfigure(1, weight=1)
 
-        ctk.CTkLabel(modal, text=title, font=ctk.CTkFont(size=16, weight="bold")).grid(
+        ctk.CTkLabel(modal, text=title, font=font_section()).grid(
             row=0,
             column=0,
             padx=12,

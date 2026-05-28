@@ -635,7 +635,7 @@ class AdminPagesMixin:
         for index, (key, label) in enumerate(summary_items):
             card = ctk.CTkFrame(summary_panel, fg_color=THEME_APP_BG, corner_radius=8)
             card.grid(row=0, column=index, padx=8, pady=10, sticky="ew")
-            value_label = ctk.CTkLabel(card, text="0", font=ctk.CTkFont(size=18, weight="bold"))
+            value_label = ctk.CTkLabel(card, text="0", font=font_kpi_value())
             value_label.pack(anchor="w", padx=12, pady=(10, 0))
             ctk.CTkLabel(card, text=label, text_color=THEME_TEXT_SUB).pack(anchor="w", padx=12, pady=(0, 10))
             summary_labels[key] = value_label
@@ -689,7 +689,7 @@ class AdminPagesMixin:
         loan_box = ctk.CTkFrame(detail_form, fg_color="transparent")
         loan_box.grid(row=0, column=0, columnspan=2, padx=12, pady=(10, 4), sticky="ew")
         loan_box.grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(loan_box, text="Emprestimo", font=ctk.CTkFont(size=13, weight="bold")).grid(
+        ctk.CTkLabel(loan_box, text="Emprestimo", font=font_subsection()).grid(
             row=0,
             column=0,
             columnspan=4,
@@ -715,7 +715,7 @@ class AdminPagesMixin:
         maintenance_box = ctk.CTkFrame(detail_form, fg_color="transparent")
         maintenance_box.grid(row=1, column=0, columnspan=2, padx=12, pady=(4, 10), sticky="ew")
         maintenance_box.grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(maintenance_box, text="Manutencao", font=ctk.CTkFont(size=13, weight="bold")).grid(
+        ctk.CTkLabel(maintenance_box, text="Manutencao", font=font_subsection()).grid(
             row=0,
             column=0,
             columnspan=4,
@@ -1637,7 +1637,7 @@ class AdminPagesMixin:
         ctk.CTkLabel(
             form,
             text="Plano",
-            font=ctk.CTkFont(size=14, weight="bold"),
+            font=font_section(),
             text_color=THEME_TEXT_MAIN,
         ).grid(row=0, column=0, padx=16, pady=(12, 4), sticky="w")
         plan_entries: dict[str, ctk.CTkEntry] = {}
@@ -1660,7 +1660,7 @@ class AdminPagesMixin:
         ctk.CTkLabel(
             form,
             text="Lancamento",
-            font=ctk.CTkFont(size=14, weight="bold"),
+            font=font_section(),
             text_color=THEME_TEXT_MAIN,
         ).grid(row=13, column=0, padx=16, pady=(18, 4), sticky="w")
 
@@ -1719,7 +1719,7 @@ class AdminPagesMixin:
         for index, (key, label) in enumerate(summary_items):
             card = ctk.CTkFrame(summary_panel, fg_color=THEME_APP_BG, corner_radius=8)
             card.grid(row=0, column=index, padx=8, pady=10, sticky="ew")
-            value_label = ctk.CTkLabel(card, text="0", font=ctk.CTkFont(size=18, weight="bold"))
+            value_label = ctk.CTkLabel(card, text="0", font=font_kpi_value())
             value_label.pack(anchor="w", padx=12, pady=(10, 0))
             ctk.CTkLabel(card, text=label, text_color=THEME_TEXT_SUB).pack(anchor="w", padx=12, pady=(0, 10))
             summary_labels[key] = value_label
@@ -2146,7 +2146,7 @@ class AdminPagesMixin:
         selected_transaction_id: dict[str, int | None] = {"value": None}
 
         ctk.CTkLabel(
-            caixa_form, text="Transacao", font=ctk.CTkFont(size=14, weight="bold"), text_color=THEME_TEXT_MAIN
+            caixa_form, text="Transacao", font=font_section(), text_color=THEME_TEXT_MAIN
         ).grid(row=0, column=0, padx=16, pady=(12, 4), sticky="w")
 
         trans_entries: dict[str, ctk.CTkEntry] = {}
@@ -2260,7 +2260,7 @@ class AdminPagesMixin:
 
         selected_sponsor_id: dict[str, int | None] = {"value": None}
 
-        ctk.CTkLabel(spon_form, text="Patrocinador", font=ctk.CTkFont(size=14, weight="bold")).grid(row=0, column=0, padx=16, pady=(12, 4), sticky="w")
+        ctk.CTkLabel(spon_form, text="Patrocinador", font=font_section()).grid(row=0, column=0, padx=16, pady=(12, 4), sticky="w")
         
         spon_entries: dict[str, ctk.CTkEntry] = {}
         spon_fields = [

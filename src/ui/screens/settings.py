@@ -236,7 +236,7 @@ class SettingsPagesMixin:
         ctk.CTkLabel(
             backup_header,
             text="Backups disponiveis",
-            font=ctk.CTkFont(size=15, weight="bold"),
+            font=font_section(),
         ).grid(row=0, column=0, sticky="w")
 
         backup_holder = ctk.CTkFrame(backup_panel, fg_color="transparent")
@@ -257,7 +257,7 @@ class SettingsPagesMixin:
         ctk.CTkLabel(
             audit_header,
             text="Auditoria recente",
-            font=ctk.CTkFont(size=15, weight="bold"),
+            font=font_section(),
         ).grid(row=0, column=0, sticky="w")
         audit_holder = ctk.CTkFrame(backup_panel, fg_color="transparent")
         audit_holder.grid(row=3, column=0, padx=12, pady=(0, 12), sticky="nsew")
@@ -912,7 +912,7 @@ class SettingsPagesMixin:
         ctk.CTkLabel(
             trf_help_panel,
             text="Preparacao FIDE/TRF",
-            font=ctk.CTkFont(size=15, weight="bold"),
+            font=font_section(),
         ).grid(row=0, column=0, padx=16, pady=(16, 4), sticky="w")
         ctk.CTkLabel(
             trf_help_panel,

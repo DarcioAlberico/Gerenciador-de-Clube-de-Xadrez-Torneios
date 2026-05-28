@@ -317,7 +317,7 @@ class TournamentPagesMixin:
         ctk.CTkLabel(
             summary_panel,
             text="Resumo",
-            font=ctk.CTkFont(size=16, weight="bold"),
+            font=font_section(),
         ).grid(row=0, column=0, padx=16, pady=(16, 8), sticky="w")
 
         summary_rows = [
@@ -402,12 +402,12 @@ class TournamentPagesMixin:
         ctk.CTkLabel(
             basic_panel,
             text="Dados gerais",
-            font=ctk.CTkFont(size=15, weight="bold"),
+            font=font_section(),
         ).grid(row=0, column=0, padx=16, pady=(16, 6), sticky="w")
         ctk.CTkLabel(
             settings_panel,
             text="Dados oficiais e regras",
-            font=ctk.CTkFont(size=15, weight="bold"),
+            font=font_section(),
         ).grid(row=0, column=0, padx=16, pady=(16, 6), sticky="w")
 
         tournament_entries: dict[str, ctk.CTkEntry] = {}
@@ -749,7 +749,7 @@ class TournamentPagesMixin:
         ctk.CTkLabel(
             schedule_panel,
             text="Datas e horarios das rodadas",
-            font=ctk.CTkFont(size=15, weight="bold"),
+            font=font_section(),
         ).grid(row=0, column=0, columnspan=3, padx=16, pady=(16, 8), sticky="w")
 
         existing_schedule = self.db.list_round_schedule(self.current_tournament_id)
@@ -1422,7 +1422,7 @@ class TournamentPagesMixin:
             ctk.CTkLabel(
                 dialog,
                 text=summary,
-                font=ctk.CTkFont(size=15, weight="bold"),
+                font=font_section(),
                 text_color=THEME_TEXT_MAIN,
             ).grid(row=0, column=0, padx=16, pady=(16, 8), sticky="w")
 
@@ -1671,7 +1671,7 @@ class TournamentPagesMixin:
             ctk.CTkLabel(
                 panel,
                 text="Este torneio esta no formato Individual.",
-                font=ctk.CTkFont(size=15, weight="bold"),
+                font=font_section(),
             ).grid(row=0, column=0, padx=16, pady=(16, 6), sticky="w")
             ctk.CTkLabel(
                 panel,
@@ -1716,7 +1716,7 @@ class TournamentPagesMixin:
         ctk.CTkLabel(
             form,
             text="Jogador da equipe",
-            font=ctk.CTkFont(size=15, weight="bold"),
+            font=font_section(),
         ).grid(row=assignment_row, column=0, padx=16, pady=(18, 4), sticky="w")
 
         ctk.CTkLabel(form, text="Jogador inscrito").grid(
@@ -1767,7 +1767,7 @@ class TournamentPagesMixin:
         ctk.CTkLabel(
             teams_panel,
             text="Equipes cadastradas",
-            font=ctk.CTkFont(size=15, weight="bold"),
+            font=font_section(),
         ).grid(row=0, column=0, padx=12, pady=(12, 6), sticky="w")
         team_tree = self._make_tree(
             teams_panel,
@@ -1801,7 +1801,7 @@ class TournamentPagesMixin:
         ctk.CTkLabel(
             roster_panel,
             text="Escalacao da equipe",
-            font=ctk.CTkFont(size=15, weight="bold"),
+            font=font_section(),
         ).grid(row=0, column=0, padx=12, pady=(12, 6), sticky="w")
         roster_tree = self._make_tree(
             roster_panel,

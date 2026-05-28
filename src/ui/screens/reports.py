@@ -28,7 +28,7 @@ class ReportPagesMixin:
         main_panel.grid(row=0, column=0, sticky="nsew")
         main_panel.grid_columnconfigure(0, weight=1)
         
-        ctk.CTkLabel(main_panel, text="DRE Financeiro", font=ctk.CTkFont(size=16, weight="bold")).grid(row=0, column=0, padx=16, pady=(16, 8), sticky="w")
+        ctk.CTkLabel(main_panel, text="DRE Financeiro", font=font_section()).grid(row=0, column=0, padx=16, pady=(16, 8), sticky="w")
         
         dre_frame = ctk.CTkFrame(main_panel, fg_color="transparent")
         dre_frame.grid(row=1, column=0, padx=16, pady=(0, 16), sticky="w")
@@ -51,7 +51,7 @@ class ReportPagesMixin:
         for idx, (key, label) in enumerate([("total_income", "Receitas (+)"), ("total_expense", "Despesas (-)"), ("net_balance", "Resultado Líquido")]):
             card = ctk.CTkFrame(dre_results_frame, fg_color=THEME_APP_BG, corner_radius=8)
             card.grid(row=0, column=idx, padx=8, pady=4, sticky="ew")
-            val_lbl = ctk.CTkLabel(card, text="R$ 0.00", font=ctk.CTkFont(size=18, weight="bold"))
+            val_lbl = ctk.CTkLabel(card, text="R$ 0.00", font=font_kpi_value())
             val_lbl.pack(anchor="w", padx=12, pady=(10, 0))
             ctk.CTkLabel(card, text=label, text_color=THEME_TEXT_SUB).pack(anchor="w", padx=12, pady=(0, 10))
             summary_labels[key] = val_lbl
@@ -129,8 +129,8 @@ class ReportPagesMixin:
         btn_dre.grid(row=0, column=5, padx=(0, 0))
         self._disable_if_unauthorized(btn_dre, "finance_write")
         
-        ctk.CTkLabel(main_panel, text="Estatísticas de Torneios (Em Breve)", font=ctk.CTkFont(size=16, weight="bold")).grid(row=3, column=0, padx=16, pady=(16, 8), sticky="w")
+        ctk.CTkLabel(main_panel, text="Estatísticas de Torneios (Em Breve)", font=font_section()).grid(row=3, column=0, padx=16, pady=(16, 8), sticky="w")
         ctk.CTkLabel(main_panel, text="Métricas de participação e desempenho em torneios.").grid(row=4, column=0, padx=16, pady=(0, 16), sticky="w")
 
-        ctk.CTkLabel(main_panel, text="Crescimento de Membros (Em Breve)", font=ctk.CTkFont(size=16, weight="bold")).grid(row=5, column=0, padx=16, pady=(16, 8), sticky="w")
+        ctk.CTkLabel(main_panel, text="Crescimento de Membros (Em Breve)", font=font_section()).grid(row=5, column=0, padx=16, pady=(16, 8), sticky="w")
         ctk.CTkLabel(main_panel, text="Análise de novas associações e frequência.").grid(row=6, column=0, padx=16, pady=(0, 16), sticky="w")

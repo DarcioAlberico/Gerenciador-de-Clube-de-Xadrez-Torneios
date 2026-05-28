@@ -339,7 +339,7 @@ class AlbericusApp(
         ctk.CTkLabel(
             header,
             text=title,
-            font=ctk.CTkFont(size=22, weight="bold"),
+            font=ctk.CTkFont(size=SIZE_PAGE_TITLE, weight="bold"),
             text_color=THEME_TEXT_MAIN,
         ).grid(row=0, column=0, sticky="w")
         if subtitle:
