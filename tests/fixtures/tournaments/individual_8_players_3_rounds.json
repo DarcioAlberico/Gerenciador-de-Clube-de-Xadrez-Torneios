@@ -1,0 +1,21 @@
+{
+  "name": "Cenário: individual 8 jogadores 3 rodadas",
+  "description": "Swiss individual completo com 8 jogadores, 3 rodadas, ratings decrescentes 2000→1650 e resultados forçados onde o favorito vence sempre na primeira metade e há um empate por rodada para gerar empates de pontos no fim.",
+  "rounds_count": 3,
+  "competition_type": "individual",
+  "players": [
+    {"name": "Jogador 1", "rating": 2000, "club": "Clube A"},
+    {"name": "Jogador 2", "rating": 1950, "club": "Clube A"},
+    {"name": "Jogador 3", "rating": 1900, "club": "Clube B"},
+    {"name": "Jogador 4", "rating": 1850, "club": "Clube B"},
+    {"name": "Jogador 5", "rating": 1800, "club": "Clube C"},
+    {"name": "Jogador 6", "rating": 1750, "club": "Clube C"},
+    {"name": "Jogador 7", "rating": 1700, "club": "Clube D"},
+    {"name": "Jogador 8", "rating": 1650, "club": "Clube D"}
+  ],
+  "rounds": [
+    {"results_by_board": {"1": "1-0", "2": "1-0", "3": "1/2-1/2", "4": "1-0"}},
+    {"results_by_board": {"1": "1-0", "2": "1-0", "3": "1/2-1/2", "4": "1-0"}},
+    {"results_by_board": {"1": "1-0", "2": "1/2-1/2", "3": "1-0", "4": "1-0"}}
+  ]
+}

@@ -40,6 +40,48 @@ from src.core.services import (
 )
 from src.services.federation_exporters import FederationExporterRegistry, TRF16Exporter
 from src.services.result_server import LocalResultServer
+from tests.fixtures import load_tournament_fixture
+
+
+class TournamentFixtureTest(unittest.TestCase):
+    """Smoke da pasta tests/fixtures/tournaments/ — garante que o cenário
+    carrega e o motor produz um estado consistente."""
+
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        base_path = Path(self.temp_dir.name)
+        self.db = Database(base_path / "albericus.db", backup_dir=base_path / "backups")
+        self.service = PairingService(self.db)
+
+    def tearDown(self) -> None:
+        self.temp_dir.cleanup()
+
+    def test_individual_8_players_3_rounds_fixture(self) -> None:
+        tournament_id = load_tournament_fixture(
+            "individual_8_players_3_rounds", self.db, self.service
+        )
+
+        players = self.db.list_players(tournament_id, active_only=False)
+        rounds = self.db.list_rounds(tournament_id)
+        standings = self.service.standings(tournament_id)
+
+        self.assertEqual(8, len(players))
+        self.assertEqual(3, len(rounds))
+        self.assertTrue(
+            all(r["status"] == "closed" for r in rounds),
+            "Todas as rodadas da fixture devem ficar fechadas.",
+        )
+        self.assertEqual(8, len(standings))
+        # Soma de pontos = total de mesas (4 por rodada) × 3 rodadas × 1.0
+        total_points = sum(float(row.get("points") or 0) for row in standings)
+        self.assertAlmostEqual(12.0, total_points, places=2)
+
+        # result_states_summary cobre todas as mesas como "locked" (round closed,
+        # com resultado) — exercita o derive_pairing_state na ponta.
+        states = self.service.result_states_summary(tournament_id)
+        self.assertEqual(12, states["locked"])
+        self.assertEqual(0, states["empty"])
+        self.assertEqual(0, states["published"])
 
 
 class DerivePairingStateTest(unittest.TestCase):
