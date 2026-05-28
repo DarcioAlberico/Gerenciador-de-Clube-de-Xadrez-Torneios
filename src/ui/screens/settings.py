@@ -167,12 +167,23 @@ class SettingsPagesMixin:
         retention_entry.grid(row=18, column=0, padx=16, pady=(0, 14), sticky="w")
         retention_entry.insert(0, str(settings.get("backup_retention_count") or "10"))
 
+        ctk.CTkLabel(settings_panel, text="Tamanho da fonte/interface (%)").grid(
+            row=19,
+            column=0,
+            padx=16,
+            pady=(6, 4),
+            sticky="w",
+        )
+        ui_scale_entry = ctk.CTkEntry(settings_panel, width=120)
+        ui_scale_entry.grid(row=20, column=0, padx=16, pady=(0, 14), sticky="w")
+        ui_scale_entry.insert(0, str(settings.get("ui_scale_percent") or "120"))
+
         ctk.CTkLabel(
             settings_panel,
             text="Sincronizacao de Ratings",
             font=ctk.CTkFont(size=14, weight="bold"),
             text_color="#0F172A",
-        ).grid(row=19, column=0, padx=16, pady=(16, 4), sticky="w")
+        ).grid(row=21, column=0, padx=16, pady=(16, 4), sticky="w")
 
         def download_fide() -> None:
             import threading
@@ -196,7 +207,7 @@ class SettingsPagesMixin:
             command=download_fide,
             fg_color="#059669",
             hover_color="#047857",
-        ).grid(row=20, column=0, padx=16, pady=(10, 8), sticky="ew")
+        ).grid(row=22, column=0, padx=16, pady=(10, 8), sticky="ew")
 
         def import_cbx() -> None:
             from tkinter import filedialog, messagebox
@@ -219,7 +230,7 @@ class SettingsPagesMixin:
             settings_panel,
             text="Importar Lista CBX (Excel / CSV / XML)",
             command=import_cbx,
-        ).grid(row=21, column=0, padx=16, pady=(0, 14), sticky="ew")
+        ).grid(row=23, column=0, padx=16, pady=(0, 14), sticky="ew")
 
         backup_panel = self._make_panel(body)
         backup_panel.grid(row=0, column=1, sticky="nsew")
@@ -312,6 +323,12 @@ class SettingsPagesMixin:
         def persist_settings() -> None:
             export_dir = Path(export_dir_entry.get().strip() or default_export_dir())
             backup_dir = Path(backup_dir_entry.get().strip() or default_backup_dir())
+            try:
+                ui_scale_percent = int(ui_scale_entry.get().strip() or "120")
+            except ValueError as exc:
+                raise AppError("Tamanho da fonte/interface deve ser um numero entre 80 e 160.") from exc
+            if ui_scale_percent < 80 or ui_scale_percent > 160:
+                raise AppError("Tamanho da fonte/interface deve ficar entre 80 e 160.")
             export_dir.mkdir(parents=True, exist_ok=True)
             backup_dir.mkdir(parents=True, exist_ok=True)
             self.db.save_app_settings(
@@ -321,6 +338,7 @@ class SettingsPagesMixin:
                     "default_export_dir": str(export_dir),
                     "backup_dir": str(backup_dir),
                     "cloud_sync_dir": cloud_dir_entry.get().strip(),
+                    "ui_scale_percent": str(ui_scale_percent),
                 }
             )
             self.security_service.save_security_settings(
@@ -329,6 +347,8 @@ class SettingsPagesMixin:
                 }
             )
             ctk.set_appearance_mode(appearance_values[appearance_option.get()])
+            self._apply_app_settings()
+            self._configure_tree_style(register_callback=False)
             
             if settings.get("color_theme") != color_theme_values[color_theme_option.get()]:
                 self._show_info("Reinicie o aplicativo para aplicar o novo tema de cores.")
@@ -400,7 +420,7 @@ class SettingsPagesMixin:
                 self._show_error(exc)
 
         actions = ctk.CTkFrame(settings_panel, fg_color="transparent")
-        actions.grid(row=19, column=0, padx=16, pady=(0, 16), sticky="ew")
+        actions.grid(row=24, column=0, padx=16, pady=(0, 16), sticky="ew")
         actions.grid_columnconfigure(0, weight=1)
         btn_save = ctk.CTkButton(actions, text="Salvar configuracoes", command=lambda: save_settings())
         btn_save.grid(row=0, column=0, pady=(0, 8), sticky="ew")
@@ -657,6 +677,7 @@ class SettingsPagesMixin:
             "Exportar",
             f"Torneio: {tournament['name'] if tournament else ''}",
         )
+        self._build_tournament_nav("export")
 
         body = ctk.CTkFrame(self.content, fg_color="transparent")
         body.grid(row=1, column=0, padx=22, pady=(0, 22), sticky="nsew")
@@ -680,16 +701,20 @@ class SettingsPagesMixin:
         report_values = [
             "Completo",
             "Classificacao",
+            "Desempates",
             "Rodada especifica",
             "Todas as rodadas",
             "Jogadores",
             "Site HTML",
+            "JSON publico",
             "Chess-Results (TRF16)",
             "TRF FIDE",
+            "Pendencias TRF",
             "PGN (Partidas)",
         ]
         if tournament and tournament.get("competition_type") == "team":
             report_values.insert(5, "Equipes")
+            report_values.insert(6, "Escalacoes equipes")
 
         ctk.CTkLabel(panel, text="Relatorio").grid(row=0, column=0, padx=16, pady=(16, 4), sticky="w")
         report_option = ctk.CTkOptionMenu(
@@ -726,7 +751,7 @@ class SettingsPagesMixin:
                 round_option.configure(state="normal")
             else:
                 round_option.configure(state="disabled")
-            if report_option.get() in ("Site HTML", "Chess-Results (TRF16)", "TRF FIDE", "PGN (Partidas)"):
+            if report_option.get() in ("Site HTML", "JSON publico", "Chess-Results (TRF16)", "TRF FIDE", "PGN (Partidas)"):
                 format_option.configure(state="disabled")
             else:
                 format_option.configure(state="normal")
@@ -740,12 +765,16 @@ class SettingsPagesMixin:
             names = {
                 "Completo": f"{safe_name}_completo",
                 "Classificacao": f"{safe_name}_classificacao",
+                "Desempates": f"{safe_name}_desempates",
                 "Rodada especifica": f"{safe_name}_rodada",
                 "Todas as rodadas": f"{safe_name}_rodadas",
                 "Jogadores": f"{safe_name}_jogadores",
                 "Equipes": f"{safe_name}_equipes",
+                "Escalacoes equipes": f"{safe_name}_escalacoes_equipes",
+                "JSON publico": f"{safe_name}_publico",
                 "Chess-Results (TRF16)": f"{safe_name}_chess_results_trf16",
                 "TRF FIDE": f"{safe_name}_fide",
+                "Pendencias TRF": f"{safe_name}_pendencias_trf",
                 "PGN (Partidas)": f"{safe_name}_partidas",
             }
             if report == "Rodada especifica" and round_option.get() in export_round_map:
@@ -753,12 +782,40 @@ class SettingsPagesMixin:
                 names[report] = f"{safe_name}_rodada_{round_number}"
             return f"{names[report]}.{extension}"
 
+        trf_warning_label = ctk.CTkLabel(
+            panel,
+            text="Clique em Validar TRF FIDE para conferir pendencias antes de gerar o arquivo.",
+            text_color=THEME_TEXT_SUB,
+            justify="left",
+            anchor="w",
+            wraplength=980,
+        )
+        trf_warning_label.grid(row=3, column=0, columnspan=5, padx=16, pady=(0, 16), sticky="ew")
+
+        def set_trf_validation_text(message: str) -> None:
+            trf_warning_label.configure(text=message)
+
+        def validate_trf() -> None:
+            try:
+                tournament_id = int(self.current_tournament_id)
+                warnings = self.export_service.validate_chess_results_trf(tournament_id)
+                if warnings:
+                    warning_text = "\n".join(f"- {item}" for item in warnings)
+                    set_trf_validation_text(f"TRF pode ser gerado, mas ha avisos:\n\n{warning_text}")
+                    return
+                set_trf_validation_text("TRF validado. Nenhum aviso encontrado.")
+            except Exception as exc:
+                set_trf_validation_text(f"TRF nao pode ser gerado:\n\n{exc}")
+                self._show_error(exc)
+
         def export() -> None:
             try:
                 report = report_option.get()
                 extension = format_option.get()
                 if report in ("Chess-Results (TRF16)", "TRF FIDE"):
-                    extension = "txt"
+                    extension = "trf"
+                elif report == "JSON publico":
+                    extension = "json"
                 elif report == "PGN (Partidas)":
                     extension = "pgn"
                 tournament_id = int(self.current_tournament_id)
@@ -799,6 +856,8 @@ class SettingsPagesMixin:
                         self.export_service.export_complete(tournament_id, path)
                     elif report == "Classificacao":
                         self.export_service.export_standings(tournament_id, path)
+                    elif report == "Desempates":
+                        self.export_service.export_tiebreak_report(tournament_id, path)
                     elif report == "Rodada especifica":
                         if not round_id:
                             raise AppError("Selecione uma rodada para exportar.")
@@ -809,8 +868,14 @@ class SettingsPagesMixin:
                         self.export_service.export_players(tournament_id, path)
                     elif report == "Equipes":
                         self.export_service.export_teams(tournament_id, path)
+                    elif report == "Escalacoes equipes":
+                        self.export_service.export_team_lineups(tournament_id, path)
+                    elif report == "JSON publico":
+                        self.export_service.export_public_json(tournament_id, path)
                     elif report in ("Chess-Results (TRF16)", "TRF FIDE"):
                         return self.export_service.export_chess_results_trf(tournament_id, path)
+                    elif report == "Pendencias TRF":
+                        self.export_service.export_chess_results_trf_validation_report(tournament_id, path)
                     elif report == "PGN (Partidas)":
                         self.export_service.export_pgn(tournament_id, path)
                     else:
@@ -841,6 +906,47 @@ class SettingsPagesMixin:
             pady=(0, 12),
             sticky="w",
         )
+        ctk.CTkButton(panel, text="Validar TRF FIDE", command=validate_trf).grid(
+            row=1,
+            column=4,
+            padx=(0, 16),
+            pady=(0, 12),
+            sticky="w",
+        )
+
+        trf_help_panel = self._make_panel(body)
+        trf_help_panel.pack(anchor="nw", fill="x", pady=(12, 0))
+        trf_help_panel.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(
+            trf_help_panel,
+            text="Preparacao FIDE/TRF",
+            font=ctk.CTkFont(size=15, weight="bold"),
+        ).grid(row=0, column=0, padx=16, pady=(16, 4), sticky="w")
+        ctk.CTkLabel(
+            trf_help_panel,
+            text=(
+                "Antes de gerar o TRF, confira em Config. Torneio: local, datas, ritmo, federacao e arbitro-chefe. "
+                "Em Jogadores, confira FIDE ID, rating FIDE, federacao/clube e nascimento."
+            ),
+            text_color=THEME_TEXT_SUB,
+            wraplength=920,
+            justify="left",
+        ).grid(row=1, column=0, columnspan=3, padx=16, pady=(0, 12), sticky="w")
+        ctk.CTkButton(
+            trf_help_panel,
+            text="Corrigir Config. Torneio",
+            command=self.show_tournament_settings,
+        ).grid(row=2, column=0, padx=16, pady=(0, 16), sticky="w")
+        ctk.CTkButton(
+            trf_help_panel,
+            text="Corrigir Jogadores",
+            command=self.show_players,
+        ).grid(row=2, column=1, padx=(0, 16), pady=(0, 16), sticky="w")
+        ctk.CTkButton(
+            trf_help_panel,
+            text="Importar/atualizar ratings oficiais",
+            command=self.show_players,
+        ).grid(row=2, column=2, padx=(0, 16), pady=(0, 16), sticky="w")
 
     def _show_certificates_tournament_only(self) -> None:
         if not self._require_tournament():
@@ -852,6 +958,7 @@ class SettingsPagesMixin:
             "Diplomas",
             f"Torneio: {tournament['name'] if tournament else ''}",
         )
+        self._build_tournament_nav("certificates")
 
         body = ctk.CTkFrame(self.content, fg_color="transparent")
         body.grid(row=1, column=0, padx=22, pady=(0, 22), sticky="nsew")
@@ -1301,6 +1408,8 @@ class SettingsPagesMixin:
             "Diplomas",
             f"Torneio atual: {tournament['name']}" if tournament else "Gere certificados e diplomas por contexto.",
         )
+        if tournament:
+            self._build_tournament_nav("certificates")
 
         body = ctk.CTkFrame(self.content, fg_color="transparent")
         body.grid(row=1, column=0, padx=22, pady=(0, 22), sticky="nsew")

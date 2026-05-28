@@ -18,6 +18,7 @@ from .screens.tournaments import TournamentPagesMixin
 from .screens.reports import ReportPagesMixin
 from .screens.audit import AuditPagesMixin
 from .screens.communication import CommunicationPagesMixin
+from .screens.integrations import IntegrationPagesMixin
 from src.services.report_engine import ReportEngine
 
 
@@ -34,6 +35,7 @@ class AlbericusApp(
     ReportPagesMixin,
     AuditPagesMixin,
     CommunicationPagesMixin,
+    IntegrationPagesMixin,
     ctk.CTk,
 ):
     def __init__(self, db: Database | None = None) -> None:
@@ -64,7 +66,10 @@ class AlbericusApp(
         self.event_service = EventService(self.db)
         self.inventory_service = InventoryService(self.db)
         self.security_service = SecurityService(self.db)
+        self.sync_service = SyncService(self.db)
+        self.clock_integration_service = ClockIntegrationService(self.db)
         self.pairing_service = PairingService(self.db)
+        self.qr_result_service = QRResultService(self.db, self.pairing_service)
         self.import_service = ImportService(self.db)
         self.official_rating_service = OfficialRatingService(self.db)
         self.internal_rating_service = InternalRatingService(self.db)
@@ -80,6 +85,7 @@ class AlbericusApp(
         self.round_option_map: dict[str, int] = {}
         self.pairing_row_map: dict[str, int] = {}
         self.pairing_detail_map: dict[str, dict[str, Any]] = {}
+        self.local_result_server: LocalResultServer | None = None
 
         self._configure_grid()
         self._configure_tree_style()
@@ -91,6 +97,8 @@ class AlbericusApp(
             self.security_service.create_backup("auto_shutdown")
         except Exception as exc:
             logger.error("Erro ao gerar backup no fechamento: %s", exc)
+        if self.local_result_server is not None:
+            self.local_result_server.stop()
         self.destroy()
 
     def _build_login_screen(self) -> None:
@@ -133,20 +141,22 @@ class AlbericusApp(
         self.grid_rowconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=0)
 
-    def _configure_tree_style(self) -> None:
+    def _configure_tree_style(self, register_callback: bool = True) -> None:
         style = ttk.Style(self)
         try:
             style.theme_use("clam")
         except Exception:
             pass
+        scale = getattr(self, "_ui_scale_percent", 120) / 100
         style.configure(
             "Treeview",
-            rowheight=28,
-            font=("Segoe UI", 10),
+            rowheight=max(28, int(28 * scale)),
+            font=("Segoe UI", max(10, int(10 * scale))),
         )
-        style.configure("Treeview.Heading", font=("Segoe UI", 10, "bold"))
+        style.configure("Treeview.Heading", font=("Segoe UI", max(10, int(10 * scale)), "bold"))
         self._update_tree_colors(style)
-        ctk.AppearanceModeTracker.add(self._on_appearance_change, self)
+        if register_callback:
+            ctk.AppearanceModeTracker.add(self._on_appearance_change, self)
 
     def _on_appearance_change(self, new_appearance_mode: str) -> None:
         style = ttk.Style(self)
@@ -192,6 +202,8 @@ class AlbericusApp(
         tourn_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Torneio", menu=tourn_menu)
         tourn_menu.add_command(label="Torneios", command=self.show_tournaments)
+        tourn_menu.add_command(label="Central do Torneio", command=self.show_tournament_dashboard)
+        tourn_menu.add_command(label="Painel do Árbitro", command=self.show_arbitration_panel)
         tourn_menu.add_command(label="Config. Torneio", command=self.show_tournament_settings)
         tourn_menu.add_separator()
         tourn_menu.add_command(label="Jogadores", command=self.show_players)
@@ -207,6 +219,7 @@ class AlbericusApp(
         tools_menu.add_command(label="Relatórios Administrativos", command=self.show_administrative_reports)
         tools_menu.add_command(label="DRE Financeiro", command=self.show_financial_reports)
         tools_menu.add_command(label="Comunicação", command=self.show_communication)
+        tools_menu.add_command(label="Integrações Operacionais", command=self.show_integrations)
 
         # 6. Configurações
         settings_menu = tk.Menu(menubar, tearoff=0)
@@ -313,6 +326,7 @@ class AlbericusApp(
         self.content.grid_rowconfigure(1, weight=1)
 
     def _clear_content(self) -> None:
+        self._pairing_shortcuts_enabled = False
         for child in self.content.winfo_children():
             child.destroy()
 
@@ -320,6 +334,7 @@ class AlbericusApp(
         header = ctk.CTkFrame(self.content, fg_color="transparent")
         header.grid(row=0, column=0, padx=22, pady=(22, 10), sticky="ew")
         header.grid_columnconfigure(0, weight=1)
+        self._page_header = header
 
         ctk.CTkLabel(
             header,
@@ -335,6 +350,49 @@ class AlbericusApp(
                 wraplength=760,
                 justify="left",
             ).grid(row=1, column=0, pady=(2, 0), sticky="w")
+
+    def _build_tournament_nav(self, active: str) -> None:
+        if not getattr(self, "current_tournament_id", None):
+            return
+        tournament = self.db.get_tournament(self.current_tournament_id)
+        if not tournament:
+            return
+        header = getattr(self, "_page_header", None)
+        if header is None:
+            return
+
+        is_team_tournament = tournament.get("competition_type") == "team"
+        nav = ctk.CTkFrame(header, fg_color="transparent")
+        nav.grid(row=0, column=1, rowspan=2, padx=(16, 0), sticky="e")
+
+        items: list[tuple[str, str, Callable[[], None], str | None]] = [
+            ("central", "Central", self.show_tournament_dashboard, None),
+            ("arbiter", "Arbitro", self.show_arbitration_panel, None),
+            ("settings", "Config.", self.show_tournament_settings, "tournament_write"),
+            ("players", "Jogadores", self.show_players, "tournament_write"),
+            ("pairings", "Rodadas", self.show_pairings, "tournament_write"),
+            ("standings", "Classificacao", self.show_standings, None),
+            ("export", "Exportar", self.show_export, None),
+            ("certificates", "Diplomas", self.show_certificates, None),
+        ]
+        if is_team_tournament:
+            items.insert(3, ("teams", "Equipes", self.show_teams, "tournament_write"))
+
+        for index, (key, label, command, permission) in enumerate(items):
+            is_active = key == active
+            button = ctk.CTkButton(
+                nav,
+                text=label,
+                command=command,
+                width=112,
+                height=32,
+                fg_color=THEME_ACCENT if is_active else "transparent",
+                border_width=0 if is_active else 1,
+                text_color=("#FFFFFF", "#0B0F19") if is_active else THEME_TEXT_MAIN,
+            )
+            button.grid(row=0, column=index, padx=(6, 0), pady=(0, 6), sticky="e")
+            if permission:
+                self._disable_if_unauthorized(button, permission)
 
     def _make_panel(self, parent: ctk.CTkBaseClass | None = None) -> ctk.CTkFrame:
         panel = ctk.CTkFrame(parent or self.content, fg_color=THEME_PANEL_BG, corner_radius=8)
@@ -435,6 +493,15 @@ class AlbericusApp(
             color_theme = settings.get("color_theme")
             if color_theme and color_theme in ["blue", "green", "dark-blue"]:
                 ctk.set_default_color_theme(color_theme)
+            try:
+                scale_percent = int(str(settings.get("ui_scale_percent") or "120"))
+            except ValueError:
+                scale_percent = 100
+            scale_percent = min(160, max(80, scale_percent))
+            self._ui_scale_percent = scale_percent
+            scale = scale_percent / 100
+            ctk.set_widget_scaling(scale)
+            ctk.set_window_scaling(scale)
         except Exception:
             logger.exception("Falha ao aplicar configuracoes do aplicativo")
 

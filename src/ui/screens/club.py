@@ -1482,12 +1482,76 @@ class ClubPagesMixin:
             ctk.CTkButton(btn_frame, text="FIDE", command=lambda: do_import("fide"), width=100).pack(side="left", padx=10)
             ctk.CTkButton(btn_frame, text="CBX", command=lambda: do_import("cbx"), width=100).pack(side="left", padx=10)
 
+        def import_members() -> None:
+            try:
+                file_path = filedialog.askopenfilename(
+                    title="Importar membros/alunos",
+                    initialdir=str(self._default_export_dir()),
+                    filetypes=[
+                        ("Planilhas e CSV", "*.csv;*.xls;*.xlsx"),
+                        ("CSV", "*.csv"),
+                        ("Excel", "*.xls;*.xlsx"),
+                        ("Todos os arquivos", "*.*"),
+                    ],
+                )
+                if not file_path:
+                    return
+
+                def show_import_result(result: dict[str, Any]) -> None:
+                    load_category_filter()
+                    load_learning_level_filter_options()
+                    load_class_filter_options()
+                    load_members()
+                    message = (
+                        f"{result['imported']} membros/alunos importados.\n"
+                        f"{result['skipped']} linhas ignoradas."
+                    )
+                    if result["errors"]:
+                        message += "\n\nErros:\n" + "\n".join(result["errors"][:12])
+                    self._show_info(message)
+
+                self._run_background(
+                    lambda: self.import_service.import_members(file_path),
+                    show_import_result,
+                    "Importando membros/alunos...",
+                )
+            except Exception as exc:
+                self._show_error(exc)
+
+        def export_member_import_template() -> None:
+            try:
+                file_path = filedialog.asksaveasfilename(
+                    title="Salvar modelo de membros/alunos",
+                    initialdir=str(self._default_export_dir()),
+                    initialfile="modelo_membros_alunos.xlsx",
+                    defaultextension=".xlsx",
+                    filetypes=[
+                        ("Excel", "*.xlsx"),
+                        ("CSV", "*.csv"),
+                        ("Todos os arquivos", "*.*"),
+                    ],
+                )
+                if not file_path:
+                    return
+                path = Path(file_path)
+                if path.suffix.lower() not in {".csv", ".xlsx"}:
+                    path = path.with_suffix(".xlsx")
+                self._run_background(
+                    lambda: self.export_service.export_member_import_template(path),
+                    lambda _result: self._show_info(f"Modelo salvo:\n{path}"),
+                    "Gerando modelo...",
+                )
+            except Exception as exc:
+                self._show_error(exc)
+
         buttons = [
             ("Adicionar", add_member),
             ("Atualizar", update_member),
             ("Ativar/Inativar", toggle_member),
             ("Hist. rating", show_rating_history),
             ("Exportar evolucao", export_evolution),
+            ("Modelo CSV/Excel", export_member_import_template),
+            ("Importar CSV/Excel", import_members),
             ("Importar Ratings", import_ratings),
             ("Limpar", clear_form),
         ]

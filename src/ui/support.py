@@ -3,6 +3,9 @@ from __future__ import annotations
 import logging
 import sys
 import os
+import shutil
+import subprocess
+import webbrowser
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from typing import Any, Callable
@@ -45,6 +48,7 @@ from src.core.services import (
     AppError,
     CalendarService,
     CertificateService,
+    ClockIntegrationService,
     LibraryService,
     ClubService,
     CommunicationService,
@@ -58,11 +62,14 @@ from src.core.services import (
     InternalRatingService,
     InventoryService,
     LearningLevelService,
+    LocalResultServer,
     MemberService,
     OfficialRatingService,
     PairingService,
+    QRResultService,
     RefereeService,
     SecurityService,
+    SyncService,
     TeamService,
     TournamentService,
     TrainingService,
@@ -210,10 +217,24 @@ class ErrorCatchingMixin:
 
     def _print_document(self, path: Path) -> None:
         try:
-            if hasattr(os, "startfile"):
-                os.startfile(str(path), "print")
+            document_path = Path(path)
+            if not document_path.exists():
+                raise FileNotFoundError(document_path)
+            if sys.platform == "win32" and hasattr(os, "startfile"):
+                os.startfile(str(document_path), "print")
+                return
+
+            print_command = shutil.which("lp") or shutil.which("lpr")
+            if print_command:
+                subprocess.Popen([print_command, str(document_path)])
+                self._show_info("Documento enviado para a impressora padrão.")
+                return
+
+            if sys.platform == "darwin":
+                subprocess.Popen(["open", str(document_path)])
             else:
-                self._show_info("A impressão direta só é suportada nativamente no Windows por enquanto.")
+                webbrowser.open(document_path.resolve().as_uri())
+            self._show_info("Nao encontrei comando de impressao. O documento foi aberto para impressao manual.")
         except Exception as exc:
             self._show_error(f"Não foi possível iniciar a impressão: {exc}")
 

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import base64
 import ctypes
+import hashlib
+import json
 import os
 import shutil
 import sqlite3
@@ -358,7 +360,7 @@ LEGACY_LOGS_DIR = BASE_DIR / "logs"
 
 
 class Database:
-    SCHEMA_VERSION = 22
+    SCHEMA_VERSION = 28
 
     def __init__(
         self,
@@ -541,6 +543,15 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_team_boards_match
                 ON team_boards(team_match_id, board_number);
 
+            CREATE INDEX IF NOT EXISTS idx_team_lineups_round
+                ON team_lineups(tournament_id, round_id, team_id);
+
+            CREATE INDEX IF NOT EXISTS idx_team_lineup_boards_lineup
+                ON team_lineup_boards(lineup_id, board_number);
+
+            CREATE INDEX IF NOT EXISTS idx_team_substitutions_round
+                ON team_substitution_events(tournament_id, round_id, team_id);
+
             CREATE INDEX IF NOT EXISTS idx_round_schedule_tournament
                 ON round_schedule(tournament_id, round_number);
 
@@ -564,6 +575,51 @@ class Database:
 
             CREATE INDEX IF NOT EXISTS idx_audit_log_entity
                 ON audit_log(entity_type, entity_id, created_at);
+
+            CREATE INDEX IF NOT EXISTS idx_audit_events_tournament
+                ON audit_events(tournament_id, created_at);
+
+            CREATE INDEX IF NOT EXISTS idx_audit_events_entity
+                ON audit_events(entity_type, entity_id, created_at);
+
+            CREATE INDEX IF NOT EXISTS idx_pairing_snapshots_round
+                ON pairing_snapshots(tournament_id, round_number, stage);
+
+            CREATE INDEX IF NOT EXISTS idx_standings_snapshots_round
+                ON standings_snapshots(tournament_id, round_id);
+
+            CREATE INDEX IF NOT EXISTS idx_tiebreak_components_player
+                ON tiebreak_components(tournament_id, player_id, criterion);
+
+            CREATE INDEX IF NOT EXISTS idx_tiebreak_components_round
+                ON tiebreak_components(tournament_id, round_id);
+
+            CREATE INDEX IF NOT EXISTS idx_public_tokens_hash
+                ON public_tokens(token_hash);
+
+            CREATE INDEX IF NOT EXISTS idx_public_tokens_pairing
+                ON public_tokens(tournament_id, round_id, pairing_id, status);
+
+            CREATE INDEX IF NOT EXISTS idx_result_submissions_status
+                ON result_submissions(tournament_id, status, submitted_at);
+
+            CREATE INDEX IF NOT EXISTS idx_result_submissions_pairing
+                ON result_submissions(pairing_id, status);
+
+            CREATE INDEX IF NOT EXISTS idx_devices_status
+                ON devices(status, role, name);
+
+            CREATE INDEX IF NOT EXISTS idx_sync_outbox_status
+                ON sync_outbox(status, next_attempt_at, created_at);
+
+            CREATE INDEX IF NOT EXISTS idx_sync_outbox_tournament
+                ON sync_outbox(tournament_id, status, created_at);
+
+            CREATE INDEX IF NOT EXISTS idx_clock_events_tournament
+                ON clock_events(tournament_id, round_id, occurred_at);
+
+            CREATE INDEX IF NOT EXISTS idx_clock_events_pairing
+                ON clock_events(pairing_id, event_type, occurred_at);
 
             CREATE INDEX IF NOT EXISTS idx_certificate_templates_type
                 ON certificate_templates(certificate_type, active, name);
@@ -954,6 +1010,8 @@ class Database:
                     tournament_id INTEGER NOT NULL,
                     number INTEGER NOT NULL,
                     status TEXT NOT NULL DEFAULT 'generated',
+                    pairing_engine_version TEXT NOT NULL DEFAULT 'albericus-swiss-1',
+                    ruleset_version TEXT NOT NULL DEFAULT 'albericus-2026-phase0',
                     created_at TEXT NOT NULL,
                     UNIQUE (tournament_id, number),
                     FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE
@@ -1038,6 +1096,60 @@ class Database:
                     FOREIGN KEY (black_player_id) REFERENCES players(id) ON DELETE SET NULL
                 );
 
+                CREATE TABLE IF NOT EXISTS team_lineups (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    tournament_id INTEGER NOT NULL,
+                    round_id INTEGER NOT NULL,
+                    team_match_id INTEGER NOT NULL,
+                    team_id INTEGER NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'approved',
+                    submitted_at TEXT DEFAULT '',
+                    approved_at TEXT DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    UNIQUE (round_id, team_match_id, team_id),
+                    FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
+                    FOREIGN KEY (round_id) REFERENCES rounds(id) ON DELETE CASCADE,
+                    FOREIGN KEY (team_match_id) REFERENCES team_matches(id) ON DELETE CASCADE,
+                    FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE
+                );
+
+                CREATE TABLE IF NOT EXISTS team_lineup_boards (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    lineup_id INTEGER NOT NULL,
+                    board_number INTEGER NOT NULL,
+                    player_id INTEGER,
+                    color TEXT NOT NULL DEFAULT '',
+                    role TEXT NOT NULL DEFAULT 'starter',
+                    created_at TEXT NOT NULL,
+                    UNIQUE (lineup_id, board_number),
+                    FOREIGN KEY (lineup_id) REFERENCES team_lineups(id) ON DELETE CASCADE,
+                    FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE SET NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS team_substitution_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    tournament_id INTEGER NOT NULL,
+                    round_id INTEGER NOT NULL,
+                    team_match_id INTEGER NOT NULL,
+                    team_board_id INTEGER NOT NULL,
+                    team_id INTEGER NOT NULL,
+                    board_number INTEGER NOT NULL,
+                    color TEXT NOT NULL,
+                    out_player_id INTEGER,
+                    in_player_id INTEGER NOT NULL,
+                    reason TEXT DEFAULT '',
+                    requires_correction INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
+                    FOREIGN KEY (round_id) REFERENCES rounds(id) ON DELETE CASCADE,
+                    FOREIGN KEY (team_match_id) REFERENCES team_matches(id) ON DELETE CASCADE,
+                    FOREIGN KEY (team_board_id) REFERENCES team_boards(id) ON DELETE CASCADE,
+                    FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE,
+                    FOREIGN KEY (out_player_id) REFERENCES players(id) ON DELETE SET NULL,
+                    FOREIGN KEY (in_player_id) REFERENCES players(id) ON DELETE CASCADE
+                );
+
                 CREATE TABLE IF NOT EXISTS tournament_settings (
                     tournament_id INTEGER PRIMARY KEY,
                     fide_event_id TEXT DEFAULT '',
@@ -1065,6 +1177,8 @@ class Database:
                     hide_standings INTEGER NOT NULL DEFAULT 0,
                     calculate_performance INTEGER NOT NULL DEFAULT 0,
                     pairing_method TEXT NOT NULL DEFAULT 'swiss',
+                    pairing_system TEXT NOT NULL DEFAULT 'custom_authorized',
+                    acceleration_method TEXT NOT NULL DEFAULT 'none',
                     hide_color_names INTEGER NOT NULL DEFAULT 0,
                     show_opponents_in_standings INTEGER NOT NULL DEFAULT 0,
                     team_boards_count INTEGER NOT NULL DEFAULT 4,
@@ -1075,6 +1189,10 @@ class Database:
                     team_standing_primary TEXT NOT NULL DEFAULT 'match_points',
                     team_standing_secondary TEXT NOT NULL DEFAULT 'game_points',
                     team_fixed_board_order INTEGER NOT NULL DEFAULT 1,
+                    team_board_order_policy TEXT NOT NULL DEFAULT 'fixed',
+                    team_reserve_policy TEXT NOT NULL DEFAULT 'same_team',
+                    team_lineup_deadline TEXT DEFAULT '',
+                    team_max_substitutions INTEGER NOT NULL DEFAULT 0,
                     archived INTEGER NOT NULL DEFAULT 0,
                     updated_at TEXT NOT NULL,
                     FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE
@@ -1187,6 +1305,170 @@ class Database:
                     created_at TEXT NOT NULL
                 );
 
+                CREATE TABLE IF NOT EXISTS audit_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    event_id TEXT NOT NULL UNIQUE,
+                    tournament_id INTEGER,
+                    round_id INTEGER,
+                    entity_type TEXT NOT NULL DEFAULT '',
+                    entity_id INTEGER,
+                    action TEXT NOT NULL,
+                    actor TEXT DEFAULT '',
+                    role TEXT DEFAULT '',
+                    reason TEXT DEFAULT '',
+                    before_hash TEXT DEFAULT '',
+                    after_hash TEXT DEFAULT '',
+                    before_json TEXT DEFAULT '',
+                    after_json TEXT DEFAULT '',
+                    metadata_json TEXT DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
+                    FOREIGN KEY (round_id) REFERENCES rounds(id) ON DELETE SET NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS pairing_snapshots (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    tournament_id INTEGER NOT NULL,
+                    round_id INTEGER,
+                    round_number INTEGER NOT NULL,
+                    stage TEXT NOT NULL,
+                    pairing_system TEXT NOT NULL DEFAULT '',
+                    pairing_engine_version TEXT NOT NULL DEFAULT '',
+                    ruleset_version TEXT NOT NULL DEFAULT '',
+                    snapshot_json TEXT NOT NULL,
+                    snapshot_hash TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
+                    FOREIGN KEY (round_id) REFERENCES rounds(id) ON DELETE CASCADE
+                );
+
+                CREATE TABLE IF NOT EXISTS standings_snapshots (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    tournament_id INTEGER NOT NULL,
+                    round_id INTEGER NOT NULL,
+                    round_number INTEGER NOT NULL,
+                    standings_json TEXT NOT NULL,
+                    snapshot_hash TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    UNIQUE (tournament_id, round_id),
+                    FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
+                    FOREIGN KEY (round_id) REFERENCES rounds(id) ON DELETE CASCADE
+                );
+
+                CREATE TABLE IF NOT EXISTS tiebreak_components (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    tournament_id INTEGER NOT NULL,
+                    round_id INTEGER,
+                    round_number INTEGER NOT NULL DEFAULT 0,
+                    player_id INTEGER NOT NULL,
+                    player_name TEXT NOT NULL DEFAULT '',
+                    criterion TEXT NOT NULL,
+                    value REAL,
+                    components_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    UNIQUE (tournament_id, round_id, player_id, criterion),
+                    FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
+                    FOREIGN KEY (round_id) REFERENCES rounds(id) ON DELETE CASCADE,
+                    FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE
+                );
+
+                CREATE TABLE IF NOT EXISTS public_tokens (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    token_hash TEXT NOT NULL UNIQUE,
+                    tournament_id INTEGER NOT NULL,
+                    round_id INTEGER NOT NULL,
+                    pairing_id INTEGER NOT NULL,
+                    board_number INTEGER NOT NULL DEFAULT 0,
+                    purpose TEXT NOT NULL DEFAULT 'result_submission',
+                    status TEXT NOT NULL DEFAULT 'active',
+                    expires_at TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    used_at TEXT DEFAULT '',
+                    FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
+                    FOREIGN KEY (round_id) REFERENCES rounds(id) ON DELETE CASCADE,
+                    FOREIGN KEY (pairing_id) REFERENCES pairings(id) ON DELETE CASCADE
+                );
+
+                CREATE TABLE IF NOT EXISTS result_submissions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    tournament_id INTEGER NOT NULL,
+                    round_id INTEGER NOT NULL,
+                    pairing_id INTEGER NOT NULL,
+                    token_id INTEGER,
+                    board_number INTEGER NOT NULL DEFAULT 0,
+                    submitted_result TEXT NOT NULL,
+                    submitter TEXT DEFAULT '',
+                    status TEXT NOT NULL DEFAULT 'submitted',
+                    submitted_at TEXT NOT NULL,
+                    reviewed_at TEXT DEFAULT '',
+                    reviewer TEXT DEFAULT '',
+                    reason TEXT DEFAULT '',
+                    FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
+                    FOREIGN KEY (round_id) REFERENCES rounds(id) ON DELETE CASCADE,
+                    FOREIGN KEY (pairing_id) REFERENCES pairings(id) ON DELETE CASCADE,
+                    FOREIGN KEY (token_id) REFERENCES public_tokens(id) ON DELETE SET NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS devices (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    device_id TEXT NOT NULL UNIQUE,
+                    name TEXT NOT NULL,
+                    role TEXT NOT NULL DEFAULT 'assistant',
+                    status TEXT NOT NULL DEFAULT 'authorized',
+                    secret_hash TEXT DEFAULT '',
+                    last_seen_at TEXT DEFAULT '',
+                    metadata_json TEXT DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS sync_outbox (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    event_id TEXT NOT NULL UNIQUE,
+                    device_id TEXT NOT NULL DEFAULT '',
+                    tournament_id INTEGER,
+                    round_id INTEGER,
+                    entity_type TEXT NOT NULL DEFAULT '',
+                    entity_id INTEGER,
+                    action TEXT NOT NULL,
+                    payload_json TEXT NOT NULL,
+                    payload_hash TEXT NOT NULL,
+                    conflict_policy TEXT NOT NULL DEFAULT 'server_authoritative',
+                    status TEXT NOT NULL DEFAULT 'pending',
+                    attempts INTEGER NOT NULL DEFAULT 0,
+                    last_error TEXT DEFAULT '',
+                    next_attempt_at TEXT DEFAULT '',
+                    synced_at TEXT DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
+                    FOREIGN KEY (round_id) REFERENCES rounds(id) ON DELETE SET NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS clock_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    event_id TEXT NOT NULL UNIQUE,
+                    tournament_id INTEGER NOT NULL,
+                    round_id INTEGER,
+                    pairing_id INTEGER,
+                    board_number INTEGER NOT NULL DEFAULT 0,
+                    player_id INTEGER,
+                    device_id TEXT DEFAULT '',
+                    source TEXT NOT NULL DEFAULT 'manual',
+                    event_type TEXT NOT NULL,
+                    side TEXT DEFAULT '',
+                    seconds_remaining INTEGER,
+                    note TEXT DEFAULT '',
+                    payload_json TEXT NOT NULL DEFAULT '{}',
+                    status TEXT NOT NULL DEFAULT 'logged',
+                    occurred_at TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
+                    FOREIGN KEY (round_id) REFERENCES rounds(id) ON DELETE SET NULL,
+                    FOREIGN KEY (pairing_id) REFERENCES pairings(id) ON DELETE SET NULL,
+                    FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE SET NULL
+                );
+
                 CREATE TABLE IF NOT EXISTS certificate_templates (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     name TEXT NOT NULL UNIQUE,
@@ -1281,6 +1563,7 @@ class Database:
             tournament_columns = {
                 str(row[1]) for row in connection.execute("PRAGMA table_info(tournaments)").fetchall()
             }
+            round_columns = {str(row[1]) for row in connection.execute("PRAGMA table_info(rounds)").fetchall()}
             settings_columns = {
                 str(row[1]) for row in connection.execute("PRAGMA table_info(tournament_settings)").fetchall()
             }
@@ -1308,6 +1591,7 @@ class Database:
                 "learning_level_id",
             }
             required_tournament_columns = {"club_id", "class_id", "competition_type"}
+            required_round_columns = {"pairing_engine_version", "ruleset_version"}
             required_settings_columns = {
                 "tournament_profile",
                 "team_boards_count",
@@ -1318,6 +1602,12 @@ class Database:
                 "team_standing_primary",
                 "team_standing_secondary",
                 "team_fixed_board_order",
+                "team_board_order_policy",
+                "team_reserve_policy",
+                "team_lineup_deadline",
+                "team_max_substitutions",
+                "pairing_system",
+                "acceleration_method",
             }
             settings_table = connection.execute(
                 """
@@ -1366,6 +1656,69 @@ class Database:
                 SELECT name
                 FROM sqlite_master
                 WHERE type = 'table' AND name = 'audit_log'
+                """
+            ).fetchone()
+            audit_events_table = connection.execute(
+                """
+                SELECT name
+                FROM sqlite_master
+                WHERE type = 'table' AND name = 'audit_events'
+                """
+            ).fetchone()
+            pairing_snapshots_table = connection.execute(
+                """
+                SELECT name
+                FROM sqlite_master
+                WHERE type = 'table' AND name = 'pairing_snapshots'
+                """
+            ).fetchone()
+            standings_snapshots_table = connection.execute(
+                """
+                SELECT name
+                FROM sqlite_master
+                WHERE type = 'table' AND name = 'standings_snapshots'
+                """
+            ).fetchone()
+            tiebreak_components_table = connection.execute(
+                """
+                SELECT name
+                FROM sqlite_master
+                WHERE type = 'table' AND name = 'tiebreak_components'
+                """
+            ).fetchone()
+            public_tokens_table = connection.execute(
+                """
+                SELECT name
+                FROM sqlite_master
+                WHERE type = 'table' AND name = 'public_tokens'
+                """
+            ).fetchone()
+            result_submissions_table = connection.execute(
+                """
+                SELECT name
+                FROM sqlite_master
+                WHERE type = 'table' AND name = 'result_submissions'
+                """
+            ).fetchone()
+            devices_table = connection.execute(
+                """
+                SELECT name
+                FROM sqlite_master
+                WHERE type = 'table' AND name = 'devices'
+                """
+            ).fetchone()
+            sync_outbox_table = connection.execute(
+                """
+                SELECT name
+                FROM sqlite_master
+                WHERE type = 'table' AND name = 'sync_outbox'
+                """
+            ).fetchone()
+            clock_events_table = connection.execute(
+                """
+                SELECT name
+                FROM sqlite_master
+                WHERE type = 'table' AND name = 'clock_events'
                 """
             ).fetchone()
             classes_table = connection.execute(
@@ -1520,6 +1873,27 @@ class Database:
                 WHERE type = 'table' AND name = 'team_boards'
                 """
             ).fetchone()
+            team_lineups_table = connection.execute(
+                """
+                SELECT name
+                FROM sqlite_master
+                WHERE type = 'table' AND name = 'team_lineups'
+                """
+            ).fetchone()
+            team_lineup_boards_table = connection.execute(
+                """
+                SELECT name
+                FROM sqlite_master
+                WHERE type = 'table' AND name = 'team_lineup_boards'
+                """
+            ).fetchone()
+            team_substitution_events_table = connection.execute(
+                """
+                SELECT name
+                FROM sqlite_master
+                WHERE type = 'table' AND name = 'team_substitution_events'
+                """
+            ).fetchone()
             certificate_templates_table = connection.execute(
                 """
                 SELECT name
@@ -1562,6 +1936,7 @@ class Database:
                 or not required_club_columns.issubset(club_columns)
                 or not required_member_columns.issubset(member_columns)
                 or not required_tournament_columns.issubset(tournament_columns)
+                or not required_round_columns.issubset(round_columns)
                 or not required_settings_columns.issubset(settings_columns)
                 or not settings_table
                 or not schedule_table
@@ -1570,6 +1945,15 @@ class Database:
                 or not internal_rating_history_table
                 or not app_settings_table
                 or not audit_log_table
+                or not audit_events_table
+                or not pairing_snapshots_table
+                or not standings_snapshots_table
+                or not tiebreak_components_table
+                or not public_tokens_table
+                or not result_submissions_table
+                or not devices_table
+                or not sync_outbox_table
+                or not clock_events_table
                 or not classes_table
                 or not enrollments_table
                 or not guardians_table
@@ -1591,6 +1975,9 @@ class Database:
                 or not team_players_table
                 or not team_matches_table
                 or not team_boards_table
+                or not team_lineups_table
+                or not team_lineup_boards_table
+                or not team_substitution_events_table
                 or not certificate_templates_table
                 or not certificate_issuances_table
                 or not required_certificate_template_columns.issubset(certificate_template_columns)
@@ -1636,6 +2023,28 @@ class Database:
         except Exception:
             pass
 
+        return backup_path
+
+    def backup_before(
+        self,
+        action: str,
+        tournament_id: int | None = None,
+        round_id: int | None = None,
+    ) -> Path:
+        parts = ["before", action.strip() or "action"]
+        if tournament_id is not None:
+            parts.append(f"t{int(tournament_id)}")
+        if round_id is not None:
+            parts.append(f"r{int(round_id)}")
+        backup_path = self.backup("_".join(parts))
+        self.create_audit_event(
+            action="backup_created",
+            tournament_id=tournament_id,
+            round_id=round_id,
+            entity_type="backup",
+            reason=f"Backup automatico antes de {action}.",
+            after={"path": str(backup_path), "reason": "_".join(parts)},
+        )
         return backup_path
 
     def list_backups(self) -> list[dict[str, Any]]:
@@ -1701,6 +2110,7 @@ class Database:
             "operator_name": "Administrador",
             "operator_role": "admin",
             "backup_retention_count": "10",
+            "ui_scale_percent": "120",
         }
         with self.connect() as connection:
             rows = connection.execute(
@@ -1813,6 +2223,15 @@ class Database:
             "operator_name",
             "operator_role",
             "backup_retention_count",
+            "ui_scale_percent",
+            "local_result_server_url",
+            "sync_server_url",
+            "sync_enabled",
+            "local_device_id",
+            "device_integrations_enabled",
+            "notifications_enabled",
+            "live_portal_notice",
+            "live_portal_mode",
             "smtp_server",
             "smtp_port",
             "smtp_user",
@@ -1907,6 +2326,777 @@ class Database:
                 [*params, safe_limit],
             ).fetchall()
             return self.rows_to_dicts(rows)
+
+    @staticmethod
+    def _canonical_json(data: Mapping[str, Any] | list[Any] | None) -> str:
+        return json.dumps(data or {}, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+    @classmethod
+    def _hash_payload(cls, data: Mapping[str, Any] | list[Any] | str | None) -> str:
+        if isinstance(data, str):
+            payload = data
+        else:
+            payload = cls._canonical_json(data)
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+    def _operator_context(self) -> tuple[str, str]:
+        settings = self.get_app_settings()
+        actor = str(settings.get("operator_name") or "").strip()
+        role = str(settings.get("operator_role") or "").strip()
+        return actor, role
+
+    def ensure_local_device(self, name: str = "") -> dict[str, Any]:
+        settings = self.get_app_settings()
+        device_id = str(settings.get("local_device_id") or "").strip()
+        if not device_id:
+            seed = f"{self.db_path.resolve()}:{self.now()}:{datetime.now().timestamp()}"
+            device_id = "dev_" + self._hash_payload(seed)[:24]
+            self.save_app_settings({"local_device_id": device_id})
+        device_name = name.strip() or str(settings.get("operator_name") or "").strip() or "Desktop local"
+        return self.register_device(device_id=device_id, name=device_name, role="desktop", status="authorized")
+
+    def register_device(
+        self,
+        device_id: str,
+        name: str,
+        role: str = "assistant",
+        status: str = "authorized",
+        secret: str = "",
+        metadata: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        safe_device_id = device_id.strip()
+        if not safe_device_id:
+            raise ValueError("device_id obrigatorio")
+        safe_status = status.strip() or "authorized"
+        safe_role = role.strip() or "assistant"
+        now = self.now()
+        secret_hash = self._hash_payload(secret) if secret else ""
+        metadata_json = self._canonical_json(metadata)
+        with self.connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO devices (
+                    device_id, name, role, status, secret_hash, metadata_json,
+                    created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(device_id) DO UPDATE SET
+                    name = excluded.name,
+                    role = excluded.role,
+                    status = excluded.status,
+                    secret_hash = CASE
+                        WHEN excluded.secret_hash != '' THEN excluded.secret_hash
+                        ELSE devices.secret_hash
+                    END,
+                    metadata_json = excluded.metadata_json,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    safe_device_id,
+                    name.strip() or safe_device_id,
+                    safe_role,
+                    safe_status,
+                    secret_hash,
+                    metadata_json,
+                    now,
+                    now,
+                ),
+            )
+            row = connection.execute("SELECT * FROM devices WHERE device_id = ?", (safe_device_id,)).fetchone()
+            return dict(row)
+
+    def list_devices(self, status: str = "") -> list[dict[str, Any]]:
+        params: list[Any] = []
+        where = ""
+        if status:
+            where = "WHERE status = ?"
+            params.append(status.strip())
+        with self.connect() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT *
+                FROM devices
+                {where}
+                ORDER BY status, name
+                """,
+                params,
+            ).fetchall()
+            return self.rows_to_dicts(rows)
+
+    def update_device_status(self, device_id: str, status: str) -> None:
+        with self.connect() as connection:
+            connection.execute(
+                """
+                UPDATE devices
+                SET status = ?, updated_at = ?
+                WHERE device_id = ?
+                """,
+                (status.strip(), self.now(), device_id.strip()),
+            )
+
+    def create_sync_outbox_event(
+        self,
+        action: str,
+        payload: Mapping[str, Any] | list[Any],
+        tournament_id: int | None = None,
+        round_id: int | None = None,
+        entity_type: str = "",
+        entity_id: int | None = None,
+        device_id: str = "",
+        conflict_policy: str = "server_authoritative",
+        status: str = "pending",
+    ) -> int:
+        local_device = self.ensure_local_device()
+        resolved_device_id = device_id.strip() or str(local_device["device_id"])
+        payload_json = self._canonical_json(payload)
+        now = self.now()
+        event_seed = self._canonical_json(
+            {
+                "device_id": resolved_device_id,
+                "action": action,
+                "tournament_id": tournament_id,
+                "round_id": round_id,
+                "entity_type": entity_type,
+                "entity_id": entity_id,
+                "payload_hash": self._hash_payload(payload_json),
+                "created_at": now,
+            }
+        )
+        event_id = self._hash_payload(f"{event_seed}:{datetime.now().timestamp()}")
+        with self.connect() as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO sync_outbox (
+                    event_id, device_id, tournament_id, round_id, entity_type,
+                    entity_id, action, payload_json, payload_hash, conflict_policy,
+                    status, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    event_id,
+                    resolved_device_id,
+                    tournament_id,
+                    round_id,
+                    entity_type.strip(),
+                    entity_id,
+                    action.strip(),
+                    payload_json,
+                    self._hash_payload(payload_json),
+                    conflict_policy.strip() or "server_authoritative",
+                    status.strip() or "pending",
+                    now,
+                    now,
+                ),
+            )
+            return int(cursor.lastrowid)
+
+    def list_sync_outbox(self, status: str = "pending", limit: int = 200) -> list[dict[str, Any]]:
+        conditions = []
+        params: list[Any] = []
+        if status:
+            conditions.append("status = ?")
+            params.append(status.strip())
+        where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        safe_limit = max(1, min(int(limit or 200), 5000))
+        with self.connect() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT *
+                FROM sync_outbox
+                {where}
+                ORDER BY created_at ASC, id ASC
+                LIMIT ?
+                """,
+                [*params, safe_limit],
+            ).fetchall()
+            return self.rows_to_dicts(rows)
+
+    def mark_sync_outbox_synced(self, event_id: str) -> None:
+        with self.connect() as connection:
+            connection.execute(
+                """
+                UPDATE sync_outbox
+                SET status = 'synced', synced_at = ?, updated_at = ?, last_error = ''
+                WHERE event_id = ?
+                """,
+                (self.now(), self.now(), event_id),
+            )
+
+    def mark_sync_outbox_failed(self, event_id: str, error: str) -> None:
+        with self.connect() as connection:
+            connection.execute(
+                """
+                UPDATE sync_outbox
+                SET attempts = attempts + 1, last_error = ?, updated_at = ?, next_attempt_at = ?
+                WHERE event_id = ?
+                """,
+                (error[:500], self.now(), self.now(), event_id),
+            )
+
+    def mark_sync_outbox_rejected(self, event_id: str, error: str) -> None:
+        with self.connect() as connection:
+            connection.execute(
+                """
+                UPDATE sync_outbox
+                SET status = 'rejected', attempts = attempts + 1, last_error = ?, updated_at = ?
+                WHERE event_id = ?
+                """,
+                (error[:500], self.now(), event_id),
+            )
+
+    def create_clock_event(
+        self,
+        tournament_id: int,
+        event_type: str,
+        round_id: int | None = None,
+        pairing_id: int | None = None,
+        board_number: int = 0,
+        player_id: int | None = None,
+        device_id: str = "",
+        source: str = "manual",
+        side: str = "",
+        seconds_remaining: int | None = None,
+        note: str = "",
+        payload: Mapping[str, Any] | None = None,
+        status: str = "logged",
+        occurred_at: str = "",
+    ) -> int:
+        payload_json = self._canonical_json(payload)
+        now = self.now()
+        event_seed = self._canonical_json(
+            {
+                "tournament_id": tournament_id,
+                "round_id": round_id,
+                "pairing_id": pairing_id,
+                "event_type": event_type,
+                "device_id": device_id,
+                "source": source,
+                "occurred_at": occurred_at or now,
+                "payload_hash": self._hash_payload(payload_json),
+            }
+        )
+        event_id = self._hash_payload(f"{event_seed}:{datetime.now().timestamp()}")
+        with self.connect() as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO clock_events (
+                    event_id, tournament_id, round_id, pairing_id, board_number,
+                    player_id, device_id, source, event_type, side,
+                    seconds_remaining, note, payload_json, status, occurred_at,
+                    created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    event_id,
+                    tournament_id,
+                    round_id,
+                    pairing_id,
+                    int(board_number or 0),
+                    player_id,
+                    device_id.strip(),
+                    source.strip() or "manual",
+                    event_type.strip(),
+                    side.strip(),
+                    seconds_remaining,
+                    note.strip(),
+                    payload_json,
+                    status.strip() or "logged",
+                    occurred_at.strip() or now,
+                    now,
+                ),
+            )
+            return int(cursor.lastrowid)
+
+    def list_clock_events(
+        self,
+        tournament_id: int | None = None,
+        round_id: int | None = None,
+        pairing_id: int | None = None,
+        limit: int = 200,
+    ) -> list[dict[str, Any]]:
+        conditions = []
+        params: list[Any] = []
+        if tournament_id is not None:
+            conditions.append("tournament_id = ?")
+            params.append(int(tournament_id))
+        if round_id is not None:
+            conditions.append("round_id = ?")
+            params.append(int(round_id))
+        if pairing_id is not None:
+            conditions.append("pairing_id = ?")
+            params.append(int(pairing_id))
+        where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        safe_limit = max(1, min(int(limit or 200), 5000))
+        with self.connect() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT *
+                FROM clock_events
+                {where}
+                ORDER BY occurred_at DESC, id DESC
+                LIMIT ?
+                """,
+                [*params, safe_limit],
+            ).fetchall()
+            return self.rows_to_dicts(rows)
+
+    def create_audit_event(
+        self,
+        action: str,
+        tournament_id: int | None = None,
+        round_id: int | None = None,
+        entity_type: str = "",
+        entity_id: int | None = None,
+        reason: str = "",
+        before: Mapping[str, Any] | list[Any] | None = None,
+        after: Mapping[str, Any] | list[Any] | None = None,
+        metadata: Mapping[str, Any] | None = None,
+        actor: str = "",
+        role: str = "",
+    ) -> int:
+        before_json = self._canonical_json(before)
+        after_json = self._canonical_json(after)
+        metadata_json = self._canonical_json(metadata)
+        resolved_actor, resolved_role = (actor.strip(), role.strip())
+        if not resolved_actor and not resolved_role:
+            resolved_actor, resolved_role = self._operator_context()
+        event_seed = self._canonical_json(
+            {
+                "action": action,
+                "tournament_id": tournament_id,
+                "round_id": round_id,
+                "entity_type": entity_type,
+                "entity_id": entity_id,
+                "before": before,
+                "after": after,
+                "metadata": metadata,
+                "created_at": self.now(),
+            }
+        )
+        event_id = self._hash_payload(f"{event_seed}:{datetime.now().timestamp()}")
+        with self.connect() as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO audit_events (
+                    event_id, tournament_id, round_id, entity_type, entity_id,
+                    action, actor, role, reason, before_hash, after_hash,
+                    before_json, after_json, metadata_json, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    event_id,
+                    tournament_id,
+                    round_id,
+                    entity_type.strip(),
+                    entity_id,
+                    action.strip(),
+                    resolved_actor,
+                    resolved_role,
+                    reason.strip(),
+                    self._hash_payload(before_json),
+                    self._hash_payload(after_json),
+                    before_json,
+                    after_json,
+                    metadata_json,
+                    self.now(),
+                ),
+            )
+            audit_row_id = int(cursor.lastrowid)
+        if not action.startswith("sync_"):
+            self.create_sync_outbox_event(
+                action=action,
+                tournament_id=tournament_id,
+                round_id=round_id,
+                entity_type=entity_type,
+                entity_id=entity_id,
+                payload={
+                    "audit_event_id": event_id,
+                    "action": action,
+                    "actor": resolved_actor,
+                    "role": resolved_role,
+                    "reason": reason,
+                    "before": before,
+                    "after": after,
+                    "metadata": metadata,
+                },
+            )
+        return audit_row_id
+
+    def list_audit_events(
+        self,
+        tournament_id: int | None = None,
+        limit: int = 200,
+        action: str = "",
+        entity_type: str = "",
+    ) -> list[dict[str, Any]]:
+        conditions = []
+        params: list[Any] = []
+        if tournament_id is not None:
+            conditions.append("tournament_id = ?")
+            params.append(int(tournament_id))
+        if action:
+            conditions.append("action = ?")
+            params.append(action.strip())
+        if entity_type:
+            conditions.append("entity_type = ?")
+            params.append(entity_type.strip())
+        where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        safe_limit = max(1, min(int(limit or 200), 5000))
+        with self.connect() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT *
+                FROM audit_events
+                {where}
+                ORDER BY created_at DESC, id DESC
+                LIMIT ?
+                """,
+                [*params, safe_limit],
+            ).fetchall()
+            return self.rows_to_dicts(rows)
+
+    def create_pairing_snapshot(
+        self,
+        tournament_id: int,
+        round_number: int,
+        stage: str,
+        snapshot: Mapping[str, Any] | list[Any],
+        round_id: int | None = None,
+        pairing_system: str = "",
+        pairing_engine_version: str = "",
+        ruleset_version: str = "",
+    ) -> int:
+        snapshot_json = self._canonical_json(snapshot)
+        with self.connect() as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO pairing_snapshots (
+                    tournament_id, round_id, round_number, stage, pairing_system,
+                    pairing_engine_version, ruleset_version, snapshot_json,
+                    snapshot_hash, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    int(tournament_id),
+                    round_id,
+                    int(round_number),
+                    stage.strip(),
+                    pairing_system.strip(),
+                    pairing_engine_version.strip(),
+                    ruleset_version.strip(),
+                    snapshot_json,
+                    self._hash_payload(snapshot_json),
+                    self.now(),
+                ),
+            )
+            return int(cursor.lastrowid)
+
+    def list_pairing_snapshots(
+        self,
+        tournament_id: int,
+        round_id: int | None = None,
+        round_number: int | None = None,
+    ) -> list[dict[str, Any]]:
+        conditions = ["tournament_id = ?"]
+        params: list[Any] = [int(tournament_id)]
+        if round_id is not None:
+            conditions.append("round_id = ?")
+            params.append(int(round_id))
+        if round_number is not None:
+            conditions.append("round_number = ?")
+            params.append(int(round_number))
+        with self.connect() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT *
+                FROM pairing_snapshots
+                WHERE {' AND '.join(conditions)}
+                ORDER BY round_number ASC, stage ASC, id ASC
+                """,
+                params,
+            ).fetchall()
+            return self.rows_to_dicts(rows)
+
+    def create_standings_snapshot(
+        self,
+        tournament_id: int,
+        round_id: int,
+        round_number: int,
+        standings: list[dict[str, Any]],
+    ) -> int:
+        standings_json = self._canonical_json(standings)
+        with self.connect() as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO standings_snapshots (
+                    tournament_id, round_id, round_number, standings_json,
+                    snapshot_hash, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(tournament_id, round_id) DO UPDATE SET
+                    standings_json = excluded.standings_json,
+                    snapshot_hash = excluded.snapshot_hash,
+                    created_at = excluded.created_at
+                """,
+                (
+                    int(tournament_id),
+                    int(round_id),
+                    int(round_number),
+                    standings_json,
+                    self._hash_payload(standings_json),
+                    self.now(),
+                ),
+            )
+            return int(cursor.lastrowid)
+
+    def list_standings_snapshots(self, tournament_id: int) -> list[dict[str, Any]]:
+        with self.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT *
+                FROM standings_snapshots
+                WHERE tournament_id = ?
+                ORDER BY round_number ASC, id ASC
+                """,
+                (int(tournament_id),),
+            ).fetchall()
+            return self.rows_to_dicts(rows)
+
+    def replace_tiebreak_components(
+        self,
+        tournament_id: int,
+        round_id: int | None,
+        round_number: int,
+        components: list[dict[str, Any]],
+    ) -> None:
+        with self.connect() as connection:
+            if round_id is None:
+                connection.execute(
+                    "DELETE FROM tiebreak_components WHERE tournament_id = ? AND round_id IS NULL",
+                    (int(tournament_id),),
+                )
+            else:
+                connection.execute(
+                    "DELETE FROM tiebreak_components WHERE tournament_id = ? AND round_id = ?",
+                    (int(tournament_id), int(round_id)),
+                )
+            rows = [
+                (
+                    int(tournament_id),
+                    int(round_id) if round_id is not None else None,
+                    int(round_number),
+                    int(item["player_id"]),
+                    str(item.get("player_name", "")),
+                    str(item["criterion"]),
+                    item.get("value"),
+                    self._canonical_json(item.get("components", {})),
+                    self.now(),
+                )
+                for item in components
+            ]
+            if rows:
+                connection.executemany(
+                    """
+                    INSERT INTO tiebreak_components (
+                        tournament_id, round_id, round_number, player_id, player_name,
+                        criterion, value, components_json, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    rows,
+                )
+
+    def list_tiebreak_components(
+        self,
+        tournament_id: int,
+        player_id: int | None = None,
+        round_id: int | None = None,
+    ) -> list[dict[str, Any]]:
+        conditions = ["tournament_id = ?"]
+        params: list[Any] = [int(tournament_id)]
+        if player_id is not None:
+            conditions.append("player_id = ?")
+            params.append(int(player_id))
+        if round_id is not None:
+            conditions.append("round_id = ?")
+            params.append(int(round_id))
+        with self.connect() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT *
+                FROM tiebreak_components
+                WHERE {' AND '.join(conditions)}
+                ORDER BY round_number DESC, player_name COLLATE NOCASE ASC, criterion ASC
+                """,
+                params,
+            ).fetchall()
+            return self.rows_to_dicts(rows)
+
+    def create_public_token(
+        self,
+        token_hash: str,
+        tournament_id: int,
+        round_id: int,
+        pairing_id: int,
+        board_number: int,
+        expires_at: str,
+        purpose: str = "result_submission",
+    ) -> int:
+        with self.connect() as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO public_tokens (
+                    token_hash, tournament_id, round_id, pairing_id, board_number,
+                    purpose, status, expires_at, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?)
+                """,
+                (
+                    token_hash,
+                    int(tournament_id),
+                    int(round_id),
+                    int(pairing_id),
+                    int(board_number),
+                    purpose.strip() or "result_submission",
+                    expires_at,
+                    self.now(),
+                ),
+            )
+            return int(cursor.lastrowid)
+
+    def get_public_token_by_hash(self, token_hash: str) -> dict[str, Any] | None:
+        with self.connect() as connection:
+            row = connection.execute(
+                """
+                SELECT *
+                FROM public_tokens
+                WHERE token_hash = ?
+                """,
+                (token_hash,),
+            ).fetchone()
+            return dict(row) if row else None
+
+    def get_active_public_token_for_pairing(self, pairing_id: int) -> dict[str, Any] | None:
+        with self.connect() as connection:
+            row = connection.execute(
+                """
+                SELECT *
+                FROM public_tokens
+                WHERE pairing_id = ? AND status = 'active' AND expires_at > ?
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (int(pairing_id), self.now()),
+            ).fetchone()
+            return dict(row) if row else None
+
+    def update_public_token_status(self, token_id: int, status: str, used_at: str = "") -> None:
+        with self.connect() as connection:
+            connection.execute(
+                """
+                UPDATE public_tokens
+                SET status = ?, used_at = ?
+                WHERE id = ?
+                """,
+                (status.strip(), used_at, int(token_id)),
+            )
+
+    def create_result_submission(
+        self,
+        tournament_id: int,
+        round_id: int,
+        pairing_id: int,
+        token_id: int | None,
+        board_number: int,
+        submitted_result: str,
+        submitter: str = "",
+    ) -> int:
+        with self.connect() as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO result_submissions (
+                    tournament_id, round_id, pairing_id, token_id, board_number,
+                    submitted_result, submitter, status, submitted_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, 'submitted', ?)
+                """,
+                (
+                    int(tournament_id),
+                    int(round_id),
+                    int(pairing_id),
+                    token_id,
+                    int(board_number),
+                    submitted_result.strip(),
+                    submitter.strip(),
+                    self.now(),
+                ),
+            )
+            return int(cursor.lastrowid)
+
+    def get_result_submission(self, submission_id: int) -> dict[str, Any] | None:
+        with self.connect() as connection:
+            row = connection.execute(
+                """
+                SELECT
+                    s.*,
+                    r.status AS round_status,
+                    p.result AS current_result
+                FROM result_submissions s
+                JOIN rounds r ON r.id = s.round_id
+                JOIN pairings p ON p.id = s.pairing_id
+                WHERE s.id = ?
+                """,
+                (int(submission_id),),
+            ).fetchone()
+            return dict(row) if row else None
+
+    def list_result_submissions(
+        self,
+        tournament_id: int | None = None,
+        status: str = "",
+        limit: int = 500,
+    ) -> list[dict[str, Any]]:
+        conditions = []
+        params: list[Any] = []
+        if tournament_id is not None:
+            conditions.append("s.tournament_id = ?")
+            params.append(int(tournament_id))
+        if status:
+            conditions.append("s.status = ?")
+            params.append(status.strip())
+        where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        with self.connect() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT
+                    s.*,
+                    t.name AS tournament_name,
+                    r.number AS round_number,
+                    r.status AS round_status,
+                    p.result AS current_result
+                FROM result_submissions s
+                JOIN tournaments t ON t.id = s.tournament_id
+                JOIN rounds r ON r.id = s.round_id
+                JOIN pairings p ON p.id = s.pairing_id
+                {where}
+                ORDER BY s.submitted_at DESC, s.id DESC
+                LIMIT ?
+                """,
+                [*params, max(1, min(int(limit or 500), 5000))],
+            ).fetchall()
+            return self.rows_to_dicts(rows)
+
+    def update_result_submission_status(
+        self,
+        submission_id: int,
+        status: str,
+        reviewer: str = "",
+        reason: str = "",
+    ) -> None:
+        with self.connect() as connection:
+            connection.execute(
+                """
+                UPDATE result_submissions
+                SET status = ?, reviewer = ?, reason = ?, reviewed_at = ?
+                WHERE id = ?
+                """,
+                (status.strip(), reviewer.strip(), reason.strip(), self.now(), int(submission_id)),
+            )
 
     def list_certificate_templates(self, active_only: bool = False) -> list[dict[str, Any]]:
         active_filter = "WHERE active = 1" if active_only else ""
@@ -5157,6 +6347,129 @@ class Database:
                 (tournament_id, int(rounds_count)),
             )
 
+    def duplicate_tournament(self, source_tournament_id: int, new_name: str) -> int:
+        with self.connect() as connection:
+            source = connection.execute(
+                """
+                SELECT *
+                FROM tournaments
+                WHERE id = ?
+                """,
+                (source_tournament_id,),
+            ).fetchone()
+            if not source:
+                raise ValueError("Torneio de origem nao encontrado.")
+
+            cursor = connection.execute(
+                """
+                INSERT INTO tournaments (
+                    club_id, class_id, competition_type, name, location, start_date, end_date, system, rounds_count,
+                    time_control, bye_points, status, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?)
+                """,
+                (
+                    source["club_id"],
+                    source["class_id"],
+                    source["competition_type"],
+                    new_name.strip(),
+                    source["location"],
+                    source["start_date"],
+                    source["end_date"],
+                    source["system"],
+                    source["rounds_count"],
+                    source["time_control"],
+                    source["bye_points"],
+                    self.now(),
+                ),
+            )
+            new_tournament_id = int(cursor.lastrowid)
+            self._ensure_tournament_settings(connection, source_tournament_id)
+            self._ensure_tournament_settings(connection, new_tournament_id)
+            connection.execute(
+                """
+                UPDATE tournament_settings
+                SET
+                    fide_event_id = src.fide_event_id,
+                    organizer = src.organizer,
+                    website = src.website,
+                    contact_email = src.contact_email,
+                    director = src.director,
+                    chief_arbiter = src.chief_arbiter,
+                    arbiters = src.arbiters,
+                    federation = src.federation,
+                    state = src.state,
+                    categories = src.categories,
+                    cutoff_date = src.cutoff_date,
+                    comments = src.comments,
+                    prizes = src.prizes,
+                    initial_order = src.initial_order,
+                    tournament_type = src.tournament_type,
+                    tournament_profile = src.tournament_profile,
+                    allow_public_registration = src.allow_public_registration,
+                    allow_player_result_edit = src.allow_player_result_edit,
+                    allow_dangerous_changes = src.allow_dangerous_changes,
+                    disable_bye = src.disable_bye,
+                    late_entry_points = src.late_entry_points,
+                    accelerated_system = src.accelerated_system,
+                    hide_standings = src.hide_standings,
+                    calculate_performance = src.calculate_performance,
+                    pairing_method = src.pairing_method,
+                    pairing_system = src.pairing_system,
+                    acceleration_method = src.acceleration_method,
+                    hide_color_names = src.hide_color_names,
+                    show_opponents_in_standings = src.show_opponents_in_standings,
+                    team_boards_count = src.team_boards_count,
+                    team_match_win_points = src.team_match_win_points,
+                    team_match_draw_points = src.team_match_draw_points,
+                    team_match_loss_points = src.team_match_loss_points,
+                    team_pairing_method = src.team_pairing_method,
+                    team_standing_primary = src.team_standing_primary,
+                    team_standing_secondary = src.team_standing_secondary,
+                    team_fixed_board_order = src.team_fixed_board_order,
+                    team_board_order_policy = src.team_board_order_policy,
+                    team_reserve_policy = src.team_reserve_policy,
+                    team_lineup_deadline = src.team_lineup_deadline,
+                    team_max_substitutions = src.team_max_substitutions,
+                    archived = src.archived,
+                    updated_at = ?
+                FROM tournament_settings AS src
+                WHERE tournament_settings.tournament_id = ?
+                  AND src.tournament_id = ?
+                """,
+                (self.now(), new_tournament_id, source_tournament_id),
+            )
+            schedules = connection.execute(
+                """
+                SELECT round_number, date, time
+                FROM round_schedule
+                WHERE tournament_id = ?
+                ORDER BY round_number
+                """,
+                (source_tournament_id,),
+            ).fetchall()
+            connection.executemany(
+                """
+                INSERT INTO round_schedule (
+                    tournament_id, round_number, date, time, updated_at
+                ) VALUES (?, ?, ?, ?, ?)
+                """,
+                [
+                    (
+                        new_tournament_id,
+                        int(row["round_number"]),
+                        str(row["date"] or ""),
+                        str(row["time"] or ""),
+                        self.now(),
+                    )
+                    for row in schedules
+                ],
+            )
+            return new_tournament_id
+
+    def delete_tournament(self, tournament_id: int) -> None:
+        with self.connect() as connection:
+            connection.execute("DELETE FROM tournaments WHERE id = ?", (tournament_id,))
+
     def list_tournaments(self) -> list[dict[str, Any]]:
         with self.connect() as connection:
             rows = connection.execute(
@@ -5223,11 +6536,14 @@ class Database:
                     allow_dangerous_changes = ?, disable_bye = ?,
                     late_entry_points = ?, accelerated_system = ?,
                     hide_standings = ?, calculate_performance = ?,
+                    pairing_system = ?, acceleration_method = ?,
                     hide_color_names = ?, show_opponents_in_standings = ?,
                     team_boards_count = ?, team_match_win_points = ?,
                     team_match_draw_points = ?, team_match_loss_points = ?,
                     team_pairing_method = ?, team_standing_primary = ?,
                     team_standing_secondary = ?, team_fixed_board_order = ?,
+                    team_board_order_policy = ?, team_reserve_policy = ?,
+                    team_lineup_deadline = ?, team_max_substitutions = ?,
                     archived = ?, updated_at = ?
                 WHERE tournament_id = ?
                 """,
@@ -5256,6 +6572,8 @@ class Database:
                     int(data.get("accelerated_system", 0) or 0),
                     int(data.get("hide_standings", 0) or 0),
                     int(data.get("calculate_performance", 0) or 0),
+                    str(data.get("pairing_system", "custom_authorized")).strip() or "custom_authorized",
+                    str(data.get("acceleration_method", "none")).strip() or "none",
                     int(data.get("hide_color_names", 0) or 0),
                     int(data.get("show_opponents_in_standings", 0) or 0),
                     int(data.get("team_boards_count", 4) or 4),
@@ -5266,6 +6584,10 @@ class Database:
                     str(data.get("team_standing_primary", "match_points")).strip() or "match_points",
                     str(data.get("team_standing_secondary", "game_points")).strip() or "game_points",
                     int(data.get("team_fixed_board_order", 1) or 0),
+                    str(data.get("team_board_order_policy", "fixed")).strip() or "fixed",
+                    str(data.get("team_reserve_policy", "same_team")).strip() or "same_team",
+                    str(data.get("team_lineup_deadline", "")).strip(),
+                    int(data.get("team_max_substitutions", 0) or 0),
                     int(data.get("archived", 0) or 0),
                     self.now(),
                     tournament_id,
@@ -5834,17 +7156,23 @@ class Database:
         tournament_id: int,
         active_only: bool = False,
     ) -> list[dict[str, Any]]:
-        where = "WHERE tournament_id = ?"
+        where = "WHERE p.tournament_id = ?"
         params: list[Any] = [tournament_id]
         if active_only:
-            where += " AND active = 1 AND player_status = 'active'"
+            where += " AND p.active = 1 AND p.player_status = 'active'"
         with self.connect() as connection:
             rows = connection.execute(
                 f"""
-                SELECT *
-                FROM players
+                SELECT
+                    p.*,
+                    ac.class_id AS active_class_id,
+                    cl.name AS active_class_name
+                FROM players p
+                LEFT JOIN member_class_enrollments ac
+                    ON ac.member_id = p.member_id AND ac.status = 'active'
+                LEFT JOIN classes cl ON cl.id = ac.class_id
                 {where}
-                ORDER BY active DESC, rating DESC, name COLLATE NOCASE ASC
+                ORDER BY p.active DESC, p.rating DESC, p.name COLLATE NOCASE ASC
                 """,
                 params,
             ).fetchall()
@@ -6142,7 +7470,17 @@ class Database:
     def get_player(self, player_id: int) -> dict[str, Any] | None:
         with self.connect() as connection:
             row = connection.execute(
-                "SELECT * FROM players WHERE id = ?",
+                """
+                SELECT
+                    p.*,
+                    ac.class_id AS active_class_id,
+                    cl.name AS active_class_name
+                FROM players p
+                LEFT JOIN member_class_enrollments ac
+                    ON ac.member_id = p.member_id AND ac.status = 'active'
+                LEFT JOIN classes cl ON cl.id = ac.class_id
+                WHERE p.id = ?
+                """,
                 (player_id,),
             ).fetchone()
             return dict(row) if row else None
@@ -6199,6 +7537,7 @@ class Database:
                 SELECT
                     p.*,
                     r.tournament_id,
+                    r.number AS round_number,
                     r.status AS round_status
                 FROM pairings p
                 JOIN rounds r ON r.id = p.round_id
@@ -6213,15 +7552,20 @@ class Database:
         tournament_id: int,
         round_number: int,
         matches: list[dict[str, Any]],
+        pairing_engine_version: str = "albericus-team-swiss-1",
+        ruleset_version: str = "albericus-2026-phase0",
     ) -> int:
         now = self.now()
         with self.connect() as connection:
             cursor = connection.execute(
                 """
-                INSERT INTO rounds (tournament_id, number, status, created_at)
-                VALUES (?, ?, 'generated', ?)
+                INSERT INTO rounds (
+                    tournament_id, number, status, pairing_engine_version,
+                    ruleset_version, created_at
+                )
+                VALUES (?, ?, 'generated', ?, ?, ?)
                 """,
-                (tournament_id, round_number, now),
+                (tournament_id, round_number, pairing_engine_version, ruleset_version, now),
             )
             round_id = int(cursor.lastrowid)
             for match in matches:
@@ -6376,6 +7720,298 @@ class Database:
                 (result.strip(), self.now(), team_board_id),
             )
 
+    def swap_team_board_colors(self, team_board_id: int) -> None:
+        with self.connect() as connection:
+            row = connection.execute(
+                """
+                SELECT white_player_id, black_player_id
+                FROM team_boards
+                WHERE id = ?
+                """,
+                (team_board_id,),
+            ).fetchone()
+            if not row or row["white_player_id"] is None or row["black_player_id"] is None:
+                return
+            connection.execute(
+                """
+                UPDATE team_boards
+                SET white_player_id = ?, black_player_id = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (row["black_player_id"], row["white_player_id"], self.now(), team_board_id),
+            )
+
+    def update_team_board_players(
+        self,
+        updates: list[tuple[int, int | None, int | None]],
+    ) -> None:
+        with self.connect() as connection:
+            connection.executemany(
+                """
+                UPDATE team_boards
+                SET white_player_id = ?, black_player_id = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                [
+                    (white_player_id, black_player_id, self.now(), team_board_id)
+                    for team_board_id, white_player_id, black_player_id in updates
+                ],
+            )
+
+    def create_team_lineups_from_round(self, round_id: int) -> None:
+        with self.connect() as connection:
+            round_row = connection.execute(
+                "SELECT tournament_id, number FROM rounds WHERE id = ?",
+                (round_id,),
+            ).fetchone()
+            if not round_row:
+                return
+            now = self.now()
+            team_players = {
+                int(row["player_id"]): {
+                    "team_id": int(row["team_id"]),
+                    "role": str(row["role"] or "starter"),
+                }
+                for row in connection.execute(
+                    """
+                    SELECT tp.team_id, tp.player_id, tp.role
+                    FROM team_players tp
+                    JOIN teams tm ON tm.id = tp.team_id
+                    WHERE tm.tournament_id = ?
+                    """,
+                    (int(round_row["tournament_id"]),),
+                ).fetchall()
+            }
+            matches = connection.execute(
+                """
+                SELECT *
+                FROM team_matches
+                WHERE round_id = ?
+                ORDER BY match_number ASC
+                """,
+                (round_id,),
+            ).fetchall()
+            for match in matches:
+                team_ids = [int(match["white_team_id"])]
+                if match["black_team_id"]:
+                    team_ids.append(int(match["black_team_id"]))
+                lineup_ids: dict[int, int] = {}
+                for team_id in team_ids:
+                    cursor = connection.execute(
+                        """
+                        INSERT INTO team_lineups (
+                            tournament_id, round_id, team_match_id, team_id,
+                            status, submitted_at, approved_at, created_at, updated_at
+                        ) VALUES (?, ?, ?, ?, 'approved', ?, ?, ?, ?)
+                        ON CONFLICT(round_id, team_match_id, team_id) DO UPDATE SET
+                            status = excluded.status,
+                            approved_at = excluded.approved_at,
+                            updated_at = excluded.updated_at
+                        """,
+                        (
+                            int(round_row["tournament_id"]),
+                            int(round_id),
+                            int(match["id"]),
+                            team_id,
+                            now,
+                            now,
+                            now,
+                            now,
+                        ),
+                    )
+                    lineup_row = connection.execute(
+                        """
+                        SELECT id
+                        FROM team_lineups
+                        WHERE round_id = ? AND team_match_id = ? AND team_id = ?
+                        """,
+                        (int(round_id), int(match["id"]), team_id),
+                    ).fetchone()
+                    lineup_ids[team_id] = int(lineup_row["id"] if lineup_row else cursor.lastrowid)
+                    connection.execute("DELETE FROM team_lineup_boards WHERE lineup_id = ?", (lineup_ids[team_id],))
+
+                boards = connection.execute(
+                    """
+                    SELECT *
+                    FROM team_boards
+                    WHERE team_match_id = ?
+                    ORDER BY board_number ASC
+                    """,
+                    (int(match["id"]),),
+                ).fetchall()
+                for board in boards:
+                    for color, player_id in (
+                        ("white", board["white_player_id"]),
+                        ("black", board["black_player_id"]),
+                    ):
+                        if not player_id:
+                            continue
+                        assignment = team_players.get(int(player_id))
+                        if not assignment or assignment["team_id"] not in lineup_ids:
+                            continue
+                        connection.execute(
+                            """
+                            INSERT INTO team_lineup_boards (
+                                lineup_id, board_number, player_id, color, role, created_at
+                            ) VALUES (?, ?, ?, ?, ?, ?)
+                            """,
+                            (
+                                lineup_ids[assignment["team_id"]],
+                                int(board["board_number"]),
+                                int(player_id),
+                                color,
+                                assignment["role"],
+                                now,
+                            ),
+                        )
+
+    def list_team_lineups(self, tournament_id: int, round_id: int | None = None) -> list[dict[str, Any]]:
+        conditions = ["tl.tournament_id = ?"]
+        params: list[Any] = [int(tournament_id)]
+        if round_id is not None:
+            conditions.append("tl.round_id = ?")
+            params.append(int(round_id))
+        with self.connect() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT
+                    tl.*,
+                    r.number AS round_number,
+                    tm.match_number,
+                    t.name AS team_name,
+                    t.club AS team_club
+                FROM team_lineups tl
+                JOIN rounds r ON r.id = tl.round_id
+                JOIN team_matches tm ON tm.id = tl.team_match_id
+                JOIN teams t ON t.id = tl.team_id
+                WHERE {' AND '.join(conditions)}
+                ORDER BY r.number ASC, tm.match_number ASC, t.name COLLATE NOCASE ASC
+                """,
+                params,
+            ).fetchall()
+            return self.rows_to_dicts(rows)
+
+    def list_team_lineup_boards(self, lineup_id: int) -> list[dict[str, Any]]:
+        with self.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT
+                    tlb.*,
+                    p.name AS player_name,
+                    p.surname AS player_surname,
+                    p.given_name AS player_given_name,
+                    p.rating AS player_rating
+                FROM team_lineup_boards tlb
+                LEFT JOIN players p ON p.id = tlb.player_id
+                WHERE tlb.lineup_id = ?
+                ORDER BY tlb.board_number ASC
+                """,
+                (int(lineup_id),),
+            ).fetchall()
+            return self.rows_to_dicts(rows)
+
+    def replace_team_lineup_board_player(
+        self,
+        round_id: int,
+        team_match_id: int,
+        team_id: int,
+        board_number: int,
+        player_id: int,
+        color: str,
+    ) -> None:
+        with self.connect() as connection:
+            lineup = connection.execute(
+                """
+                SELECT id
+                FROM team_lineups
+                WHERE round_id = ? AND team_match_id = ? AND team_id = ?
+                """,
+                (int(round_id), int(team_match_id), int(team_id)),
+            ).fetchone()
+            if not lineup:
+                return
+            connection.execute(
+                """
+                INSERT INTO team_lineup_boards (
+                    lineup_id, board_number, player_id, color, role, created_at
+                ) VALUES (?, ?, ?, ?, 'reserve', ?)
+                ON CONFLICT(lineup_id, board_number) DO UPDATE SET
+                    player_id = excluded.player_id,
+                    color = excluded.color,
+                    role = excluded.role
+                """,
+                (int(lineup["id"]), int(board_number), int(player_id), color, self.now()),
+            )
+
+    def create_team_substitution_event(
+        self,
+        tournament_id: int,
+        round_id: int,
+        team_match_id: int,
+        team_board_id: int,
+        team_id: int,
+        board_number: int,
+        color: str,
+        out_player_id: int | None,
+        in_player_id: int,
+        reason: str = "",
+        requires_correction: bool = False,
+    ) -> int:
+        with self.connect() as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO team_substitution_events (
+                    tournament_id, round_id, team_match_id, team_board_id, team_id,
+                    board_number, color, out_player_id, in_player_id, reason,
+                    requires_correction, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    int(tournament_id),
+                    int(round_id),
+                    int(team_match_id),
+                    int(team_board_id),
+                    int(team_id),
+                    int(board_number),
+                    color,
+                    out_player_id,
+                    int(in_player_id),
+                    reason.strip(),
+                    1 if requires_correction else 0,
+                    self.now(),
+                ),
+            )
+            return int(cursor.lastrowid)
+
+    def list_team_substitution_events(self, tournament_id: int, round_id: int | None = None) -> list[dict[str, Any]]:
+        conditions = ["tse.tournament_id = ?"]
+        params: list[Any] = [int(tournament_id)]
+        if round_id is not None:
+            conditions.append("tse.round_id = ?")
+            params.append(int(round_id))
+        with self.connect() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT
+                    tse.*,
+                    r.number AS round_number,
+                    tm.match_number,
+                    team.name AS team_name,
+                    out_player.name AS out_player_name,
+                    in_player.name AS in_player_name
+                FROM team_substitution_events tse
+                JOIN rounds r ON r.id = tse.round_id
+                JOIN team_matches tm ON tm.id = tse.team_match_id
+                JOIN teams team ON team.id = tse.team_id
+                LEFT JOIN players out_player ON out_player.id = tse.out_player_id
+                JOIN players in_player ON in_player.id = tse.in_player_id
+                WHERE {' AND '.join(conditions)}
+                ORDER BY tse.created_at ASC, tse.id ASC
+                """,
+                params,
+            ).fetchall()
+            return self.rows_to_dicts(rows)
+
     def update_team_match_summary(
         self,
         team_match_id: int,
@@ -6409,14 +8045,19 @@ class Database:
         tournament_id: int,
         round_number: int,
         pairings: list[dict[str, Any]],
+        pairing_engine_version: str = "albericus-swiss-1",
+        ruleset_version: str = "albericus-2026-phase0",
     ) -> int:
         with self.connect() as connection:
             cursor = connection.execute(
                 """
-                INSERT INTO rounds (tournament_id, number, status, created_at)
-                VALUES (?, ?, 'generated', ?)
+                INSERT INTO rounds (
+                    tournament_id, number, status, pairing_engine_version,
+                    ruleset_version, created_at
+                )
+                VALUES (?, ?, 'generated', ?, ?, ?)
                 """,
-                (tournament_id, round_number, self.now()),
+                (tournament_id, round_number, pairing_engine_version, ruleset_version, self.now()),
             )
             round_id = int(cursor.lastrowid)
             for pairing in pairings:

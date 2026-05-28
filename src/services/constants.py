@@ -55,6 +55,19 @@ PAIRING_METHODS = {
     "round_robin": "Schuring (Todos contra todos)",
     "knockout": "Mata-mata",
 }
+PAIRING_SYSTEMS = {
+    "fide_dutch": "FIDE Dutch",
+    "dubov": "Dubov",
+    "burstein": "Burstein",
+    "lim": "Lim",
+    "team_swiss": "Suico por equipes",
+    "custom_authorized": "Customizado/autorizado",
+}
+ACCELERATION_METHODS = {
+    "none": "Sem aceleracao",
+    "accelerated": "Acelerado",
+    "custom": "Customizado",
+}
 TEAM_PAIRING_METHODS = {"swiss": "Suico", "round_robin": "Schuring (Todos contra todos)"}
 CERTIFICATE_TYPES = {
     "participation": "Participacao",

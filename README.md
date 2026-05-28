@@ -23,8 +23,13 @@ Aplicativo desktop em Python para emparceiramento de torneios de xadrez.
   interno e torneios recentes.
 - Pacote administrativo consolidado reunindo clube, presencas, financeiro,
   calendario, torneios e ranking interno.
-- Cadastro e importacao CSV de jogadores, incluindo FIDE ID, CBX ID,
+- Ajuste de tamanho da interface/fonte pela tela `Config. app`.
+- Torneios podem ser selecionados, duplicados, excluidos e salvos como novo
+  modelo a partir das configuracoes atuais.
+- Cadastro e importacao CSV/XLS/XLSX de jogadores, incluindo FIDE ID, CBX ID,
   titulos e ratings nacional/internacional.
+- Importacao de inscricoes por arquivo CSV/XLS/XLSX ou link publicado do
+  Google Forms/Sheets em formato CSV.
 - Importacao de listas oficiais FIDE/CBX em CSV para uma base local de ratings.
 - Atualizacao dos jogadores inscritos a partir da base oficial por FIDE ID/CBX ID.
 - Inscricao de membros em torneios integrados, filtrando por escopo do torneio.
@@ -42,11 +47,18 @@ Aplicativo desktop em Python para emparceiramento de torneios de xadrez.
 - Pontos de entrada tardia aplicados automaticamente a novos jogadores depois
   de rodadas fechadas.
 - Status de jogador no torneio: ativo, desistente, ausente e nao emparceirado.
+- Chamada inicial antes da primeira rodada, com marcacao de presentes e
+  ausentes antes de gerar o emparceiramento.
 - Registro de resultados.
+- Lancamento rapido de resultados por botoes e atalhos de teclado.
 - Fechamento de rodada.
+- Aviso de numero minimo recomendado de rodadas antes de gerar uma rodada curta
+  para a quantidade de jogadores.
 - Bloqueio de alteracao em rodada fechada, liberado apenas com a flag
   `Permitir mudancas perigosas`.
 - Ajuste manual de jogadores em uma mesa antes do fechamento da rodada.
+- Ajustes manuais em torneios por equipes, incluindo troca de cores e troca de
+  jogador por tabuleiro dentro da equipe.
 - Busca de jogadores e filtro de classificacao por categoria.
 - Configuracao avancada de torneios com dados oficiais, regras basicas,
   flags de interface/publicacao e agenda de datas/horarios por rodada.
@@ -55,9 +67,94 @@ Aplicativo desktop em Python para emparceiramento de torneios de xadrez.
 - Exportacao de jogadores, classificacao, rodada especifica, todas as rodadas e relatorio completo em CSV, XLSX e PDF.
 - Exportacao de site estatico em HTML/CSS com dados do torneio, jogadores,
   agenda, rodadas e classificacao.
+- Exportacao e validacao TRF/FIDE/Chess-Results, com avisos para dados
+  oficiais incompletos antes da geracao do arquivo `.trf`.
+- Auditoria operacional do torneio com snapshots de emparceiramento,
+  classificacao e correcoes de resultado.
+- Pre-visualizacao da proxima rodada antes de gravar o emparceiramento.
+- Painel do arbitro com pendencias, correcoes e acoes rapidas.
+- Explicacao/exportacao de desempates com componentes persistidos.
+- QR local opcional para submissao de resultado por mesa, sempre com aprovacao
+  do arbitro antes de alterar a partida.
+- Portal live local/publico com dados filtrados para nao expor informacoes
+  sensiveis.
+- Torneios por equipes com escalacoes por rodada, reservas e historico de
+  substituicoes.
+- Sincronizacao multi-dispositivo opcional por fila local, preservando o
+  desktop/banco SQLite como autoridade.
+- Registro opcional de eventos de relogio, tempo e ausencia como alertas para
+  o arbitro, sem aplicar resultado automaticamente.
 - Geracao de diplomas/certificados de torneios em PDF, com modelos
   personalizaveis, logo, cores e tamanhos de fonte por modelo.
 - Logs, exportacoes e backups ficam na pasta de dados do usuario por padrao.
+
+## Manual operacional de arbitragem
+
+O Albericus usa uma regra simples de autoridade: o desktop com o banco SQLite
+local e sempre a fonte oficial do torneio. QR, portal live, sincronizacao,
+dispositivos, relogios e notificacoes sao camadas auxiliares. Elas podem sugerir
+ou registrar eventos, mas resultado fechado e alteracao critica dependem do
+fluxo normal do arbitro.
+
+### Antes do torneio
+
+1. Crie ou carregue o torneio e confira nome, local, datas, ritmo, quantidade
+   de rodadas, perfil FIDE e dados do arbitro.
+2. Importe jogadores por CSV/XLS/XLSX, Google Forms/Sheets publicado em CSV,
+   base local de membros ou cadastro manual.
+3. Atualize ratings oficiais quando houver lista FIDE/CBX importada.
+4. Use a chamada inicial na tela de rodadas antes da primeira rodada para
+   marcar presentes e ausentes.
+5. Gere um backup manual ou confirme que a pasta de backups esta configurada em
+   `Config. app`.
+6. Para torneios oficiais, rode `Validar TRF FIDE` antes da primeira rodada para
+   identificar dados ausentes com antecedencia.
+
+### Durante o torneio
+
+1. Use `Pre-visualizar proxima rodada` quando quiser revisar alertas de bye,
+   cor, repeticao ou float antes de gravar.
+2. Depois de gerar a rodada, imprima/exporte a rodada ou publique o portal live
+   quando necessario.
+3. Registre resultados pelo desktop. O QR por mesa pode receber submissao, mas
+   o resultado so entra na partida depois de aprovado.
+4. Feche a rodada apenas quando nao houver pendencias. O fechamento grava
+   snapshot de classificacao e auditoria.
+5. Se precisar corrigir resultado de rodada fechada, habilite explicitamente
+   mudancas perigosas e registre o motivo.
+6. Eventos de relogio, ausencia e plugins de hardware entram como alerta. Eles
+   nao definem WO, queda de seta ou resultado sem decisao do arbitro.
+
+### Depois do torneio
+
+1. Confira classificacao, desempates e relatorio de auditoria.
+2. Exporte classificacao, rodadas, PGN, site HTML ou pacote completo conforme
+   a necessidade.
+3. Gere `Pendencias TRF` e depois o arquivo `Chess-Results (TRF16)` quando o
+   torneio precisar de envio federativo.
+4. Gere diplomas/certificados se aplicavel.
+5. Mantenha o backup final junto dos arquivos exportados do torneio.
+
+### Recursos opcionais
+
+- **Portal live:** publica dados do torneio em modo publico ou restrito; dados
+  sensiveis ficam fora do modo publico.
+- **QR local:** facilita coleta de resultados, mas toda submissao exige revisao.
+- **Sincronizacao:** eventos ficam em `sync_outbox`; se a rede cair, o torneio
+  continua local e os eventos pendentes podem sincronizar depois.
+- **Dispositivos/relogios:** registram `clock_events` e alertas de anomalia; o
+  arbitro continua responsavel pela decisao.
+- **Notificacoes:** sao opcionais e auditadas. Sem configuracao ativa, sao
+  registradas como ignoradas.
+
+### Checklist rapido
+
+- Backup configurado e testado.
+- Jogadores presentes conferidos antes da primeira rodada.
+- Configuracoes oficiais revisadas para TRF quando aplicavel.
+- Rodada anterior fechada antes de gerar a proxima.
+- Pendencias e alertas revisados no painel do arbitro.
+- Exportacoes finais e backup final arquivados.
 
 ## Instalar com uv
 
@@ -836,7 +933,7 @@ banco local simples e testavel:
 - Bancos antigos sao migrados automaticamente para a versao 13, criando
   `audit_log` e indices por data/acao e entidade.
 
-## CSV de jogadores
+## Importacao de jogadores
 
 Cabecalhos aceitos:
 
@@ -849,6 +946,8 @@ Bruno Souza,Clube B,1720,Absoluto,234567,6789,1720,1690,
 Tambem sao aceitos nomes de colunas em portugues, como `nome`, `clube`, `elo`,
 `categoria`, `sobrenome`, `sexo`, `id_fide`, `id_cbx`, `elo_nacional` e
 `elo_fide`.
+
+Os mesmos cabecalhos podem ser usados em arquivos `.csv`, `.xls` e `.xlsx`.
 
 ## CSV de ratings oficiais
 

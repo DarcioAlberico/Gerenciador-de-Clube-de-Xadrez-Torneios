@@ -11,3 +11,4 @@ from .settings import SettingsPagesMixin
 from .tournaments import TournamentPagesMixin
 from .audit import AuditPagesMixin
 from .communication import CommunicationPagesMixin
+from .integrations import IntegrationPagesMixin

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import base64
+import hashlib
+import json
 import os
 import sqlite3
 import tempfile
@@ -14,6 +16,7 @@ from src.core.database import APP_DATA_DIR_ENV_VAR, Database, resolve_app_data_d
 from src.core.services import (
     AppError,
     CertificateService,
+    ClockIntegrationService,
     ClubService,
     DashboardService,
     EventService,
@@ -28,11 +31,15 @@ from src.core.services import (
     MemberService,
     OfficialRatingService,
     PairingService,
+    QRResultService,
     SecurityService,
+    SyncService,
     TeamService,
     TournamentService,
     TrainingService,
 )
+from src.services.federation_exporters import FederationExporterRegistry, TRF16Exporter
+from src.services.result_server import LocalResultServer
 
 
 class PairingServiceTest(unittest.TestCase):
@@ -43,6 +50,7 @@ class PairingServiceTest(unittest.TestCase):
         self.db = Database(base_path / "albericus.db", backup_dir=self.backup_dir)
         self.service = PairingService(self.db)
         self.club_service = ClubService(self.db)
+        self.clock_integration_service = ClockIntegrationService(self.db)
         self.dashboard_service = DashboardService(self.db)
         self.guardian_service = GuardianService(self.db)
         self.member_service = MemberService(self.db)
@@ -57,6 +65,8 @@ class PairingServiceTest(unittest.TestCase):
         self.internal_rating_service = InternalRatingService(self.db)
         self.inventory_service = InventoryService(self.db)
         self.security_service = SecurityService(self.db)
+        self.sync_service = SyncService(self.db)
+        self.qr_result_service = QRResultService(self.db, self.service)
         self.export_service = ExportService(self.db, self.service)
         self.certificate_service = CertificateService(self.db, self.service)
         self.finance_service = FinanceService(self.db)
@@ -395,6 +405,10 @@ class PairingServiceTest(unittest.TestCase):
                 row["name"]
                 for row in connection.execute("PRAGMA table_info(tournament_settings)").fetchall()
             }
+            round_columns = {
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(rounds)").fetchall()
+            }
             member_columns = {
                 row["name"]
                 for row in connection.execute("PRAGMA table_info(members)").fetchall()
@@ -428,13 +442,19 @@ class PairingServiceTest(unittest.TestCase):
                     SELECT name
                     FROM sqlite_master
                     WHERE type = 'table'
-                        AND name IN ('teams', 'team_players', 'team_matches', 'team_boards')
+                        AND name IN (
+                            'teams', 'team_players', 'team_matches', 'team_boards',
+                            'team_lineups', 'team_lineup_boards', 'team_substitution_events'
+                        )
                     """
                 ).fetchall()
             }
             team_indexes = {
                 row["name"]
-                for table_name in ("teams", "team_players", "team_matches", "team_boards")
+                for table_name in (
+                    "teams", "team_players", "team_matches", "team_boards",
+                    "team_lineups", "team_lineup_boards", "team_substitution_events"
+                )
                 for row in connection.execute(f"PRAGMA index_list({table_name})").fetchall()
             }
             certificate_tables = {
@@ -507,9 +527,47 @@ class PairingServiceTest(unittest.TestCase):
                 WHERE type = 'table' AND name = 'audit_log'
                 """
             ).fetchone()
+            phase0_tables = {
+                row["name"]
+                for row in connection.execute(
+                    """
+                    SELECT name
+                    FROM sqlite_master
+                    WHERE type = 'table'
+                        AND name IN (
+                            'audit_events', 'pairing_snapshots', 'standings_snapshots',
+                            'tiebreak_components', 'public_tokens', 'result_submissions'
+                        )
+                    """
+                ).fetchall()
+            }
             audit_indexes = {
                 row["name"]
                 for row in connection.execute("PRAGMA index_list(audit_log)").fetchall()
+            }
+            phase0_indexes = {
+                row["name"]
+                for table_name in (
+                    "audit_events", "pairing_snapshots", "standings_snapshots",
+                    "tiebreak_components", "public_tokens", "result_submissions"
+                )
+                for row in connection.execute(f"PRAGMA index_list({table_name})").fetchall()
+            }
+            integration_tables = {
+                row["name"]
+                for row in connection.execute(
+                    """
+                    SELECT name
+                    FROM sqlite_master
+                    WHERE type = 'table'
+                        AND name IN ('devices', 'sync_outbox', 'clock_events')
+                    """
+                ).fetchall()
+            }
+            integration_indexes = {
+                row["name"]
+                for table_name in ("devices", "sync_outbox", "clock_events")
+                for row in connection.execute(f"PRAGMA index_list({table_name})").fetchall()
             }
             certificate_template_count = connection.execute(
                 "SELECT COUNT(*) FROM certificate_templates"
@@ -522,19 +580,35 @@ class PairingServiceTest(unittest.TestCase):
         self.assertEqual(user_version, Database.SCHEMA_VERSION)
         self.assertIn("competition_type", tournament_columns)
         self.assertIn("tournament_profile", settings_columns)
+        self.assertIn("pairing_system", settings_columns)
+        self.assertIn("acceleration_method", settings_columns)
         self.assertIn("team_boards_count", settings_columns)
         self.assertIn("team_match_win_points", settings_columns)
         self.assertIn("team_standing_primary", settings_columns)
         self.assertIn("team_standing_secondary", settings_columns)
+        self.assertIn("team_board_order_policy", settings_columns)
+        self.assertIn("team_reserve_policy", settings_columns)
+        self.assertIn("team_lineup_deadline", settings_columns)
+        self.assertIn("team_max_substitutions", settings_columns)
         self.assertIn("learning_level_id", member_columns)
         self.assertIn("training_list_id", training_session_columns)
+        self.assertIn("pairing_engine_version", round_columns)
+        self.assertIn("ruleset_version", round_columns)
         self.assertEqual({"learning_levels"}, learning_tables)
         self.assertIn("idx_learning_levels_order", learning_indexes)
         self.assertIn("idx_pairings_white_player", pairing_indexes)
         self.assertIn("idx_pairings_black_player", pairing_indexes)
-        self.assertEqual({"teams", "team_players", "team_matches", "team_boards"}, team_tables)
+        self.assertEqual(
+            {
+                "teams", "team_players", "team_matches", "team_boards",
+                "team_lineups", "team_lineup_boards", "team_substitution_events",
+            },
+            team_tables,
+        )
         self.assertIn("idx_teams_tournament", team_indexes)
         self.assertIn("idx_team_matches_round", team_indexes)
+        self.assertIn("idx_team_lineups_round", team_indexes)
+        self.assertIn("idx_team_substitutions_round", team_indexes)
         self.assertEqual({"certificate_templates", "certificate_issuances"}, certificate_tables)
         self.assertIn("idx_certificate_templates_type", certificate_indexes)
         self.assertIn("idx_certificate_issuances_context", certificate_indexes)
@@ -551,8 +625,25 @@ class PairingServiceTest(unittest.TestCase):
         self.assertIn("idx_inventory_loans_item", inventory_indexes)
         self.assertIn("idx_inventory_maintenance_item", inventory_indexes)
         self.assertIsNotNone(audit_table)
+        self.assertEqual(
+            {
+                "audit_events", "pairing_snapshots", "standings_snapshots",
+                "tiebreak_components", "public_tokens", "result_submissions",
+            },
+            phase0_tables,
+        )
         self.assertIn("idx_audit_log_created", audit_indexes)
         self.assertIn("idx_audit_log_entity", audit_indexes)
+        self.assertIn("idx_audit_events_tournament", phase0_indexes)
+        self.assertIn("idx_pairing_snapshots_round", phase0_indexes)
+        self.assertIn("idx_standings_snapshots_round", phase0_indexes)
+        self.assertIn("idx_tiebreak_components_player", phase0_indexes)
+        self.assertIn("idx_public_tokens_hash", phase0_indexes)
+        self.assertIn("idx_result_submissions_status", phase0_indexes)
+        self.assertEqual({"devices", "sync_outbox", "clock_events"}, integration_tables)
+        self.assertIn("idx_devices_status", integration_indexes)
+        self.assertIn("idx_sync_outbox_status", integration_indexes)
+        self.assertIn("idx_clock_events_tournament", integration_indexes)
         self.assertGreaterEqual(certificate_template_count, 7)
         self.assertIn("logo_path", certificate_template_columns)
         self.assertIn("background_image_path", certificate_template_columns)
@@ -561,6 +652,863 @@ class PairingServiceTest(unittest.TestCase):
         self.assertIn("primary_color", certificate_template_columns)
         self.assertIn("accent_color", certificate_template_columns)
         self.assertIn("title_font_size", certificate_template_columns)
+
+    def test_phase0_records_pairing_snapshots_standings_snapshot_and_audit_events(self) -> None:
+        self._create_players(4)
+        round_data = self.service.generate_next_round(self.tournament_id)
+        round_id = int(round_data["id"])
+        pairings = self.db.get_pairings_for_round(round_id)
+        for pairing in pairings:
+            self.service.update_result(self.tournament_id, int(pairing["id"]), "1-0")
+
+        self.service.close_round(self.tournament_id, round_id)
+
+        snapshots = self.db.list_pairing_snapshots(self.tournament_id, round_id=round_id)
+        input_snapshots = self.db.list_pairing_snapshots(self.tournament_id, round_number=1)
+        standings_snapshots = self.db.list_standings_snapshots(self.tournament_id)
+        audit_events = self.db.list_audit_events(self.tournament_id, limit=20)
+        current_round = self.db.get_round(round_id)
+
+        self.assertTrue(any(item["stage"] == "input" for item in input_snapshots))
+        self.assertTrue(any(item["stage"] == "output" for item in snapshots))
+        self.assertEqual(1, len(standings_snapshots))
+        self.assertTrue(standings_snapshots[0]["snapshot_hash"])
+        self.assertEqual("albericus-swiss-1", current_round["pairing_engine_version"])
+        self.assertEqual("albericus-2026-phase0", current_round["ruleset_version"])
+        self.assertIn("round_generated", {item["action"] for item in audit_events})
+        self.assertIn("round_closed", {item["action"] for item in audit_events})
+        self.assertIn("backup_created", {item["action"] for item in audit_events})
+
+    def test_phase1_preview_next_round_does_not_persist(self) -> None:
+        self._create_players(4)
+
+        preview = self.service.preview_next_round(self.tournament_id)
+
+        self.assertEqual("individual", preview["competition_type"])
+        self.assertEqual(1, preview["round_number"])
+        self.assertEqual(2, len(preview["pairings"]))
+        self.assertEqual([], self.db.list_rounds(self.tournament_id))
+        self.assertEqual([], self.db.list_pairing_snapshots(self.tournament_id))
+        self.assertEqual([], self.db.list_audit_events(self.tournament_id))
+        self.assertEqual([], list(self.backup_dir.glob("*.db")))
+
+    def test_phase1_preview_flags_bye_alert(self) -> None:
+        self._create_players(3)
+
+        preview = self.service.preview_next_round(self.tournament_id)
+
+        self.assertEqual(2, len(preview["pairings"]))
+        self.assertGreaterEqual(preview["alerts_count"], 1)
+        self.assertTrue(any("Bye" in pairing["alerts"] for pairing in preview["pairings"]))
+
+    def test_phase2_arbitration_dashboard_reports_pending_ready_and_corrections(self) -> None:
+        self._create_players(2)
+        empty_dashboard = self.service.arbitration_dashboard(self.tournament_id)
+        self.assertEqual(0, empty_dashboard["metrics"]["generated_rounds"])
+        self.assertIn("Nenhuma rodada gerada", empty_dashboard["alerts"][0])
+
+        round_data = self.service.generate_next_round(self.tournament_id)
+        pending_dashboard = self.service.arbitration_dashboard(self.tournament_id)
+        self.assertEqual(1, pending_dashboard["metrics"]["pending_results"])
+        self.assertFalse(pending_dashboard["metrics"]["ready_to_close"])
+
+        pairing = self.db.get_pairings_for_round(int(round_data["id"]))[0]
+        self.service.update_result(self.tournament_id, int(pairing["id"]), "1-0")
+        ready_dashboard = self.service.arbitration_dashboard(self.tournament_id)
+        self.assertEqual(0, ready_dashboard["metrics"]["pending_results"])
+        self.assertTrue(ready_dashboard["metrics"]["ready_to_close"])
+
+        self.service.close_round(self.tournament_id, int(round_data["id"]))
+        settings = self.db.get_tournament_settings(self.tournament_id) or {}
+        settings["allow_dangerous_changes"] = 1
+        self.db.save_tournament_settings(self.tournament_id, settings)
+        self.service.update_result(self.tournament_id, int(pairing["id"]), "0-1")
+
+        corrected_dashboard = self.service.arbitration_dashboard(self.tournament_id)
+        self.assertEqual(1, corrected_dashboard["metrics"]["corrections"])
+        self.assertTrue(corrected_dashboard["metrics"]["can_preview_next_round"])
+
+    def test_phase2_round_close_blocks_arbitration_decision_issues(self) -> None:
+        self._create_players(2)
+        round_data = self.service.generate_next_round(self.tournament_id)
+        pairing = self.db.get_pairings_for_round(int(round_data["id"]))[0]
+        token_payload = self.qr_result_service.result_url_for_pairing(self.tournament_id, int(pairing["id"]))
+        submission = self.qr_result_service.submit_result(token_payload["token"], "1-0", submitter="Mesa 1")
+        self.service.update_result(self.tournament_id, int(pairing["id"]), "1-0")
+
+        dashboard = self.service.arbitration_dashboard(self.tournament_id)
+        self.assertFalse(dashboard["metrics"]["ready_to_close"])
+        self.assertEqual(1, dashboard["metrics"]["blocking_issues"])
+        with self.assertRaisesRegex(AppError, "pendencias de arbitragem bloqueantes"):
+            self.service.close_round(self.tournament_id, int(round_data["id"]))
+
+        self.qr_result_service.reject_submission(int(submission["id"]), reviewer="Arbitro", reason="Resultado lancado no desktop.")
+        self.service.close_round(self.tournament_id, int(round_data["id"]))
+        self.assertEqual("closed", self.db.get_round(int(round_data["id"]))["status"])
+
+    def test_phase2_round_close_allows_attention_only_clock_issue(self) -> None:
+        self._create_players(2)
+        round_data = self.service.generate_next_round(self.tournament_id)
+        pairing = self.db.get_pairings_for_round(int(round_data["id"]))[0]
+        self.service.update_result(self.tournament_id, int(pairing["id"]), "1-0")
+        self.clock_integration_service.record_manual_event(
+            self.tournament_id,
+            "flag_fall",
+            pairing_id=int(pairing["id"]),
+            side="white",
+            seconds_remaining=0,
+            note="Apenas alerta conferido em mesa.",
+        )
+
+        dashboard = self.service.arbitration_dashboard(self.tournament_id)
+        self.assertTrue(dashboard["metrics"]["ready_to_close"])
+        self.assertEqual(0, dashboard["metrics"]["blocking_issues"])
+
+        self.service.close_round(self.tournament_id, int(round_data["id"]))
+        self.assertEqual("closed", self.db.get_round(int(round_data["id"]))["status"])
+
+    def test_phase2_arbitration_issues_aggregate_qr_sync_and_clock_alerts(self) -> None:
+        self._create_players(2)
+        remote_device = self.sync_service.register_device("Mesa 1", role="assistant", device_id="device-board-1")
+        round_data = self.service.generate_next_round(self.tournament_id)
+        pairing = self.db.get_pairings_for_round(int(round_data["id"]))[0]
+        token_payload = self.qr_result_service.result_url_for_pairing(self.tournament_id, int(pairing["id"]))
+        self.qr_result_service.submit_result(token_payload["token"], "1-0", submitter="Mesa 1")
+        self.sync_service.apply_remote_event(
+            {
+                "event_id": "remote-invalid-result",
+                "device_id": remote_device["device_id"],
+                "tournament_id": self.tournament_id,
+                "round_id": int(round_data["id"]),
+                "entity_type": "pairing",
+                "entity_id": int(pairing["id"]),
+                "action": "result_updated",
+                "payload": {"result": "BYE"},
+                "payload_hash": self.db._hash_payload({"result": "BYE"}),
+            }
+        )
+        self.clock_integration_service.record_manual_event(
+            self.tournament_id,
+            "flag_fall",
+            pairing_id=int(pairing["id"]),
+            side="white",
+            seconds_remaining=0,
+            note="Conferir mesa.",
+        )
+
+        issues = self.service.arbitration_issues(self.tournament_id)
+        sources = {item["source"] for item in issues["issues"]}
+
+        self.assertEqual(3, issues["metrics"]["total"])
+        self.assertEqual(1, issues["metrics"]["qr_pending"])
+        self.assertEqual(1, issues["metrics"]["sync_conflicts"])
+        self.assertEqual(1, issues["metrics"]["clock_alerts"])
+        self.assertEqual({"qr", "sync", "clock"}, sources)
+        self.assertTrue(all(item.get("payload") for item in issues["issues"]))
+        self.assertTrue(all(item.get("issue_key") for item in issues["issues"]))
+
+    def test_phase2_arbitration_issue_acknowledgement_hides_non_qr_issue(self) -> None:
+        self._create_players(2)
+        round_data = self.service.generate_next_round(self.tournament_id)
+        pairing = self.db.get_pairings_for_round(int(round_data["id"]))[0]
+        self.clock_integration_service.record_manual_event(
+            self.tournament_id,
+            "flag_fall",
+            pairing_id=int(pairing["id"]),
+            side="black",
+            seconds_remaining=0,
+            note="Mesa conferida.",
+        )
+
+        issues = self.service.arbitration_issues(self.tournament_id)
+        clock_issue = next(item for item in issues["issues"] if item["source"] == "clock")
+        self.service.acknowledge_arbitration_issue(self.tournament_id, str(clock_issue["issue_key"]))
+
+        refreshed = self.service.arbitration_issues(self.tournament_id)
+        audit_events = self.db.list_audit_events(
+            self.tournament_id,
+            action="arbitration_issue_acknowledged",
+            entity_type="arbitration_issue",
+        )
+
+        self.assertEqual(0, refreshed["metrics"]["total"])
+        self.assertEqual(1, len(audit_events))
+        self.assertIn(str(clock_issue["issue_key"]), audit_events[0]["after_json"])
+
+    def test_phase2_arbitration_issue_acknowledgement_rejects_qr_issue(self) -> None:
+        self._create_players(2)
+        round_data = self.service.generate_next_round(self.tournament_id)
+        pairing = self.db.get_pairings_for_round(int(round_data["id"]))[0]
+        token_payload = self.qr_result_service.result_url_for_pairing(self.tournament_id, int(pairing["id"]))
+        self.qr_result_service.submit_result(token_payload["token"], "1-0", submitter="Mesa 1")
+
+        issues = self.service.arbitration_issues(self.tournament_id)
+        qr_issue = next(item for item in issues["issues"] if item["source"] == "qr")
+
+        with self.assertRaisesRegex(AppError, "Use Aprovar QR ou Rejeitar QR"):
+            self.service.acknowledge_arbitration_issue(self.tournament_id, str(qr_issue["issue_key"]))
+
+    def test_phase0_audits_dangerous_result_correction(self) -> None:
+        self._create_players(2)
+        round_data = self.service.generate_next_round(self.tournament_id)
+        pairing = self.db.get_pairings_for_round(int(round_data["id"]))[0]
+        self.service.update_result(self.tournament_id, int(pairing["id"]), "1-0")
+        self.service.close_round(self.tournament_id, int(round_data["id"]))
+        settings = self.db.get_tournament_settings(self.tournament_id) or {}
+        settings["allow_dangerous_changes"] = 1
+        self.db.save_tournament_settings(self.tournament_id, settings)
+
+        self.service.update_result(self.tournament_id, int(pairing["id"]), "0-1")
+
+        corrections = self.db.list_audit_events(
+            self.tournament_id,
+            action="result_corrected",
+            entity_type="pairing",
+        )
+        self.assertEqual(1, len(corrections))
+        self.assertIn("1-0", corrections[0]["before_json"])
+        self.assertIn("0-1", corrections[0]["after_json"])
+        self.assertTrue(corrections[0]["before_hash"])
+        self.assertTrue(corrections[0]["after_hash"])
+
+    def test_phase8_audit_events_enqueue_sync_outbox_and_network_failure_keeps_pending(self) -> None:
+        self._create_players(2)
+        round_data = self.service.generate_next_round(self.tournament_id)
+        outbox = self.db.list_sync_outbox(status="pending", limit=20)
+        round_generated = next(item for item in outbox if item["action"] == "round_generated")
+
+        with mock.patch("src.services.sync_service.urlopen", side_effect=OSError("offline")):
+            summary = self.sync_service.sync_pending("https://sync.example.test", limit=1)
+
+        pending = self.db.list_sync_outbox(status="pending", limit=20)
+        failed_event = next(item for item in pending if int(item["attempts"]) == 1)
+        self.assertEqual(int(round_data["id"]), int(round_generated["round_id"]))
+        self.assertEqual({"sent": 1, "synced": 0, "rejected": 0, "failed": 1}, summary)
+        self.assertEqual("pending", failed_event["status"])
+        self.assertEqual(1, failed_event["attempts"])
+        self.assertIn("offline", failed_event["last_error"])
+
+    def test_phase8_device_registration_validates_role_name_and_revoke_target(self) -> None:
+        with self.assertRaisesRegex(AppError, "nome do dispositivo"):
+            self.sync_service.register_device("   ", role="assistant")
+        with self.assertRaisesRegex(AppError, "Perfil"):
+            self.sync_service.register_device("Mesa 1", role="admin")
+
+        device = self.sync_service.register_device(" Mesa 1 ", role="assistant", device_id=" device-board-1 ")
+        self.sync_service.revoke_device("device-board-1")
+
+        revoked = next(item for item in self.sync_service.list_devices() if item["device_id"] == "device-board-1")
+        self.assertEqual("Mesa 1", device["name"])
+        self.assertEqual("revoked", revoked["status"])
+        with self.assertRaisesRegex(AppError, "nao encontrado"):
+            self.sync_service.revoke_device("missing-device")
+
+    def test_phase8_sync_pending_validates_target_url_limit_and_timeout(self) -> None:
+        with self.assertRaisesRegex(AppError, "URL"):
+            self.sync_service.sync_pending("sync.example.test")
+        with self.assertRaisesRegex(AppError, "Limite"):
+            self.sync_service.sync_pending("https://sync.example.test", limit=0)
+        with self.assertRaisesRegex(AppError, "Timeout"):
+            self.sync_service.sync_pending("https://sync.example.test", timeout_seconds=0)
+
+        self.assertEqual([], self.db.list_sync_outbox(status="rejected", limit=20))
+
+    def test_phase8_remote_rejection_ignores_invalid_audit_scope(self) -> None:
+        response = self.sync_service.apply_remote_event(
+            {
+                "event_id": "remote-invalid-scope",
+                "device_id": "unknown-device",
+                "tournament_id": 999999,
+                "round_id": 999999,
+                "entity_type": "pairing",
+                "entity_id": 999999,
+                "action": "result_updated",
+                "payload": {"result": "1-0"},
+            }
+        )
+
+        rejected = self.db.list_audit_events(action="sync_remote_rejected")
+        self.assertEqual("rejected", response["status"])
+        self.assertTrue(rejected)
+        self.assertIsNone(rejected[0]["tournament_id"])
+        self.assertIsNone(rejected[0]["round_id"])
+
+    def test_phase8_remote_result_rejects_malformed_ids_without_exception(self) -> None:
+        self._create_players(2)
+        remote_device = self.sync_service.register_device("Mesa 1", role="assistant", device_id="device-board-1")
+        round_data = self.service.generate_next_round(self.tournament_id)
+        pairing = self.db.get_pairings_for_round(int(round_data["id"]))[0]
+
+        bad_pairing = self.sync_service.apply_remote_event(
+            {
+                "event_id": "remote-bad-pairing",
+                "device_id": remote_device["device_id"],
+                "tournament_id": self.tournament_id,
+                "round_id": int(round_data["id"]),
+                "entity_type": "pairing",
+                "entity_id": "abc",
+                "action": "result_updated",
+                "payload": {"result": "1-0"},
+            }
+        )
+        bad_tournament = self.sync_service.apply_remote_event(
+            {
+                "event_id": "remote-bad-tournament",
+                "device_id": remote_device["device_id"],
+                "tournament_id": "abc",
+                "round_id": int(round_data["id"]),
+                "entity_type": "pairing",
+                "entity_id": int(pairing["id"]),
+                "action": "result_updated",
+                "payload": {"result": "1-0"},
+            }
+        )
+        bad_round = self.sync_service.apply_remote_event(
+            {
+                "event_id": "remote-bad-round",
+                "device_id": remote_device["device_id"],
+                "tournament_id": self.tournament_id,
+                "round_id": "abc",
+                "entity_type": "pairing",
+                "entity_id": int(pairing["id"]),
+                "action": "result_updated",
+                "payload": {"result": "1-0"},
+            }
+        )
+
+        unchanged = self.db.get_pairing(int(pairing["id"]))
+        self.assertEqual("rejected", bad_pairing["status"])
+        self.assertEqual("rejected", bad_tournament["status"])
+        self.assertEqual("rejected", bad_round["status"])
+        self.assertEqual("", unchanged["result"])
+
+    def test_phase8_remote_result_rejects_malformed_payload_without_exception(self) -> None:
+        self._create_players(2)
+        remote_device = self.sync_service.register_device("Mesa 1", role="assistant", device_id="device-board-1")
+        round_data = self.service.generate_next_round(self.tournament_id)
+        pairing = self.db.get_pairings_for_round(int(round_data["id"]))[0]
+
+        response = self.sync_service.apply_remote_event(
+            {
+                "event_id": "remote-bad-payload",
+                "device_id": remote_device["device_id"],
+                "tournament_id": self.tournament_id,
+                "round_id": int(round_data["id"]),
+                "entity_type": "pairing",
+                "entity_id": int(pairing["id"]),
+                "action": "result_updated",
+                "payload": ["1-0"],
+            }
+        )
+
+        unchanged = self.db.get_pairing(int(pairing["id"]))
+        rejected = self.db.list_audit_events(self.tournament_id, action="sync_remote_rejected")
+        self.assertEqual("rejected", response["status"])
+        self.assertEqual("", unchanged["result"])
+        self.assertTrue(any("Payload remoto invalido" in item["reason"] for item in rejected))
+
+    def test_phase8_remote_result_conflict_does_not_change_closed_round(self) -> None:
+        self._create_players(2)
+        remote_device = self.sync_service.register_device("Mesa 1", role="assistant", device_id="device-board-1")
+        round_data = self.service.generate_next_round(self.tournament_id)
+        pairing = self.db.get_pairings_for_round(int(round_data["id"]))[0]
+        self.service.update_result(self.tournament_id, int(pairing["id"]), "1-0")
+        self.service.close_round(self.tournament_id, int(round_data["id"]))
+
+        response = self.sync_service.apply_remote_event(
+            {
+                "event_id": "remote-event-1",
+                "device_id": remote_device["device_id"],
+                "tournament_id": self.tournament_id,
+                "round_id": int(round_data["id"]),
+                "entity_type": "pairing",
+                "entity_id": int(pairing["id"]),
+                "action": "result_updated",
+                "payload": {"result": "0-1"},
+            }
+        )
+
+        unchanged = self.db.get_pairing(int(pairing["id"]))
+        rejected = self.db.list_audit_events(self.tournament_id, action="sync_remote_rejected")
+        self.assertEqual("conflict", response["status"])
+        self.assertEqual("1-0", unchanged["result"])
+        self.assertTrue(rejected)
+        self.assertIn("Rodada fechada", rejected[0]["reason"])
+
+    def test_phase8_remote_result_rejects_payload_hash_mismatch(self) -> None:
+        self._create_players(2)
+        remote_device = self.sync_service.register_device("Mesa 1", role="assistant", device_id="device-board-1")
+        round_data = self.service.generate_next_round(self.tournament_id)
+        pairing = self.db.get_pairings_for_round(int(round_data["id"]))[0]
+
+        response = self.sync_service.apply_remote_event(
+            {
+                "event_id": "remote-event-tampered",
+                "device_id": remote_device["device_id"],
+                "tournament_id": self.tournament_id,
+                "round_id": int(round_data["id"]),
+                "entity_type": "pairing",
+                "entity_id": int(pairing["id"]),
+                "action": "result_updated",
+                "payload": {"result": "0-1"},
+                "payload_hash": self.db._hash_payload({"result": "1-0"}),
+            }
+        )
+
+        unchanged = self.db.get_pairing(int(pairing["id"]))
+        rejected = self.db.list_audit_events(self.tournament_id, action="sync_remote_rejected")
+        self.assertEqual("rejected", response["status"])
+        self.assertEqual("", unchanged["result"])
+        self.assertTrue(rejected)
+        self.assertIn("Hash do payload", rejected[0]["reason"])
+
+    def test_phase8_remote_result_cannot_clear_pairing_result(self) -> None:
+        self._create_players(2)
+        remote_device = self.sync_service.register_device("Mesa 1", role="assistant", device_id="device-board-1")
+        round_data = self.service.generate_next_round(self.tournament_id)
+        pairing = self.db.get_pairings_for_round(int(round_data["id"]))[0]
+        self.service.update_result(self.tournament_id, int(pairing["id"]), "1-0")
+
+        response = self.sync_service.apply_remote_event(
+            {
+                "event_id": "remote-event-clear",
+                "device_id": remote_device["device_id"],
+                "tournament_id": self.tournament_id,
+                "round_id": int(round_data["id"]),
+                "entity_type": "pairing",
+                "entity_id": int(pairing["id"]),
+                "action": "result_updated",
+                "payload": {"result": ""},
+                "payload_hash": self.db._hash_payload({"result": ""}),
+            }
+        )
+
+        unchanged = self.db.get_pairing(int(pairing["id"]))
+        rejected = self.db.list_audit_events(self.tournament_id, action="sync_remote_rejected")
+        self.assertEqual("rejected", response["status"])
+        self.assertEqual("1-0", unchanged["result"])
+        self.assertTrue(rejected)
+        self.assertIn("Resultado remoto invalido", rejected[0]["reason"])
+
+    def test_phase8_remote_result_conflict_does_not_override_open_desktop_result(self) -> None:
+        self._create_players(2)
+        remote_device = self.sync_service.register_device("Mesa 1", role="assistant", device_id="device-board-1")
+        round_data = self.service.generate_next_round(self.tournament_id)
+        pairing = self.db.get_pairings_for_round(int(round_data["id"]))[0]
+        self.service.update_result(self.tournament_id, int(pairing["id"]), "1-0")
+
+        response = self.sync_service.apply_remote_event(
+            {
+                "event_id": "remote-open-conflict",
+                "device_id": remote_device["device_id"],
+                "tournament_id": self.tournament_id,
+                "round_id": int(round_data["id"]),
+                "entity_type": "pairing",
+                "entity_id": int(pairing["id"]),
+                "action": "result_updated",
+                "payload": {"result": "0-1"},
+                "payload_hash": self.db._hash_payload({"result": "0-1"}),
+            }
+        )
+
+        unchanged = self.db.get_pairing(int(pairing["id"]))
+        rejected = self.db.list_audit_events(self.tournament_id, action="sync_remote_rejected")
+        self.assertEqual("conflict", response["status"])
+        self.assertEqual("1-0", unchanged["result"])
+        self.assertTrue(any("outro resultado" in item["reason"] for item in rejected))
+
+    def test_phase8_remote_result_rejects_tournament_or_round_mismatch(self) -> None:
+        self._create_players(2)
+        remote_device = self.sync_service.register_device("Mesa 1", role="assistant", device_id="device-board-1")
+        round_data = self.service.generate_next_round(self.tournament_id)
+        pairing = self.db.get_pairings_for_round(int(round_data["id"]))[0]
+
+        wrong_tournament = self.sync_service.apply_remote_event(
+            {
+                "event_id": "remote-event-wrong-tournament",
+                "device_id": remote_device["device_id"],
+                "tournament_id": self.tournament_id + 999,
+                "round_id": int(round_data["id"]),
+                "entity_type": "pairing",
+                "entity_id": int(pairing["id"]),
+                "action": "result_updated",
+                "payload": {"result": "1-0"},
+                "payload_hash": self.db._hash_payload({"result": "1-0"}),
+            }
+        )
+        wrong_round = self.sync_service.apply_remote_event(
+            {
+                "event_id": "remote-event-wrong-round",
+                "device_id": remote_device["device_id"],
+                "tournament_id": self.tournament_id,
+                "round_id": int(round_data["id"]) + 999,
+                "entity_type": "pairing",
+                "entity_id": int(pairing["id"]),
+                "action": "result_updated",
+                "payload": {"result": "0-1"},
+                "payload_hash": self.db._hash_payload({"result": "0-1"}),
+            }
+        )
+
+        unchanged = self.db.get_pairing(int(pairing["id"]))
+        rejected = self.db.list_audit_events(self.tournament_id, action="sync_remote_rejected")
+        self.assertEqual("rejected", wrong_tournament["status"])
+        self.assertEqual("rejected", wrong_round["status"])
+        self.assertEqual("", unchanged["result"])
+        self.assertTrue(any("outra rodada" in item["reason"] for item in rejected))
+
+    def test_phase8_pending_event_syncs_when_server_returns(self) -> None:
+        event_id = self.db.create_sync_outbox_event(
+            action="heartbeat",
+            tournament_id=self.tournament_id,
+            entity_type="tournament",
+            entity_id=self.tournament_id,
+            payload={"status": "local_ok"},
+        )
+        event = self.db.list_sync_outbox(status="pending", limit=1)[0]
+
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, traceback):
+                return False
+
+            @staticmethod
+            def read() -> bytes:
+                return b'{"status": "accepted"}'
+
+        with mock.patch("src.services.sync_service.urlopen", return_value=FakeResponse()):
+            summary = self.sync_service.sync_pending("https://sync.example.test", limit=1)
+
+        synced = self.db.list_sync_outbox(status="synced", limit=20)
+        self.assertEqual({"sent": 1, "synced": 1, "rejected": 0, "failed": 0}, summary)
+        self.assertEqual(event["event_id"], next(item["event_id"] for item in synced if item["id"] == event_id))
+
+    def test_phase9_manual_clock_event_is_audited_without_changing_result(self) -> None:
+        self._create_players(2)
+        round_data = self.service.generate_next_round(self.tournament_id)
+        pairing = self.db.get_pairings_for_round(int(round_data["id"]))[0]
+
+        event = self.clock_integration_service.record_manual_event(
+            self.tournament_id,
+            "flag_fall",
+            pairing_id=int(pairing["id"]),
+            side="white",
+            seconds_remaining=0,
+            note="Seta caiu, aguardando decisao do arbitro.",
+        )
+
+        unchanged = self.db.get_pairing(int(pairing["id"]))
+        audit_events = self.db.list_audit_events(self.tournament_id, action="clock_event_logged")
+        alerts = self.clock_integration_service.anomaly_alerts(self.tournament_id)
+        self.assertEqual("flag_fall", event["event_type"])
+        self.assertEqual("", unchanged["result"])
+        self.assertTrue(audit_events)
+        self.assertTrue(any("Apenas alerta" in alert["recommendation"] for alert in alerts))
+
+    def test_phase9_clock_event_rejects_invalid_side_and_negative_time(self) -> None:
+        self._create_players(2)
+        round_data = self.service.generate_next_round(self.tournament_id)
+        pairing = self.db.get_pairings_for_round(int(round_data["id"]))[0]
+
+        with self.assertRaisesRegex(AppError, "Lado"):
+            self.clock_integration_service.record_manual_event(
+                self.tournament_id,
+                "time_warning",
+                pairing_id=int(pairing["id"]),
+                side="red",
+                seconds_remaining=30,
+            )
+        with self.assertRaisesRegex(AppError, "Segundos"):
+            self.clock_integration_service.record_manual_event(
+                self.tournament_id,
+                "time_warning",
+                pairing_id=int(pairing["id"]),
+                side="white",
+                seconds_remaining=-1,
+            )
+
+        self.assertEqual([], self.clock_integration_service.list_clock_events(self.tournament_id))
+
+    def test_phase9_clock_event_validates_player_tournament_and_pairing(self) -> None:
+        player_ids = self._create_players(2)
+        outside_tournament_id = self.db.create_tournament("Outro torneio", rounds_count=1)
+        outside_player_id = self.db.create_player(outside_tournament_id, name="Jogador externo", rating=1500)
+        round_data = self.service.generate_next_round(self.tournament_id)
+        pairing = self.db.get_pairings_for_round(int(round_data["id"]))[0]
+
+        with self.assertRaisesRegex(AppError, "torneio selecionado"):
+            self.clock_integration_service.record_manual_event(
+                self.tournament_id,
+                "manual_note",
+                player_id=outside_player_id,
+            )
+        with self.assertRaisesRegex(AppError, "mesa informada"):
+            self.clock_integration_service.record_manual_event(
+                self.tournament_id,
+                "manual_note",
+                pairing_id=int(pairing["id"]),
+                player_id=outside_player_id,
+            )
+
+        event = self.clock_integration_service.record_manual_event(
+            self.tournament_id,
+            "manual_note",
+            pairing_id=int(pairing["id"]),
+            player_id=player_ids[0],
+        )
+
+        self.assertEqual(player_ids[0], event["player_id"])
+        self.assertEqual(1, len(self.clock_integration_service.list_clock_events(self.tournament_id)))
+
+    def test_phase9_plugin_events_are_optional_and_never_apply_result(self) -> None:
+        self._create_players(2)
+        round_data = self.service.generate_next_round(self.tournament_id)
+        pairing = self.db.get_pairings_for_round(int(round_data["id"]))[0]
+
+        class FakeClockPlugin:
+            plugin_id = "fake_clock"
+            label = "Relogio falso"
+
+            def normalize_event(self, raw_event: dict[str, object]) -> dict[str, object]:
+                return {**raw_event, "event_type": "absence", "note": "Ausencia detectada pelo dispositivo."}
+
+        self.clock_integration_service.register_plugin(FakeClockPlugin())
+        disabled = self.clock_integration_service.record_plugin_event(
+            "fake_clock",
+            {
+                "tournament_id": self.tournament_id,
+                "pairing_id": int(pairing["id"]),
+                "device_id": "clock-1",
+                "result": "0-1",
+            },
+        )
+        self.db.save_app_settings({"device_integrations_enabled": "1"})
+        accepted = self.clock_integration_service.record_plugin_event(
+            "fake_clock",
+            {
+                "tournament_id": self.tournament_id,
+                "pairing_id": int(pairing["id"]),
+                "device_id": "clock-1",
+                "result": "0-1",
+            },
+        )
+
+        unchanged = self.db.get_pairing(int(pairing["id"]))
+        self.assertEqual("ignored", disabled["status"])
+        self.assertEqual("absence", accepted["event_type"])
+        self.assertEqual("", unchanged["result"])
+
+    def test_phase9_notifications_are_optional_audited_queue_only(self) -> None:
+        skipped = self.clock_integration_service.queue_notification(
+            "EMAIL",
+            " arbitro@example.com ",
+            " Rodada publicada. ",
+            tournament_id=self.tournament_id,
+        )
+        self.db.save_app_settings({"notifications_enabled": "1"})
+        queued = self.clock_integration_service.queue_notification(
+            "sms",
+            "+5500000000000",
+            "Mesa 1 requer atencao.",
+            tournament_id=self.tournament_id,
+        )
+
+        skipped_events = self.db.list_audit_events(self.tournament_id, action="notification_skipped")
+        queued_events = self.db.list_audit_events(self.tournament_id, action="notification_queued")
+        self.assertEqual("skipped", skipped["status"])
+        self.assertEqual("queued", queued["status"])
+        self.assertTrue(skipped_events)
+        self.assertTrue(queued_events)
+
+    def test_phase9_notification_queue_validates_channel_recipient_and_message(self) -> None:
+        self.db.save_app_settings({"notifications_enabled": "1"})
+
+        with self.assertRaisesRegex(AppError, "Canal"):
+            self.clock_integration_service.queue_notification("telegram", "arbitro@example.com", "Rodada publicada")
+        with self.assertRaisesRegex(AppError, "destinatario"):
+            self.clock_integration_service.queue_notification("email", "", "Rodada publicada")
+        with self.assertRaisesRegex(AppError, "mensagem"):
+            self.clock_integration_service.queue_notification("email", "arbitro@example.com", " ")
+
+        self.assertEqual([], self.db.list_audit_events(self.tournament_id, action="notification_queued"))
+
+    def test_phase0_exports_tournament_audit_report(self) -> None:
+        self._create_players(2)
+        round_data = self.service.generate_next_round(self.tournament_id)
+        pairing = self.db.get_pairings_for_round(int(round_data["id"]))[0]
+        self.service.update_result(self.tournament_id, int(pairing["id"]), "1-0")
+        self.service.close_round(self.tournament_id, int(round_data["id"]))
+
+        output_path = Path(self.temp_dir.name) / "auditoria.csv"
+        self.export_service.export_tournament_audit(self.tournament_id, output_path)
+        content = output_path.read_text(encoding="utf-8")
+
+        self.assertIn("Data/hora;Acao;Entidade", content)
+        self.assertIn("round_generated", content)
+        self.assertIn("round_closed", content)
+
+    def test_phase3_tiebreak_components_are_persisted_and_exported(self) -> None:
+        self._create_players(4)
+        first_round = self.service.generate_next_round(self.tournament_id)
+        self._fill_decisive_results(first_round["id"])
+        self.service.close_round(self.tournament_id, first_round["id"])
+
+        second_round = self.service.generate_next_round(self.tournament_id)
+        self._fill_decisive_results(second_round["id"])
+        self.service.close_round(self.tournament_id, second_round["id"])
+
+        standings = self.service.tiebreak_report(self.tournament_id)
+        first = standings[0]
+        components = first["tiebreak_components"]
+        self.assertIn("buchholz", components)
+        self.assertIn("buchholz_median", components)
+        self.assertIn("sonneborn_berger", components)
+        self.assertIn("direct_encounter", components)
+        self.assertIn("performance", components)
+        self.assertEqual(first["buchholz"], components["buchholz"]["total"])
+        self.assertEqual(first["sonneborn_berger"], components["sonneborn_berger"]["total"])
+        self.assertTrue(components["buchholz"]["opponents"])
+
+        persisted = self.db.list_tiebreak_components(
+            self.tournament_id,
+            player_id=int(first["player_id"]),
+            round_id=int(second_round["id"]),
+        )
+        self.assertGreaterEqual(len(persisted), 6)
+        self.assertIn("buchholz", {item["criterion"] for item in persisted})
+        self.assertIn("opponents", persisted[0]["components_json"])
+
+        report_path = Path(self.temp_dir.name) / "desempates.csv"
+        self.export_service.export_tiebreak_report(self.tournament_id, report_path)
+        report_content = report_path.read_text(encoding="utf-8-sig")
+        self.assertIn("Buchholz", report_content)
+        self.assertIn("Sonneborn-Berger", report_content)
+
+        site_path = self.export_service.export_site(self.tournament_id, Path(self.temp_dir.name) / "site")
+        html = site_path.read_text(encoding="utf-8")
+        self.assertIn("Componentes de desempate", html)
+        self.assertIn("Buchholz", html)
+
+    def test_phase4_qr_result_submission_requires_approval_and_audits_review(self) -> None:
+        self._create_players(2)
+        round_data = self.service.generate_next_round(self.tournament_id)
+        pairing = self.db.get_pairings_for_round(int(round_data["id"]))[0]
+
+        token_payload = self.qr_result_service.result_url_for_pairing(
+            self.tournament_id,
+            int(pairing["id"]),
+            base_url="http://localhost:8765",
+        )
+        submission = self.qr_result_service.submit_result(token_payload["token"], "1-0", submitter="Mesa 1")
+
+        self.assertEqual("submitted", submission["status"])
+        self.assertEqual("", self.db.get_pairing(int(pairing["id"]))["result"])
+        self.assertEqual(1, len(self.qr_result_service.pending_submissions(self.tournament_id)))
+
+        self.qr_result_service.approve_submission(int(submission["id"]), reviewer="Arbitro")
+
+        self.assertEqual("1-0", self.db.get_pairing(int(pairing["id"]))["result"])
+        self.assertEqual([], self.qr_result_service.pending_submissions(self.tournament_id))
+        actions = {event["action"] for event in self.db.list_audit_events(self.tournament_id, limit=20)}
+        self.assertIn("result_submitted", actions)
+        self.assertIn("result_submission_approved", actions)
+
+    def test_phase4_qr_result_rejects_duplicate_pending_submission(self) -> None:
+        self._create_players(2)
+        round_data = self.service.generate_next_round(self.tournament_id)
+        pairing = self.db.get_pairings_for_round(int(round_data["id"]))[0]
+        token_payload = self.qr_result_service.result_url_for_pairing(self.tournament_id, int(pairing["id"]))
+
+        first = self.qr_result_service.submit_result(token_payload["token"], "1-0", submitter="Mesa 1")
+
+        with self.assertRaisesRegex(AppError, "envio pendente"):
+            self.qr_result_service.submit_result(token_payload["token"], "0-1", submitter="Mesa 1")
+        self.assertEqual(1, len(self.qr_result_service.pending_submissions(self.tournament_id)))
+
+        self.qr_result_service.reject_submission(int(first["id"]), reviewer="Arbitro", reason="Conferir novamente")
+        second = self.qr_result_service.submit_result(token_payload["token"], "0-1", submitter="Mesa 1")
+
+        self.assertEqual("submitted", second["status"])
+        self.assertEqual(1, len(self.qr_result_service.pending_submissions(self.tournament_id)))
+
+    def test_phase4_qr_new_link_revokes_previous_active_token_for_pairing(self) -> None:
+        self._create_players(2)
+        round_data = self.service.generate_next_round(self.tournament_id)
+        pairing = self.db.get_pairings_for_round(int(round_data["id"]))[0]
+
+        first = self.qr_result_service.result_url_for_pairing(self.tournament_id, int(pairing["id"]))
+        second = self.qr_result_service.result_url_for_pairing(self.tournament_id, int(pairing["id"]))
+
+        first_row = self.db.get_public_token_by_hash(self.qr_result_service._token_hash(first["token"]))
+        second_row = self.db.get_public_token_by_hash(self.qr_result_service._token_hash(second["token"]))
+        with self.assertRaisesRegex(AppError, "utilizado ou cancelado"):
+            self.qr_result_service.submit_result(first["token"], "1-0")
+        submission = self.qr_result_service.submit_result(second["token"], "1-0")
+
+        self.assertEqual("revoked", first_row["status"])
+        self.assertEqual("active", second_row["status"])
+        self.assertEqual("submitted", submission["status"])
+
+    def test_phase4_qr_does_not_override_desktop_result(self) -> None:
+        self._create_players(2)
+        round_data = self.service.generate_next_round(self.tournament_id)
+        pairing = self.db.get_pairings_for_round(int(round_data["id"]))[0]
+        token_payload = self.qr_result_service.result_url_for_pairing(self.tournament_id, int(pairing["id"]))
+
+        self.service.update_result(self.tournament_id, int(pairing["id"]), "1-0")
+
+        with self.assertRaisesRegex(AppError, "resultado registrado no desktop"):
+            self.qr_result_service.submit_result(token_payload["token"], "0-1")
+
+        self.service.update_result(self.tournament_id, int(pairing["id"]), "")
+        submission = self.qr_result_service.submit_result(token_payload["token"], "0-1")
+        self.service.update_result(self.tournament_id, int(pairing["id"]), "1-0")
+
+        with self.assertRaisesRegex(AppError, "outro resultado registrado"):
+            self.qr_result_service.approve_submission(int(submission["id"]), reviewer="Arbitro")
+        self.assertEqual("1-0", self.db.get_pairing(int(pairing["id"]))["result"])
+
+    def test_phase4_qr_token_rejects_tampering_expiration_closed_round_and_rejection(self) -> None:
+        self._create_players(2)
+        round_data = self.service.generate_next_round(self.tournament_id)
+        pairing = self.db.get_pairings_for_round(int(round_data["id"]))[0]
+        token_payload = self.qr_result_service.result_url_for_pairing(self.tournament_id, int(pairing["id"]))
+
+        with self.assertRaisesRegex(AppError, "Assinatura"):
+            self.qr_result_service.submit_result(token_payload["token"][:-1] + "x", "1-0")
+
+        submission = self.qr_result_service.submit_result(token_payload["token"], "0-1")
+        self.qr_result_service.reject_submission(int(submission["id"]), reviewer="Arbitro", reason="Conferido na mesa")
+        self.assertEqual("", self.db.get_pairing(int(pairing["id"]))["result"])
+        rejected = self.db.get_result_submission(int(submission["id"]))
+        self.assertEqual("rejected", rejected["status"])
+
+        expired = self.qr_result_service.result_url_for_pairing(self.tournament_id, int(pairing["id"]), expires_minutes=1)
+        token_row = self.db.get_public_token_by_hash(self.qr_result_service._token_hash(expired["token"]))
+        with self.db.connect() as connection:
+            connection.execute(
+                "UPDATE public_tokens SET expires_at = '2000-01-01 00:00:00' WHERE id = ?",
+                (int(token_row["id"]),),
+            )
+        with self.assertRaisesRegex(AppError, "expirado"):
+            self.qr_result_service.submit_result(expired["token"], "1-0")
+
+        self.service.update_result(self.tournament_id, int(pairing["id"]), "1-0")
+        self.service.close_round(self.tournament_id, int(round_data["id"]))
+        closed_token = self.qr_result_service.result_url_for_pairing
+        with self.assertRaisesRegex(AppError, "rodada fechada"):
+            closed_token(self.tournament_id, int(pairing["id"]))
+
+    def test_phase4_local_result_server_escapes_mobile_html(self) -> None:
+        form_html = LocalResultServer._result_form_html("abc'><script>alert(1)</script>")
+        response_html = LocalResultServer._result_response_html("Erro <script>alert(1)</script>")
+
+        self.assertNotIn("<script>", form_html)
+        self.assertIn("abc&#x27;&gt;&lt;script&gt;alert(1)&lt;/script&gt;", form_html)
+        self.assertNotIn("<script>", response_html)
+        self.assertIn("Erro &lt;script&gt;alert(1)&lt;/script&gt;", response_html)
 
     def test_team_tournament_storage_foundation(self) -> None:
         tournament_id = self.tournament_service.create_tournament(
@@ -796,7 +1744,8 @@ class PairingServiceTest(unittest.TestCase):
         closed_round = self.db.get_round(round_data["id"])
 
         self.assertEqual(closed_round["status"], "closed")
-        self.assertEqual(len(backups), 1)
+        self.assertGreaterEqual(len(backups), 2)
+        self.assertTrue(any("before_close_round" in backup.name for backup in backups))
         self.assertEqual(standings[0]["points"], 1.0)
 
     def test_team_pairing_generates_matches_and_boards(self) -> None:
@@ -907,6 +1856,125 @@ class PairingServiceTest(unittest.TestCase):
 
         with self.assertRaisesRegex(AppError, "resultados dos tabuleiros"):
             self.service.close_round(tournament_id, round_data["id"])
+
+    def test_team_board_manual_color_swap(self) -> None:
+        tournament_id, _team_ids = self._create_team_tournament(teams_count=2, boards_count=2)
+        round_data = self.service.generate_next_round(tournament_id)
+        match = self.db.list_team_matches_for_round(round_data["id"])[0]
+        board = self.db.list_team_boards(int(match["id"]))[0]
+
+        self.service.swap_team_board_colors(tournament_id, round_data["id"], int(board["id"]))
+
+        updated = self.db.list_team_boards(int(match["id"]))[0]
+        self.assertEqual(updated["white_player_id"], board["black_player_id"])
+        self.assertEqual(updated["black_player_id"], board["white_player_id"])
+
+    def test_team_board_manual_player_swap_keeps_player_in_same_team(self) -> None:
+        tournament_id, _team_ids = self._create_team_tournament(teams_count=2, boards_count=2)
+        round_data = self.service.generate_next_round(tournament_id)
+        match = self.db.list_team_matches_for_round(round_data["id"])[0]
+        boards = self.db.list_team_boards(int(match["id"]))
+
+        source_player_id = int(boards[0]["white_player_id"])
+        replacement_player_id = int(boards[1]["black_player_id"])
+        self.service.adjust_team_board_player(
+            tournament_id,
+            round_data["id"],
+            int(boards[0]["id"]),
+            "white",
+            replacement_player_id,
+        )
+
+        updated = self.db.list_team_boards(int(match["id"]))
+        self.assertEqual(updated[0]["white_player_id"], replacement_player_id)
+        self.assertEqual(updated[1]["black_player_id"], source_player_id)
+
+    def test_team_board_manual_player_swap_rejects_other_team_player(self) -> None:
+        tournament_id, _team_ids = self._create_team_tournament(teams_count=2, boards_count=2)
+        round_data = self.service.generate_next_round(tournament_id)
+        match = self.db.list_team_matches_for_round(round_data["id"])[0]
+        boards = self.db.list_team_boards(int(match["id"]))
+
+        with self.assertRaisesRegex(AppError, "mesma equipe"):
+            self.service.adjust_team_board_player(
+                tournament_id,
+                round_data["id"],
+                int(boards[0]["id"]),
+                "white",
+                int(boards[0]["black_player_id"]),
+            )
+
+    def test_phase6_team_lineups_substitutions_and_export_are_recorded(self) -> None:
+        tournament_id, team_ids = self._create_team_tournament(teams_count=2, boards_count=2)
+        reserve_id = self.db.create_player(tournament_id, name="Reserva Equipe 1", rating=1600, club="Clube 1")
+        self.team_service.add_player(team_ids[0], reserve_id, board_number="", role="reserve")
+        settings = self.db.get_tournament_settings(tournament_id) or {}
+        settings.update(
+            {
+                "team_max_substitutions": 2,
+                "team_board_order_policy": "fixed",
+                "team_reserve_policy": "same_team",
+            }
+        )
+        self.db.save_tournament_settings(tournament_id, settings)
+
+        round_data = self.service.generate_next_round(tournament_id)
+        lineups = self.db.list_team_lineups(tournament_id, round_id=int(round_data["id"]))
+        self.assertEqual(2, len(lineups))
+        self.assertEqual(4, sum(len(self.db.list_team_lineup_boards(int(lineup["id"]))) for lineup in lineups))
+
+        match = self.db.list_team_matches_for_round(round_data["id"])[0]
+        board = self.db.list_team_boards(int(match["id"]))[0]
+        team_player_ids = {int(item["player_id"]) for item in self.db.list_team_players(team_ids[0], active_only=True)}
+        color = "white" if int(board["white_player_id"]) in team_player_ids else "black"
+
+        self.service.adjust_team_board_player(
+            tournament_id,
+            int(round_data["id"]),
+            int(board["id"]),
+            color,
+            reserve_id,
+            reason="Titular chegou atrasado",
+        )
+
+        substitutions = self.db.list_team_substitution_events(tournament_id, round_id=int(round_data["id"]))
+        self.assertEqual(1, len(substitutions))
+        self.assertEqual("Titular chegou atrasado", substitutions[0]["reason"])
+        self.assertEqual(reserve_id, substitutions[0]["in_player_id"])
+        lineup_player_ids = {
+            int(board_row["player_id"])
+            for lineup in self.db.list_team_lineups(tournament_id, round_id=int(round_data["id"]))
+            for board_row in self.db.list_team_lineup_boards(int(lineup["id"]))
+            if board_row.get("player_id")
+        }
+        self.assertIn(reserve_id, lineup_player_ids)
+
+        export_path = Path(self.temp_dir.name) / "escalacoes.csv"
+        self.export_service.export_team_lineups(tournament_id, export_path)
+        content = export_path.read_text(encoding="utf-8-sig")
+        self.assertIn("Escalacoes por equipes", content)
+        self.assertIn("Substituicoes por equipes", content)
+        self.assertIn("Reserva Equipe 1", content)
+
+    def test_phase6_team_substitution_after_result_requires_formal_correction(self) -> None:
+        tournament_id, team_ids = self._create_team_tournament(teams_count=2, boards_count=2)
+        reserve_id = self.db.create_player(tournament_id, name="Reserva Bloqueio", rating=1500)
+        self.team_service.add_player(team_ids[0], reserve_id, board_number="", role="reserve")
+        round_data = self.service.generate_next_round(tournament_id)
+        match = self.db.list_team_matches_for_round(round_data["id"])[0]
+        board = self.db.list_team_boards(int(match["id"]))[0]
+        self.service.update_result(tournament_id, int(board["id"]), "1-0")
+        team_player_ids = {int(item["player_id"]) for item in self.db.list_team_players(team_ids[0], active_only=True)}
+        color = "white" if int(board["white_player_id"]) in team_player_ids else "black"
+
+        with self.assertRaisesRegex(AppError, "correcao formal"):
+            self.service.adjust_team_board_player(
+                tournament_id,
+                int(round_data["id"]),
+                int(board["id"]),
+                color,
+                reserve_id,
+            )
 
     def test_odd_player_count_does_not_repeat_bye_next_round(self) -> None:
         self._create_players(5)
@@ -1293,12 +2361,15 @@ class PairingServiceTest(unittest.TestCase):
             school_member_id,
         )
         player = self.db.get_player(player_id)
+        tournament_players = self.db.list_players(school_tournament_id, active_only=False)
         member = self.db.get_member(school_member_id)
         class_data = self.db.list_classes(club_id=school_id)[0]
 
         self.assertIn(school_member_id, eligible_ids)
         self.assertNotIn(other_member_id, eligible_ids)
         self.assertEqual(player["club"], "Escola Alpha")
+        self.assertEqual(player["active_class_name"], "Turma A")
+        self.assertEqual(tournament_players[0]["active_class_name"], "Turma A")
         self.assertEqual(member["club_name"], "Escola Alpha")
         self.assertEqual(member["active_class_name"], "Turma A")
         self.assertEqual(class_data["active_members_count"], 1)
@@ -3099,6 +4170,27 @@ class PairingServiceTest(unittest.TestCase):
         self.assertEqual(semicolon_imported["fide_id"], "444")
         self.assertEqual(semicolon_imported["cbx_id"], "555")
 
+        from openpyxl import Workbook
+
+        xlsx_path = Path(self.temp_dir.name) / "players.xlsx"
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.append(["nome", "clube", "elo", "categoria", "id_fide", "id_cbx"])
+        sheet.append(["Carlos Lima", "Clube C", 1610, "ABS", "666", "777"])
+        workbook.save(xlsx_path)
+
+        xlsx_result = self.import_service.import_players(self.tournament_id, xlsx_path)
+        xlsx_imported = next(
+            player
+            for player in self.db.list_players(self.tournament_id)
+            if player["name"] == "Carlos Lima"
+        )
+
+        self.assertEqual(xlsx_result["imported"], 1)
+        self.assertEqual(xlsx_imported["rating"], 1610)
+        self.assertEqual(xlsx_imported["fide_id"], "666")
+        self.assertEqual(xlsx_imported["cbx_id"], "777")
+
     def test_online_registration_import_previews_duplicates_and_imports_ready_rows(self) -> None:
         self.tournament_service.save_profile(
             self.tournament_id,
@@ -3153,6 +4245,51 @@ class PairingServiceTest(unittest.TestCase):
         self.assertEqual(imported["age_category"], "Sub-16")
         self.assertEqual(imported["rating_category"], "Sub-1400")
         self.assertEqual(imported["prize_tags"], "Feminino; Melhor Local")
+
+    def test_online_registration_import_accepts_google_sheets_link(self) -> None:
+        csv_content = (
+            "Nome completo;Data de nascimento;Sexo;Clube / Cidade;Rating nacional;FIDE ID;Categoria\n"
+            "Carla Forms;2007-02-03;Feminino;Curitiba;1510;333;Sub-18\n"
+        ).encode("utf-8")
+
+        class FakeResponse:
+            def __enter__(self) -> "FakeResponse":
+                return self
+
+            def __exit__(self, *_args: object) -> None:
+                return None
+
+            @staticmethod
+            def read() -> bytes:
+                return csv_content
+
+        requested_urls: list[str] = []
+
+        def fake_urlopen(request: object, timeout: int = 0) -> FakeResponse:
+            requested_urls.append(request.full_url)
+            self.assertEqual(timeout, 20)
+            return FakeResponse()
+
+        source_url = "https://docs.google.com/spreadsheets/d/abc123/edit#gid=987"
+        with mock.patch("src.services.export_service.urlopen", side_effect=fake_urlopen):
+            preview = self.import_service.preview_online_registrations(self.tournament_id, source_url)
+            result = self.import_service.import_online_registrations(self.tournament_id, source_url)
+
+        imported = next(
+            player
+            for player in self.db.list_players(self.tournament_id, active_only=False)
+            if player["name"] == "Carla Forms"
+        )
+
+        self.assertEqual(
+            requested_urls[0],
+            "https://docs.google.com/spreadsheets/d/abc123/export?format=csv&gid=987",
+        )
+        self.assertEqual(preview["ready"], 1)
+        self.assertEqual(result["imported"], 1)
+        self.assertEqual(imported["club"], "Curitiba")
+        self.assertEqual(imported["fide_id"], "333")
+        self.assertEqual(imported["category"], "Sub-20")
 
     def test_official_rating_import_updates_tournament_players(self) -> None:
         player_id = self.db.create_player(
@@ -3327,6 +4464,57 @@ class PairingServiceTest(unittest.TestCase):
         self.assertIn("Classificacao", html)
         self.assertIn("Rodada 1", html)
 
+    def test_phase5_public_portal_payload_json_and_html_hide_sensitive_data(self) -> None:
+        first_player = self.db.create_player(
+            self.tournament_id,
+            name="Jogador Publico",
+            rating=1800,
+            club="Clube",
+            category="ABS",
+            birth_date="2010-01-02",
+            fide_id="123456",
+        )
+        self.db.create_player(
+            self.tournament_id,
+            name="Jogador Visitante",
+            rating=1700,
+            club="Clube",
+            category="ABS",
+        )
+        round_data = self.service.generate_next_round(self.tournament_id)
+        pairing = self.db.get_pairings_for_round(round_data["id"])[0]
+        self.db.update_pairing_result(pairing["id"], "1-0")
+        self.service.close_round(self.tournament_id, round_data["id"])
+        self.db.save_app_settings({"live_portal_notice": "Resultados sujeitos a homologacao."})
+        self.db.save_tournament_settings(
+            self.tournament_id,
+            {"contact_email": "arbitro@example.com", "comments": "Comentario interno"},
+        )
+
+        payload = self.export_service.public_tournament_payload(self.tournament_id, mode="publico")
+        serialized = json.dumps(payload, ensure_ascii=False)
+
+        self.assertEqual("publico", payload["mode"])
+        self.assertEqual("Resultados sujeitos a homologacao.", payload["notice"])
+        self.assertEqual("Jogador Publico", payload["players"][0]["name"])
+        self.assertNotIn("arbitro@example.com", serialized)
+        self.assertNotIn("Comentario interno", serialized)
+        self.assertNotIn("2010-01-02", serialized)
+        self.assertNotIn("123456", serialized)
+        self.assertEqual(first_player, payload["players"][0]["id"])
+
+        output_path = Path(self.temp_dir.name) / "publico.json"
+        self.export_service.export_public_json(self.tournament_id, output_path)
+        exported = output_path.read_text(encoding="utf-8")
+        self.assertIn("Jogador Publico", exported)
+        self.assertNotIn("arbitro@example.com", exported)
+
+        html = self.export_service.live_portal_html(self.tournament_id, mode="publico")
+        self.assertIn("Albericus Live", html)
+        self.assertIn("Rodada atual", html)
+        self.assertIn("Fichas publicas", html)
+        self.assertNotIn("arbitro@example.com", html)
+
     def test_export_chess_results_trf16_includes_required_fields(self) -> None:
         tournament_id = self.db.create_tournament(
             "Aberto Sao Paulo",
@@ -3339,6 +4527,7 @@ class PairingServiceTest(unittest.TestCase):
         self.db.save_tournament_settings(
             tournament_id,
             {
+                "fide_event_id": "12345",
                 "federation": "BRA",
                 "chief_arbiter": "Arbitro Chefe",
                 "arbiters": "Adjunto Um",
@@ -3415,6 +4604,72 @@ class PairingServiceTest(unittest.TestCase):
         self.assertTrue(player_lines[0].endswith("2 w 1"))
         self.assertTrue(player_lines[1].endswith("1 b 0"))
 
+    def test_validate_chess_results_trf16_warns_about_open_rounds_and_invalid_fide_data(self) -> None:
+        tournament_id = self.db.create_tournament(
+            "Aberto Validacao",
+            location="Curitiba",
+            rounds_count=2,
+            time_control="60 min",
+            start_date="2026-05-24",
+            end_date="2026-05-25",
+        )
+        self.db.save_tournament_settings(
+            tournament_id,
+            {
+                "federation": "BR",
+                "chief_arbiter": "Arbitro Chefe",
+                "tournament_profile": "fide",
+            },
+        )
+        self.db.save_round_schedule(
+            tournament_id,
+            [
+                {"round_number": 1, "date": "2026-05-24", "time": "10:00"},
+                {"round_number": 2, "date": "data ruim", "time": "15:00"},
+            ],
+        )
+        first_player = self.db.create_player(
+            tournament_id,
+            name="Jogador Um",
+            fide_id="ABC123",
+            federation_id="BR",
+            rating=1800,
+            international_rating=1800,
+            birth_date="data ruim",
+        )
+        second_player = self.db.create_player(
+            tournament_id,
+            name="Jogador Dois",
+            fide_id="222",
+            federation_id="BRA",
+            rating=1700,
+            international_rating=1700,
+            birth_date="2000-01-02",
+        )
+        self.db.create_round_with_pairings(
+            tournament_id,
+            1,
+            [
+                {
+                    "board_number": 1,
+                    "white_player_id": first_player,
+                    "black_player_id": second_player,
+                    "result": "",
+                }
+            ],
+        )
+
+        warnings = self.export_service.validate_chess_results_trf(tournament_id)
+
+        self.assertIn("Federacao FIDE do torneio deve ter 3 letras.", warnings)
+        self.assertIn("Torneio FIDE-rated sem FIDE Event-ID.", warnings)
+        self.assertIn("Rodadas ainda nao fechadas: 1.", warnings)
+        self.assertIn("Rodadas com resultados pendentes/incompletos: 1.", warnings)
+        self.assertIn("Rodadas com data invalida no calendario: 2.", warnings)
+        self.assertTrue(any("FIDE ID numerico" in warning for warning in warnings))
+        self.assertTrue(any("data de nascimento valida" in warning for warning in warnings))
+        self.assertTrue(any("federacao FIDE com 3 letras" in warning for warning in warnings))
+
     def test_export_chess_results_trf16_supports_team_tournaments(self) -> None:
         tournament_id, _team_ids = self._create_team_tournament(teams_count=2, boards_count=2)
         round_data = self.service.generate_next_round(tournament_id)
@@ -3439,6 +4694,151 @@ class PairingServiceTest(unittest.TestCase):
         self.assertTrue(any("   3 w 1" in line for line in player_lines))
         self.assertTrue(any("   4 b =" in line for line in player_lines))
         self.assertTrue(any("Jogadores sem FIDE ID" in warning for warning in warnings))
+
+    def test_federation_exporter_registry_keeps_trf16_flow_extensible(self) -> None:
+        registry = FederationExporterRegistry()
+        exporter = TRF16Exporter(self.export_service)
+        registry.register(exporter)
+
+        self.assertEqual(["trf16"], registry.list_formats())
+        self.assertIs(registry.get("trf16"), exporter)
+
+    def test_validate_chess_results_trf16_reports_special_result_statuses(self) -> None:
+        tournament_id = self.db.create_tournament(
+            "Aberto Pendencias",
+            location="Sao Paulo",
+            rounds_count=1,
+            time_control="15 min",
+            start_date="2026-05-24",
+            end_date="2026-05-24",
+        )
+        self.db.save_tournament_settings(
+            tournament_id,
+            {
+                "fide_event_id": "12345",
+                "federation": "BRA",
+                "chief_arbiter": "Arbitro Chefe",
+                "tournament_profile": "fide",
+            },
+        )
+        self.db.save_round_schedule(
+            tournament_id,
+            [{"round_number": 1, "date": "2026-05-24", "time": "10:00"}],
+        )
+
+        def player(index: int) -> int:
+            return self.db.create_player(
+                tournament_id,
+                name=f"Jogador {index}",
+                federation_id="BRA",
+                fide_id=str(1000 + index),
+                rating=1800 + index,
+                international_rating=1800 + index,
+                birth_date="2000-01-02",
+            )
+
+        players = [player(index) for index in range(1, 7)]
+        round_id = self.db.create_round_with_pairings(
+            tournament_id,
+            1,
+            [
+                {
+                    "board_number": 1,
+                    "white_player_id": players[0],
+                    "black_player_id": players[1],
+                    "result": "1F-0F",
+                    "is_bye": 0,
+                },
+                {
+                    "board_number": 2,
+                    "white_player_id": players[2],
+                    "black_player_id": players[3],
+                    "result": "0F-0F",
+                    "is_bye": 0,
+                },
+                {
+                    "board_number": 3,
+                    "white_player_id": players[4],
+                    "black_player_id": None,
+                    "result": "BYE",
+                    "is_bye": 1,
+                },
+            ],
+        )
+        self.service.close_round(tournament_id, round_id)
+
+        warnings = self.export_service.validate_chess_results_trf(tournament_id)
+
+        self.assertIn("TRF16 contem 1 bye(s).", warnings)
+        self.assertIn("TRF16 contem 1 resultado(s) por WO.", warnings)
+        self.assertIn("TRF16 contem 1 dupla(s) ausencia(s).", warnings)
+        self.assertIn("TRF16 contem 1 jogador(es) nao emparceirado(s) em rodadas geradas.", warnings)
+
+    def test_export_chess_results_trf16_validation_report_and_encoding(self) -> None:
+        tournament_id = self.db.create_tournament(
+            "Aberto Acentuacao",
+            location="Sao Paulo",
+            rounds_count=1,
+            time_control="90 min",
+            start_date="2026-05-24",
+            end_date="2026-05-24",
+        )
+        self.db.save_tournament_settings(
+            tournament_id,
+            {
+                "fide_event_id": "12345",
+                "federation": "BRA",
+                "chief_arbiter": "Arbitro Chefe",
+                "tournament_profile": "fide",
+            },
+        )
+        first_player = self.db.create_player(
+            tournament_id,
+            name="Ávila, José",
+            surname="Ávila",
+            given_name="José",
+            federation_id="BRA",
+            fide_id="1234",
+            rating=2100,
+            international_rating=2100,
+            birth_date="2000-01-02",
+        )
+        second_player = self.db.create_player(
+            tournament_id,
+            name="Núñez, Maria",
+            surname="Núñez",
+            given_name="Maria",
+            federation_id="BRA",
+            fide_id="1235",
+            rating=2000,
+            international_rating=2000,
+            birth_date="2000-01-02",
+        )
+        round_id = self.db.create_round_with_pairings(
+            tournament_id,
+            1,
+            [
+                {
+                    "board_number": 1,
+                    "white_player_id": first_player,
+                    "black_player_id": second_player,
+                    "result": "1-0",
+                }
+            ],
+        )
+        self.service.close_round(tournament_id, round_id)
+
+        trf_path = Path(self.temp_dir.name) / "acentuacao.trf"
+        report_path = Path(self.temp_dir.name) / "pendencias_trf.csv"
+        self.export_service.export_chess_results_trf(tournament_id, trf_path)
+        self.export_service.export_chess_results_trf_validation_report(tournament_id, report_path)
+
+        trf_content = trf_path.read_text(encoding="utf-8")
+        report_content = report_path.read_text(encoding="utf-8")
+        self.assertIn("Avila, Jose", trf_content)
+        self.assertIn("Nunez, Maria", trf_content)
+        self.assertIn("Partidas jogadas", report_content)
+        self.assertIn("1", report_content)
 
     def test_export_club_portal_creates_static_html_package(self) -> None:
         club_id = self.club_service.save_profile(
@@ -4361,6 +5761,27 @@ class PairingServiceTest(unittest.TestCase):
                 WHERE type = 'table' AND name = 'team_boards'
                 """
             ).fetchone()
+            team_lineups_table = migrated_connection.execute(
+                """
+                SELECT name
+                FROM sqlite_master
+                WHERE type = 'table' AND name = 'team_lineups'
+                """
+            ).fetchone()
+            team_lineup_boards_table = migrated_connection.execute(
+                """
+                SELECT name
+                FROM sqlite_master
+                WHERE type = 'table' AND name = 'team_lineup_boards'
+                """
+            ).fetchone()
+            team_substitution_events_table = migrated_connection.execute(
+                """
+                SELECT name
+                FROM sqlite_master
+                WHERE type = 'table' AND name = 'team_substitution_events'
+                """
+            ).fetchone()
             certificate_templates_table = migrated_connection.execute(
                 """
                 SELECT name
@@ -4412,6 +5833,10 @@ class PairingServiceTest(unittest.TestCase):
         self.assertIn("team_standing_primary", settings_columns)
         self.assertIn("team_standing_secondary", settings_columns)
         self.assertIn("team_fixed_board_order", settings_columns)
+        self.assertIn("team_board_order_policy", settings_columns)
+        self.assertIn("team_reserve_policy", settings_columns)
+        self.assertIn("team_lineup_deadline", settings_columns)
+        self.assertIn("team_max_substitutions", settings_columns)
         self.assertIsNotNone(settings_table)
         self.assertIsNotNone(schedule_table)
         self.assertIsNotNone(official_snapshots_table)
@@ -4446,6 +5871,9 @@ class PairingServiceTest(unittest.TestCase):
         self.assertIsNotNone(team_players_table)
         self.assertIsNotNone(team_matches_table)
         self.assertIsNotNone(team_boards_table)
+        self.assertIsNotNone(team_lineups_table)
+        self.assertIsNotNone(team_lineup_boards_table)
+        self.assertIsNotNone(team_substitution_events_table)
         self.assertIsNotNone(certificate_templates_table)
         self.assertIsNotNone(certificate_issuances_table)
         self.assertGreaterEqual(certificate_templates_count, 7)
@@ -4755,6 +6183,107 @@ class PairingServiceTest(unittest.TestCase):
         self.assertIn("idx_audit_log_created", audit_indexes)
         self.assertIn("idx_audit_log_entity", audit_indexes)
         self.assertEqual(Database.SCHEMA_VERSION, user_version)
+
+    def test_v22_database_adds_phase0_arbitration_schema(self) -> None:
+        legacy_path = Path(self.temp_dir.name) / "legacy_v22_phase0.db"
+        Database(legacy_path, backup_dir=self.backup_dir)
+        connection = sqlite3.connect(legacy_path)
+        try:
+            connection.executescript(
+                """
+                DROP TABLE IF EXISTS audit_events;
+                DROP TABLE IF EXISTS pairing_snapshots;
+                DROP TABLE IF EXISTS standings_snapshots;
+                DROP TABLE IF EXISTS tiebreak_components;
+                DROP TABLE IF EXISTS public_tokens;
+                DROP TABLE IF EXISTS result_submissions;
+                PRAGMA user_version = 22;
+                """
+            )
+            connection.commit()
+        finally:
+            connection.close()
+
+        migrated = Database(legacy_path, backup_dir=self.backup_dir)
+        with migrated.connect() as migrated_connection:
+            settings_columns = {
+                row["name"]
+                for row in migrated_connection.execute("PRAGMA table_info(tournament_settings)").fetchall()
+            }
+            round_columns = {
+                row["name"]
+                for row in migrated_connection.execute("PRAGMA table_info(rounds)").fetchall()
+            }
+            phase0_tables = {
+                row["name"]
+                for row in migrated_connection.execute(
+                    """
+                    SELECT name
+                    FROM sqlite_master
+                    WHERE type = 'table'
+                        AND name IN (
+                            'audit_events', 'pairing_snapshots', 'standings_snapshots',
+                            'tiebreak_components', 'public_tokens', 'result_submissions'
+                        )
+                    """
+                ).fetchall()
+            }
+            user_version = migrated_connection.execute("PRAGMA user_version").fetchone()[0]
+
+        self.assertIn("pairing_system", settings_columns)
+        self.assertIn("acceleration_method", settings_columns)
+        self.assertIn("pairing_engine_version", round_columns)
+        self.assertIn("ruleset_version", round_columns)
+        self.assertEqual(
+            {
+                "audit_events", "pairing_snapshots", "standings_snapshots",
+                "tiebreak_components", "public_tokens", "result_submissions",
+            },
+            phase0_tables,
+        )
+        self.assertEqual(Database.SCHEMA_VERSION, user_version)
+
+    def test_current_database_repairs_legacy_users_table_before_login(self) -> None:
+        legacy_path = Path(self.temp_dir.name) / "legacy_current_users.db"
+        legacy_hash = hashlib.sha256("admin".encode()).hexdigest()
+        connection = sqlite3.connect(legacy_path)
+        try:
+            connection.executescript(
+                f"""
+                CREATE TABLE users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT NOT NULL UNIQUE,
+                    password_hash TEXT NOT NULL,
+                    role TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+
+                INSERT INTO users (username, password_hash, role, created_at)
+                VALUES ('admin', '{legacy_hash}', 'admin', '2026-01-01 00:00:00');
+
+                PRAGMA user_version = {Database.SCHEMA_VERSION};
+                """
+            )
+            connection.commit()
+        finally:
+            connection.close()
+
+        migrated = Database(legacy_path, backup_dir=self.backup_dir)
+        security_service = SecurityService(migrated)
+
+        self.assertTrue(security_service.login("admin", "admin"))
+        with migrated.connect() as migrated_connection:
+            user_columns = {
+                row["name"]
+                for row in migrated_connection.execute("PRAGMA table_info(users)").fetchall()
+            }
+            user = migrated_connection.execute(
+                "SELECT password_hash, updated_at FROM users WHERE username = 'admin'"
+            ).fetchone()
+
+        self.assertIn("updated_at", user_columns)
+        self.assertTrue(str(user["password_hash"]).startswith("pbkdf2_sha256$"))
+        self.assertTrue(user["updated_at"])
 
     def test_future_database_version_is_rejected(self) -> None:
         future_path = Path(self.temp_dir.name) / "future.db"

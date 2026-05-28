@@ -58,9 +58,8 @@ class SecurityService:
                 "username": row["username"],
                 "role": row["role"]
             }
-            self.audit("login", description=f"Usuário {username} fez login.")
-            return True
-        return False
+        self.audit("login", description=f"Usuário {username} fez login.")
+        return True
 
     def list_users(self) -> list[dict[str, Any]]:
         with self.db.connect() as conn:

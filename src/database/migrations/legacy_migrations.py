@@ -34,6 +34,12 @@ class LegacyMigrations:
             20: self._migrate_to_v20,
             21: self._migrate_to_v21,
             22: self._migrate_to_v22,
+            23: self._migrate_to_v23,
+            24: self._migrate_to_v24,
+            25: self._migrate_to_v25,
+            26: self._migrate_to_v26,
+            27: self._migrate_to_v27,
+            28: self._migrate_to_v28,
         }
 
     def _run_schema_migrations(self, connection: sqlite3.Connection) -> None:
@@ -94,6 +100,20 @@ class LegacyMigrations:
             self._migrate_to_v20(connection)
         if self.db.SCHEMA_VERSION >= 21:
             self._migrate_to_v21(connection)
+        if self.db.SCHEMA_VERSION >= 22:
+            self._migrate_to_v22(connection)
+        if self.db.SCHEMA_VERSION >= 23:
+            self._migrate_to_v23(connection)
+        if self.db.SCHEMA_VERSION >= 24:
+            self._migrate_to_v24(connection)
+        if self.db.SCHEMA_VERSION >= 25:
+            self._migrate_to_v25(connection)
+        if self.db.SCHEMA_VERSION >= 26:
+            self._migrate_to_v26(connection)
+        if self.db.SCHEMA_VERSION >= 27:
+            self._migrate_to_v27(connection)
+        if self.db.SCHEMA_VERSION >= 28:
+            self._migrate_to_v28(connection)
 
     def _migrate_to_v1(self, connection: sqlite3.Connection) -> None:
         now = self.db.now()
@@ -620,6 +640,26 @@ class LegacyMigrations:
                 updated_at TEXT NOT NULL
             )
             """
+        )
+        user_columns = self.db._table_columns(connection, "users")
+        user_migrations = {
+            "username": "TEXT NOT NULL DEFAULT ''",
+            "password_hash": "TEXT NOT NULL DEFAULT ''",
+            "role": "TEXT NOT NULL DEFAULT 'admin'",
+            "created_at": "TEXT NOT NULL DEFAULT ''",
+            "updated_at": "TEXT NOT NULL DEFAULT ''",
+        }
+        for column, definition in user_migrations.items():
+            if column not in user_columns:
+                connection.execute(f"ALTER TABLE users ADD COLUMN {column} {definition}")
+        connection.execute(
+            """
+            UPDATE users
+            SET created_at = CASE WHEN created_at = '' THEN ? ELSE created_at END,
+                updated_at = CASE WHEN updated_at = '' THEN ? ELSE updated_at END,
+                role = CASE WHEN role = '' THEN 'admin' ELSE role END
+            """,
+            (now, now),
         )
         # Verifica se já existe algum admin. Se não houver, insere o padrão.
         cursor = connection.execute("SELECT COUNT(*) FROM users WHERE role = 'admin'")
@@ -1150,3 +1190,342 @@ class LegacyMigrations:
             connection.execute("ALTER TABLE members ADD COLUMN online_blitz_rating INTEGER DEFAULT 0")
         if "online_rapid_rating" not in member_columns:
             connection.execute("ALTER TABLE members ADD COLUMN online_rapid_rating INTEGER DEFAULT 0")
+
+    def _migrate_to_v23(self, connection: sqlite3.Connection) -> None:
+        self._ensure_arbitration_phase0_schema(connection)
+
+    def _migrate_to_v24(self, connection: sqlite3.Connection) -> None:
+        self._ensure_tiebreak_components_schema(connection)
+
+    def _migrate_to_v25(self, connection: sqlite3.Connection) -> None:
+        self._ensure_public_result_submission_schema(connection)
+
+    def _migrate_to_v26(self, connection: sqlite3.Connection) -> None:
+        self._ensure_team_lineup_schema(connection)
+
+    def _migrate_to_v27(self, connection: sqlite3.Connection) -> None:
+        self._ensure_sync_schema(connection)
+
+    def _migrate_to_v28(self, connection: sqlite3.Connection) -> None:
+        self._ensure_clock_events_schema(connection)
+
+    def _ensure_arbitration_phase0_schema(self, connection: sqlite3.Connection) -> None:
+        round_columns = self.db._table_columns(connection, "rounds")
+        if "pairing_engine_version" not in round_columns:
+            connection.execute(
+                "ALTER TABLE rounds ADD COLUMN pairing_engine_version TEXT NOT NULL DEFAULT 'albericus-swiss-1'"
+            )
+        if "ruleset_version" not in round_columns:
+            connection.execute(
+                "ALTER TABLE rounds ADD COLUMN ruleset_version TEXT NOT NULL DEFAULT 'albericus-2026-phase0'"
+            )
+
+        settings_columns = self.db._table_columns(connection, "tournament_settings")
+        if "pairing_system" not in settings_columns:
+            connection.execute(
+                "ALTER TABLE tournament_settings ADD COLUMN pairing_system TEXT NOT NULL DEFAULT 'custom_authorized'"
+            )
+        if "acceleration_method" not in settings_columns:
+            connection.execute(
+                "ALTER TABLE tournament_settings ADD COLUMN acceleration_method TEXT NOT NULL DEFAULT 'none'"
+            )
+
+        connection.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS audit_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_id TEXT NOT NULL UNIQUE,
+                tournament_id INTEGER,
+                round_id INTEGER,
+                entity_type TEXT NOT NULL DEFAULT '',
+                entity_id INTEGER,
+                action TEXT NOT NULL,
+                actor TEXT DEFAULT '',
+                role TEXT DEFAULT '',
+                reason TEXT DEFAULT '',
+                before_hash TEXT DEFAULT '',
+                after_hash TEXT DEFAULT '',
+                before_json TEXT DEFAULT '',
+                after_json TEXT DEFAULT '',
+                metadata_json TEXT DEFAULT '',
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
+                FOREIGN KEY (round_id) REFERENCES rounds(id) ON DELETE SET NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS pairing_snapshots (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tournament_id INTEGER NOT NULL,
+                round_id INTEGER,
+                round_number INTEGER NOT NULL,
+                stage TEXT NOT NULL,
+                pairing_system TEXT NOT NULL DEFAULT '',
+                pairing_engine_version TEXT NOT NULL DEFAULT '',
+                ruleset_version TEXT NOT NULL DEFAULT '',
+                snapshot_json TEXT NOT NULL,
+                snapshot_hash TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
+                FOREIGN KEY (round_id) REFERENCES rounds(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS standings_snapshots (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tournament_id INTEGER NOT NULL,
+                round_id INTEGER NOT NULL,
+                round_number INTEGER NOT NULL,
+                standings_json TEXT NOT NULL,
+                snapshot_hash TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                UNIQUE (tournament_id, round_id),
+                FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
+                FOREIGN KEY (round_id) REFERENCES rounds(id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_audit_events_tournament
+                ON audit_events(tournament_id, created_at);
+            CREATE INDEX IF NOT EXISTS idx_audit_events_entity
+                ON audit_events(entity_type, entity_id, created_at);
+            CREATE INDEX IF NOT EXISTS idx_pairing_snapshots_round
+                ON pairing_snapshots(tournament_id, round_number, stage);
+            CREATE INDEX IF NOT EXISTS idx_standings_snapshots_round
+                ON standings_snapshots(tournament_id, round_id);
+            """
+        )
+
+    def _ensure_public_result_submission_schema(self, connection: sqlite3.Connection) -> None:
+        connection.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS public_tokens (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                token_hash TEXT NOT NULL UNIQUE,
+                tournament_id INTEGER NOT NULL,
+                round_id INTEGER NOT NULL,
+                pairing_id INTEGER NOT NULL,
+                board_number INTEGER NOT NULL DEFAULT 0,
+                purpose TEXT NOT NULL DEFAULT 'result_submission',
+                status TEXT NOT NULL DEFAULT 'active',
+                expires_at TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                used_at TEXT DEFAULT '',
+                FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
+                FOREIGN KEY (round_id) REFERENCES rounds(id) ON DELETE CASCADE,
+                FOREIGN KEY (pairing_id) REFERENCES pairings(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS result_submissions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tournament_id INTEGER NOT NULL,
+                round_id INTEGER NOT NULL,
+                pairing_id INTEGER NOT NULL,
+                token_id INTEGER,
+                board_number INTEGER NOT NULL DEFAULT 0,
+                submitted_result TEXT NOT NULL,
+                submitter TEXT DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'submitted',
+                submitted_at TEXT NOT NULL,
+                reviewed_at TEXT DEFAULT '',
+                reviewer TEXT DEFAULT '',
+                reason TEXT DEFAULT '',
+                FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
+                FOREIGN KEY (round_id) REFERENCES rounds(id) ON DELETE CASCADE,
+                FOREIGN KEY (pairing_id) REFERENCES pairings(id) ON DELETE CASCADE,
+                FOREIGN KEY (token_id) REFERENCES public_tokens(id) ON DELETE SET NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_public_tokens_hash
+                ON public_tokens(token_hash);
+            CREATE INDEX IF NOT EXISTS idx_public_tokens_pairing
+                ON public_tokens(tournament_id, round_id, pairing_id, status);
+            CREATE INDEX IF NOT EXISTS idx_result_submissions_status
+                ON result_submissions(tournament_id, status, submitted_at);
+            CREATE INDEX IF NOT EXISTS idx_result_submissions_pairing
+                ON result_submissions(pairing_id, status);
+            """
+        )
+
+    def _ensure_team_lineup_schema(self, connection: sqlite3.Connection) -> None:
+        settings_columns = self.db._table_columns(connection, "tournament_settings")
+        additions = {
+            "team_board_order_policy": "TEXT NOT NULL DEFAULT 'fixed'",
+            "team_reserve_policy": "TEXT NOT NULL DEFAULT 'same_team'",
+            "team_lineup_deadline": "TEXT DEFAULT ''",
+            "team_max_substitutions": "INTEGER NOT NULL DEFAULT 0",
+        }
+        for column, definition in additions.items():
+            if column not in settings_columns:
+                connection.execute(f"ALTER TABLE tournament_settings ADD COLUMN {column} {definition}")
+
+        connection.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS team_lineups (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tournament_id INTEGER NOT NULL,
+                round_id INTEGER NOT NULL,
+                team_match_id INTEGER NOT NULL,
+                team_id INTEGER NOT NULL,
+                status TEXT NOT NULL DEFAULT 'approved',
+                submitted_at TEXT DEFAULT '',
+                approved_at TEXT DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE (round_id, team_match_id, team_id),
+                FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
+                FOREIGN KEY (round_id) REFERENCES rounds(id) ON DELETE CASCADE,
+                FOREIGN KEY (team_match_id) REFERENCES team_matches(id) ON DELETE CASCADE,
+                FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS team_lineup_boards (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                lineup_id INTEGER NOT NULL,
+                board_number INTEGER NOT NULL,
+                player_id INTEGER,
+                color TEXT NOT NULL DEFAULT '',
+                role TEXT NOT NULL DEFAULT 'starter',
+                created_at TEXT NOT NULL,
+                UNIQUE (lineup_id, board_number),
+                FOREIGN KEY (lineup_id) REFERENCES team_lineups(id) ON DELETE CASCADE,
+                FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE SET NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS team_substitution_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tournament_id INTEGER NOT NULL,
+                round_id INTEGER NOT NULL,
+                team_match_id INTEGER NOT NULL,
+                team_board_id INTEGER NOT NULL,
+                team_id INTEGER NOT NULL,
+                board_number INTEGER NOT NULL,
+                color TEXT NOT NULL,
+                out_player_id INTEGER,
+                in_player_id INTEGER NOT NULL,
+                reason TEXT DEFAULT '',
+                requires_correction INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
+                FOREIGN KEY (round_id) REFERENCES rounds(id) ON DELETE CASCADE,
+                FOREIGN KEY (team_match_id) REFERENCES team_matches(id) ON DELETE CASCADE,
+                FOREIGN KEY (team_board_id) REFERENCES team_boards(id) ON DELETE CASCADE,
+                FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE,
+                FOREIGN KEY (out_player_id) REFERENCES players(id) ON DELETE SET NULL,
+                FOREIGN KEY (in_player_id) REFERENCES players(id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_team_lineups_round
+                ON team_lineups(tournament_id, round_id, team_id);
+            CREATE INDEX IF NOT EXISTS idx_team_lineup_boards_lineup
+                ON team_lineup_boards(lineup_id, board_number);
+            CREATE INDEX IF NOT EXISTS idx_team_substitutions_round
+                ON team_substitution_events(tournament_id, round_id, team_id);
+            """
+        )
+
+    def _ensure_sync_schema(self, connection: sqlite3.Connection) -> None:
+        connection.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS devices (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                device_id TEXT NOT NULL UNIQUE,
+                name TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'assistant',
+                status TEXT NOT NULL DEFAULT 'authorized',
+                secret_hash TEXT DEFAULT '',
+                last_seen_at TEXT DEFAULT '',
+                metadata_json TEXT DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS sync_outbox (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_id TEXT NOT NULL UNIQUE,
+                device_id TEXT NOT NULL DEFAULT '',
+                tournament_id INTEGER,
+                round_id INTEGER,
+                entity_type TEXT NOT NULL DEFAULT '',
+                entity_id INTEGER,
+                action TEXT NOT NULL,
+                payload_json TEXT NOT NULL,
+                payload_hash TEXT NOT NULL,
+                conflict_policy TEXT NOT NULL DEFAULT 'server_authoritative',
+                status TEXT NOT NULL DEFAULT 'pending',
+                attempts INTEGER NOT NULL DEFAULT 0,
+                last_error TEXT DEFAULT '',
+                next_attempt_at TEXT DEFAULT '',
+                synced_at TEXT DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
+                FOREIGN KEY (round_id) REFERENCES rounds(id) ON DELETE SET NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_devices_status
+                ON devices(status, role, name);
+            CREATE INDEX IF NOT EXISTS idx_sync_outbox_status
+                ON sync_outbox(status, next_attempt_at, created_at);
+            CREATE INDEX IF NOT EXISTS idx_sync_outbox_tournament
+                ON sync_outbox(tournament_id, status, created_at);
+            """
+        )
+
+    def _ensure_clock_events_schema(self, connection: sqlite3.Connection) -> None:
+        connection.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS clock_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_id TEXT NOT NULL UNIQUE,
+                tournament_id INTEGER NOT NULL,
+                round_id INTEGER,
+                pairing_id INTEGER,
+                board_number INTEGER NOT NULL DEFAULT 0,
+                player_id INTEGER,
+                device_id TEXT DEFAULT '',
+                source TEXT NOT NULL DEFAULT 'manual',
+                event_type TEXT NOT NULL,
+                side TEXT DEFAULT '',
+                seconds_remaining INTEGER,
+                note TEXT DEFAULT '',
+                payload_json TEXT NOT NULL DEFAULT '{}',
+                status TEXT NOT NULL DEFAULT 'logged',
+                occurred_at TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
+                FOREIGN KEY (round_id) REFERENCES rounds(id) ON DELETE SET NULL,
+                FOREIGN KEY (pairing_id) REFERENCES pairings(id) ON DELETE SET NULL,
+                FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE SET NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_clock_events_tournament
+                ON clock_events(tournament_id, round_id, occurred_at);
+            CREATE INDEX IF NOT EXISTS idx_clock_events_pairing
+                ON clock_events(pairing_id, event_type, occurred_at);
+            """
+        )
+
+    def _ensure_tiebreak_components_schema(self, connection: sqlite3.Connection) -> None:
+        connection.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS tiebreak_components (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tournament_id INTEGER NOT NULL,
+                round_id INTEGER,
+                round_number INTEGER NOT NULL DEFAULT 0,
+                player_id INTEGER NOT NULL,
+                player_name TEXT NOT NULL DEFAULT '',
+                criterion TEXT NOT NULL,
+                value REAL,
+                components_json TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                UNIQUE (tournament_id, round_id, player_id, criterion),
+                FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
+                FOREIGN KEY (round_id) REFERENCES rounds(id) ON DELETE CASCADE,
+                FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_tiebreak_components_player
+                ON tiebreak_components(tournament_id, player_id, criterion);
+            CREATE INDEX IF NOT EXISTS idx_tiebreak_components_round
+                ON tiebreak_components(tournament_id, round_id);
+            """
+        )

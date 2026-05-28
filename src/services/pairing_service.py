@@ -37,9 +37,274 @@ class PairingService:
     REPEAT_PAIRING_PENALTY = 1_000_000
     SCORE_GROUP_FLOAT_PENALTY = 10_000
     SCORE_DIFF_PENALTY = 1_000
+    PAIRING_ENGINE_VERSION = "albericus-swiss-1"
+    TEAM_PAIRING_ENGINE_VERSION = "albericus-team-swiss-1"
+    RULESET_VERSION = "albericus-2026-phase0"
 
     def __init__(self, db: Database) -> None:
         self.db = db
+
+    def preview_next_round(self, tournament_id: int) -> dict[str, Any]:
+        tournament = self.db.get_tournament(tournament_id)
+        if not tournament:
+            raise AppError("Selecione um torneio valido.")
+        if tournament.get("competition_type") == "team":
+            plan = self._team_next_round_plan(tournament_id, tournament)
+            return self._team_preview_payload(tournament_id, tournament, plan)
+        plan = self._individual_next_round_plan(tournament_id, tournament)
+        return self._individual_preview_payload(tournament_id, tournament, plan)
+
+    def arbitration_dashboard(self, tournament_id: int) -> dict[str, Any]:
+        tournament = self.db.get_tournament(tournament_id)
+        if not tournament:
+            raise AppError("Selecione um torneio valido.")
+        rounds = sorted(self.db.list_rounds(tournament_id), key=lambda item: int(item["number"]))
+        latest_round = rounds[-1] if rounds else None
+        players = self.db.list_players(tournament_id, active_only=False)
+        absent_players = [player for player in players if player.get("player_status") == "absent"]
+        corrections = self.db.list_audit_events(tournament_id, limit=5000)
+        correction_count = sum(1 for event in corrections if "corrected" in str(event.get("action", "")))
+        submitted_results = len(self.db.list_result_submissions(tournament_id=tournament_id, status="submitted"))
+        generated_rounds = len(rounds)
+        closed_rounds = sum(1 for item in rounds if item.get("status") == "closed")
+        metrics: dict[str, Any] = {
+            "tournament_name": tournament.get("name", ""),
+            "competition_type": tournament.get("competition_type", "individual"),
+            "rounds_count": int(tournament.get("rounds_count") or 0),
+            "generated_rounds": generated_rounds,
+            "closed_rounds": closed_rounds,
+            "absent_players": len(absent_players),
+            "corrections": correction_count,
+            "latest_round_number": int(latest_round["number"]) if latest_round else 0,
+            "latest_round_status": latest_round.get("status", "") if latest_round else "sem_rodadas",
+            "pending_results": 0,
+            "submitted_results": submitted_results,
+            "byes": 0,
+            "blocking_issues": 0,
+            "ready_to_close": False,
+            "can_preview_next_round": False,
+            "preview_alerts": 0,
+        }
+        alerts: list[str] = []
+        if latest_round:
+            if tournament.get("competition_type") == "team":
+                metrics.update(self._team_round_dashboard_metrics(int(latest_round["id"])))
+            else:
+                metrics.update(self._individual_round_dashboard_metrics(int(latest_round["id"])))
+            if latest_round.get("status") != "closed":
+                if metrics["pending_results"]:
+                    alerts.append(f"Rodada {latest_round['number']} tem {metrics['pending_results']} resultado(s) pendente(s).")
+                else:
+                    blocking_issues = self._blocking_arbitration_issues_for_round(tournament_id, int(latest_round["id"]))
+                    metrics["blocking_issues"] = len(blocking_issues)
+                    if blocking_issues:
+                        metrics["ready_to_close"] = False
+                        alerts.append(
+                            f"Rodada {latest_round['number']} tem {len(blocking_issues)} pendencia(s) de arbitragem bloqueante(s)."
+                        )
+                    else:
+                        alerts.append(f"Rodada {latest_round['number']} esta pronta para fechamento.")
+        else:
+            alerts.append("Nenhuma rodada gerada. Use a chamada inicial antes da primeira rodada.")
+        if absent_players:
+            alerts.append(f"{len(absent_players)} jogador(es) marcado(s) como ausente(s).")
+        if correction_count:
+            alerts.append(f"{correction_count} correcao(oes) auditada(s) no torneio.")
+        if submitted_results:
+            alerts.append(f"{submitted_results} resultado(s) enviado(s) por QR aguardando aprovacao.")
+
+        if not latest_round or latest_round.get("status") == "closed":
+            try:
+                preview = self.preview_next_round(tournament_id)
+                metrics["can_preview_next_round"] = True
+                metrics["preview_alerts"] = int(preview.get("alerts_count") or 0)
+                if metrics["preview_alerts"]:
+                    alerts.append(f"Previa da proxima rodada tem {metrics['preview_alerts']} alerta(s).")
+            except AppError as exc:
+                alerts.append(str(exc))
+
+        return {"metrics": metrics, "alerts": alerts}
+
+    def arbitration_issues(self, tournament_id: int, limit: int = 200) -> dict[str, Any]:
+        tournament = self.db.get_tournament(tournament_id)
+        if not tournament:
+            raise AppError("Selecione um torneio valido.")
+        issues: list[dict[str, Any]] = []
+        safe_limit = max(1, min(int(limit or 200), 1000))
+        acknowledged_keys = self._acknowledged_arbitration_issue_keys(tournament_id)
+
+        for submission in self.db.list_result_submissions(tournament_id=tournament_id, status="submitted", limit=safe_limit):
+            issues.append(
+                {
+                    "issue_key": f"qr:result_submission:{submission.get('id')}",
+                    "severity": "decision",
+                    "source": "qr",
+                    "kind": "result_submission",
+                    "title": f"Resultado QR pendente - mesa {submission.get('board_number') or ''}",
+                    "detail": f"Resultado enviado: {submission.get('submitted_result') or ''}",
+                    "round_id": submission.get("round_id"),
+                    "entity_id": submission.get("id"),
+                    "created_at": submission.get("submitted_at") or "",
+                    "payload": submission,
+                }
+            )
+
+        for event in self.db.list_audit_events(tournament_id, action="sync_remote_rejected", limit=safe_limit):
+            issues.append(self._audit_issue(event, "sync", "remote_rejected", "Evento remoto rejeitado"))
+        for event in self.db.list_audit_events(tournament_id, action="sync_event_rejected", limit=safe_limit):
+            issues.append(self._audit_issue(event, "sync", "outbox_rejected", "Evento local rejeitado pelo servidor"))
+
+        for event in self.db.list_clock_events(tournament_id=tournament_id, limit=safe_limit):
+            event_type = str(event.get("event_type") or "")
+            seconds = int(event.get("seconds_remaining") or 999999)
+            if event_type == "flag_fall":
+                issues.append(self._clock_issue(event, "Queda de seta registrada"))
+            elif event_type == "absence":
+                issues.append(self._clock_issue(event, "Ausencia registrada"))
+            elif event_type == "time_warning" and seconds <= 60:
+                issues.append(self._clock_issue(event, "Alerta de tempo critico"))
+
+        issues = [issue for issue in issues if str(issue.get("issue_key") or "") not in acknowledged_keys]
+        issues.sort(key=lambda item: str(item.get("created_at") or ""), reverse=True)
+        issues = issues[:safe_limit]
+        metrics = {
+            "total": len(issues),
+            "qr_pending": sum(1 for item in issues if item["source"] == "qr"),
+            "sync_conflicts": sum(1 for item in issues if item["source"] == "sync"),
+            "clock_alerts": sum(1 for item in issues if item["source"] == "clock"),
+            "decision_required": sum(1 for item in issues if item["severity"] == "decision"),
+        }
+        return {"metrics": metrics, "issues": issues}
+
+    def acknowledge_arbitration_issue(self, tournament_id: int, issue_key: str, note: str = "") -> int:
+        tournament = self.db.get_tournament(tournament_id)
+        if not tournament:
+            raise AppError("Selecione um torneio valido.")
+        normalized_key = str(issue_key or "").strip()
+        if not normalized_key:
+            raise AppError("Selecione uma pendencia.")
+
+        issues = self.arbitration_issues(tournament_id, limit=1000)["issues"]
+        issue = next((item for item in issues if str(item.get("issue_key") or "") == normalized_key), None)
+        if not issue:
+            raise AppError("Pendencia nao encontrada ou ja tratada.")
+        if issue.get("source") == "qr":
+            raise AppError("Use Aprovar QR ou Rejeitar QR para pendencia QR.")
+
+        return self.db.create_audit_event(
+            action="arbitration_issue_acknowledged",
+            tournament_id=tournament_id,
+            round_id=issue.get("round_id"),
+            entity_type="arbitration_issue",
+            entity_id=None,
+            reason=note.strip() or "Pendencia marcada como ciente.",
+            after={"issue_key": normalized_key, "issue": issue},
+            metadata={"source": issue.get("source"), "kind": issue.get("kind")},
+        )
+
+    def _acknowledged_arbitration_issue_keys(self, tournament_id: int) -> set[str]:
+        acknowledged: set[str] = set()
+        for event in self.db.list_audit_events(
+            tournament_id,
+            action="arbitration_issue_acknowledged",
+            entity_type="arbitration_issue",
+            limit=5000,
+        ):
+            try:
+                payload = json.loads(event.get("after_json") or "{}")
+            except json.JSONDecodeError:
+                payload = {}
+            issue_key = str(payload.get("issue_key") or "").strip()
+            if issue_key:
+                acknowledged.add(issue_key)
+        return acknowledged
+
+    def _blocking_arbitration_issues_for_round(self, tournament_id: int, round_id: int) -> list[dict[str, Any]]:
+        issues = self.arbitration_issues(tournament_id, limit=1000)["issues"]
+        return [
+            issue
+            for issue in issues
+            if issue.get("severity") == "decision" and self._issue_matches_round(issue, round_id)
+        ]
+
+    @staticmethod
+    def _issue_matches_round(issue: dict[str, Any], round_id: int) -> bool:
+        raw_round_id = issue.get("round_id")
+        if raw_round_id in (None, ""):
+            return True
+        try:
+            return int(raw_round_id) == int(round_id)
+        except (TypeError, ValueError):
+            return True
+
+    @staticmethod
+    def _blocking_issues_message(issues: list[dict[str, Any]]) -> str:
+        if not issues:
+            return ""
+        summaries = [
+            f"{issue.get('source') or ''}/{issue.get('kind') or ''}".strip("/")
+            for issue in issues[:3]
+        ]
+        suffix = f" ({', '.join(summaries)})" if summaries else ""
+        return f"Resolva as pendencias de arbitragem bloqueantes antes de fechar a rodada{suffix}."
+
+    @staticmethod
+    def _audit_issue(event: dict[str, Any], source: str, kind: str, title: str) -> dict[str, Any]:
+        event_identifier = event.get("event_id") or event.get("id") or event.get("entity_id") or ""
+        return {
+            "issue_key": f"{source}:{kind}:{event_identifier}",
+            "severity": "decision",
+            "source": source,
+            "kind": kind,
+            "title": title,
+            "detail": event.get("reason") or event.get("action") or "",
+            "round_id": event.get("round_id"),
+            "entity_id": event.get("entity_id"),
+            "created_at": event.get("created_at") or "",
+            "payload": event,
+        }
+
+    @staticmethod
+    def _clock_issue(event: dict[str, Any], title: str) -> dict[str, Any]:
+        event_identifier = event.get("event_id") or event.get("id") or ""
+        return {
+            "issue_key": f"clock:{event.get('event_type') or ''}:{event_identifier}",
+            "severity": "attention",
+            "source": "clock",
+            "kind": str(event.get("event_type") or ""),
+            "title": title,
+            "detail": event.get("note") or "Apenas alerta; o arbitro deve decidir manualmente.",
+            "round_id": event.get("round_id"),
+            "entity_id": event.get("id"),
+            "created_at": event.get("occurred_at") or event.get("created_at") or "",
+            "payload": event,
+        }
+
+    def _individual_round_dashboard_metrics(self, round_id: int) -> dict[str, Any]:
+        pairings = self.db.get_pairings_for_round(round_id)
+        pending = [item for item in pairings if not item.get("result") or item.get("result") not in FINAL_RESULTS]
+        byes = [item for item in pairings if item.get("is_bye")]
+        return {
+            "pending_results": len(pending),
+            "byes": len(byes),
+            "ready_to_close": bool(pairings) and not pending,
+        }
+
+    def _team_round_dashboard_metrics(self, round_id: int) -> dict[str, Any]:
+        matches = self.db.list_team_matches_for_round(round_id)
+        pending = 0
+        byes = 0
+        for match in matches:
+            if match.get("is_bye"):
+                byes += 1
+                continue
+            boards = self.db.list_team_boards(int(match["id"]))
+            pending += sum(1 for board in boards if not board.get("result") or board.get("result") not in FINAL_RESULTS)
+        return {
+            "pending_results": pending,
+            "byes": byes,
+            "ready_to_close": bool(matches) and pending == 0,
+        }
 
     def generate_next_round(self, tournament_id: int) -> dict[str, Any]:
         tournament = self.db.get_tournament(tournament_id)
@@ -48,6 +313,69 @@ class PairingService:
         if tournament.get("competition_type") == "team":
             return self._generate_next_team_round(tournament_id, tournament)
 
+        plan = self._individual_next_round_plan(tournament_id, tournament)
+        players = plan["players"]
+        settings = plan["settings"]
+        next_number = int(plan["round_number"])
+        pairings = plan["pairings"]
+
+        input_snapshot = self._pairing_input_snapshot(
+            tournament_id=tournament_id,
+            tournament=tournament,
+            settings=settings,
+            round_number=next_number,
+            participants=players,
+        )
+        self.db.create_pairing_snapshot(
+            tournament_id,
+            next_number,
+            "input",
+            input_snapshot,
+            pairing_system=str(settings.get("pairing_system") or "custom_authorized"),
+            pairing_engine_version=self.PAIRING_ENGINE_VERSION,
+            ruleset_version=self.RULESET_VERSION,
+        )
+        self.db.backup_before("generate_round", tournament_id=tournament_id)
+        round_id = self.db.create_round_with_pairings(
+            tournament_id,
+            next_number,
+            pairings,
+            pairing_engine_version=self.PAIRING_ENGINE_VERSION,
+            ruleset_version=self.RULESET_VERSION,
+        )
+        self.db.create_pairing_snapshot(
+            tournament_id,
+            next_number,
+            "output",
+            {"round_number": next_number, "pairings": pairings},
+            round_id=round_id,
+            pairing_system=str(settings.get("pairing_system") or "custom_authorized"),
+            pairing_engine_version=self.PAIRING_ENGINE_VERSION,
+            ruleset_version=self.RULESET_VERSION,
+        )
+        self.db.create_audit_event(
+            action="round_generated",
+            tournament_id=tournament_id,
+            round_id=round_id,
+            entity_type="round",
+            entity_id=round_id,
+            after={"round_number": next_number, "pairings_count": len(pairings)},
+            metadata={
+                "pairing_engine_version": self.PAIRING_ENGINE_VERSION,
+                "ruleset_version": self.RULESET_VERSION,
+            },
+        )
+        logger.info("Rodada %s gerada para o torneio %s", next_number, tournament_id)
+        if tournament["status"] == "draft":
+            self.db.update_tournament_status(tournament_id, "running")
+
+        generated = self.db.get_round_by_number(tournament_id, next_number)
+        if not generated:
+            raise AppError("A rodada foi gerada, mas nao pode ser reaberta.")
+        generated["id"] = round_id
+        return generated
+
+    def _individual_next_round_plan(self, tournament_id: int, tournament: dict[str, Any]) -> dict[str, Any]:
         players = self.db.list_players(tournament_id, active_only=True)
         if len(players) < 2:
             raise AppError("Cadastre pelo menos 2 jogadores ativos.")
@@ -73,13 +401,205 @@ class PairingService:
                 pairings = self._first_round_pairings(players)
             else:
                 pairings = self._swiss_pairings(tournament_id, players)
+        return {
+            "players": players,
+            "settings": settings,
+            "round_number": next_number,
+            "pairings": pairings,
+        }
 
-        round_id = self.db.create_round_with_pairings(
+    def _pairing_input_snapshot(
+        self,
+        tournament_id: int,
+        tournament: dict[str, Any],
+        settings: dict[str, Any],
+        round_number: int,
+        participants: list[dict[str, Any]],
+        extra: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        previous_rounds = self.db.list_rounds(tournament_id)
+        previous_pairings = self.db.get_pairings_for_tournament(tournament_id)
+        return {
+            "tournament": {
+                "id": int(tournament["id"]),
+                "name": tournament.get("name", ""),
+                "competition_type": tournament.get("competition_type", "individual"),
+                "rounds_count": int(tournament.get("rounds_count") or 0),
+                "bye_points": float(tournament.get("bye_points") or 0.0),
+            },
+            "settings": {
+                "pairing_method": settings.get("pairing_method", "swiss"),
+                "pairing_system": settings.get("pairing_system", "custom_authorized"),
+                "acceleration_method": settings.get("acceleration_method", "none"),
+                "disable_bye": int(settings.get("disable_bye", 0) or 0),
+                "initial_order": settings.get("initial_order", "rating"),
+            },
+            "round_number": int(round_number),
+            "participants": [
+                {
+                    "id": int(item["id"]),
+                    "name": str(item.get("name") or ""),
+                    "rating": int(item.get("rating") or item.get("seed_rating") or 0),
+                    "active": int(item.get("active", 1) or 0),
+                    "status": str(item.get("player_status") or item.get("status") or ""),
+                }
+                for item in participants
+            ],
+            "previous_rounds": [
+                {
+                    "id": int(item["id"]),
+                    "number": int(item["number"]),
+                    "status": item.get("status", ""),
+                }
+                for item in sorted(previous_rounds, key=lambda row: int(row["number"]))
+            ],
+            "previous_pairings": [
+                {
+                    "round_number": int(item["round_number"]),
+                    "board_number": int(item["board_number"]),
+                    "white_player_id": int(item["white_player_id"]),
+                    "black_player_id": int(item["black_player_id"]) if item.get("black_player_id") else None,
+                    "result": item.get("result", ""),
+                    "is_bye": int(item.get("is_bye") or 0),
+                }
+                for item in previous_pairings
+            ],
+            "extra": extra or {},
+        }
+
+    def _individual_preview_payload(
+        self,
+        tournament_id: int,
+        tournament: dict[str, Any],
+        plan: dict[str, Any],
+    ) -> dict[str, Any]:
+        players_by_id = {int(player["id"]): player for player in plan["players"]}
+        histories = self._color_histories(tournament_id)
+        played_pairs = self._played_pairs(tournament_id)
+        standings = {int(item["player_id"]): item for item in self.standings(tournament_id)}
+        preview_pairings = []
+        alert_count = 0
+        for pairing in plan["pairings"]:
+            white_id = int(pairing["white_player_id"])
+            black_id = int(pairing["black_player_id"]) if pairing.get("black_player_id") else None
+            alerts = []
+            explanation = []
+            if pairing.get("is_bye"):
+                alerts.append("Bye")
+                explanation.append("Jogador recebeu bye por numero impar de participantes ativos.")
+            elif black_id is not None:
+                if frozenset((white_id, black_id)) in played_pairs:
+                    alerts.append("Confronto repetido")
+                white_score = float(standings.get(white_id, {}).get("points", 0.0) or 0.0)
+                black_score = float(standings.get(black_id, {}).get("points", 0.0) or 0.0)
+                if abs(white_score - black_score) > 1.0:
+                    alerts.append("Scoregroup distante")
+                explanation.append(
+                    "Pareado por pontuacao e criterios do metodo configurado; "
+                    f"placares atuais {white_score:g} x {black_score:g}."
+                )
+                if self._would_make_three_colors(white_id, "W", histories):
+                    alerts.append("Brancas pela terceira vez seguida")
+                if self._would_make_three_colors(black_id, "B", histories):
+                    alerts.append("Pretas pela terceira vez seguida")
+
+            alert_count += len(alerts)
+            white = players_by_id.get(white_id, {})
+            black = players_by_id.get(black_id or 0, {})
+            preview_pairings.append(
+                {
+                    "board_number": int(pairing["board_number"]),
+                    "white_player_id": white_id,
+                    "white_name": player_pairing_name(white) if white else str(white_id),
+                    "white_rating": int(white.get("rating") or 0) if white else 0,
+                    "black_player_id": black_id,
+                    "black_name": "BYE" if pairing.get("is_bye") else player_pairing_name(black) if black else "",
+                    "black_rating": int(black.get("rating") or 0) if black else 0,
+                    "is_bye": 1 if pairing.get("is_bye") else 0,
+                    "alerts": alerts,
+                    "explanation": " ".join(explanation),
+                }
+            )
+        return {
+            "competition_type": "individual",
+            "tournament_id": tournament_id,
+            "tournament_name": tournament.get("name", ""),
+            "round_number": int(plan["round_number"]),
+            "pairing_system": str(plan["settings"].get("pairing_system") or "custom_authorized"),
+            "pairing_engine_version": self.PAIRING_ENGINE_VERSION,
+            "ruleset_version": self.RULESET_VERSION,
+            "pairings": preview_pairings,
+            "alerts_count": alert_count,
+        }
+
+    @staticmethod
+    def _would_make_three_colors(player_id: int, color: str, histories: dict[int, list[str]]) -> bool:
+        history = histories.get(int(player_id), [])
+        return len(history) >= 2 and history[-2:] == [color, color]
+
+    def _generate_next_team_round(
+        self,
+        tournament_id: int,
+        tournament: dict[str, Any],
+    ) -> dict[str, Any]:
+        plan = self._team_next_round_plan(tournament_id, tournament)
+        settings = plan["settings"]
+        teams = plan["teams"]
+        boards_count = int(plan["boards_count"])
+        seed_ratings = plan["seed_ratings"]
+        next_number = int(plan["round_number"])
+        matches = plan["matches"]
+
+        input_snapshot = self._pairing_input_snapshot(
+            tournament_id=tournament_id,
+            tournament=tournament,
+            settings=settings,
+            round_number=next_number,
+            participants=teams,
+            extra={"boards_count": boards_count, "seed_ratings": seed_ratings},
+        )
+        self.db.create_pairing_snapshot(
             tournament_id,
             next_number,
-            pairings,
+            "input",
+            input_snapshot,
+            pairing_system=str(settings.get("pairing_system") or "team_swiss"),
+            pairing_engine_version=self.TEAM_PAIRING_ENGINE_VERSION,
+            ruleset_version=self.RULESET_VERSION,
         )
-        logger.info("Rodada %s gerada para o torneio %s", next_number, tournament_id)
+        self.db.backup_before("generate_team_round", tournament_id=tournament_id)
+        round_id = self.db.create_round_with_team_matches(
+            tournament_id,
+            next_number,
+            matches,
+            pairing_engine_version=self.TEAM_PAIRING_ENGINE_VERSION,
+            ruleset_version=self.RULESET_VERSION,
+        )
+        self.db.create_team_lineups_from_round(round_id)
+        self.db.create_pairing_snapshot(
+            tournament_id,
+            next_number,
+            "output",
+            {"round_number": next_number, "matches": matches},
+            round_id=round_id,
+            pairing_system=str(settings.get("pairing_system") or "team_swiss"),
+            pairing_engine_version=self.TEAM_PAIRING_ENGINE_VERSION,
+            ruleset_version=self.RULESET_VERSION,
+        )
+        self.db.create_audit_event(
+            action="team_round_generated",
+            tournament_id=tournament_id,
+            round_id=round_id,
+            entity_type="round",
+            entity_id=round_id,
+            after={"round_number": next_number, "matches_count": len(matches)},
+            metadata={
+                "pairing_engine_version": self.TEAM_PAIRING_ENGINE_VERSION,
+                "ruleset_version": self.RULESET_VERSION,
+                "lineups_created": True,
+            },
+        )
+        logger.info("Rodada por equipes %s gerada para o torneio %s", next_number, tournament_id)
         if tournament["status"] == "draft":
             self.db.update_tournament_status(tournament_id, "running")
 
@@ -89,11 +609,7 @@ class PairingService:
         generated["id"] = round_id
         return generated
 
-    def _generate_next_team_round(
-        self,
-        tournament_id: int,
-        tournament: dict[str, Any],
-    ) -> dict[str, Any]:
+    def _team_next_round_plan(self, tournament_id: int, tournament: dict[str, Any]) -> dict[str, Any]:
         settings = self.db.get_tournament_settings(tournament_id) or {}
         teams = self.db.list_teams(tournament_id, active_only=True)
         if len(teams) < 2:
@@ -117,16 +633,64 @@ class PairingService:
         else:
             matches = self._swiss_team_matches(tournament_id, teams, rosters, seed_ratings, boards_count, settings)
 
-        round_id = self.db.create_round_with_team_matches(tournament_id, next_number, matches)
-        logger.info("Rodada por equipes %s gerada para o torneio %s", next_number, tournament_id)
-        if tournament["status"] == "draft":
-            self.db.update_tournament_status(tournament_id, "running")
+        return {
+            "settings": settings,
+            "teams": teams,
+            "boards_count": boards_count,
+            "seed_ratings": seed_ratings,
+            "round_number": next_number,
+            "matches": matches,
+        }
 
-        generated = self.db.get_round_by_number(tournament_id, next_number)
-        if not generated:
-            raise AppError("A rodada foi gerada, mas nao pode ser reaberta.")
-        generated["id"] = round_id
-        return generated
+    def _team_preview_payload(
+        self,
+        tournament_id: int,
+        tournament: dict[str, Any],
+        plan: dict[str, Any],
+    ) -> dict[str, Any]:
+        teams_by_id = {int(team["id"]): team for team in plan["teams"]}
+        played_pairs = self._team_played_pairs(tournament_id)
+        preview_matches = []
+        alert_count = 0
+        for match in plan["matches"]:
+            white_team_id = int(match["white_team_id"])
+            black_team_id = int(match["black_team_id"]) if match.get("black_team_id") else None
+            alerts = []
+            explanation = []
+            if match.get("is_bye"):
+                alerts.append("Bye da equipe")
+                explanation.append("Equipe recebeu bye por numero impar de equipes ativas.")
+            elif black_team_id is not None:
+                if frozenset((white_team_id, black_team_id)) in played_pairs:
+                    alerts.append("Confronto repetido")
+                explanation.append("Match gerado pelo metodo de emparceiramento por equipes configurado.")
+            alert_count += len(alerts)
+            white_team = teams_by_id.get(white_team_id, {})
+            black_team = teams_by_id.get(black_team_id or 0, {})
+            preview_matches.append(
+                {
+                    "match_number": int(match["match_number"]),
+                    "white_team_id": white_team_id,
+                    "white_team_name": str(white_team.get("name") or white_team_id),
+                    "black_team_id": black_team_id,
+                    "black_team_name": "BYE" if match.get("is_bye") else str(black_team.get("name") or ""),
+                    "boards_count": len(match.get("boards") or []),
+                    "is_bye": 1 if match.get("is_bye") else 0,
+                    "alerts": alerts,
+                    "explanation": " ".join(explanation),
+                }
+            )
+        return {
+            "competition_type": "team",
+            "tournament_id": tournament_id,
+            "tournament_name": tournament.get("name", ""),
+            "round_number": int(plan["round_number"]),
+            "pairing_system": str(plan["settings"].get("pairing_system") or "team_swiss"),
+            "pairing_engine_version": self.TEAM_PAIRING_ENGINE_VERSION,
+            "ruleset_version": self.RULESET_VERSION,
+            "matches": preview_matches,
+            "alerts_count": alert_count,
+        }
 
     def _team_starter_rosters(
         self,
@@ -441,11 +1005,27 @@ class PairingService:
             raise AppError("Mesa nao encontrada para o torneio selecionado.")
         if result not in RESULTS:
             raise AppError("Resultado invalido.")
+        before = {
+            "pairing_id": int(pairing_id),
+            "result": pairing.get("result", ""),
+            "round_status": pairing.get("round_status", ""),
+        }
         if pairing["round_status"] == "closed":
             settings = self.db.get_tournament_settings(tournament_id) or {}
             if not settings.get("allow_dangerous_changes"):
                 raise AppError("Resultado de rodada fechada so pode ser alterado com mudancas perigosas habilitadas.")
         self.db.update_pairing_result(pairing_id, result)
+        action = "result_corrected" if pairing["round_status"] == "closed" else "result_updated"
+        self.db.create_audit_event(
+            action=action,
+            tournament_id=tournament_id,
+            round_id=int(pairing["round_id"]),
+            entity_type="pairing",
+            entity_id=int(pairing_id),
+            reason="Correcao em rodada fechada." if action == "result_corrected" else "",
+            before=before,
+            after={"pairing_id": int(pairing_id), "result": result, "round_status": pairing.get("round_status", "")},
+        )
         logger.info("Resultado da mesa %s atualizado para %s", pairing_id, result or "pendente")
 
     def close_round(self, tournament_id: int, round_id: int) -> None:
@@ -469,10 +1049,36 @@ class PairingService:
         if pending:
             raise AppError("Preencha todos os resultados antes de fechar a rodada.")
 
-        backup_path = self.db.backup(f"before_close_round_{round_id}")
+        blocking_issues = self._blocking_arbitration_issues_for_round(tournament_id, round_id)
+        if blocking_issues:
+            raise AppError(self._blocking_issues_message(blocking_issues))
+
+        backup_path = self.db.backup_before("close_round", tournament_id=tournament_id, round_id=round_id)
         logger.info("Backup criado antes de fechar rodada %s: %s", round_id, backup_path)
 
         self.db.close_round(round_id)
+        standings = self.standings(tournament_id)
+        self.db.create_standings_snapshot(
+            tournament_id=tournament_id,
+            round_id=round_id,
+            round_number=int(round_data["number"]),
+            standings=standings,
+        )
+        self._persist_tiebreak_components(
+            tournament_id=tournament_id,
+            round_id=round_id,
+            round_number=int(round_data["number"]),
+            standings=standings,
+        )
+        self.db.create_audit_event(
+            action="round_closed",
+            tournament_id=tournament_id,
+            round_id=round_id,
+            entity_type="round",
+            entity_id=round_id,
+            before={"status": round_data.get("status", "")},
+            after={"status": "closed", "standings_count": len(standings)},
+        )
         logger.info("Rodada %s fechada no torneio %s", round_id, tournament_id)
 
         latest = self.db.get_latest_round(tournament_id)
@@ -487,11 +1093,27 @@ class PairingService:
             raise AppError("Tabuleiro nao encontrado para o torneio selecionado.")
         if result not in RESULTS:
             raise AppError("Resultado invalido.")
+        before = {
+            "team_board_id": int(team_board_id),
+            "result": board.get("result", ""),
+            "round_status": board.get("round_status", ""),
+        }
         if board["round_status"] == "closed":
             settings = self.db.get_tournament_settings(tournament_id) or {}
             if not settings.get("allow_dangerous_changes"):
                 raise AppError("Resultado de rodada fechada so pode ser alterado com mudancas perigosas habilitadas.")
         self.db.update_team_board_result(team_board_id, result)
+        action = "team_result_corrected" if board["round_status"] == "closed" else "team_result_updated"
+        self.db.create_audit_event(
+            action=action,
+            tournament_id=tournament_id,
+            round_id=int(board["round_id"]),
+            entity_type="team_board",
+            entity_id=int(team_board_id),
+            reason="Correcao em rodada fechada." if action == "team_result_corrected" else "",
+            before=before,
+            after={"team_board_id": int(team_board_id), "result": result, "round_status": board.get("round_status", "")},
+        )
         logger.info("Resultado do tabuleiro de equipe %s atualizado para %s", team_board_id, result or "pendente")
 
     def _close_team_round(
@@ -581,7 +1203,11 @@ class PairingService:
         if pending:
             raise AppError("Preencha todos os resultados dos tabuleiros antes de fechar a rodada.")
 
-        backup_path = self.db.backup(f"before_close_round_{round_id}")
+        blocking_issues = self._blocking_arbitration_issues_for_round(tournament_id, round_id)
+        if blocking_issues:
+            raise AppError(self._blocking_issues_message(blocking_issues))
+
+        backup_path = self.db.backup_before("close_team_round", tournament_id=tournament_id, round_id=round_id)
         logger.info("Backup criado antes de fechar rodada por equipes %s: %s", round_id, backup_path)
 
         for summary in summaries:
@@ -595,6 +1221,22 @@ class PairingService:
             )
 
         self.db.close_round(round_id)
+        standings = self.team_standings(tournament_id)
+        self.db.create_standings_snapshot(
+            tournament_id=tournament_id,
+            round_id=round_id,
+            round_number=int(round_data["number"]),
+            standings=standings,
+        )
+        self.db.create_audit_event(
+            action="team_round_closed",
+            tournament_id=tournament_id,
+            round_id=round_id,
+            entity_type="round",
+            entity_id=round_id,
+            before={"status": round_data.get("status", "")},
+            after={"status": "closed", "standings_count": len(standings)},
+        )
         logger.info("Rodada por equipes %s fechada no torneio %s", round_id, tournament_id)
 
         latest = self.db.get_latest_round(tournament_id)
@@ -606,12 +1248,24 @@ class PairingService:
     def delete_generated_round(self, round_id: int) -> None:
         with self.db.connect() as connection:
             row = connection.execute(
-                "SELECT status FROM rounds WHERE id = ?",
+                "SELECT tournament_id, number, status FROM rounds WHERE id = ?",
                 (round_id,),
             ).fetchone()
         if row and row["status"] == "closed":
             raise AppError("Rodada fechada nao pode ser excluida.")
+        if row:
+            self.db.backup_before("delete_generated_round", tournament_id=int(row["tournament_id"]), round_id=round_id)
         self.db.delete_round(round_id)
+        if row:
+            self.db.create_audit_event(
+                action="round_deleted",
+                tournament_id=int(row["tournament_id"]),
+                round_id=None,
+                entity_type="round",
+                entity_id=round_id,
+                before={"round_id": round_id, "number": int(row["number"]), "status": row["status"]},
+                reason="Exclusao de rodada gerada ainda nao fechada.",
+            )
         logger.info("Rodada gerada %s excluida", round_id)
 
     def delete_player_if_unpaired(self, tournament_id: int, player_id: int) -> None:
@@ -718,6 +1372,173 @@ class PairingService:
             replacement_player_id,
         )
 
+    def swap_team_board_colors(self, tournament_id: int, round_id: int, team_board_id: int) -> None:
+        round_data = self.db.get_round(round_id)
+        if not round_data or int(round_data["tournament_id"]) != int(tournament_id):
+            raise AppError("Rodada nao encontrada para o torneio selecionado.")
+        if round_data["status"] == "closed":
+            raise AppError("Rodada fechada nao pode ser ajustada.")
+        board = self.db.get_team_board(team_board_id)
+        if not board or int(board["tournament_id"]) != int(tournament_id):
+            raise AppError("Tabuleiro nao encontrado para o torneio selecionado.")
+        if board["result"]:
+            raise AppError("Limpe o resultado do tabuleiro antes de trocar cores.")
+        self.db.swap_team_board_colors(team_board_id)
+        logger.info("Cores trocadas no tabuleiro por equipes %s", team_board_id)
+
+    def adjust_team_board_player(
+        self,
+        tournament_id: int,
+        round_id: int,
+        team_board_id: int,
+        color: str,
+        replacement_player_id: int,
+        reason: str = "",
+    ) -> None:
+        round_data = self.db.get_round(round_id)
+        if not round_data or int(round_data["tournament_id"]) != int(tournament_id):
+            raise AppError("Rodada nao encontrada para o torneio selecionado.")
+        if round_data["status"] == "closed":
+            raise AppError("Rodada fechada nao pode ser ajustada.")
+        if color not in {"white", "black"}:
+            raise AppError("Cor invalida para ajuste.")
+
+        source_board = self.db.get_team_board(team_board_id)
+        if not source_board or int(source_board["tournament_id"]) != int(tournament_id):
+            raise AppError("Tabuleiro selecionado nao encontrado.")
+
+        replacement = self.db.get_player(replacement_player_id)
+        if not replacement or int(replacement["tournament_id"]) != int(tournament_id):
+            raise AppError("Jogador substituto nao pertence ao torneio.")
+        if not replacement["active"]:
+            raise AppError("Jogador substituto precisa estar ativo.")
+
+        source_player_id = source_board["white_player_id"] if color == "white" else source_board["black_player_id"]
+        if source_player_id is None:
+            raise AppError("Jogador de origem invalido.")
+        if int(source_player_id) == int(replacement_player_id):
+            return
+
+        source_team = self.db.get_team_player_by_player(int(source_player_id))
+        replacement_team = self.db.get_team_player_by_player(replacement_player_id)
+        if not source_team or not replacement_team or int(source_team["team_id"]) != int(replacement_team["team_id"]):
+            raise AppError("Em torneios por equipes, troque apenas por jogador da mesma equipe.")
+        settings = self.db.get_tournament_settings(tournament_id) or {}
+        max_substitutions = int(settings.get("team_max_substitutions") or 0)
+        if max_substitutions > 0:
+            existing_substitutions = [
+                item
+                for item in self.db.list_team_substitution_events(tournament_id, round_id=round_id)
+                if int(item["team_id"]) == int(source_team["team_id"])
+            ]
+            if len(existing_substitutions) >= max_substitutions:
+                raise AppError("Limite de substituicoes da equipe nesta rodada foi atingido.")
+
+        active_team_player_ids = {
+            int(player["player_id"])
+            for player in self.db.list_team_players(int(source_team["team_id"]), active_only=True)
+        }
+        if replacement_player_id not in active_team_player_ids:
+            raise AppError("Jogador substituto precisa estar ativo na equipe.")
+
+        matches = self.db.list_team_matches_for_round(round_id)
+        boards = [
+            board
+            for match in matches
+            for board in self.db.list_team_boards(int(match["id"]))
+        ]
+        if not boards:
+            raise AppError("A rodada nao possui tabuleiros para ajustar.")
+
+        board_by_id = {int(board["id"]): board for board in boards}
+        selected_board = board_by_id.get(int(team_board_id))
+        if not selected_board:
+            raise AppError("Tabuleiro selecionado nao encontrado.")
+
+        target_slot = self._find_team_board_player_slot(boards, replacement_player_id)
+        affected_board_ids = {int(team_board_id)}
+        if target_slot:
+            affected_board_ids.add(int(target_slot["board"]["id"]))
+
+        for board_id in affected_board_ids:
+            board = board_by_id[board_id]
+            if board["result"]:
+                raise AppError("Substituicao depois de resultado exige correcao formal: limpe o resultado antes.")
+
+        updates: dict[int, dict[str, int | None]] = {
+            int(board["id"]): {
+                "white": int(board["white_player_id"]) if board["white_player_id"] else None,
+                "black": int(board["black_player_id"]) if board["black_player_id"] else None,
+            }
+            for board in boards
+        }
+        updates[int(team_board_id)][color] = int(replacement_player_id)
+        if target_slot:
+            updates[int(target_slot["board"]["id"])][target_slot["color"]] = int(source_player_id)
+
+        for board_id in affected_board_ids:
+            values = updates[board_id]
+            if values["white"] is not None and values["white"] == values["black"]:
+                raise AppError("Um tabuleiro nao pode ter o mesmo jogador dos dois lados.")
+
+        self.db.update_team_board_players(
+            [
+                (board_id, updates[board_id]["white"], updates[board_id]["black"])
+                for board_id in affected_board_ids
+            ]
+        )
+        self.db.create_team_lineups_from_round(round_id)
+        substitution_id = self.db.create_team_substitution_event(
+            tournament_id=tournament_id,
+            round_id=round_id,
+            team_match_id=int(source_board["team_match_id"]),
+            team_board_id=team_board_id,
+            team_id=int(source_team["team_id"]),
+            board_number=int(source_board["board_number"]),
+            color=color,
+            out_player_id=int(source_player_id),
+            in_player_id=int(replacement_player_id),
+            reason=reason,
+            requires_correction=False,
+        )
+        self.db.create_audit_event(
+            action="team_substitution_recorded",
+            tournament_id=tournament_id,
+            round_id=round_id,
+            entity_type="team_substitution_event",
+            entity_id=substitution_id,
+            reason=reason,
+            before={
+                "team_board_id": int(team_board_id),
+                "color": color,
+                "out_player_id": int(source_player_id),
+            },
+            after={
+                "team_board_id": int(team_board_id),
+                "color": color,
+                "in_player_id": int(replacement_player_id),
+            },
+        )
+        logger.info(
+            "Ajuste manual por equipes na rodada %s: tabuleiro %s, cor %s, jogador %s",
+            round_id,
+            team_board_id,
+            color,
+            replacement_player_id,
+        )
+
+    @staticmethod
+    def _find_team_board_player_slot(
+        boards: list[dict[str, Any]],
+        player_id: int,
+    ) -> dict[str, Any] | None:
+        for board in boards:
+            if board.get("white_player_id") and int(board["white_player_id"]) == int(player_id):
+                return {"board": board, "color": "white"}
+            if board.get("black_player_id") and int(board["black_player_id"]) == int(player_id):
+                return {"board": board, "color": "black"}
+        return None
+
     def standings(self, tournament_id: int) -> list[dict[str, Any]]:
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
@@ -748,6 +1569,7 @@ class PairingService:
                 "byes": 0,
                 "opponents": [],
                 "earned_against": [],
+                "games": [],
                 "performance": "",
             }
 
@@ -763,6 +1585,16 @@ class PairingService:
             if pairing["is_bye"]:
                 stats[white_id]["points"] += float(tournament["bye_points"])
                 stats[white_id]["byes"] += 1
+                stats[white_id]["games"].append(
+                    {
+                        "round": int(pairing.get("round_number") or 0),
+                        "color": "bye",
+                        "opponent_id": None,
+                        "opponent_name": "BYE",
+                        "result": result,
+                        "earned": float(tournament["bye_points"]),
+                    }
+                )
                 continue
 
             if not black_id or black_id not in stats or result not in RESULT_POINTS:
@@ -777,6 +1609,26 @@ class PairingService:
             stats[black_id]["opponents"].append(white_id)
             stats[white_id]["earned_against"].append((black_id, white_points))
             stats[black_id]["earned_against"].append((white_id, black_points))
+            stats[white_id]["games"].append(
+                {
+                    "round": int(pairing.get("round_number") or 0),
+                    "color": "white",
+                    "opponent_id": int(black_id),
+                    "opponent_name": stats[black_id]["name"],
+                    "result": result,
+                    "earned": white_points,
+                }
+            )
+            stats[black_id]["games"].append(
+                {
+                    "round": int(pairing.get("round_number") or 0),
+                    "color": "black",
+                    "opponent_id": int(white_id),
+                    "opponent_name": stats[white_id]["name"],
+                    "result": result,
+                    "earned": black_points,
+                }
+            )
             if white_points == 1.0 and black_points == 0.0:
                 stats[white_id]["wins"] += 1
             if black_points == 1.0 and white_points == 0.0:
@@ -800,6 +1652,7 @@ class PairingService:
                 sb += stats[opponent_id]["points"] * earned
             player_stat["sonneborn_berger"] = round(sb, 2)
             player_stat["performance"] = self._performance_rating(player_stat, stats)
+            player_stat["tiebreak_components"] = self._player_tiebreak_components(player_stat, stats)
 
         ordered_stats = sorted(
             stats.values(),
@@ -817,6 +1670,181 @@ class PairingService:
         for index, item in enumerate(ordered_stats, start=1):
             item["position"] = index
         return ordered_stats
+
+    def tiebreak_report(self, tournament_id: int, player_id: int | None = None) -> list[dict[str, Any]]:
+        standings = self.standings(tournament_id)
+        closed_rounds = [
+            round_data
+            for round_data in self.db.list_rounds(tournament_id)
+            if round_data.get("status") == "closed"
+        ]
+        latest_round = max(closed_rounds, key=lambda item: int(item["number"])) if closed_rounds else None
+        if latest_round:
+            self.db.replace_tiebreak_components(
+                tournament_id=tournament_id,
+                round_id=int(latest_round["id"]),
+                round_number=int(latest_round["number"]),
+                components=self._flatten_tiebreak_components(standings),
+            )
+        if player_id is not None:
+            standings = [item for item in standings if int(item["player_id"]) == int(player_id)]
+        return standings
+
+    def _persist_tiebreak_components(
+        self,
+        tournament_id: int,
+        round_id: int,
+        round_number: int,
+        standings: list[dict[str, Any]],
+    ) -> None:
+        self.db.replace_tiebreak_components(
+            tournament_id=tournament_id,
+            round_id=round_id,
+            round_number=round_number,
+            components=self._flatten_tiebreak_components(standings),
+        )
+
+    @staticmethod
+    def _flatten_tiebreak_components(standings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+        for item in standings:
+            for criterion, components in dict(item.get("tiebreak_components") or {}).items():
+                rows.append(
+                    {
+                        "player_id": int(item["player_id"]),
+                        "player_name": item.get("name", ""),
+                        "criterion": criterion,
+                        "value": components.get("value"),
+                        "components": components,
+                    }
+                )
+        return rows
+
+    def _player_tiebreak_components(
+        self,
+        player_stat: dict[str, Any],
+        stats: dict[int, dict[str, Any]],
+    ) -> dict[str, dict[str, Any]]:
+        opponent_rows = []
+        opponent_scores = []
+        for opponent_id in player_stat["opponents"]:
+            if opponent_id not in stats:
+                continue
+            score = float(stats[opponent_id]["points"])
+            opponent_scores.append(score)
+            opponent_rows.append(
+                {
+                    "opponent_id": int(opponent_id),
+                    "opponent_name": stats[opponent_id]["name"],
+                    "points": round(score, 2),
+                }
+            )
+
+        ordered_scores = sorted(opponent_scores)
+        if len(ordered_scores) >= 3:
+            median_used = ordered_scores[1:-1]
+            cut_low = ordered_scores[0]
+            cut_high = ordered_scores[-1]
+        else:
+            median_used = ordered_scores
+            cut_low = None
+            cut_high = None
+
+        sb_rows = []
+        for opponent_id, earned in player_stat["earned_against"]:
+            if opponent_id not in stats:
+                continue
+            opponent_points = float(stats[opponent_id]["points"])
+            sb_rows.append(
+                {
+                    "opponent_id": int(opponent_id),
+                    "opponent_name": stats[opponent_id]["name"],
+                    "opponent_points": round(opponent_points, 2),
+                    "earned": round(float(earned), 2),
+                    "contribution": round(opponent_points * float(earned), 2),
+                }
+            )
+
+        tied_opponents = [
+            game
+            for game in player_stat["games"]
+            if game.get("opponent_id") in stats
+            and float(stats[int(game["opponent_id"])]["points"]) == float(player_stat["points"])
+        ]
+        direct_score = round(sum(float(game.get("earned") or 0.0) for game in tied_opponents), 2)
+        performance = self._performance_components(player_stat, stats)
+
+        return {
+            "buchholz": {
+                "label": "Buchholz",
+                "value": player_stat["buchholz"],
+                "formula": "Soma dos pontos finais dos adversarios enfrentados.",
+                "opponents": opponent_rows,
+                "total": player_stat["buchholz"],
+            },
+            "buchholz_median": {
+                "label": "Buchholz mediano",
+                "value": player_stat["buchholz_median"],
+                "formula": "Soma dos pontos dos adversarios com corte do menor e maior valor quando ha 3 ou mais jogos.",
+                "used_scores": [round(value, 2) for value in median_used],
+                "cut_low": cut_low,
+                "cut_high": cut_high,
+                "total": player_stat["buchholz_median"],
+            },
+            "sonneborn_berger": {
+                "label": "Sonneborn-Berger",
+                "value": player_stat["sonneborn_berger"],
+                "formula": "Pontos do adversario multiplicados pelo resultado obtido contra ele.",
+                "opponents": sb_rows,
+                "total": player_stat["sonneborn_berger"],
+            },
+            "direct_encounter": {
+                "label": "Confronto direto",
+                "value": direct_score,
+                "formula": "Pontos marcados contra adversarios que terminaram empatados em pontos.",
+                "games": tied_opponents,
+                "total": direct_score,
+            },
+            "wins": {
+                "label": "Vitorias",
+                "value": int(player_stat["wins"]),
+                "formula": "Quantidade de partidas vencidas no tabuleiro.",
+                "games": [game for game in player_stat["games"] if float(game.get("earned") or 0.0) == 1.0],
+                "total": int(player_stat["wins"]),
+            },
+            "performance": performance,
+        }
+
+    @staticmethod
+    def _performance_components(
+        player_stat: dict[str, Any],
+        stats: dict[int, dict[str, Any]],
+    ) -> dict[str, Any]:
+        rated_games = [
+            {
+                "opponent_id": int(opponent_id),
+                "opponent_name": stats[opponent_id]["name"],
+                "opponent_rating": int(stats[opponent_id]["rating"] or 0),
+                "earned": round(float(earned), 2),
+            }
+            for opponent_id, earned in player_stat["earned_against"]
+            if opponent_id in stats and int(stats[opponent_id]["rating"] or 0) > 0
+        ]
+        score = round(sum(float(item["earned"]) for item in rated_games), 2)
+        games = len(rated_games)
+        average_rating = round(
+            sum(int(item["opponent_rating"]) for item in rated_games) / games,
+            2,
+        ) if games else 0.0
+        return {
+            "label": "Performance",
+            "value": player_stat["performance"] if player_stat["performance"] != "" else None,
+            "formula": "Media de rating dos adversarios ajustada pelo percentual de score.",
+            "games": rated_games,
+            "score": score,
+            "average_rating": average_rating,
+            "total": player_stat["performance"],
+        }
 
     def team_standings(self, tournament_id: int) -> list[dict[str, Any]]:
         tournament = self.db.get_tournament(tournament_id)

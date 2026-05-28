@@ -1,6 +1,7 @@
 from __future__ import annotations
 import csv
 import html
+import io
 import json
 import logging
 import math
@@ -11,6 +12,8 @@ import unicodedata
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any, Mapping, TYPE_CHECKING
+from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
+from urllib.request import Request, urlopen
 
 from src.core.database import BASE_DIR, DEFAULT_CERTIFICATE_TEMPLATES, Database
 from src.services.constants import *
@@ -36,6 +39,9 @@ class ImportService:
         self.db = db
 
     def preview_online_registrations_csv(self, tournament_id: int, file_path: str | Path) -> dict[str, Any]:
+        return self.preview_online_registrations(tournament_id, file_path)
+
+    def preview_online_registrations(self, tournament_id: int, file_path: str | Path) -> dict[str, Any]:
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
             raise AppError("Selecione um torneio valido.")
@@ -50,7 +56,10 @@ class ImportService:
         return {"rows": rows, **summary}
 
     def import_online_registrations_csv(self, tournament_id: int, file_path: str | Path) -> dict[str, Any]:
-        preview = self.preview_online_registrations_csv(tournament_id, file_path)
+        return self.import_online_registrations(tournament_id, file_path)
+
+    def import_online_registrations(self, tournament_id: int, file_path: str | Path) -> dict[str, Any]:
+        preview = self.preview_online_registrations(tournament_id, file_path)
         imported = 0
         skipped = 0
         imported_player_ids = []
@@ -82,59 +91,346 @@ class ImportService:
 
     def import_players_csv(self, tournament_id: int, file_path: str | Path) -> dict[str, Any]:
         path = Path(file_path)
+        rows = self._player_rows_from_csv(path)
+        result = self._import_player_rows(tournament_id, rows, path)
+        logger.info("%s jogadores importados de %s para o torneio %s", result["imported"], path, tournament_id)
+        return result
+
+    def import_players(self, tournament_id: int, file_path: str | Path) -> dict[str, Any]:
+        path = Path(file_path)
+        extension = path.suffix.lower()
+        if extension == ".csv":
+            return self.import_players_csv(tournament_id, path)
+        if extension in {".xls", ".xlsx"}:
+            rows = self._player_rows_from_spreadsheet(path)
+            result = self._import_player_rows(tournament_id, rows, path)
+            logger.info("%s jogadores importados de %s para o torneio %s", result["imported"], path, tournament_id)
+            return result
+        raise AppError("Formato nao suportado. Use .csv, .xls ou .xlsx.")
+
+    def import_members(self, file_path: str | Path) -> dict[str, Any]:
+        path = Path(file_path)
+        extension = path.suffix.lower()
+        if extension == ".csv":
+            rows = self._player_rows_from_csv(path)
+        elif extension in {".xls", ".xlsx"}:
+            rows = self._player_rows_from_spreadsheet(path)
+        else:
+            raise AppError("Formato nao suportado. Use .csv, .xls ou .xlsx.")
+
+        result = self._import_member_rows(rows)
+        logger.info("%s membros importados de %s", result["imported"], path)
+        return result
+
+    def _import_member_rows(self, rows: list[tuple[int, dict[str, Any]]]) -> dict[str, Any]:
+        from src.services.member_service import MemberService
+
+        member_service = MemberService(self.db)
+        imported = 0
+        skipped = 0
+        errors: list[str] = []
+        existing_members = self.db.list_members(active_only=False)
+        seen_keys: set[tuple[str, str]] = set()
+
+        for line_number, row in rows:
+            payload, row_errors = self._member_payload_from_row(row)
+            if row_errors:
+                skipped += 1
+                errors.extend(f"Linha {line_number}: {error}" for error in row_errors)
+                continue
+
+            duplicate_key = self._member_duplicate_key(payload)
+            if duplicate_key in seen_keys or self._matches_existing_member(payload, existing_members):
+                skipped += 1
+                errors.append(f"Linha {line_number}: membro duplicado ignorado.")
+                continue
+
+            try:
+                member_id = member_service.create_member(payload)
+            except Exception as exc:
+                skipped += 1
+                errors.append(f"Linha {line_number}: {exc}")
+                continue
+
+            created = self.db.get_member(member_id)
+            if created:
+                existing_members.append(created)
+            seen_keys.add(duplicate_key)
+            imported += 1
+
+        return {"imported": imported, "skipped": skipped, "errors": errors}
+
+    def _member_payload_from_row(self, row: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+        errors: list[str] = []
+        full_name = self._pick(row, "name", "nome", "membro", "aluno", "jogador", "nome completo")
+        surname = self._pick(row, "surname", "sobrenome")
+        name = full_name
+        if not surname and "," in full_name:
+            surname, name = [part.strip() for part in full_name.split(",", maxsplit=1)]
+        if not name:
+            errors.append("nome vazio")
+
+        rating_text = self._pick(row, "rating", "elo", "rtg")
+        try:
+            rating = int(float(rating_text)) if rating_text else 0
+        except ValueError:
+            rating = 0
+            errors.append("rating invalido")
+
+        club_id, club_error = self._resolve_club_id(
+            self._pick(row, "club_id", "id_clube", "id escola", "id_escola"),
+            self._pick(row, "club", "clube", "escola", "unidade"),
+        )
+        if club_error:
+            errors.append(club_error)
+
+        class_id, class_error = self._resolve_class_id(
+            club_id,
+            self._pick(row, "class_id", "id_turma", "turma_id"),
+            self._pick(row, "class", "turma", "sala"),
+        )
+        if class_error:
+            errors.append(class_error)
+
+        learning_level_id = self._resolve_learning_level_id(
+            self._pick(row, "learning_level_id", "nivel_id", "id_nivel"),
+            self._pick(row, "learning_level", "nivel", "nivel de aprendizagem"),
+        )
+        member_type = self._normalize_member_type(self._pick(row, "member_type", "tipo", "vinculo"))
+        status = self._normalize_member_status(self._pick(row, "status", "situacao"))
+
+        payload = {
+            "name": name,
+            "surname": surname,
+            "club_id": club_id,
+            "class_id": class_id,
+            "learning_level_id": learning_level_id,
+            "city": self._pick(row, "city", "cidade"),
+            "phone": self._pick(row, "phone", "telefone", "celular", "whatsapp"),
+            "email": self._pick(row, "email", "e-mail"),
+            "document": self._pick(row, "document", "documento", "cpf", "rg"),
+            "birth_date": self._pick(row, "birth_date", "nascimento", "data nascimento", "data de nascimento"),
+            "rating": rating,
+            "category": self._pick(row, "category", "categoria"),
+            "member_type": member_type,
+            "status": status,
+            "guardian_name": self._pick(row, "guardian_name", "responsavel", "responsável", "nome responsavel"),
+            "guardian_phone": self._pick(row, "guardian_phone", "telefone responsavel", "telefone responsável"),
+            "notes": self._pick(row, "notes", "observacoes", "observações"),
+            "lichess_username": self._pick(row, "lichess", "lichess_username", "usuario lichess"),
+            "chesscom_username": self._pick(row, "chesscom", "chesscom_username", "usuario chess.com"),
+            "online_blitz_rating": self._parse_optional_int(
+                self._pick(row, "online_blitz_rating", "blitz online", "rating blitz")
+            ),
+            "online_rapid_rating": self._parse_optional_int(
+                self._pick(row, "online_rapid_rating", "rapid online", "rating rapid")
+            ),
+        }
+        return payload, errors
+
+    def _resolve_club_id(self, raw_id: str, raw_name: str) -> tuple[int, str]:
+        if raw_id:
+            try:
+                club_id = int(raw_id)
+            except ValueError:
+                return 1, "id do clube/escola invalido"
+            if self.db.get_club(club_id):
+                return club_id, ""
+            return 1, "clube/escola nao encontrado"
+
+        if raw_name:
+            normalized = self._normalize_text(raw_name)
+            for club in self.db.list_clubs(active_only=False):
+                if self._normalize_text(str(club.get("name") or "")) == normalized:
+                    return int(club["id"]), ""
+            club_id = self.db.save_club(
+                name=raw_name,
+                kind="school",
+                active=1,
+                club_id=None,
+            )
+            return club_id, ""
+        return 1, ""
+
+    def _resolve_class_id(self, club_id: int, raw_id: str, raw_name: str) -> tuple[int | None, str]:
+        if raw_id:
+            try:
+                class_id = int(raw_id)
+            except ValueError:
+                return None, "id da turma invalido"
+            class_data = self.db.get_class(class_id)
+            if not class_data:
+                return None, "turma nao encontrada"
+            if int(class_data["club_id"]) != int(club_id):
+                return None, "turma nao pertence ao clube/escola informado"
+            return class_id, ""
+
+        if raw_name:
+            normalized = self._normalize_text(raw_name)
+            for class_data in self.db.list_classes(club_id=club_id, active_only=False):
+                if self._normalize_text(str(class_data.get("name") or "")) == normalized:
+                    return int(class_data["id"]), ""
+            class_id = self.db.create_class(club_id=club_id, name=raw_name, active=1)
+            return class_id, ""
+        return None, ""
+
+    def _resolve_learning_level_id(self, raw_id: str, raw_name: str) -> int | None:
+        if raw_id:
+            try:
+                level_id = int(raw_id)
+            except ValueError:
+                return None
+            return level_id if self.db.get_learning_level(level_id) else None
+        if raw_name:
+            normalized = self._normalize_text(raw_name)
+            for level in self.db.list_learning_levels(active_only=False):
+                if self._normalize_text(str(level.get("name") or "")) == normalized:
+                    return int(level["id"])
+        return None
+
+    @classmethod
+    def _matches_existing_member(cls, payload: dict[str, Any], existing_members: list[dict[str, Any]]) -> bool:
+        candidate_key = cls._member_duplicate_key(payload)
+        for member in existing_members:
+            if candidate_key == cls._member_duplicate_key(member):
+                return True
+        return False
+
+    @staticmethod
+    def _member_duplicate_key(payload: dict[str, Any]) -> tuple[str, str]:
+        document = ImportService._normalize_text(str(payload.get("document") or ""))
+        if document:
+            return "document", document
+        email = ImportService._normalize_text(str(payload.get("email") or ""))
+        if email:
+            return "email", email
+        name = ImportService._normalize_text(str(payload.get("name") or ""))
+        surname = ImportService._normalize_text(str(payload.get("surname") or ""))
+        birth_date = str(payload.get("birth_date") or "").strip()
+        return "name_birth", f"{surname}|{name}|{birth_date}"
+
+    @staticmethod
+    def _normalize_member_type(value: str) -> str:
+        normalized = ImportService._normalize_text(value)
+        mapping = {
+            "": "aluno",
+            "aluno": "aluno",
+            "socio": "socio",
+            "sócio": "socio",
+            "convidado": "convidado",
+            "visitante": "visitante",
+        }
+        return mapping.get(normalized, normalized if normalized in MEMBER_TYPES else "aluno")
+
+    @staticmethod
+    def _normalize_member_status(value: str) -> str:
+        normalized = ImportService._normalize_text(value)
+        mapping = {
+            "": "active",
+            "ativo": "active",
+            "active": "active",
+            "inativo": "inactive",
+            "inactive": "inactive",
+            "visitante": "visitor",
+            "visitor": "visitor",
+            "convidado": "guest",
+            "guest": "guest",
+            "desistente": "withdrawn",
+            "withdrawn": "withdrawn",
+        }
+        return mapping.get(normalized, normalized if normalized in MEMBER_STATUSES else "active")
+
+    def _import_player_rows(
+        self,
+        tournament_id: int,
+        rows: list[tuple[int, dict[str, Any]]],
+        path: Path,
+    ) -> dict[str, Any]:
         imported = 0
         errors: list[str] = []
 
+        for line_number, row in rows:
+            name = self._pick(row, "name", "nome", "jogador")
+            if not name:
+                errors.append(f"Linha {line_number}: nome vazio.")
+                continue
+
+            national_rating = self._parse_optional_int(
+                self._pick(row, "national_rating", "rating_nacional", "elo_nacional", "cbx_rating")
+            )
+            international_rating = self._parse_optional_int(
+                self._pick(row, "international_rating", "rating_internacional", "elo_fide", "fide_rating")
+            )
+            rating_text = self._pick(row, "rating", "elo", "rtg")
+            if rating_text:
+                try:
+                    rating = int(float(rating_text))
+                except ValueError:
+                    errors.append(f"Linha {line_number}: rating invalido.")
+                    continue
+            else:
+                rating = max(national_rating, international_rating)
+
+            self.db.create_player(
+                tournament_id=tournament_id,
+                name=name,
+                club=self._pick(row, "club", "clube", "cidade"),
+                rating=rating,
+                category=self._pick(row, "category", "categoria"),
+                federation_id=self._pick(row, "federation_id", "id_federacao"),
+                fide_id=self._pick(row, "fide_id", "fide", "id_fide"),
+                cbx_id=self._pick(row, "cbx_id", "cbx", "id_cbx"),
+                birth_date=self._pick(row, "birth_date", "nascimento", "data_nascimento"),
+                surname=self._pick(row, "surname", "sobrenome"),
+                given_name=self._pick(row, "given_name", "nome_proprio"),
+                title=self._pick(row, "title", "titulo"),
+                sex=self._pick(row, "sex", "sexo"),
+                national_rating=national_rating,
+                international_rating=international_rating,
+            )
+            imported += 1
+
+        return {"imported": imported, "errors": errors}
+
+    def _player_rows_from_csv(self, path: Path) -> list[tuple[int, dict[str, Any]]]:
         with path.open("r", encoding="utf-8-sig", newline="") as file:
             sample = file.read(4096)
             file.seek(0)
             reader = csv.DictReader(file, dialect=self._csv_dialect(sample))
             if not reader.fieldnames:
                 raise AppError("CSV sem cabecalho.")
+            return [(line_number, dict(row)) for line_number, row in enumerate(reader, start=2)]
 
-            for line_number, row in enumerate(reader, start=2):
-                name = self._pick(row, "name", "nome", "jogador")
-                if not name:
-                    errors.append(f"Linha {line_number}: nome vazio.")
-                    continue
+    def _player_rows_from_spreadsheet(self, path: Path) -> list[tuple[int, dict[str, Any]]]:
+        try:
+            import pandas as pd
+        except ImportError as exc:
+            raise AppError("Importacao Excel indisponivel. Instale pandas, openpyxl e xlrd.") from exc
 
-                national_rating = self._parse_optional_int(
-                    self._pick(row, "national_rating", "rating_nacional", "elo_nacional", "cbx_rating")
-                )
-                international_rating = self._parse_optional_int(
-                    self._pick(row, "international_rating", "rating_internacional", "elo_fide", "fide_rating")
-                )
-                rating_text = self._pick(row, "rating", "elo", "rtg")
-                if rating_text:
-                    try:
-                        rating = int(float(rating_text))
-                    except ValueError:
-                        errors.append(f"Linha {line_number}: rating invalido.")
-                        continue
-                else:
-                    rating = max(national_rating, international_rating)
+        try:
+            dataframe = pd.read_excel(path, sheet_name=0, dtype=object)
+        except Exception as exc:
+            raise AppError(f"Nao foi possivel ler a planilha: {exc}") from exc
 
-                self.db.create_player(
-                    tournament_id=tournament_id,
-                    name=name,
-                    club=self._pick(row, "club", "clube", "cidade"),
-                    rating=rating,
-                    category=self._pick(row, "category", "categoria"),
-                    federation_id=self._pick(row, "federation_id", "id_federacao"),
-                    fide_id=self._pick(row, "fide_id", "fide", "id_fide"),
-                    cbx_id=self._pick(row, "cbx_id", "cbx", "id_cbx"),
-                    birth_date=self._pick(row, "birth_date", "nascimento", "data_nascimento"),
-                    surname=self._pick(row, "surname", "sobrenome"),
-                    given_name=self._pick(row, "given_name", "nome_proprio"),
-                    title=self._pick(row, "title", "titulo"),
-                    sex=self._pick(row, "sex", "sexo"),
-                    national_rating=national_rating,
-                    international_rating=international_rating,
-                )
-                imported += 1
+        if dataframe.columns.empty:
+            raise AppError("Planilha sem cabecalho.")
 
-        logger.info("%s jogadores importados de %s para o torneio %s", imported, path, tournament_id)
-        return {"imported": imported, "errors": errors}
+        rows: list[tuple[int, dict[str, Any]]] = []
+        for index, row in dataframe.iterrows():
+            parsed = {str(column): self._clean_spreadsheet_cell(value) for column, value in row.items()}
+            rows.append((int(index) + 2, parsed))
+        return rows
+
+    @staticmethod
+    def _clean_spreadsheet_cell(value: Any) -> Any:
+        try:
+            import pandas as pd
+
+            if pd.isna(value):
+                return ""
+        except Exception:
+            pass
+        return value
 
     def import_rating_list_csv(self, file_path: str | Path, rating_type: str = "fide") -> dict[str, Any]:
         """Importa um CSV de ratings FIDE ou CBX e atualiza os membros do clube correspondentes."""
@@ -202,60 +498,109 @@ class ImportService:
         return {"updated": updated, "skipped": skipped, "errors": errors}
 
     def _online_registration_rows(self, tournament_id: int, file_path: str | Path) -> list[dict[str, Any]]:
-        path = Path(file_path)
+        source_rows = self._online_registration_source_rows(file_path)
+
         existing_players = self.db.list_players(tournament_id, active_only=False)
         rows = []
         seen_keys: set[tuple[str, str]] = set()
 
-        with path.open("r", encoding="utf-8-sig", newline="") as file:
-            sample = file.read(4096)
-            file.seek(0)
-            dialect = self._csv_dialect(sample)
-            reader = csv.DictReader(file, dialect=dialect)
-            if not reader.fieldnames:
-                raise AppError("CSV sem cabecalho.")
+        for line_number, row in source_rows:
+            parsed = self._online_registration_payload(row)
+            status = "ready"
+            status_label = "Pronto"
+            message = "Pronto para importar"
+            payload = parsed.get("payload") or {}
 
-            for line_number, row in enumerate(reader, start=2):
-                parsed = self._online_registration_payload(row)
-                status = "ready"
-                status_label = "Pronto"
-                message = "Pronto para importar"
-                payload = parsed.get("payload") or {}
-
-                if parsed["errors"]:
-                    status = "error"
-                    status_label = "Erro"
-                    message = "; ".join(parsed["errors"])
+            if parsed["errors"]:
+                status = "error"
+                status_label = "Erro"
+                message = "; ".join(parsed["errors"])
+            else:
+                duplicate_key = self._registration_duplicate_key(payload)
+                if self._matches_existing_player(payload, existing_players):
+                    status = "duplicate"
+                    status_label = "Duplicado"
+                    message = "Ja existe jogador equivalente no torneio"
+                elif duplicate_key in seen_keys:
+                    status = "duplicate"
+                    status_label = "Duplicado"
+                    message = "Inscricao repetida no proprio arquivo"
                 else:
-                    duplicate_key = self._registration_duplicate_key(payload)
-                    if self._matches_existing_player(payload, existing_players):
-                        status = "duplicate"
-                        status_label = "Duplicado"
-                        message = "Ja existe jogador equivalente no torneio"
-                    elif duplicate_key in seen_keys:
-                        status = "duplicate"
-                        status_label = "Duplicado"
-                        message = "Inscricao repetida no proprio CSV"
-                    else:
-                        seen_keys.add(duplicate_key)
+                    seen_keys.add(duplicate_key)
 
-                rows.append(
-                    {
-                        "line": line_number,
-                        "status": status,
-                        "status_label": status_label,
-                        "message": message,
-                        "name": payload.get("name", parsed.get("name", "")),
-                        "birth_date": payload.get("birth_date", ""),
-                        "rating": payload.get("rating", ""),
-                        "club": payload.get("club", ""),
-                        "category": payload.get("category", ""),
-                        "fide_id": payload.get("fide_id", ""),
-                        "cbx_id": payload.get("cbx_id", ""),
-                        "payload": payload,
-                    }
-                )
+            rows.append(
+                {
+                    "line": line_number,
+                    "status": status,
+                    "status_label": status_label,
+                    "message": message,
+                    "name": payload.get("name", parsed.get("name", "")),
+                    "birth_date": payload.get("birth_date", ""),
+                    "rating": payload.get("rating", ""),
+                    "club": payload.get("club", ""),
+                    "category": payload.get("category", ""),
+                    "fide_id": payload.get("fide_id", ""),
+                    "cbx_id": payload.get("cbx_id", ""),
+                    "payload": payload,
+                }
+            )
         return rows
+
+    def _online_registration_source_rows(self, source: str | Path) -> list[tuple[int, dict[str, Any]]]:
+        source_text = str(source).strip()
+        if self._is_url(source_text):
+            return self._player_rows_from_csv_url(source_text)
+
+        path = Path(source)
+        extension = path.suffix.lower()
+        if extension == ".csv":
+            return self._player_rows_from_csv(path)
+        if extension in {".xls", ".xlsx"}:
+            return self._player_rows_from_spreadsheet(path)
+        raise AppError("Formato nao suportado. Use .csv, .xls, .xlsx ou link CSV do Google Sheets.")
+
+    @staticmethod
+    def _is_url(value: str) -> bool:
+        parsed = urlparse(value)
+        return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
+
+    def _player_rows_from_csv_url(self, url: str) -> list[tuple[int, dict[str, Any]]]:
+        csv_url = self._google_sheets_csv_url(url)
+        request = Request(csv_url, headers={"User-Agent": "Albericus"})
+        try:
+            with urlopen(request, timeout=20) as response:
+                content = response.read().decode("utf-8-sig")
+        except Exception as exc:
+            raise AppError(f"Nao foi possivel baixar a planilha: {exc}") from exc
+        return self._player_rows_from_csv_text(content)
+
+    def _player_rows_from_csv_text(self, content: str) -> list[tuple[int, dict[str, Any]]]:
+        sample = content[:4096]
+        file = io.StringIO(content)
+        reader = csv.DictReader(file, dialect=self._csv_dialect(sample))
+        if not reader.fieldnames:
+            raise AppError("CSV sem cabecalho.")
+        return [(line_number, dict(row)) for line_number, row in enumerate(reader, start=2)]
+
+    @staticmethod
+    def _google_sheets_csv_url(url: str) -> str:
+        parsed = urlparse(url)
+        query = parse_qs(parsed.query)
+        if "docs.google.com" not in parsed.netloc or "/spreadsheets/" not in parsed.path:
+            return url
+        if query.get("output", [""])[0].lower() == "csv":
+            return url
+
+        parts = parsed.path.strip("/").split("/")
+        try:
+            sheet_id = parts[parts.index("d") + 1]
+        except (ValueError, IndexError):
+            return url
+
+        fragment_query = parse_qs(parsed.fragment)
+        gid = (query.get("gid") or fragment_query.get("gid") or ["0"])[0]
+        export_query = urlencode({"format": "csv", "gid": gid})
+        return urlunparse((parsed.scheme, parsed.netloc, f"/spreadsheets/d/{sheet_id}/export", "", export_query, ""))
 
     def _online_registration_payload(self, row: dict[str, Any]) -> dict[str, Any]:
         errors = []
@@ -1772,6 +2117,66 @@ class ExportService:
         title, headers, rows = self._players_section(tournament_id)
         self._write_report(file_path, title, headers, rows)
 
+    def export_player_import_template(self, file_path: str | Path) -> None:
+        self._write_report(
+            file_path,
+            "Modelo de importacao de jogadores",
+            [
+                "nome",
+                "sobrenome",
+                "rating",
+                "clube",
+                "categoria",
+                "fide_id",
+                "cbx_id",
+                "nascimento",
+                "sexo",
+            ],
+            [["Ana", "Silva", "1500", "Clube A", "ABS", "", "", "2012-05-10", "F"]],
+        )
+
+    def export_online_registration_template(self, file_path: str | Path) -> None:
+        self._write_report(
+            file_path,
+            "Modelo de inscricoes online",
+            [
+                "Nome completo do jogador",
+                "Rating",
+                "Clube/Cidade",
+                "Categoria",
+                "Data de nascimento",
+                "FIDE ID",
+                "CBX ID",
+                "Sexo",
+            ],
+            [["Ana Silva", "1500", "Clube A", "ABS", "2012-05-10", "", "", "F"]],
+        )
+
+    def export_member_import_template(self, file_path: str | Path) -> None:
+        self._write_report(
+            file_path,
+            "Modelo de importacao de membros",
+            [
+                "nome",
+                "sobrenome",
+                "rating",
+                "escola",
+                "turma",
+                "tipo",
+                "status",
+                "nascimento",
+                "email",
+                "telefone",
+                "responsavel",
+                "telefone responsavel",
+            ],
+            [["Ana", "Silva", "1500", "Escola A", "Turma 1", "aluno", "ativo", "2012-05-10", "", "", "", ""]],
+        )
+
+    def export_initial_player_list(self, tournament_id: int, file_path: str | Path) -> None:
+        title, headers, rows = self._initial_player_list_section(tournament_id)
+        self._write_report(file_path, title, headers, rows)
+
     def export_pairings(self, round_id: int, file_path: str | Path) -> None:
         title, headers, rows = self._pairings_section(round_id)
         self._write_report(file_path, title, headers, rows)
@@ -1782,6 +2187,15 @@ class ExportService:
             [
                 self._teams_section(tournament_id),
                 self._team_rosters_section(tournament_id),
+            ],
+        )
+
+    def export_team_lineups(self, tournament_id: int, file_path: str | Path) -> None:
+        self._write_multi_report(
+            file_path,
+            [
+                self._team_lineups_section(tournament_id),
+                self._team_substitutions_section(tournament_id),
             ],
         )
 
@@ -1797,6 +2211,80 @@ class ExportService:
         title, headers, rows = self._standings_section(tournament_id)
         self._write_report(file_path, title, headers, rows)
 
+    def export_tiebreak_report(self, tournament_id: int, file_path: str | Path) -> None:
+        tournament = self.db.get_tournament(tournament_id)
+        if not tournament:
+            raise AppError("Selecione um torneio valido.")
+        if tournament.get("competition_type") == "team":
+            raise AppError("Relatorio de desempates por jogador disponivel apenas para torneios individuais.")
+        rows = []
+        for standing in self.pairing_service.tiebreak_report(tournament_id):
+            components = dict(standing.get("tiebreak_components") or {})
+            for criterion in (
+                "buchholz",
+                "buchholz_median",
+                "sonneborn_berger",
+                "direct_encounter",
+                "wins",
+                "performance",
+            ):
+                item = dict(components.get(criterion) or {})
+                rows.append(
+                    [
+                        standing["position"],
+                        standing["name"],
+                        standing["points"],
+                        item.get("label", criterion),
+                        item.get("value", ""),
+                        item.get("formula", ""),
+                        self._tiebreak_component_summary(item),
+                    ]
+                )
+        self._write_report(
+            file_path,
+            f"Desempates - {tournament['name']}",
+            ["Pos", "Jogador", "Pts", "Criterio", "Valor", "Formula", "Componentes"],
+            rows,
+        )
+
+    def export_tournament_audit(self, tournament_id: int, file_path: str | Path) -> None:
+        tournament = self.db.get_tournament(tournament_id)
+        if not tournament:
+            raise AppError("Selecione um torneio valido.")
+        events = self.db.list_audit_events(tournament_id, limit=5000)
+        rows = [
+            [
+                event.get("created_at", ""),
+                event.get("action", ""),
+                event.get("entity_type", ""),
+                event.get("entity_id", ""),
+                event.get("round_id", ""),
+                event.get("actor", ""),
+                event.get("role", ""),
+                event.get("reason", ""),
+                event.get("before_hash", ""),
+                event.get("after_hash", ""),
+            ]
+            for event in events
+        ]
+        self._write_report(
+            file_path,
+            f"Auditoria do torneio - {tournament['name']}",
+            [
+                "Data/hora",
+                "Acao",
+                "Entidade",
+                "ID entidade",
+                "Rodada ID",
+                "Operador",
+                "Perfil",
+                "Motivo",
+                "Hash anterior",
+                "Hash posterior",
+            ],
+            rows,
+        )
+
     def export_complete(self, tournament_id: int, file_path: str | Path) -> None:
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
@@ -1807,6 +2295,8 @@ class ExportService:
         if tournament.get("competition_type") == "team":
             sections.append(self._teams_section(tournament_id))
             sections.append(self._team_rosters_section(tournament_id))
+            sections.append(self._team_lineups_section(tournament_id))
+            sections.append(self._team_substitutions_section(tournament_id))
         sections.append(self._players_section(tournament_id))
         for round_data in sorted(self.db.list_rounds(tournament_id), key=lambda item: item["number"]):
             sections.append(self._pairings_section(round_data["id"]))
@@ -1851,134 +2341,49 @@ class ExportService:
         return self.export_chess_results_trf(tournament_id, file_path)
 
     def export_chess_results_trf(self, tournament_id: int, file_path: str | Path) -> list[str]:
-        tournament = self.db.get_tournament(tournament_id)
-        if not tournament:
-            raise AppError("Selecione um torneio valido.")
-
-        settings = self.db.get_tournament_settings(tournament_id) or {}
-        warnings = self.validate_chess_results_trf(tournament_id)
-        players = sorted(
-            self.db.list_players(tournament_id, active_only=False),
-            key=lambda player: (
-                -self._trf_rating(player),
-                player_pairing_name(player).casefold(),
-                int(player.get("id") or 0),
-            ),
-        )
-        rounds = sorted(self.db.list_rounds(tournament_id), key=lambda round_data: round_data["number"])
-        schedule = {
-            int(item["round_number"]): str(item.get("date") or "").strip()
-            for item in self.db.list_round_schedule(tournament_id)
-        }
-        is_team_tournament = tournament.get("competition_type") == "team"
-        pairings_by_round = self._trf_pairings_by_round(tournament, rounds)
-        player_id_to_start_rank = {int(player["id"]): index for index, player in enumerate(players, start=1)}
-        standings_by_player = self._trf_player_standings(tournament, players)
-        round_count = max(
-            [int(tournament.get("rounds_count") or 0), *(int(round_data["number"]) for round_data in rounds)],
-            default=0,
-        )
-        teams = self.db.list_teams(tournament_id, active_only=False) if is_team_tournament else []
-
-        path = Path(file_path)
-        with path.open("w", encoding="utf-8", newline="") as handle:
-            handle.write(self._trf_tournament_line("012", tournament["name"]))
-            handle.write(self._trf_tournament_line("022", tournament.get("location", "")))
-            handle.write(self._trf_tournament_line("032", settings.get("federation", "")))
-            handle.write(self._trf_tournament_line("042", self._trf_date(tournament.get("start_date"), long_year=True)))
-            handle.write(self._trf_tournament_line("052", self._trf_date(tournament.get("end_date"), long_year=True)))
-            handle.write(self._trf_tournament_line("062", str(len(players))))
-            handle.write(self._trf_tournament_line("072", str(sum(1 for player in players if self._trf_rating(player) > 0))))
-            handle.write(self._trf_tournament_line("082", str(len(teams))))
-            handle.write(self._trf_tournament_line("092", self._trf_tournament_type(tournament, settings)))
-            handle.write(self._trf_tournament_line("102", self._trf_chief_arbiter(tournament_id, settings)))
-            for deputy in self._trf_deputy_arbiters(tournament_id, settings):
-                handle.write(self._trf_tournament_line("112", deputy))
-            handle.write(self._trf_tournament_line("122", tournament.get("time_control", "")))
-            handle.write(self._trf_round_dates_line(round_count, schedule))
-
-            for player in players:
-                handle.write(
-                    self._trf_player_line(
-                        player,
-                        player_id_to_start_rank,
-                        standings_by_player,
-                        pairings_by_round,
-                        round_count,
-                        settings,
-                    )
-                )
-            for team in teams:
-                handle.write(self._trf_team_line(team, player_id_to_start_rank))
-
-        return warnings
+        return self._federation_exporter("trf16").export(tournament_id, file_path)
 
     def validate_chess_results_trf(self, tournament_id: int) -> list[str]:
-        tournament = self.db.get_tournament(tournament_id)
-        if not tournament:
-            raise AppError("Selecione um torneio valido.")
+        return self._federation_exporter("trf16").validate(tournament_id)
 
-        settings = self.db.get_tournament_settings(tournament_id) or {}
-        players = self.db.list_players(tournament_id, active_only=False)
-        rounds = self.db.list_rounds(tournament_id)
-        warnings: list[str] = []
+    def export_chess_results_trf_validation_report(self, tournament_id: int, file_path: str | Path) -> None:
+        rows = self._federation_exporter("trf16").validation_report_rows(tournament_id)
+        self._write_report(
+            file_path,
+            "Pendencias TRF16",
+            ["Tipo", "Item", "Valor"],
+            rows,
+        )
 
-        if not players:
-            raise AppError("Cadastre jogadores antes de exportar para Chess-Results/TRF16.")
-        if not str(tournament.get("name") or "").strip():
-            raise AppError("Informe o nome do torneio antes de exportar para Chess-Results/TRF16.")
-        if tournament.get("competition_type") == "team" and not self.db.list_teams(tournament_id, active_only=False):
-            raise AppError("Cadastre equipes antes de exportar um TRF16 por equipes.")
+    def _federation_exporter(self, code: str):
+        from src.services.federation_exporters import FederationExporterRegistry, TRF16Exporter
 
-        required_tournament_fields = [
-            ("location", "cidade/local"),
-            ("start_date", "data de inicio"),
-            ("end_date", "data de termino"),
-            ("time_control", "ritmo de jogo"),
-        ]
-        for field, label in required_tournament_fields:
-            if not str(tournament.get(field) or "").strip():
-                warnings.append(f"Torneio sem {label}.")
-        if not str(settings.get("federation") or "").strip():
-            warnings.append("Torneio sem federacao FIDE.")
-        if not self._trf_chief_arbiter(tournament_id, settings):
-            warnings.append("Torneio sem arbitro-chefe.")
-        if not rounds:
-            warnings.append("Torneio sem rodadas geradas; jogadores serao exportados sem resultados.")
+        registry = FederationExporterRegistry()
+        registry.register(TRF16Exporter(self))
+        return registry.get(code)
 
-        schedule = {
-            int(item["round_number"]): str(item.get("date") or "").strip()
-            for item in self.db.list_round_schedule(tournament_id)
-        }
-        rounds_count = int(tournament.get("rounds_count") or 0)
-        missing_round_dates = [
-            str(round_number)
-            for round_number in range(1, rounds_count + 1)
-            if not schedule.get(round_number)
-        ]
-        if missing_round_dates:
-            warnings.append(f"Rodadas sem data no calendario: {', '.join(missing_round_dates)}.")
-
-        missing_fide = []
-        missing_birth = []
-        missing_federation = []
-        missing_rating = []
-        for player in players:
-            name = player_pairing_name(player)
-            if not str(player.get("fide_id") or "").strip():
-                missing_fide.append(name)
-            if not str(player.get("birth_date") or "").strip():
-                missing_birth.append(name)
-            if not str(player.get("federation_id") or settings.get("federation") or "").strip():
-                missing_federation.append(name)
-            if self._trf_rating(player) <= 0:
-                missing_rating.append(name)
-
-        warnings.extend(self._trf_missing_field_warnings("FIDE ID", missing_fide))
-        warnings.extend(self._trf_missing_field_warnings("data de nascimento", missing_birth))
-        warnings.extend(self._trf_missing_field_warnings("federacao", missing_federation))
-        warnings.extend(self._trf_missing_field_warnings("rating FIDE", missing_rating))
-        return warnings
+    def _trf_pending_result_rounds(
+        self,
+        tournament: Mapping[str, Any],
+        rounds: list[dict[str, Any]],
+    ) -> list[str]:
+        pending_rounds = []
+        for round_data in rounds:
+            if tournament.get("competition_type") == "team":
+                has_pending = any(
+                    not board.get("result") or str(board.get("result")) not in RESULT_POINTS
+                    for match in self.db.list_team_matches_for_round(int(round_data["id"]))
+                    if not match.get("is_bye")
+                    for board in self.db.list_team_boards(int(match["id"]))
+                )
+            else:
+                has_pending = any(
+                    not pairing.get("result") or str(pairing.get("result")) not in FINAL_RESULTS
+                    for pairing in self.db.get_pairings_for_round(int(round_data["id"]))
+                )
+            if has_pending:
+                pending_rounds.append(str(round_data["number"]))
+        return pending_rounds
 
     @staticmethod
     def _trf_clean(value: Any, width: int | None = None) -> str:
@@ -2004,6 +2409,23 @@ class ExportService:
         if not parsed:
             return raw.replace("-", "/")[:10]
         return parsed.strftime("%Y/%m/%d" if long_year else "%y/%m/%d")
+
+    @classmethod
+    def _trf_date_is_valid(cls, value: Any) -> bool:
+        raw = str(value or "").strip()
+        if not raw:
+            return False
+        normalized = cls._trf_date(raw, long_year=True)
+        try:
+            datetime.strptime(normalized, "%Y/%m/%d")
+            return True
+        except ValueError:
+            return False
+
+    @staticmethod
+    def _trf_valid_federation_code(value: Any) -> bool:
+        code = str(value or "").strip()
+        return len(code) == 3 and code.isalpha()
 
     @staticmethod
     def _trf_rating(player: Mapping[str, Any]) -> int:
@@ -2431,6 +2853,239 @@ class ExportService:
         logger.info("Site estatico exportado em %s", path)
         return path / "index.html"
 
+    def export_public_json(self, tournament_id: int, file_path: str | Path, mode: str = "publico") -> Path:
+        payload = self.public_tournament_payload(tournament_id, mode=mode)
+        path = Path(file_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        return path
+
+    def public_tournament_payload(self, tournament_id: int, mode: str = "publico") -> dict[str, Any]:
+        mode = self._portal_mode(mode)
+        tournament = self.db.get_tournament(tournament_id)
+        if not tournament:
+            raise AppError("Selecione um torneio valido.")
+        settings = self.db.get_tournament_settings(tournament_id) or {}
+        app_settings = self.db.get_app_settings()
+        is_team_tournament = tournament.get("competition_type") == "team"
+        standings = [] if settings.get("hide_standings") else self._standings_for_tournament(tournament_id, tournament)
+        rounds = sorted(self.db.list_rounds(tournament_id), key=lambda item: item["number"])
+        latest_round = rounds[-1] if rounds else None
+        players = self.db.list_players(tournament_id, active_only=False)
+        payload = {
+            "mode": mode,
+            "generated_at": Database.now(),
+            "notice": str(app_settings.get("live_portal_notice") or ""),
+            "tournament": self._public_tournament_info(tournament, settings, mode),
+            "current_round": self._public_round_payload(latest_round, is_team_tournament) if latest_round else None,
+            "rounds": [self._public_round_payload(round_data, is_team_tournament) for round_data in rounds],
+            "standings": self._public_standings_payload(standings, is_team_tournament, mode),
+            "players": [self._public_player_card(player, mode) for player in players],
+        }
+        if is_team_tournament:
+            payload["teams"] = [self._public_team_card(team, mode) for team in self.db.list_teams(tournament_id, active_only=False)]
+        return payload
+
+    @staticmethod
+    def _portal_mode(mode: str) -> str:
+        normalized = str(mode or "publico").strip().casefold()
+        if normalized in {"privado", "private"}:
+            return "privado"
+        if normalized in {"clube", "club"}:
+            return "clube"
+        return "publico"
+
+    def _public_tournament_info(
+        self,
+        tournament: dict[str, Any],
+        settings: dict[str, Any],
+        mode: str,
+    ) -> dict[str, Any]:
+        info = {
+            "id": int(tournament["id"]),
+            "name": tournament.get("name", ""),
+            "location": tournament.get("location", ""),
+            "start_date": tournament.get("start_date", ""),
+            "end_date": tournament.get("end_date", ""),
+            "rounds_count": int(tournament.get("rounds_count") or 0),
+            "time_control": tournament.get("time_control", ""),
+            "status": tournament.get("status", ""),
+            "competition_type": tournament.get("competition_type", "individual"),
+            "chief_arbiter": settings.get("chief_arbiter", ""),
+            "organizer": settings.get("organizer", ""),
+        }
+        if mode == "privado":
+            info["contact_email"] = settings.get("contact_email", "")
+            info["comments"] = settings.get("comments", "")
+        return info
+
+    def _public_round_payload(self, round_data: dict[str, Any], is_team_tournament: bool) -> dict[str, Any]:
+        if is_team_tournament:
+            matches = []
+            for match in self.db.list_team_matches_for_round(int(round_data["id"])):
+                matches.append(
+                    {
+                        "match_number": int(match.get("match_number") or 0),
+                        "white_team": match.get("white_team_name", ""),
+                        "black_team": "BYE" if match.get("is_bye") else match.get("black_team_name", ""),
+                        "result": self._team_match_score(match),
+                        "boards": [
+                            {
+                                "board": int(board.get("board_number") or 0),
+                                "white": self._team_board_player_name(board, "white"),
+                                "black": self._team_board_player_name(board, "black"),
+                                "result": board.get("result", ""),
+                            }
+                            for board in self.db.list_team_boards(int(match["id"]))
+                        ],
+                    }
+                )
+            return {"id": int(round_data["id"]), "number": int(round_data["number"]), "status": round_data["status"], "matches": matches}
+        pairings = []
+        for pairing in self.db.get_pairings_for_round(int(round_data["id"])):
+            pairings.append(
+                {
+                    "board": int(pairing.get("board_number") or 0),
+                    "white": pairing_player_name(pairing, "white"),
+                    "black": "BYE" if pairing.get("is_bye") else pairing_player_name(pairing, "black"),
+                    "result": pairing.get("result", ""),
+                    "is_bye": bool(pairing.get("is_bye")),
+                }
+            )
+        return {"id": int(round_data["id"]), "number": int(round_data["number"]), "status": round_data["status"], "pairings": pairings}
+
+    @staticmethod
+    def _public_standings_payload(
+        standings: list[dict[str, Any]],
+        is_team_tournament: bool,
+        mode: str,
+    ) -> list[dict[str, Any]]:
+        if is_team_tournament:
+            return [
+                {
+                    "position": item["position"],
+                    "team": item["name"],
+                    "club": item.get("club", ""),
+                    "match_points": item.get("match_points", 0),
+                    "game_points": item.get("game_points", 0),
+                    "wins": item.get("wins", 0),
+                    "draws": item.get("draws", 0),
+                    "losses": item.get("losses", 0),
+                    "buchholz": item.get("buchholz", 0),
+                }
+                for item in standings
+            ]
+        rows = []
+        for item in standings:
+            row = {
+                "position": item["position"],
+                "name": item["name"],
+                "category": item.get("category", ""),
+                "points": item.get("points", 0),
+                "buchholz": item.get("buchholz", 0),
+                "buchholz_median": item.get("buchholz_median", 0),
+                "sonneborn_berger": item.get("sonneborn_berger", 0),
+                "wins": item.get("wins", 0),
+            }
+            if mode in {"clube", "privado"}:
+                row["rating"] = item.get("rating", 0)
+                row["club"] = item.get("club", "")
+            rows.append(row)
+        return rows
+
+    @staticmethod
+    def _public_player_card(player: dict[str, Any], mode: str) -> dict[str, Any]:
+        card = {
+            "id": int(player.get("id") or 0),
+            "name": player_full_name(player),
+            "club": player.get("club", ""),
+            "category": player.get("category", ""),
+            "rating": int(player.get("rating") or 0),
+            "status": player.get("player_status", "active"),
+        }
+        if mode in {"clube", "privado"}:
+            card["fide_id"] = player.get("fide_id", "")
+            card["cbx_id"] = player.get("cbx_id", "")
+        return card
+
+    @staticmethod
+    def _public_team_card(team: dict[str, Any], mode: str) -> dict[str, Any]:
+        card = {
+            "id": int(team.get("id") or 0),
+            "name": team.get("name", ""),
+            "club": team.get("club", ""),
+            "captain": team.get("captain", "") if mode in {"clube", "privado"} else "",
+            "active": bool(team.get("active")),
+        }
+        return card
+
+    def live_portal_html(self, tournament_id: int, mode: str = "publico") -> str:
+        payload = self.public_tournament_payload(tournament_id, mode=mode)
+        tournament = payload["tournament"]
+        standings_rows = "".join(
+            "<tr>"
+            f"<td>{item.get('position', '')}</td>"
+            f"<td>{self._escape(item.get('name') or item.get('team') or '')}</td>"
+            f"<td>{self._escape(item.get('category') or item.get('club') or '')}</td>"
+            f"<td>{self._escape(item.get('points', item.get('match_points', '')))}</td>"
+            f"<td>{self._escape(item.get('buchholz', ''))}</td>"
+            "</tr>"
+            for item in payload["standings"]
+        )
+        current = payload.get("current_round") or {}
+        pairings = current.get("matches") or current.get("pairings") or []
+        current_rows = "".join(
+            "<tr>"
+            f"<td>{self._escape(item.get('match_number', item.get('board', '')))}</td>"
+            f"<td>{self._escape(item.get('white_team', item.get('white', '')))}</td>"
+            f"<td>{self._escape(item.get('result', ''))}</td>"
+            f"<td>{self._escape(item.get('black_team', item.get('black', '')))}</td>"
+            "</tr>"
+            for item in pairings
+        )
+        player_rows = "".join(
+            "<tr>"
+            f"<td>{self._escape(item.get('name', ''))}</td>"
+            f"<td>{self._escape(item.get('club', ''))}</td>"
+            f"<td>{self._escape(item.get('category', ''))}</td>"
+            f"<td>{self._escape(item.get('rating', ''))}</td>"
+            "</tr>"
+            for item in payload["players"]
+        )
+        rounds_rows = "".join(
+            "<tr>"
+            f"<td>{round_data.get('number', '')}</td>"
+            f"<td>{self._escape(round_data.get('status', ''))}</td>"
+            f"<td>{len(round_data.get('matches') or round_data.get('pairings') or [])}</td>"
+            "</tr>"
+            for round_data in payload["rounds"]
+        )
+        return f"""<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{self._escape(tournament['name'])}</title>
+  <style>{self._site_css()}</style>
+</head>
+<body>
+  <header><p class="eyebrow">Albericus Live</p><h1>{self._escape(tournament['name'])}</h1><p>{self._escape(tournament.get('location', ''))}</p></header>
+  <main>
+    <section class="summary">
+      <div><strong>Modo</strong><span>{self._escape(payload['mode'])}</span></div>
+      <div><strong>Rodada atual</strong><span>{self._escape(current.get('number', 'Sem rodada'))}</span></div>
+      <div><strong>Status</strong><span>{self._escape(tournament.get('status', ''))}</span></div>
+    </section>
+    <section><h2>Avisos do arbitro</h2><p>{self._escape(payload.get('notice') or 'Nenhum aviso publicado.')}</p></section>
+    <section><h2>Rodada atual</h2><table><thead><tr><th>Mesa</th><th>Brancas/Equipe A</th><th>Resultado</th><th>Pretas/Equipe B</th></tr></thead><tbody>{current_rows}</tbody></table></section>
+    <section><h2>Classificacao</h2><table><thead><tr><th>Pos</th><th>Nome</th><th>Categoria/Clube</th><th>Pts</th><th>Buchholz</th></tr></thead><tbody>{standings_rows}</tbody></table></section>
+    <section><h2>Historico de rodadas</h2><table><thead><tr><th>Rodada</th><th>Status</th><th>Mesas</th></tr></thead><tbody>{rounds_rows}</tbody></table></section>
+    <section><h2>Fichas publicas</h2><table><thead><tr><th>Nome</th><th>Clube</th><th>Categoria</th><th>Rating</th></tr></thead><tbody>{player_rows}</tbody></table></section>
+  </main>
+  <footer>Atualizado em {self._escape(payload['generated_at'])}</footer>
+</body>
+</html>"""
+
     def _club_portal_scope(
         self,
         club_id: int | None,
@@ -2793,6 +3448,14 @@ footer {
         for pairing in pairings:
             black_name = "BYE" if pairing["is_bye"] else pairing_player_name(pairing, "black")
             black_rating = "" if pairing["is_bye"] else pairing["black_rating"]
+            qr_cell = ""
+            if not pairing["is_bye"] and round_data.get("status") != "closed":
+                url = self._qr_result_url(int(round_data["tournament_id"]), int(pairing["id"]))
+                qr_cell = (
+                    f"<a href='{self._escape(url)}'>Enviar</a><br>"
+                    f"<img alt='QR mesa {pairing['board_number']}' width='84' height='84' "
+                    f"src='{self._escape(self._qr_image_data_uri(url))}'>"
+                )
             rows.append(
                 "<tr>"
                 f"<td>{pairing['board_number']}</td>"
@@ -2801,6 +3464,7 @@ footer {
                 f"<td>{self._escape(pairing['result'] or '')}</td>"
                 f"<td>{self._escape(black_name or '')}</td>"
                 f"<td>{self._escape(black_rating or '')}</td>"
+                f"<td>{qr_cell}</td>"
                 "</tr>"
             )
         return (
@@ -2808,10 +3472,22 @@ footer {
             f"<h2>Rodada {round_data['number']}</h2>"
             f"<p>Status: {self._escape(round_data['status'])}</p>"
             "<table><thead><tr><th>Mesa</th><th>Brancas</th><th>Rating</th>"
-            "<th>Resultado</th><th>Pretas</th><th>Rating</th></tr></thead>"
+            "<th>Resultado</th><th>Pretas</th><th>Rating</th><th>QR resultado</th></tr></thead>"
             f"<tbody>{''.join(rows)}</tbody></table>"
             "</section>"
         )
+
+    @staticmethod
+    def _qr_image_data_uri(url: str) -> str:
+        try:
+            import qrcode
+
+            image = qrcode.make(url)
+            buffer = io.BytesIO()
+            image.save(buffer, format="PNG")
+            return "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode("ascii")
+        except Exception:
+            return ""
 
     def _site_team_round_section(self, round_data: dict[str, Any]) -> str:
         rows = []
@@ -2897,6 +3573,28 @@ footer {
             "</tr>"
             for item in standings
         )
+        tiebreak_rows = []
+        for item in standings:
+            components = dict(item.get("tiebreak_components") or {})
+            buchholz = components.get("buchholz", {})
+            median = components.get("buchholz_median", {})
+            sb = components.get("sonneborn_berger", {})
+            summary = " | ".join(
+                part
+                for part in (
+                    f"Buchholz: {self._tiebreak_component_summary(buchholz)}",
+                    f"Mediano: {self._tiebreak_component_summary(median)}",
+                    f"SB: {self._tiebreak_component_summary(sb)}",
+                )
+                if part.strip()
+            )
+            tiebreak_rows.append(
+                "<tr>"
+                f"<td>{item['position']}</td>"
+                f"<td>{self._escape(item['name'])}</td>"
+                f"<td>{self._escape(summary)}</td>"
+                "</tr>"
+            )
         return (
             "<section>"
             "<h2>Classificacao</h2>"
@@ -2904,6 +3602,9 @@ footer {
             "<th>Buchholz</th><th>Buchholz M</th><th>SB</th>"
             "<th>Vitorias</th><th>Perf.</th></tr></thead>"
             f"<tbody>{standings_rows}</tbody></table>"
+            "<h3>Componentes de desempate</h3>"
+            "<table><thead><tr><th>Pos</th><th>Jogador</th><th>Resumo</th></tr></thead>"
+            f"<tbody>{''.join(tiebreak_rows)}</tbody></table>"
             "</section>"
         )
 
@@ -3151,6 +3852,38 @@ footer {
                 "Sexo",
                 "Status",
             ],
+            rows,
+        )
+
+    def _initial_player_list_section(self, tournament_id: int) -> tuple[str, list[str], list[list[Any]]]:
+        tournament = self.db.get_tournament(tournament_id)
+        players = self.db.list_players(tournament_id, active_only=False)
+        ordered_players = sorted(
+            players,
+            key=lambda player: (
+                0 if player.get("player_status") == "active" else 1,
+                -int(player.get("rating") or 0),
+                player_full_name(player).casefold(),
+            ),
+        )
+        rows = [
+            [
+                index,
+                player_full_name(player),
+                player.get("rating", ""),
+                player.get("club", ""),
+                player.get("category", ""),
+                PLAYER_STATUSES.get(player.get("player_status", "active"), player.get("player_status", "")),
+                "",
+            ]
+            for index, player in enumerate(ordered_players, start=1)
+        ]
+        title = "Lista inicial de jogadores"
+        if tournament:
+            title = f"{title} - {tournament['name']}"
+        return (
+            title,
+            ["Inicial", "Jogador", "Rating", "Clube", "Categoria", "Status", "Presenca"],
             rows,
         )
 
@@ -4311,6 +5044,9 @@ footer {
         pairings = self.db.get_pairings_for_round(round_id)
         rows = []
         for pairing in pairings:
+            result_url = ""
+            if not pairing["is_bye"] and round_data.get("status") != "closed":
+                result_url = self._qr_result_url(int(round_data["tournament_id"]), int(pairing["id"]))
             rows.append(
                 [
                     pairing["board_number"],
@@ -4319,13 +5055,21 @@ footer {
                     pairing["result"],
                     "BYE" if pairing["is_bye"] else pairing_player_name(pairing, "black"),
                     "" if pairing["is_bye"] else pairing["black_rating"],
+                    result_url,
                 ]
             )
         return (
             f"Rodada {round_data['number']}",
-            ["Mesa", "Brancas", "Rating", "Resultado", "Pretas", "Rating"],
+            ["Mesa", "Brancas", "Rating", "Resultado", "Pretas", "Rating", "Link resultado QR"],
             rows,
         )
+
+    def _qr_result_url(self, tournament_id: int, pairing_id: int) -> str:
+        from src.services.qr_result_service import QRResultService
+
+        settings = self.db.get_app_settings()
+        base_url = str(settings.get("local_result_server_url") or "http://localhost:8765")
+        return str(QRResultService(self.db, self.pairing_service).result_url_for_pairing(tournament_id, pairing_id, base_url)["url"])
 
     def _team_pairings_section(self, round_data: dict[str, Any]) -> tuple[str, list[str], list[list[Any]]]:
         rows = []
@@ -4426,6 +5170,33 @@ footer {
             rows,
         )
 
+    @staticmethod
+    def _tiebreak_component_summary(component: dict[str, Any]) -> str:
+        if "opponents" in component:
+            return " | ".join(
+                "{name}: {value}".format(
+                    name=item.get("opponent_name", ""),
+                    value=item.get("contribution", item.get("points", "")),
+                )
+                for item in component.get("opponents", [])
+            )
+        if "used_scores" in component:
+            cuts = []
+            if component.get("cut_low") is not None:
+                cuts.append(f"corte menor {component['cut_low']}")
+            if component.get("cut_high") is not None:
+                cuts.append(f"corte maior {component['cut_high']}")
+            return f"usados: {component.get('used_scores', [])}; {'; '.join(cuts)}"
+        if "games" in component:
+            return " | ".join(
+                "{name}: {earned}".format(
+                    name=item.get("opponent_name", ""),
+                    earned=item.get("earned", ""),
+                )
+                for item in component.get("games", [])
+            )
+        return json.dumps(component, ensure_ascii=False, sort_keys=True)
+
     def _team_standings_section(self, tournament_id: int) -> tuple[str, list[str], list[list[Any]]]:
         standings = self.pairing_service.team_standings(tournament_id)
         rows = [
@@ -4462,6 +5233,68 @@ footer {
                 "Confrontos",
                 "Buchholz",
                 "Status",
+            ],
+            rows,
+        )
+
+    def _team_lineups_section(self, tournament_id: int) -> tuple[str, list[str], list[list[Any]]]:
+        rows = []
+        for lineup in self.db.list_team_lineups(tournament_id):
+            for board in self.db.list_team_lineup_boards(int(lineup["id"])):
+                rows.append(
+                    [
+                        lineup.get("round_number", ""),
+                        lineup.get("match_number", ""),
+                        lineup.get("team_name", ""),
+                        board.get("board_number", ""),
+                        board.get("color", ""),
+                        player_full_name(
+                            {
+                                "name": board.get("player_name", ""),
+                                "surname": board.get("player_surname", ""),
+                                "given_name": board.get("player_given_name", ""),
+                            }
+                        ),
+                        board.get("player_rating", ""),
+                        board.get("role", ""),
+                        lineup.get("status", ""),
+                    ]
+                )
+        return (
+            "Escalacoes por equipes",
+            ["Rodada", "Match", "Equipe", "Tabuleiro", "Cor", "Jogador", "Rating", "Funcao", "Status"],
+            rows,
+        )
+
+    def _team_substitutions_section(self, tournament_id: int) -> tuple[str, list[str], list[list[Any]]]:
+        rows = [
+            [
+                item.get("created_at", ""),
+                item.get("round_number", ""),
+                item.get("match_number", ""),
+                item.get("team_name", ""),
+                item.get("board_number", ""),
+                item.get("color", ""),
+                item.get("out_player_name", ""),
+                item.get("in_player_name", ""),
+                "Sim" if item.get("requires_correction") else "Nao",
+                item.get("reason", ""),
+            ]
+            for item in self.db.list_team_substitution_events(tournament_id)
+        ]
+        return (
+            "Substituicoes por equipes",
+            [
+                "Data/hora",
+                "Rodada",
+                "Match",
+                "Equipe",
+                "Tabuleiro",
+                "Cor",
+                "Saiu",
+                "Entrou",
+                "Correcao formal",
+                "Motivo",
             ],
             rows,
         )

@@ -6,15 +6,18 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "customtkinter>=5.2.2",
+    "fastapi>=0.111.0",
     "markdown>=3.6",
     "matplotlib>=3.8.0",
     "openpyxl>=3.1.2",
     "pandas>=2.2.0",
     "pillow>=10.0.0",
     "python-chess>=1.999",
+    "qrcode[pil]>=7.4.2",
     "reportlab>=4.2.0",
     "svglib>=1.6.0",
     "tkcalendar>=1.6.1",
+    "uvicorn>=0.30.0",
     "xhtml2pdf>=0.2.15",
     "xlrd>=2.0.1",
 ]

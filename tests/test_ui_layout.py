@@ -26,6 +26,8 @@ class UiLayoutSmokeTest(unittest.TestCase):
         "show_calendar",
         "show_internal_ranking",
         "show_tournaments",
+        "show_tournament_dashboard",
+        "show_arbitration_panel",
         "show_tournament_settings",
         "show_players",
         "show_teams",
@@ -35,6 +37,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
         "show_app_settings",
         "show_reports",
         "show_export",
+        "show_integrations",
     ]
 
     def setUp(self) -> None:
@@ -123,12 +126,19 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.app.show_players()
         self.app.update()
         with mock.patch("src.ui.screens.tournaments.filedialog.askopenfilename", return_value=str(csv_path)):
-            self._click_button("Importar CSV")
+            self._click_button("Importar CSV/Excel")
         self.app.update()
 
         players = self.db.list_players(self.tournament_id, active_only=False)
         self.assertCountEqual([player["name"] for player in players], ["Carla", "Diego"])
         self.assertTrue(any("2 jogadores importados" in message for message in self.messages))
+        self.assertTrue(
+            any(
+                isinstance(widget, ctk.CTkLabel)
+                and widget.cget("text") == "Total: 2 | Visiveis: 2 | Presentes: 2 | Ausentes: 0 | Membros: 0 | Convidados: 2"
+                for widget in self._walk(self.app.content)
+            )
+        )
 
     def test_team_screen_creates_team_and_assigns_player(self) -> None:
         team_tournament_id = TournamentService(self.db).create_tournament(
@@ -339,6 +349,289 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.assertTrue(output_path.exists())
         self.assertIn("Smoke", output_path.read_text(encoding="utf-8-sig"))
 
+    def test_pairing_preview_does_not_create_round_from_ui(self) -> None:
+        self.db.create_player(self.tournament_id, name="Bruno", rating=1800, club="Clube", category="ABS")
+        self.db.create_player(self.tournament_id, name="Carlos", rating=1700, club="Clube", category="ABS")
+
+        self.app.show_pairings()
+        self.app.update()
+        self._click_button("Pre-visualizar rodada")
+        self.app.update()
+
+        self.assertEqual([], self.db.list_rounds(self.tournament_id))
+        self.assertIn("Previa da rodada 1", self.messages[-1])
+        self.assertIn("nao gravou rodada", self.messages[-1])
+
+    def test_standings_tiebreak_explanation_button_shows_components(self) -> None:
+        self.db.create_player(self.tournament_id, name="Bruno", rating=1800, club="Clube", category="ABS")
+        self.db.create_player(self.tournament_id, name="Carlos", rating=1700, club="Clube", category="ABS")
+        round_data = self.app.pairing_service.generate_next_round(self.tournament_id)
+        pairing = self.db.get_pairings_for_round(int(round_data["id"]))[0]
+        self.app.pairing_service.update_result(self.tournament_id, int(pairing["id"]), "1-0")
+        self.app.pairing_service.close_round(self.tournament_id, int(round_data["id"]))
+
+        self.app.show_standings()
+        self.app.update()
+        first_row = self.app.standings_tree.get_children()[0]
+        self.app.standings_tree.selection_set(first_row)
+        self._click_button("Explicar desempate")
+
+        self.assertIn("Buchholz", self.messages[-1])
+
+    def test_arbitration_panel_shows_pending_metrics_and_actions(self) -> None:
+        self.db.create_player(self.tournament_id, name="Bruno", rating=1800, club="Clube", category="ABS")
+        self.db.create_player(self.tournament_id, name="Carlos", rating=1700, club="Clube", category="ABS")
+        self.app.pairing_service.generate_next_round(self.tournament_id)
+
+        self.app.show_arbitration_panel()
+        self.app.update()
+
+        self._label("Painel do arbitro")
+        self._label("Pendentes")
+        self._label("1")
+        self._click_button("Central de pendencias")
+        self.app.update()
+        self._label("Central de pendencias")
+        self._label("Total")
+        with self.assertRaisesRegex(AssertionError, "Selecione uma pendencia"):
+            self._click_button("Detalhes")
+        self._click_button("Voltar ao painel")
+        self.app.update()
+        self._label("Painel do arbitro")
+        self._click_button("Abrir rodadas")
+        self.app.update()
+        self._label("Rodadas e resultados")
+
+    def test_arbitration_issues_can_approve_qr_submission(self) -> None:
+        self.db.create_player(self.tournament_id, name="Bruno", rating=1800, club="Clube", category="ABS")
+        self.db.create_player(self.tournament_id, name="Carlos", rating=1700, club="Clube", category="ABS")
+        round_data = self.app.pairing_service.generate_next_round(self.tournament_id)
+        pairing = self.db.get_pairings_for_round(int(round_data["id"]))[0]
+        token_payload = self.app.qr_result_service.result_url_for_pairing(self.tournament_id, int(pairing["id"]))
+        self.app.qr_result_service.submit_result(token_payload["token"], "1-0", submitter="Mesa 1")
+
+        self.app.show_arbitration_issues()
+        self.app.update()
+        tree = self._first_tree()
+        first_row = tree.get_children()[0]
+        tree.selection_set(first_row)
+        self._click_button("Aprovar QR")
+
+        self.assertEqual("1-0", self.db.get_pairing(int(pairing["id"]))["result"])
+        self.assertIn("Resultado QR aprovado", self.messages[-1])
+
+    def test_arbitration_issues_can_reject_qr_submission(self) -> None:
+        self.db.create_player(self.tournament_id, name="Bruno", rating=1800, club="Clube", category="ABS")
+        self.db.create_player(self.tournament_id, name="Carlos", rating=1700, club="Clube", category="ABS")
+        round_data = self.app.pairing_service.generate_next_round(self.tournament_id)
+        pairing = self.db.get_pairings_for_round(int(round_data["id"]))[0]
+        token_payload = self.app.qr_result_service.result_url_for_pairing(self.tournament_id, int(pairing["id"]))
+        submission = self.app.qr_result_service.submit_result(token_payload["token"], "0-1", submitter="Mesa 1")
+
+        self.app.show_arbitration_issues()
+        self.app.update()
+        tree = self._first_tree()
+        first_row = tree.get_children()[0]
+        tree.selection_set(first_row)
+        self._click_button("Rejeitar QR")
+
+        self.assertEqual("", self.db.get_pairing(int(pairing["id"]))["result"])
+        self.assertEqual("rejected", self.db.get_result_submission(int(submission["id"]))["status"])
+        self.assertIn("Resultado QR rejeitado", self.messages[-1])
+        refreshed_tree = self._first_tree()
+        self.assertEqual(0, len(refreshed_tree.get_children()))
+
+    def test_arbitration_issues_can_acknowledge_clock_issue(self) -> None:
+        self.db.create_player(self.tournament_id, name="Bruno", rating=1800, club="Clube", category="ABS")
+        self.db.create_player(self.tournament_id, name="Carlos", rating=1700, club="Clube", category="ABS")
+        round_data = self.app.pairing_service.generate_next_round(self.tournament_id)
+        pairing = self.db.get_pairings_for_round(int(round_data["id"]))[0]
+        self.app.clock_integration_service.record_manual_event(
+            self.tournament_id,
+            "flag_fall",
+            pairing_id=int(pairing["id"]),
+            side="white",
+            seconds_remaining=0,
+            note="Conferido pelo arbitro.",
+        )
+
+        self.app.show_arbitration_issues()
+        self.app.update()
+        tree = self._first_tree()
+        first_row = tree.get_children()[0]
+        tree.selection_set(first_row)
+        self._click_button("Marcar ciencia")
+
+        self.assertIn("Pendencia marcada como ciente", self.messages[-1])
+        refreshed_tree = self._first_tree()
+        self.assertEqual(0, len(refreshed_tree.get_children()))
+
+    def test_pairing_screen_shows_result_states_for_qr_and_correction(self) -> None:
+        self.db.create_player(self.tournament_id, name="Bruno", rating=1800, club="Clube", category="ABS")
+        self.db.create_player(self.tournament_id, name="Carlos", rating=1700, club="Clube", category="ABS")
+        round_data = self.app.pairing_service.generate_next_round(self.tournament_id)
+        pairing = self.db.get_pairings_for_round(int(round_data["id"]))[0]
+        token_payload = self.app.qr_result_service.result_url_for_pairing(self.tournament_id, int(pairing["id"]))
+        submission = self.app.qr_result_service.submit_result(token_payload["token"], "1-0", submitter="Mesa 1")
+
+        self.app.show_pairings()
+        self.app.update()
+        self.assertIn("submetido QR", self._pairing_row_values())
+
+        self.app.qr_result_service.approve_submission(int(submission["id"]), reviewer="Arbitro")
+        self.app.show_pairings()
+        self.app.update()
+        self.assertIn("aprovado QR", self._pairing_row_values())
+
+        self.app.pairing_service.close_round(self.tournament_id, int(round_data["id"]))
+        settings = self.db.get_tournament_settings(self.tournament_id) or {}
+        settings["allow_dangerous_changes"] = 1
+        self.db.save_tournament_settings(self.tournament_id, settings)
+        self.app.pairing_service.update_result(self.tournament_id, int(pairing["id"]), "0-1")
+        self.app.show_pairings()
+        self.app.update()
+        self.assertIn("corrigido", self._pairing_row_values())
+
+    def test_pairing_screen_shows_rejected_qr_state(self) -> None:
+        self.db.create_player(self.tournament_id, name="Bruno", rating=1800, club="Clube", category="ABS")
+        self.db.create_player(self.tournament_id, name="Carlos", rating=1700, club="Clube", category="ABS")
+        round_data = self.app.pairing_service.generate_next_round(self.tournament_id)
+        pairing = self.db.get_pairings_for_round(int(round_data["id"]))[0]
+        token_payload = self.app.qr_result_service.result_url_for_pairing(self.tournament_id, int(pairing["id"]))
+        submission = self.app.qr_result_service.submit_result(token_payload["token"], "0-1", submitter="Mesa 1")
+        self.app.qr_result_service.reject_submission(int(submission["id"]), reviewer="Arbitro")
+
+        self.app.show_pairings()
+        self.app.update()
+
+        self.assertIn("rejeitado QR", self._pairing_row_values())
+
+    def test_pairing_screen_result_shortcuts_save_and_advance_selection(self) -> None:
+        for index in range(4):
+            self.db.create_player(
+                self.tournament_id,
+                name=f"Jogador {index + 1}",
+                rating=1800 - index * 20,
+                club="Clube",
+                category="ABS",
+            )
+
+        self.app.show_pairings()
+        self.app.update()
+        self._click_button("Gerar proxima rodada")
+        self.app.update()
+
+        rows = list(self.app.pairing_tree.get_children())
+        self.assertEqual(2, len(rows))
+        self.app.pairing_tree.selection_set(rows[0])
+
+        self.assertEqual("break", self.app._quick_save_result_from_screen("1-0"))
+        self.app.update()
+        self.assertEqual(self.app.pairing_tree.selection()[0], self.app.pairing_tree.get_children()[1])
+
+        self.assertEqual("break", self.app._quick_save_result_from_screen("0-1"))
+        self.app.update()
+
+        pairings = self.db.get_pairings_for_round(self.app.current_round_id)
+        results_by_board = {pairing["board_number"]: pairing["result"] for pairing in pairings}
+        self.assertEqual({1: "1-0", 2: "0-1"}, results_by_board)
+
+    def test_initial_call_summary_updates_when_marking_absent(self) -> None:
+        for index in range(3):
+            self.db.create_player(
+                self.tournament_id,
+                name=f"Aluno {index + 1}",
+                rating=1500 - index * 10,
+                club="Escola",
+                category="Sub-12",
+            )
+
+        self.app.show_pairings()
+        self.app.update()
+        self.assertEqual(
+            "Presentes: 3 | Ausentes: 0 | Total: 3",
+            self.app.initial_call_summary_label.cget("text"),
+        )
+
+        first_row = self.app.initial_players_tree.get_children()[0]
+        self.app.initial_players_tree.selection_set(first_row)
+        self._click_button("Ausente")
+        self.app.update()
+
+        self.assertEqual(
+            "Presentes: 2 | Ausentes: 1 | Total: 3",
+            self.app.initial_call_summary_label.cget("text"),
+        )
+
+    def test_generate_round_warns_when_configured_rounds_are_below_recommendation(self) -> None:
+        for index in range(9):
+            self.db.create_player(
+                self.tournament_id,
+                name=f"Jogador {index + 1}",
+                rating=1800 - index * 10,
+                club="Clube",
+                category="ABS",
+            )
+
+        self.app.show_pairings()
+        self.app.update()
+        with mock.patch("src.ui.screens.pairings.messagebox.askyesnocancel", return_value=True) as confirm:
+            self._click_button("Gerar proxima rodada")
+        self.app.update()
+
+        self.assertEqual(1, len(self.db.list_rounds(self.tournament_id)))
+        confirm.assert_called_once()
+        self.assertIn("mínimo recomendado é 4 rodadas", confirm.call_args.args[1])
+
+    def test_generate_round_warning_can_open_tournament_settings(self) -> None:
+        for index in range(9):
+            self.db.create_player(
+                self.tournament_id,
+                name=f"Jogador {index + 1}",
+                rating=1800 - index * 10,
+                club="Clube",
+                category="ABS",
+            )
+
+        self.app.show_pairings()
+        self.app.update()
+        with mock.patch("src.ui.screens.pairings.messagebox.askyesnocancel", return_value=False):
+            self._click_button("Gerar proxima rodada")
+        self.app.update()
+
+        self.assertEqual([], self.db.list_rounds(self.tournament_id))
+        self._label("Configuracao do torneio")
+
+    def test_pairing_write_handlers_require_tournament_permission(self) -> None:
+        self.db.create_player(self.tournament_id, name="Jogador A", rating=1800, club="Clube", category="ABS")
+        self.db.create_player(self.tournament_id, name="Jogador B", rating=1700, club="Clube", category="ABS")
+        self.app.security_service._current_user = {
+            "id": "2",
+            "username": "consulta",
+            "role": "viewer",
+        }
+
+        self.app.show_pairings()
+        self.app.update()
+        with self.assertRaisesRegex(AssertionError, "Permissão negada"):
+            self.app._generate_round()
+
+        self.assertEqual([], self.db.list_rounds(self.tournament_id))
+
+    def test_print_document_opens_file_when_direct_print_command_is_unavailable(self) -> None:
+        pdf_path = Path(self.temp_dir.name) / "documento.pdf"
+        pdf_path.write_bytes(b"%PDF-1.4\n")
+
+        with (
+            mock.patch("src.ui.support.sys.platform", "linux"),
+            mock.patch("src.ui.support.shutil.which", return_value=None),
+            mock.patch("src.ui.support.webbrowser.open") as browser_open,
+        ):
+            self.app._print_document(pdf_path)
+
+        browser_open.assert_called_once_with(pdf_path.resolve().as_uri())
+        self.assertIn("documento foi aberto", self.messages[-1])
+
     def test_error_dialogs_separate_expected_file_and_unexpected_errors(self) -> None:
         title, message, is_unexpected = AlbericusApp._error_dialog(
             AppError("Informe o nome do jogador."),
@@ -426,6 +719,19 @@ class UiLayoutSmokeTest(unittest.TestCase):
                 widget.invoke()
                 return
         self.fail(f"Botao {text!r} nao encontrado")
+
+    def _first_tree(self) -> ttk.Treeview:
+        for widget in self._walk(self.app.content):
+            if isinstance(widget, ttk.Treeview):
+                return widget
+        self.fail("Tabela nao encontrada")
+
+    def _pairing_row_values(self) -> list[str]:
+        return [
+            str(value)
+            for row_id in self.app.pairing_tree.get_children()
+            for value in self.app.pairing_tree.item(row_id, "values")
+        ]
 
     def _label(self, text: str) -> ctk.CTkLabel:
         for widget in self._walk(self.app.content):

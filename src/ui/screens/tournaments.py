@@ -136,7 +136,7 @@ class TournamentPagesMixin:
                 )
                 self._set_current_tournament(tournament_id)
                 logger.info("Torneio criado: %s", tournament_id)
-                self.show_tournaments()
+                self.show_players()
             except Exception as exc:
                 self._show_error(exc)
 
@@ -197,23 +197,176 @@ class TournamentPagesMixin:
                 )
 
         def open_selected() -> None:
+            tournament_id = selected_tournament_id()
+            if not tournament_id:
+                return
+            self._set_current_tournament(tournament_id)
+            logger.info("Torneio selecionado: %s", tournament_id)
+            self.show_players()
+
+        def selected_tournament_id() -> int | None:
             selected = tree.selection()
             if not selected:
-                return
+                return None
             values = tree.item(selected[0], "values")
-            self._set_current_tournament(int(values[0]))
-            logger.info("Torneio selecionado: %s", values[0])
-            self._show_info("Torneio selecionado.")
+            return int(values[0])
+
+        def duplicate_selected() -> None:
+            try:
+                tournament_id = selected_tournament_id()
+                if not tournament_id:
+                    raise AppError("Selecione um torneio para duplicar.")
+                tournament = self.db.get_tournament(tournament_id)
+                if not tournament:
+                    raise AppError("Torneio selecionado nao encontrado.")
+                suggested_name = f"{tournament['name']} - copia"
+                new_name = self._ask_string("Duplicar torneio", "Nome do novo torneio:")
+                if new_name is None:
+                    return
+                new_tournament_id = self.tournament_service.duplicate_tournament(
+                    tournament_id,
+                    new_name.strip() or suggested_name,
+                )
+                self._set_current_tournament(new_tournament_id)
+                load_tournaments()
+                self._show_info("Torneio duplicado. Ajuste data, local e participantes conforme necessario.")
+            except Exception as exc:
+                self._show_error(exc)
+
+        def delete_selected() -> None:
+            try:
+                tournament_id = selected_tournament_id()
+                if not tournament_id:
+                    raise AppError("Selecione um torneio para excluir.")
+                tournament = self.db.get_tournament(tournament_id)
+                name = tournament["name"] if tournament else str(tournament_id)
+                confirmed = messagebox.askyesno(
+                    "Excluir torneio",
+                    f"Excluir o torneio '{name}' e todos os jogadores/rodadas vinculados?",
+                )
+                if not confirmed:
+                    return
+                self.tournament_service.delete_tournament(tournament_id)
+                if self.current_tournament_id == tournament_id:
+                    self.current_tournament_id = None
+                    self.current_round_id = None
+                    self.tournament_label.configure(text="Nenhum torneio selecionado")
+                load_tournaments()
+                self._show_info("Torneio excluido.")
+            except Exception as exc:
+                self._show_error(exc)
 
         tree.bind("<Double-1>", lambda _event: open_selected())
-        ctk.CTkButton(list_panel, text="Selecionar torneio", command=open_selected).grid(
-            row=1,
-            column=0,
-            padx=12,
-            pady=12,
-            sticky="e",
+        ctk.CTkLabel(
+            list_panel,
+            text="Atalhos: duplo clique seleciona; Del exclui o torneio selecionado.",
+            text_color=THEME_TEXT_SUB,
+        ).grid(row=1, column=0, padx=12, pady=(8, 0), sticky="w")
+        actions = ctk.CTkFrame(list_panel, fg_color="transparent")
+        actions.grid(row=2, column=0, padx=12, pady=12, sticky="e")
+        ctk.CTkButton(actions, text="Selecionar", command=open_selected, width=110).pack(
+            side="left",
+            padx=(0, 8),
         )
+        btn_duplicate = ctk.CTkButton(actions, text="Duplicar modelo", command=duplicate_selected, width=140)
+        btn_duplicate.pack(side="left", padx=(0, 8))
+        self._disable_if_unauthorized(btn_duplicate, "tournament_write")
+        btn_delete = ctk.CTkButton(
+            actions,
+            text="Excluir",
+            command=delete_selected,
+            fg_color=THEME_DANGER,
+            width=90,
+        )
+        btn_delete.pack(side="left")
+        self._disable_if_unauthorized(btn_delete, "tournament_write")
+        tree.bind("<Delete>", lambda _event: delete_selected())
         load_tournaments()
+
+    def show_tournament_dashboard(self) -> None:
+        if not self._require_tournament():
+            return
+
+        tournament = self.db.get_tournament(self.current_tournament_id)
+        if not tournament:
+            self._show_error(AppError("Selecione um torneio valido."))
+            return
+
+        rounds = self.db.list_rounds(self.current_tournament_id)
+        players = self.db.list_players(self.current_tournament_id, active_only=False)
+        settings = self.db.get_tournament_settings(self.current_tournament_id) or {}
+        competition_type = str(tournament.get("competition_type") or "individual")
+        is_team_tournament = competition_type == "team"
+
+        self._clear_content()
+        self._page_title(
+            "Central do Torneio",
+            f"{tournament['name']} - {self._tournament_scope_text(tournament)}",
+        )
+        self._build_tournament_nav("central")
+
+        body = ctk.CTkFrame(self.content, fg_color="transparent")
+        body.grid(row=1, column=0, padx=22, pady=(0, 22), sticky="nsew")
+        body.grid_columnconfigure(0, weight=1)
+        body.grid_rowconfigure(0, weight=1)
+
+        summary_panel = self._make_panel(body)
+        summary_panel.grid(row=0, column=0, sticky="new")
+        summary_panel.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(
+            summary_panel,
+            text="Resumo",
+            font=ctk.CTkFont(size=16, weight="bold"),
+        ).grid(row=0, column=0, padx=16, pady=(16, 8), sticky="w")
+
+        summary_rows = [
+            ("Formato", COMPETITION_TYPES.get(competition_type, "Individual")),
+            ("Status", str(tournament.get("status") or "")),
+            ("Local", str(tournament.get("location") or "Nao informado")),
+            ("Periodo", self._tournament_period_text(tournament)),
+            ("Rodadas", f"{len(rounds)} geradas de {tournament['rounds_count']}"),
+            ("Jogadores", str(len(players))),
+            ("Perfil", TOURNAMENT_PROFILES.get(str(settings.get("tournament_profile") or "free"), "Livre")),
+        ]
+        if is_team_tournament:
+            summary_rows.append(("Equipes", str(len(self.db.list_teams(self.current_tournament_id)))))
+
+        for index, (label, value) in enumerate(summary_rows, start=1):
+            row = ctk.CTkFrame(summary_panel, fg_color="transparent")
+            row.grid(row=index, column=0, padx=16, pady=(2, 8), sticky="ew")
+            row.grid_columnconfigure(1, weight=1)
+            ctk.CTkLabel(row, text=label, text_color=THEME_TEXT_SUB, width=84, anchor="w").grid(
+                row=0,
+                column=0,
+                sticky="w",
+            )
+            ctk.CTkLabel(row, text=value, text_color=THEME_TEXT_MAIN, anchor="w", wraplength=260).grid(
+                row=0,
+                column=1,
+                sticky="ew",
+            )
+
+        ctk.CTkButton(
+            summary_panel,
+            text="Voltar para lista de torneios",
+            command=self.show_tournaments,
+            fg_color="transparent",
+            border_width=1,
+            text_color=THEME_TEXT_MAIN,
+        ).grid(row=len(summary_rows) + 1, column=0, padx=16, pady=(10, 16), sticky="ew")
+
+    @staticmethod
+    def _tournament_period_text(tournament: dict[str, Any]) -> str:
+        start_date = str(tournament.get("start_date") or "").strip()
+        end_date = str(tournament.get("end_date") or "").strip()
+        if start_date and end_date:
+            return f"{start_date} a {end_date}"
+        if start_date:
+            return start_date
+        if end_date:
+            return end_date
+        return "Nao informado"
 
     def show_tournament_settings(self) -> None:
         if not self._require_tournament():
@@ -230,6 +383,7 @@ class TournamentPagesMixin:
             "Configuracao do torneio",
             f"Torneio: {tournament['name']} - {self._tournament_scope_text(tournament)}",
         )
+        self._build_tournament_nav("settings")
 
         body = ctk.CTkScrollableFrame(self.content, fg_color="transparent")
         body.grid(row=1, column=0, padx=22, pady=(0, 22), sticky="nsew")
@@ -695,47 +849,51 @@ class TournamentPagesMixin:
         btn_auto.grid(row=2, column=4, padx=(8, 0), pady=(2, 0), sticky="e")
         self._disable_if_unauthorized(btn_auto, "tournament_write")
 
+        def profile_payloads() -> tuple[dict[str, Any], dict[str, Any], list[dict[str, Any]]]:
+            tournament_payload = {
+                key: entry.get()
+                for key, entry in tournament_entries.items()
+            }
+            settings_payload = {
+                key: entry.get()
+                for key, entry in setting_entries.items()
+            }
+            scope = TOURNAMENT_SCOPE_VALUES[scope_option.get()]
+            tournament_payload["scope"] = scope
+            tournament_payload["competition_type"] = competition_by_label[competition_option.get()]
+            tournament_payload["club_id"] = None
+            tournament_payload["class_id"] = None
+            if scope in {"club", "class"}:
+                tournament_payload["club_id"] = tournament_club_map.get(tournament_club_option.get())
+                if not tournament_payload["club_id"]:
+                    raise AppError("Selecione o clube/escola do torneio.")
+            if scope == "class":
+                tournament_payload["class_id"] = tournament_class_map.get(tournament_class_option.get())
+                if not tournament_payload["class_id"]:
+                    raise AppError("Selecione a turma do torneio.")
+            settings_payload["initial_order"] = initial_order_by_label[initial_order_option.get()]
+            settings_payload["tournament_profile"] = profile_by_label[tournament_profile_option.get()]
+            settings_payload["tournament_type"] = type_by_label[tournament_type_option.get()]
+            settings_payload["pairing_method"] = pairing_by_label[pairing_option.get()]
+            settings_payload["team_pairing_method"] = team_pairing_by_label[team_pairing_option.get()]
+            settings_payload["team_standing_primary"] = team_criterion_by_label[team_primary_option.get()]
+            settings_payload["team_standing_secondary"] = team_criterion_by_label[team_secondary_option.get()]
+            settings_payload["team_fixed_board_order"] = team_fixed_board_order_check.get()
+            for key, checkbox in flag_checks.items():
+                settings_payload[key] = checkbox.get()
+            schedule_payload = [
+                {
+                    "round_number": round_number,
+                    "date": entries[0].get(),
+                    "time": entries[1].get(),
+                }
+                for round_number, entries in schedule_entries.items()
+            ]
+            return tournament_payload, settings_payload, schedule_payload
+
         def save_settings(show_message: bool = True) -> None:
             try:
-                tournament_payload = {
-                    key: entry.get()
-                    for key, entry in tournament_entries.items()
-                }
-                settings_payload = {
-                    key: entry.get()
-                    for key, entry in setting_entries.items()
-                }
-                scope = TOURNAMENT_SCOPE_VALUES[scope_option.get()]
-                tournament_payload["scope"] = scope
-                tournament_payload["competition_type"] = competition_by_label[competition_option.get()]
-                tournament_payload["club_id"] = None
-                tournament_payload["class_id"] = None
-                if scope in {"club", "class"}:
-                    tournament_payload["club_id"] = tournament_club_map.get(tournament_club_option.get())
-                    if not tournament_payload["club_id"]:
-                        raise AppError("Selecione o clube/escola do torneio.")
-                if scope == "class":
-                    tournament_payload["class_id"] = tournament_class_map.get(tournament_class_option.get())
-                    if not tournament_payload["class_id"]:
-                        raise AppError("Selecione a turma do torneio.")
-                settings_payload["initial_order"] = initial_order_by_label[initial_order_option.get()]
-                settings_payload["tournament_profile"] = profile_by_label[tournament_profile_option.get()]
-                settings_payload["tournament_type"] = type_by_label[tournament_type_option.get()]
-                settings_payload["pairing_method"] = pairing_by_label[pairing_option.get()]
-                settings_payload["team_pairing_method"] = team_pairing_by_label[team_pairing_option.get()]
-                settings_payload["team_standing_primary"] = team_criterion_by_label[team_primary_option.get()]
-                settings_payload["team_standing_secondary"] = team_criterion_by_label[team_secondary_option.get()]
-                settings_payload["team_fixed_board_order"] = team_fixed_board_order_check.get()
-                for key, checkbox in flag_checks.items():
-                    settings_payload[key] = checkbox.get()
-                schedule_payload = [
-                    {
-                        "round_number": round_number,
-                        "date": entries[0].get(),
-                        "time": entries[1].get(),
-                    }
-                    for round_number, entries in schedule_entries.items()
-                ]
+                tournament_payload, settings_payload, schedule_payload = profile_payloads()
                 self.tournament_service.save_profile(
                     self.current_tournament_id,
                     tournament_payload,
@@ -743,7 +901,30 @@ class TournamentPagesMixin:
                     schedule_payload,
                 )
                 self._set_current_tournament(self.current_tournament_id)
-                self._show_info("Configuracoes do torneio salvas.")
+                if show_message:
+                    self._show_info("Configuracoes do torneio salvas.")
+                self.show_tournament_settings()
+            except Exception as exc:
+                self._show_error(exc)
+
+        def save_as_new_tournament() -> None:
+            try:
+                tournament_payload, settings_payload, schedule_payload = profile_payloads()
+                new_name = self._ask_string(
+                    "Salvar como novo torneio",
+                    "Nome do novo torneio (em branco usa o nome do formulario):",
+                )
+                if new_name is None:
+                    return
+                if new_name.strip():
+                    tournament_payload["name"] = new_name.strip()
+                new_tournament_id = self.tournament_service.create_tournament_from_profile(
+                    tournament_payload,
+                    settings_payload,
+                    schedule_payload,
+                )
+                self._set_current_tournament(new_tournament_id)
+                self._show_info("Novo torneio criado com estas configuracoes. Inclua ou importe os participantes.")
                 self.show_tournament_settings()
             except Exception as exc:
                 self._show_error(exc)
@@ -753,6 +934,9 @@ class TournamentPagesMixin:
         btn_save_config = ctk.CTkButton(actions, text="Salvar configuracoes", command=save_settings)
         btn_save_config.pack(side="right", padx=(8, 0), pady=(0, 12))
         self._disable_if_unauthorized(btn_save_config, "tournament_write")
+        btn_save_as = ctk.CTkButton(actions, text="Salvar como novo", command=save_as_new_tournament)
+        btn_save_as.pack(side="right", padx=(8, 0), pady=(0, 12))
+        self._disable_if_unauthorized(btn_save_as, "tournament_write")
         btn_refs = ctk.CTkButton(actions, text="Equipe de Arbitragem", command=self.show_tournament_referees_dialog)
         btn_refs.pack(side="right", padx=(8, 0), pady=(0, 12))
         self._disable_if_unauthorized(btn_refs, "tournament_write")
@@ -767,6 +951,7 @@ class TournamentPagesMixin:
             "Jogadores",
             f"Torneio: {tournament['name'] if tournament else ''} - {self._tournament_scope_text(tournament) if tournament else ''}",
         )
+        self._build_tournament_nav("players")
 
         body = ctk.CTkFrame(self.content, fg_color="transparent")
         body.grid(row=1, column=0, padx=22, pady=(0, 22), sticky="nsew")
@@ -841,7 +1026,7 @@ class TournamentPagesMixin:
                 entry.bind("<FocusOut>", autofill_from_official)
         control_row = len(player_fields) * 2
         ctk.CTkLabel(form, text="Buscar na lista").grid(row=control_row, column=0, padx=16, pady=(16, 0), sticky="w")
-        search_entry = ctk.CTkEntry(form, width=240, placeholder_text="Nome, clube, categoria ou rating")
+        search_entry = ctk.CTkEntry(form, width=240, placeholder_text="Nome, clube, turma, categoria ou rating")
         search_entry.grid(row=control_row + 1, column=0, padx=16, pady=(4, 8), sticky="ew")
 
         member_source_label = "Membro cadastrado"
@@ -878,7 +1063,17 @@ class TournamentPagesMixin:
         table_panel = self._make_panel(body)
         table_panel.grid(row=0, column=1, sticky="nsew")
         table_panel.grid_columnconfigure(0, weight=1)
-        table_panel.grid_rowconfigure(0, weight=1)
+        table_panel.grid_rowconfigure(1, weight=1)
+        players_summary_label = ctk.CTkLabel(
+            table_panel,
+            text="Total: 0 | Visiveis: 0 | Presentes: 0 | Ausentes: 0 | Membros: 0 | Convidados: 0",
+            text_color=THEME_TEXT_SUB,
+        )
+        players_summary_label.grid(row=0, column=0, padx=12, pady=(12, 6), sticky="w")
+        players_tree_holder = ctk.CTkFrame(table_panel, fg_color="transparent")
+        players_tree_holder.grid(row=1, column=0, sticky="nsew")
+        players_tree_holder.grid_columnconfigure(0, weight=1)
+        players_tree_holder.grid_rowconfigure(0, weight=1)
 
         columns = [
             "id",
@@ -888,6 +1083,7 @@ class TournamentPagesMixin:
             "fide",
             "cbx",
             "club",
+            "class",
             "category",
             "age_category",
             "rating_category",
@@ -895,7 +1091,7 @@ class TournamentPagesMixin:
             "status",
         ]
         tree = self._make_tree(
-            table_panel,
+            players_tree_holder,
             columns,
             {
                 "id": "ID",
@@ -905,6 +1101,7 @@ class TournamentPagesMixin:
                 "fide": "FIDE",
                 "cbx": "CBX",
                 "club": "Clube",
+                "class": "Turma",
                 "category": "Categoria",
                 "age_category": "Idade",
                 "rating_category": "Rating cat.",
@@ -919,6 +1116,7 @@ class TournamentPagesMixin:
                 "fide": 90,
                 "cbx": 90,
                 "club": 150,
+                "class": 130,
                 "category": 120,
                 "age_category": 90,
                 "rating_category": 95,
@@ -939,7 +1137,12 @@ class TournamentPagesMixin:
         def load_players() -> None:
             tree.delete(*tree.get_children())
             query = search_entry.get().strip().casefold()
-            for player in self.db.list_players(self.current_tournament_id, active_only=False):
+            players = self.db.list_players(self.current_tournament_id, active_only=False)
+            visible_count = 0
+            present_count = sum(1 for player in players if player.get("player_status") == "active")
+            member_count = sum(1 for player in players if player.get("member_id"))
+            absent_count = len(players) - present_count
+            for player in players:
                 display_name = player_full_name(player)
                 searchable = " ".join(
                     [
@@ -948,6 +1151,7 @@ class TournamentPagesMixin:
                         str(player.get("surname") or ""),
                         str(player.get("given_name") or ""),
                         str(player["club"] or ""),
+                        str(player.get("active_class_name") or ""),
                         str(player["category"] or ""),
                         str(player.get("age_category") or ""),
                         str(player.get("rating_category") or ""),
@@ -961,6 +1165,7 @@ class TournamentPagesMixin:
                 ).casefold()
                 if query and query not in searchable:
                     continue
+                visible_count += 1
                 tree.insert(
                     "",
                     "end",
@@ -972,6 +1177,7 @@ class TournamentPagesMixin:
                         player.get("fide_id", ""),
                         player.get("cbx_id", ""),
                         player["club"],
+                        player.get("active_class_name", ""),
                         player["category"],
                         player.get("age_category", ""),
                         player.get("rating_category", ""),
@@ -979,6 +1185,13 @@ class TournamentPagesMixin:
                         PLAYER_STATUSES.get(player.get("player_status", "active"), player.get("player_status", "")),
                     ),
                 )
+            players_summary_label.configure(
+                text=(
+                    f"Total: {len(players)} | Visiveis: {visible_count} | "
+                    f"Presentes: {present_count} | Ausentes: {absent_count} | "
+                    f"Membros: {member_count} | Convidados: {len(players) - member_count}"
+                )
+            )
 
         def load_member_options() -> None:
             member_option_map.clear()
@@ -1165,7 +1378,12 @@ class TournamentPagesMixin:
             try:
                 file_path = filedialog.askopenfilename(
                     title="Importar jogadores",
-                    filetypes=[("CSV", "*.csv"), ("Todos os arquivos", "*.*")],
+                    filetypes=[
+                        ("Planilhas e CSV", "*.csv;*.xls;*.xlsx"),
+                        ("CSV", "*.csv"),
+                        ("Excel", "*.xls;*.xlsx"),
+                        ("Todos os arquivos", "*.*"),
+                    ],
                 )
                 if not file_path:
                     return
@@ -1180,7 +1398,7 @@ class TournamentPagesMixin:
                     self._show_info(message)
 
                 self._run_background(
-                    lambda: self.import_service.import_players_csv(tournament_id, file_path),
+                    lambda: self.import_service.import_players(tournament_id, file_path),
                     show_import_result,
                     "Importando jogadores...",
                 )
@@ -1272,7 +1490,7 @@ class TournamentPagesMixin:
                     self._show_info(message)
 
                 self._run_background(
-                    lambda: self.import_service.import_online_registrations_csv(tournament_id, file_path),
+                    lambda: self.import_service.import_online_registrations(tournament_id, file_path),
                     show_result,
                     "Importando inscricoes online...",
                 )
@@ -1290,15 +1508,74 @@ class TournamentPagesMixin:
             try:
                 file_path = filedialog.askopenfilename(
                     title="Importar inscricoes online",
-                    filetypes=[("CSV", "*.csv"), ("Todos os arquivos", "*.*")],
+                    filetypes=[
+                        ("Planilhas e CSV", "*.csv;*.xls;*.xlsx"),
+                        ("CSV", "*.csv"),
+                        ("Excel", "*.xls;*.xlsx"),
+                        ("Todos os arquivos", "*.*"),
+                    ],
                 )
                 if not file_path:
                     return
                 tournament_id = int(self.current_tournament_id)
                 self._run_background(
-                    lambda: self.import_service.preview_online_registrations_csv(tournament_id, file_path),
+                    lambda: self.import_service.preview_online_registrations(tournament_id, file_path),
                     lambda result: show_online_registration_preview(result, file_path),
                     "Lendo inscricoes online...",
+                )
+            except Exception as exc:
+                self._show_error(exc)
+
+        def import_online_registrations_url() -> None:
+            try:
+                source_url = self._ask_string(
+                    "Importar inscricoes online",
+                    "Cole o link CSV publicado do Google Sheets/Forms:",
+                )
+                if not source_url:
+                    return
+                tournament_id = int(self.current_tournament_id)
+                source_url = source_url.strip()
+                self._run_background(
+                    lambda: self.import_service.preview_online_registrations(tournament_id, source_url),
+                    lambda result: show_online_registration_preview(result, source_url),
+                    "Lendo inscricoes online...",
+                )
+            except Exception as exc:
+                self._show_error(exc)
+
+        def export_import_template(template_type: str) -> None:
+            try:
+                default_name = (
+                    "modelo_inscricoes_online.xlsx"
+                    if template_type == "online"
+                    else "modelo_jogadores.xlsx"
+                )
+                file_path = filedialog.asksaveasfilename(
+                    title="Salvar modelo de importacao",
+                    initialdir=str(self._default_export_dir()),
+                    initialfile=default_name,
+                    defaultextension=".xlsx",
+                    filetypes=[
+                        ("Excel", "*.xlsx"),
+                        ("CSV", "*.csv"),
+                        ("Todos os arquivos", "*.*"),
+                    ],
+                )
+                if not file_path:
+                    return
+                path = Path(file_path)
+                if path.suffix.lower() not in {".csv", ".xlsx"}:
+                    path = path.with_suffix(".xlsx")
+                exporter = (
+                    self.export_service.export_online_registration_template
+                    if template_type == "online"
+                    else self.export_service.export_player_import_template
+                )
+                self._run_background(
+                    lambda: exporter(path),
+                    lambda _result: self._show_info(f"Modelo salvo:\n{path}"),
+                    "Gerando modelo...",
                 )
             except Exception as exc:
                 self._show_error(exc)
@@ -1356,8 +1633,11 @@ class TournamentPagesMixin:
             ("Limpar", clear_form),
             ("Inscrever membro", register_member),
             ("Inscrever todos ativos", register_all_active_members),
-            ("Importar CSV", import_players),
+            ("Modelo jogadores", lambda: export_import_template("players")),
+            ("Importar CSV/Excel", import_players),
+            ("Modelo inscricoes", lambda: export_import_template("online")),
             ("Importar inscricoes online", import_online_registrations),
+            ("Importar link Forms/Sheets", import_online_registrations_url),
             ("Importar FIDE", lambda: import_official_ratings("FIDE")),
             ("Importar CBX", lambda: import_official_ratings("CBX")),
             ("Atualizar ratings oficiais", update_official_ratings),
@@ -1381,6 +1661,7 @@ class TournamentPagesMixin:
             "Equipes",
             f"Torneio: {tournament['name']} - {COMPETITION_TYPES.get(tournament.get('competition_type', 'individual'), 'Individual')}",
         )
+        self._build_tournament_nav("teams")
 
         if tournament.get("competition_type") != "team":
             body = ctk.CTkFrame(self.content, fg_color="transparent")

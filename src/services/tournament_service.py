@@ -75,6 +75,39 @@ class TournamentService:
         logger.info("Torneio criado: %s", tournament_id)
         return tournament_id
 
+    def create_tournament_from_profile(
+        self,
+        tournament_data: dict[str, Any],
+        settings_data: dict[str, Any],
+        schedule: list[dict[str, Any]],
+    ) -> int:
+        tournament_payload = self._validated_tournament_payload(tournament_data, {})
+        settings_payload = self._validated_settings(settings_data)
+        schedule_payload = self._validated_schedule(schedule, tournament_payload["rounds_count"])
+        tournament_id = self.db.create_tournament(**tournament_payload)
+        self.db.save_tournament_settings(tournament_id, settings_payload)
+        self.db.save_round_schedule(tournament_id, schedule_payload)
+        logger.info("Torneio criado a partir de modelo: %s", tournament_id)
+        return tournament_id
+
+    def duplicate_tournament(self, source_tournament_id: int, new_name: str) -> int:
+        source = self.db.get_tournament(source_tournament_id)
+        if not source:
+            raise AppError("Selecione um torneio valido para duplicar.")
+        clean_name = str(new_name or "").strip()
+        if not clean_name:
+            raise AppError("Informe o nome do novo torneio.")
+        tournament_id = self.db.duplicate_tournament(source_tournament_id, clean_name)
+        logger.info("Torneio %s duplicado como %s", source_tournament_id, tournament_id)
+        return tournament_id
+
+    def delete_tournament(self, tournament_id: int) -> None:
+        tournament = self.db.get_tournament(tournament_id)
+        if not tournament:
+            raise AppError("Selecione um torneio valido para excluir.")
+        self.db.delete_tournament(tournament_id)
+        logger.info("Torneio excluido: %s", tournament_id)
+
     def save_profile(
         self,
         tournament_id: int,
@@ -233,6 +266,13 @@ class TournamentService:
         if tournament_profile not in TOURNAMENT_PROFILES:
             raise AppError("Perfil do torneio invalido.")
 
+        pairing_system = str(data.get("pairing_system", "custom_authorized")).strip() or "custom_authorized"
+        if pairing_system not in PAIRING_SYSTEMS:
+            raise AppError("Sistema de emparceiramento normativo invalido.")
+        acceleration_method = str(data.get("acceleration_method", "none")).strip() or "none"
+        if acceleration_method not in ACCELERATION_METHODS:
+            raise AppError("Metodo de aceleracao invalido.")
+
         try:
             late_entry_points = float(str(data.get("late_entry_points") or "0").replace(",", "."))
         except ValueError as exc:
@@ -296,6 +336,8 @@ class TournamentService:
             "initial_order": initial_order,
             "tournament_type": tournament_type,
             "tournament_profile": tournament_profile,
+            "pairing_system": pairing_system,
+            "acceleration_method": acceleration_method,
             "late_entry_points": late_entry_points,
             "team_boards_count": team_boards_count,
             "team_match_win_points": team_points["team_match_win_points"],
@@ -305,6 +347,10 @@ class TournamentService:
             "team_standing_primary": team_standing_primary,
             "team_standing_secondary": team_standing_secondary,
             "team_fixed_board_order": 1 if data.get("team_fixed_board_order", 1) else 0,
+            "team_board_order_policy": str(data.get("team_board_order_policy", "fixed")).strip() or "fixed",
+            "team_reserve_policy": str(data.get("team_reserve_policy", "same_team")).strip() or "same_team",
+            "team_lineup_deadline": str(data.get("team_lineup_deadline", "")).strip(),
+            "team_max_substitutions": max(0, int(data.get("team_max_substitutions", 0) or 0)),
         }
         for field in TOURNAMENT_FLAG_FIELDS:
             payload[field] = 1 if data.get(field) else 0
