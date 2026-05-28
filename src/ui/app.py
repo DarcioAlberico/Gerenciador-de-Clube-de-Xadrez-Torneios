@@ -131,6 +131,7 @@ class AlbericusApp(
                 self._build_content()
                 self._register_shortcuts()
                 self.show_club()
+                self._refresh_statusbar()
             else:
                 self.login_error_label.configure(text="Credenciais inválidas.")
 
@@ -306,30 +307,88 @@ class AlbericusApp(
         method = getattr(self, method_name, None)
         if callable(method):
             method()
+        self._refresh_statusbar()
 
     def _build_statusbar(self) -> None:
         self.statusbar = ctk.CTkFrame(self, height=28, corner_radius=0, fg_color=THEME_STATUSBAR_BG)
         self.statusbar.grid(row=1, column=0, sticky="ew")
-        self.statusbar.grid_columnconfigure(0, weight=1)
+        self.statusbar.grid_columnconfigure(0, weight=2)
         self.statusbar.grid_columnconfigure(1, weight=1)
-        
+        self.statusbar.grid_columnconfigure(2, weight=2)
+
+        font_status = ctk.CTkFont(size=SIZE_BODY)
+
         self.tournament_label = ctk.CTkLabel(
             self.statusbar,
             text="Nenhum torneio selecionado",
             text_color=THEME_TEXT_SUB,
             justify="left",
-            font=ctk.CTkFont(size=12)
+            font=font_status,
         )
         self.tournament_label.grid(row=0, column=0, padx=10, pady=2, sticky="w")
-        
+
+        self.metrics_label = ctk.CTkLabel(
+            self.statusbar,
+            text="",
+            text_color=THEME_TEXT_SUB,
+            justify="center",
+            font=font_status,
+        )
+        self.metrics_label.grid(row=0, column=1, padx=10, pady=2, sticky="")
+
         self.status_label = ctk.CTkLabel(
             self.statusbar,
-            text=f"Banco: {Path(self.db.db_path).name}",
+            text=self._default_status_text(),
             text_color=THEME_TEXT_SUB,
             justify="right",
-            font=ctk.CTkFont(size=12)
+            font=font_status,
         )
-        self.status_label.grid(row=0, column=1, padx=10, pady=2, sticky="e")
+        self.status_label.grid(row=0, column=2, padx=10, pady=2, sticky="e")
+
+    def _default_status_text(self) -> str:
+        db_name = Path(self.db.db_path).name
+        backup = self._last_backup_label()
+        return f"Banco: {db_name}" + (f"  ·  Backup: {backup}" if backup else "")
+
+    def _last_backup_label(self) -> str:
+        try:
+            backup_dir = default_backup_dir()
+            if not backup_dir.exists():
+                return ""
+            entries = [p for p in backup_dir.iterdir() if p.is_file() or p.is_dir()]
+            if not entries:
+                return ""
+            latest = max(entries, key=lambda p: p.stat().st_mtime)
+            ts = datetime.fromtimestamp(latest.stat().st_mtime)
+            today = datetime.now().date()
+            if ts.date() == today:
+                return f"hoje {ts.strftime('%H:%M')}"
+            return ts.strftime("%d/%m %H:%M")
+        except Exception:
+            return ""
+
+    def _refresh_statusbar(self) -> None:
+        if not hasattr(self, "metrics_label"):
+            return
+        parts: list[str] = []
+        tournament_id = getattr(self, "current_tournament_id", None)
+        if tournament_id:
+            try:
+                dashboard = self.pairing_service.arbitration_dashboard(tournament_id)
+                metrics = dashboard.get("metrics", {})
+                pending = metrics.get("pending_results", 0)
+                closed = metrics.get("closed_rounds", 0)
+                total = metrics.get("rounds_count", 0)
+                parts.append(f"Rodadas {closed}/{total}")
+                if pending:
+                    parts.append(f"⚠ {pending} pendente(s)")
+                else:
+                    parts.append("✓ sem pendências")
+            except Exception:
+                pass
+        self.metrics_label.configure(text="  ·  ".join(parts))
+        if hasattr(self, "status_label"):
+            self.status_label.configure(text=self._default_status_text())
 
     def require_permission(self, action: str) -> None:
         self.security_service.require_permission(action)
@@ -596,6 +655,7 @@ class AlbericusApp(
         self.tournament_label.configure(
             text=f"{tournament['name']} | {scope} | {tournament['rounds_count']} rodadas | {tournament['status']}"
         )
+        self._refresh_statusbar()
 
     @staticmethod
     def _tournament_scope_key(tournament: dict[str, Any]) -> str:
@@ -733,7 +793,7 @@ class AlbericusApp(
                 except Exception:
                     logger.exception("Falha ao reabilitar widget apos tarefa em background")
             if hasattr(self, "status_label"):
-                self.status_label.configure(text=f"Banco: {Path(self.db.db_path).name}")
+                self.status_label.configure(text=self._default_status_text())
             if error:
                 self._show_error(error)
                 return
