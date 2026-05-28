@@ -4875,6 +4875,30 @@ class PairingServiceTest(unittest.TestCase):
         self.assertEqual(["trf16"], registry.list_formats())
         self.assertIs(registry.get("trf16"), exporter)
 
+    def test_trf25_scaffold_registers_and_warns_about_pending_extensions(self) -> None:
+        from src.services.federation_exporters import (
+            TRF25_SCAFFOLD_WARNING,
+            TRF25Exporter,
+        )
+
+        registry = FederationExporterRegistry()
+        trf16 = TRF16Exporter(self.export_service)
+        trf25 = TRF25Exporter(self.export_service)
+        registry.register(trf16)
+        registry.register(trf25)
+
+        # Códigos distintos no registry, sem colidir.
+        self.assertEqual(["trf16", "trf25"], registry.list_formats())
+        self.assertIs(registry.get("trf25"), trf25)
+        # Scaffold herda comportamento de validação, mas sempre prefixa
+        # o warning explícito de "extensões não implementadas".
+        self._create_players(2)
+        warnings = trf25.validate(self.tournament_id)
+        self.assertEqual(warnings[0], TRF25_SCAFFOLD_WARNING)
+        # Os warnings subsequentes são os do TRF16 herdado (sem federacao,
+        # sem datas, etc) — não devem ser duplicados.
+        self.assertEqual(1, sum(1 for w in warnings if w == TRF25_SCAFFOLD_WARNING))
+
     def test_validate_chess_results_trf16_reports_special_result_statuses(self) -> None:
         tournament_id = self.db.create_tournament(
             "Aberto Pendencias",

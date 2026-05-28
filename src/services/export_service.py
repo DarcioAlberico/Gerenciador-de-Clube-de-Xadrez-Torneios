@@ -2356,10 +2356,15 @@ class ExportService:
         )
 
     def _federation_exporter(self, code: str):
-        from src.services.federation_exporters import FederationExporterRegistry, TRF16Exporter
+        from src.services.federation_exporters import (
+            FederationExporterRegistry,
+            TRF16Exporter,
+            TRF25Exporter,
+        )
 
         registry = FederationExporterRegistry()
         registry.register(TRF16Exporter(self))
+        registry.register(TRF25Exporter(self))
         return registry.get(code)
 
     def _trf_pending_result_rounds(
