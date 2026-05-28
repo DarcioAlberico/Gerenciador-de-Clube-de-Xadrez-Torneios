@@ -592,6 +592,83 @@ class TeamService:
         self.db.delete_team(team_id)
         logger.info("Equipe excluida: %s", team_id)
 
+    def validate_roster_policy(
+        self,
+        tournament_id: int,
+        round_id: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """Avalia escalações e substituições contra a policy do torneio (spec §6.2).
+
+        Retorna lista de avisos não-bloqueantes:
+          - board_order_broken: tabuleiro com rating maior que o anterior
+            (respeitando team_rating_tolerance)
+          - substitution_limit_exceeded: equipe ultrapassou team_max_substitutions
+
+        Quando round_id é dado, filtra avisos para aquela rodada.
+        """
+        issues: list[dict[str, Any]] = []
+        settings = self.db.get_tournament_settings(tournament_id) or {}
+        enforce_order = bool(int(settings.get("team_fixed_board_order", 1) or 0)) and (
+            str(settings.get("team_board_order_policy", "fixed")) == "fixed"
+        )
+        tolerance = int(settings.get("team_rating_tolerance", 0) or 0)
+        max_subs = int(settings.get("team_max_substitutions", 0) or 0)
+
+        lineups = self.db.list_team_lineups(tournament_id, round_id=round_id)
+        if enforce_order:
+            for lineup in lineups:
+                boards = self.db.list_team_lineup_boards(int(lineup["id"]))
+                previous_rating: int | None = None
+                previous_board: int | None = None
+                for board in boards:
+                    rating = int(board.get("player_rating") or 0)
+                    board_number = int(board.get("board_number") or 0)
+                    if previous_rating is not None and rating > previous_rating + tolerance:
+                        issues.append({
+                            "severity": "warning",
+                            "kind": "board_order_broken",
+                            "tournament_id": tournament_id,
+                            "team_id": lineup.get("team_id"),
+                            "team_name": lineup.get("team_name"),
+                            "round_id": lineup.get("round_id"),
+                            "round_number": lineup.get("round_number"),
+                            "board_number": board_number,
+                            "message": (
+                                f"{lineup.get('team_name', 'Equipe')} R{lineup.get('round_number')}: "
+                                f"tabuleiro {board_number} rating {rating} > "
+                                f"tabuleiro {previous_board} ({previous_rating}) "
+                                f"além da tolerância ({tolerance})."
+                            ),
+                        })
+                    previous_rating = rating
+                    previous_board = board_number
+
+        if max_subs > 0:
+            subs_by_team: dict[int, dict[str, Any]] = {}
+            for event in self.db.list_team_substitution_events(tournament_id, round_id=round_id):
+                team_id = int(event.get("team_id") or 0)
+                bucket = subs_by_team.setdefault(team_id, {"count": 0, "team_name": None})
+                bucket["count"] += 1
+                bucket["team_name"] = event.get("team_name") or bucket["team_name"]
+            for team_id, bucket in subs_by_team.items():
+                if bucket["count"] > max_subs:
+                    issues.append({
+                        "severity": "warning",
+                        "kind": "substitution_limit_exceeded",
+                        "tournament_id": tournament_id,
+                        "team_id": team_id,
+                        "team_name": bucket["team_name"],
+                        "round_id": None,
+                        "round_number": None,
+                        "message": (
+                            f"{bucket['team_name'] or 'Equipe'}: "
+                            f"{bucket['count']} substituição(ões) excede o limite "
+                            f"de {max_subs}."
+                        ),
+                    })
+
+        return issues
+
     def _require_team_tournament(self, tournament_id: int) -> dict[str, Any]:
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:

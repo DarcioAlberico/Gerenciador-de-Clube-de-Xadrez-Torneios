@@ -40,6 +40,7 @@ class LegacyMigrations:
             26: self._migrate_to_v26,
             27: self._migrate_to_v27,
             28: self._migrate_to_v28,
+            29: self._migrate_to_v29,
         }
 
     def _run_schema_migrations(self, connection: sqlite3.Connection) -> None:
@@ -114,6 +115,8 @@ class LegacyMigrations:
             self._migrate_to_v27(connection)
         if self.db.SCHEMA_VERSION >= 28:
             self._migrate_to_v28(connection)
+        if self.db.SCHEMA_VERSION >= 29:
+            self._migrate_to_v29(connection)
 
     def _migrate_to_v1(self, connection: sqlite3.Connection) -> None:
         now = self.db.now()
@@ -1208,6 +1211,19 @@ class LegacyMigrations:
 
     def _migrate_to_v28(self, connection: sqlite3.Connection) -> None:
         self._ensure_clock_events_schema(connection)
+
+    def _migrate_to_v29(self, connection: sqlite3.Connection) -> None:
+        """Adiciona team_rating_tolerance a tournament_settings.
+
+        Os demais campos da policy (team_board_order_policy, team_reserve_policy,
+        team_lineup_deadline, team_max_substitutions) já existem; só falta o
+        threshold de tolerância de rating para a validação de ordem de força.
+        """
+        columns = self.db._table_columns(connection, "tournament_settings")
+        if "team_rating_tolerance" not in columns:
+            connection.execute(
+                "ALTER TABLE tournament_settings ADD COLUMN team_rating_tolerance INTEGER NOT NULL DEFAULT 0"
+            )
 
     def _ensure_arbitration_phase0_schema(self, connection: sqlite3.Connection) -> None:
         round_columns = self.db._table_columns(connection, "rounds")

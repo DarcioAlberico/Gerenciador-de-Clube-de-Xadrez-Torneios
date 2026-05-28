@@ -43,6 +43,39 @@ from src.services.result_server import LocalResultServer
 from tests.fixtures import load_tournament_fixture
 
 
+class TeamRosterPolicyValidatorTest(unittest.TestCase):
+    """Spec §6.2 — validador de policy de escalação retorna warnings."""
+
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        base_path = Path(self.temp_dir.name)
+        self.db = Database(base_path / "albericus.db", backup_dir=base_path / "backups")
+        self.team_service = TeamService(self.db)
+
+    def tearDown(self) -> None:
+        self.temp_dir.cleanup()
+
+    def test_validator_returns_empty_when_no_team_tournament(self) -> None:
+        # Torneio individual recém-criado — sem lineups, sem warnings.
+        tournament_id = self.db.create_tournament("Vazio")
+        issues = self.team_service.validate_roster_policy(tournament_id)
+        self.assertEqual([], issues)
+
+    def test_validator_signature_accepts_round_filter(self) -> None:
+        tournament_id = self.db.create_tournament("Filtrado")
+        # Não deve levantar exceção mesmo sem dados.
+        self.assertEqual(
+            [],
+            self.team_service.validate_roster_policy(tournament_id, round_id=999),
+        )
+
+    def test_migration_added_team_rating_tolerance_column(self) -> None:
+        tournament_id = self.db.create_tournament("Tolerancia")
+        settings = self.db.get_tournament_settings(tournament_id) or {}
+        # Coluna existe e default é 0.
+        self.assertEqual(0, int(settings.get("team_rating_tolerance", -1) or 0))
+
+
 class TournamentFixtureTest(unittest.TestCase):
     """Smoke da pasta tests/fixtures/tournaments/ — garante que o cenário
     carrega e o motor produz um estado consistente."""
