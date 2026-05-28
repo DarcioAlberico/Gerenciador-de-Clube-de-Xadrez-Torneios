@@ -2336,7 +2336,7 @@ class AdminPagesMixin:
 
         ctk.CTkButton(spon_form, text="Salvar Patrocinador", command=save_spon).grid(row=20, column=0, padx=16, pady=(16, 8), sticky="ew")
         ctk.CTkButton(spon_form, text="Novo", command=clear_spon_form, fg_color="transparent", border_width=1).grid(row=21, column=0, padx=16, pady=4, sticky="ew")
-        ctk.CTkButton(spon_form, text="Excluir", command=delete_spon, fg_color=THEME_DANGER, hover_color="#C0392B").grid(row=22, column=0, padx=16, pady=4, sticky="ew")
+        ctk.CTkButton(spon_form, text="Excluir", command=delete_spon, fg_color=THEME_DANGER, hover_color=THEME_DANGER_HOVER).grid(row=22, column=0, padx=16, pady=4, sticky="ew")
 
         load_sponsors()
         clear_trans_form()
@@ -3083,7 +3083,7 @@ class AdminPagesMixin:
         btn_frame = ctk.CTkFrame(left_panel, fg_color="transparent")
         btn_frame.grid(row=2, column=0, padx=16, pady=(0, 16), sticky="ew")
         ctk.CTkButton(btn_frame, text="Novo Aviso", command=add_announcement).pack(side="left", padx=(0, 10))
-        ctk.CTkButton(btn_frame, text="Excluir Aviso", command=del_announcement, fg_color="#ef4444", hover_color="#dc2626").pack(side="left")
+        ctk.CTkButton(btn_frame, text="Excluir Aviso", command=del_announcement, fg_color=THEME_DANGER, hover_color=THEME_DANGER_HOVER).pack(side="left")
 
         # Painel Direito: Envio de Mensagens e Logs
         right_panel = self._make_panel(body)

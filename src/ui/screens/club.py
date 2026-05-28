@@ -87,7 +87,7 @@ class ClubPagesMixin:
                 ctk.CTkLabel(
                     section,
                     text=line,
-                    text_color="#475569",
+                    text_color=THEME_TEXT_SUB,
                     wraplength=230,
                     justify="left",
                 ).pack(anchor="w", pady=(2, 0))
@@ -540,7 +540,7 @@ class ClubPagesMixin:
         financial_alert_label = ctk.CTkLabel(
             form, 
             text="", 
-            text_color="#ff4444", 
+            text_color=THEME_DANGER,
             font=ctk.CTkFont(size=14, weight="bold")
         )
         financial_alert_label.grid(row=0, column=0, columnspan=2, padx=16, pady=(10, 0), sticky="ew")

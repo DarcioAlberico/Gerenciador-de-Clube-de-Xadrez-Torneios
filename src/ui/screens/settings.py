@@ -139,12 +139,9 @@ class SettingsPagesMixin:
             sticky="ew",
         )
 
-        ctk.CTkLabel(
-            settings_panel,
-            text="Seguranca operacional",
-            font=ctk.CTkFont(size=14, weight="bold"),
-            text_color="#0F172A",
-        ).grid(row=15, column=0, padx=16, pady=(6, 4), sticky="w")
+        self._section_title(settings_panel, "Seguranca operacional").grid(
+            row=15, column=0, padx=16, pady=(6, 4), sticky="w"
+        )
         def open_users_manager() -> None:
             self._show_users_manager()
 
@@ -152,8 +149,6 @@ class SettingsPagesMixin:
             settings_panel,
             text="Gerenciar Usuarios do Sistema",
             command=open_users_manager,
-            fg_color="#3B82F6",
-            hover_color="#2563EB",
         ).grid(row=16, column=0, padx=16, pady=(10, 8), sticky="ew")
 
         ctk.CTkLabel(settings_panel, text="Manter ultimos backups").grid(
@@ -178,12 +173,9 @@ class SettingsPagesMixin:
         ui_scale_entry.grid(row=20, column=0, padx=16, pady=(0, 14), sticky="w")
         ui_scale_entry.insert(0, str(settings.get("ui_scale_percent") or "120"))
 
-        ctk.CTkLabel(
-            settings_panel,
-            text="Sincronizacao de Ratings",
-            font=ctk.CTkFont(size=14, weight="bold"),
-            text_color="#0F172A",
-        ).grid(row=21, column=0, padx=16, pady=(16, 4), sticky="w")
+        self._section_title(settings_panel, "Sincronizacao de Ratings").grid(
+            row=21, column=0, padx=16, pady=(16, 4), sticky="w"
+        )
 
         def download_fide() -> None:
             import threading
@@ -514,7 +506,7 @@ class SettingsPagesMixin:
         help_label = ctk.CTkLabel(
             panel,
             text="Use datas no formato ISO para filtrar torneios, presencas, financeiro ou eventos por periodo.",
-            text_color="#64748B",
+            text_color=THEME_TEXT_SUB,
         )
         help_label.grid(row=4, column=0, columnspan=4, padx=16, pady=(0, 16), sticky="w")
 
@@ -737,7 +729,7 @@ class SettingsPagesMixin:
             if tournament
             else "Nenhum torneio selecionado"
         )
-        ctk.CTkLabel(panel, text=status_text, text_color="#64748B").grid(
+        ctk.CTkLabel(panel, text=status_text, text_color=THEME_TEXT_SUB).grid(
             row=2,
             column=0,
             columnspan=4,
@@ -1117,13 +1109,13 @@ class SettingsPagesMixin:
         category_option = ctk.CTkOptionMenu(form_panel, values=category_values, width=230)
         category_option.grid(row=36, column=0, padx=16, pady=(0, 10), sticky="ew")
 
-        count_label = ctk.CTkLabel(form_panel, text="", text_color="#64748B", wraplength=250, justify="left")
+        count_label = ctk.CTkLabel(form_panel, text="", text_color=THEME_TEXT_SUB, wraplength=250, justify="left")
         count_label.grid(row=37, column=0, padx=16, pady=(0, 14), sticky="w")
 
         ctk.CTkLabel(
             table_panel,
             text="Selecione jogadores na lista apenas quando usar destinatarios selecionados.",
-            text_color="#64748B",
+            text_color=THEME_TEXT_SUB,
         ).grid(row=0, column=0, padx=16, pady=(16, 8), sticky="w")
 
         tree_holder = ctk.CTkFrame(table_panel, fg_color="transparent")
@@ -1606,7 +1598,7 @@ class SettingsPagesMixin:
         category_option = ctk.CTkOptionMenu(form_panel, values=["Todas"], width=250)
         category_option.grid(row=40, column=0, padx=16, pady=(0, 10), sticky="ew")
 
-        count_label = ctk.CTkLabel(form_panel, text="", text_color="#64748B", wraplength=270, justify="left")
+        count_label = ctk.CTkLabel(form_panel, text="", text_color=THEME_TEXT_SUB, wraplength=270, justify="left")
         count_label.grid(row=41, column=0, padx=16, pady=(0, 14), sticky="w")
 
         ctk.CTkLabel(form_panel, text="Codigo de verificacao").grid(row=42, column=0, padx=16, pady=(2, 4), sticky="w")
@@ -1616,7 +1608,7 @@ class SettingsPagesMixin:
         ctk.CTkLabel(
             table_panel,
             text="Selecione destinatarios na lista apenas quando usar destinatarios selecionados.",
-            text_color="#64748B",
+            text_color=THEME_TEXT_SUB,
         ).grid(row=0, column=0, padx=16, pady=(16, 8), sticky="w")
 
         tree_holder = ctk.CTkFrame(table_panel, fg_color="transparent")
@@ -1648,7 +1640,7 @@ class SettingsPagesMixin:
         ctk.CTkLabel(
             table_panel,
             text="Historico recente de emissoes",
-            text_color="#64748B",
+            text_color=THEME_TEXT_SUB,
         ).grid(row=2, column=0, padx=16, pady=(0, 8), sticky="w")
 
         history_holder = ctk.CTkFrame(table_panel, fg_color="transparent")

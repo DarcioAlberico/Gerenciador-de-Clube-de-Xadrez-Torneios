@@ -278,7 +278,7 @@ class AlbericusApp(
         help_menu.add_command(label="❤ Apoie o Projeto", command=show_donation_modal)
 
     def _build_statusbar(self) -> None:
-        self.statusbar = ctk.CTkFrame(self, height=28, corner_radius=0, fg_color=("gray85", "gray15"))
+        self.statusbar = ctk.CTkFrame(self, height=28, corner_radius=0, fg_color=THEME_STATUSBAR_BG)
         self.statusbar.grid(row=1, column=0, sticky="ew")
         self.statusbar.grid_columnconfigure(0, weight=1)
         self.statusbar.grid_columnconfigure(1, weight=1)

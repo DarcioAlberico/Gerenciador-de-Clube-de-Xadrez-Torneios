@@ -2147,7 +2147,7 @@ class TournamentPagesMixin:
         
         btn_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
         btn_frame.pack(fill="x", pady=(10, 0))
-        ctk.CTkButton(btn_frame, text="Remover Selecionado", command=remove_referee, fg_color="#ef4444", hover_color="#dc2626").pack(side="right")
+        ctk.CTkButton(btn_frame, text="Remover Selecionado", command=remove_referee, fg_color=THEME_DANGER, hover_color=THEME_DANGER_HOVER).pack(side="right")
         
         load_tournament_refs()
 
