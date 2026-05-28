@@ -278,6 +278,8 @@ class AlbericusApp(
             livepix_btn = ctk.CTkButton(modal, text="Cartão / Internacional (LivePix)", command=open_livepix, fg_color="#8a2be2", hover_color="#5c1d96")
             livepix_btn.pack(pady=(0, 10))
 
+        help_menu.add_command(label="Buscar ação...", command=self._show_command_palette, accelerator="Ctrl+K")
+        help_menu.add_separator()
         help_menu.add_command(label="❤ Apoie o Projeto", command=show_donation_modal)
 
     def _register_shortcuts(self) -> None:
@@ -290,6 +292,8 @@ class AlbericusApp(
             ("<Control-Key-4>", lambda _e: self._navigate("show_pairings")),
             ("<Control-Key-5>", lambda _e: self._navigate("show_standings")),
             ("<Control-comma>", lambda _e: self._navigate("show_app_settings")),
+            ("<Control-k>", lambda _e: self._show_command_palette()),
+            ("<Control-K>", lambda _e: self._show_command_palette()),
         ]
         for sequence, handler in bindings:
             self.bind_all(sequence, handler)
@@ -308,6 +312,156 @@ class AlbericusApp(
         if callable(method):
             method()
         self._refresh_statusbar()
+
+    def _command_palette_actions(self) -> list[tuple[str, Callable[[], None], str]]:
+        """Registry de ações do command palette: (label, callable, keywords)."""
+        return [
+            # Navegação — Clube
+            ("Dashboard Visual", self.show_visual_dashboard, "inicio painel home"),
+            ("Perfil do Clube", self.show_club, "clube unidade"),
+            ("Membros", self.show_members, "socios alunos pessoas"),
+            ("Níveis de Aprendizagem", self.show_learning_levels, "niveis turmas"),
+            ("Responsáveis", self.show_guardians, "guardian pais"),
+            # Treinamento
+            ("Aulas", self.show_training, "treinamento aula classe"),
+            ("Exercícios", self.show_exercises, "treino problemas"),
+            # Gestão
+            ("Árbitros", self.show_referees, "arbitros juiz"),
+            ("Inventário", self.show_inventory, "estoque material"),
+            ("Financeiro", self.show_finance, "caixa contas dinheiro"),
+            ("Calendário", self.show_calendar, "agenda eventos datas"),
+            ("Ranking Interno", self.show_internal_ranking, "rating classificacao"),
+            # Torneio
+            ("Torneios", self.show_tournaments, "lista campeonatos"),
+            ("Central do Torneio", self.show_tournament_dashboard, "dashboard torneio"),
+            ("Painel do Árbitro", self.show_arbitration_panel, "arbitragem pendencias"),
+            ("Configurações do Torneio", self.show_tournament_settings, "config torneio"),
+            ("Jogadores", self.show_players, "participantes inscritos"),
+            ("Equipes", self.show_teams, "times equipe"),
+            ("Rodadas / Emparceiramento", self.show_pairings, "pairings round chave"),
+            ("Classificação", self.show_standings, "tabela standings ranking"),
+            ("Diplomas / Certificados", self.show_certificates, "certificado diploma"),
+            # Ferramentas
+            ("Exportar", self.show_export, "trf16 pdf csv chess-results"),
+            ("Relatórios Administrativos", self.show_administrative_reports, "relatorio admin"),
+            ("DRE Financeiro", self.show_financial_reports, "dre financeiro relatorio"),
+            ("Comunicação", self.show_communication, "mensagem whatsapp comunicado"),
+            ("Integrações Operacionais", self.show_integrations, "qr relogio sync clock"),
+            # Configurações
+            ("Configurações do App", self.show_app_settings, "preferencias config"),
+            ("Auditoria Completa", self.show_audit_logs, "log auditoria historico"),
+            # Ações
+            ("Recarregar tela (F5)", self._refresh_current_view, "refresh atualizar"),
+            ("Biblioteca Pedagógica", self.show_library, "biblioteca acervo"),
+        ]
+
+    def _show_command_palette(self) -> None:
+        if getattr(self, "_palette_open", False):
+            return
+        self._palette_open = True
+
+        palette = ctk.CTkToplevel(self)
+        palette.title("Comando")
+        palette.geometry("560x420")
+        palette.transient(self)
+        palette.resizable(False, False)
+        try:
+            palette.grab_set()
+        except Exception:
+            pass
+
+        # Centraliza próximo ao topo da janela principal
+        self.update_idletasks()
+        x = self.winfo_rootx() + (self.winfo_width() - 560) // 2
+        y = self.winfo_rooty() + 80
+        palette.geometry(f"+{max(0, x)}+{max(0, y)}")
+
+        actions = self._command_palette_actions()
+        state: dict[str, Any] = {"filtered": list(actions), "selected": 0, "rows": []}
+
+        entry = ctk.CTkEntry(palette, placeholder_text="Buscar ação… (digite e Enter)")
+        entry.pack(fill="x", padx=12, pady=(12, 6))
+
+        list_holder = ctk.CTkScrollableFrame(palette, fg_color=THEME_PANEL_BG)
+        list_holder.pack(fill="both", expand=True, padx=12, pady=(0, 12))
+        list_holder.grid_columnconfigure(0, weight=1)
+
+        def close() -> None:
+            self._palette_open = False
+            try:
+                palette.grab_release()
+            except Exception:
+                pass
+            palette.destroy()
+
+        def execute(index: int) -> None:
+            if not (0 <= index < len(state["filtered"])):
+                return
+            _, fn, _ = state["filtered"][index]
+            close()
+            try:
+                fn()
+            except Exception as exc:
+                self._show_error(exc)
+
+        def render_rows() -> None:
+            for row in state["rows"]:
+                row.destroy()
+            state["rows"] = []
+            for index, (label, _fn, _kw) in enumerate(state["filtered"]):
+                is_selected = index == state["selected"]
+                row = ctk.CTkLabel(
+                    list_holder,
+                    text=label,
+                    anchor="w",
+                    fg_color=THEME_ACCENT if is_selected else "transparent",
+                    text_color=("#FFFFFF", "#0B0F19") if is_selected else THEME_TEXT_MAIN,
+                    corner_radius=4,
+                )
+                row.grid(row=index, column=0, sticky="ew", padx=4, pady=1, ipadx=8, ipady=4)
+                row.bind("<Button-1>", lambda _e, i=index: execute(i))
+                state["rows"].append(row)
+            if not state["filtered"]:
+                ctk.CTkLabel(
+                    list_holder, text="Nenhuma ação corresponde.",
+                    text_color=THEME_TEXT_SUB,
+                ).grid(row=0, column=0, pady=20)
+
+        def filter_actions(_event: Any = None) -> None:
+            query = entry.get().strip().lower()
+            if not query:
+                state["filtered"] = list(actions)
+            else:
+                scored: list[tuple[int, tuple[str, Callable, str]]] = []
+                for action in actions:
+                    label, _fn, kw = action
+                    haystack = f"{label} {kw}".lower()
+                    if query in haystack:
+                        # prefixo do label = melhor pontuação
+                        score = 0 if label.lower().startswith(query) else (
+                            1 if query in label.lower() else 2
+                        )
+                        scored.append((score, action))
+                scored.sort(key=lambda item: item[0])
+                state["filtered"] = [action for _score, action in scored]
+            state["selected"] = 0
+            render_rows()
+
+        def move(delta: int) -> str:
+            if state["filtered"]:
+                state["selected"] = (state["selected"] + delta) % len(state["filtered"])
+                render_rows()
+            return "break"
+
+        entry.bind("<KeyRelease>", filter_actions)
+        entry.bind("<Down>", lambda _e: move(1))
+        entry.bind("<Up>", lambda _e: move(-1))
+        entry.bind("<Return>", lambda _e: execute(state["selected"]))
+        palette.bind("<Escape>", lambda _e: close())
+        palette.protocol("WM_DELETE_WINDOW", close)
+
+        render_rows()
+        entry.focus_set()
 
     def _build_statusbar(self) -> None:
         self.statusbar = ctk.CTkFrame(self, height=28, corner_radius=0, fg_color=THEME_STATUSBAR_BG)
