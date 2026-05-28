@@ -2,8 +2,6 @@ import customtkinter as ctk
 from typing import Any
 import tkinter as tk
 
-from ..support import UIBuilderMixin
-
 class LibraryMixin:
     def show_library(self) -> None:
         self._clear_content()

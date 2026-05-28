@@ -8,7 +8,7 @@ import subprocess
 import webbrowser
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
-from typing import Any, Callable
+from typing import Any
 
 import customtkinter as ctk
 from tkcalendar import DateEntry
@@ -240,24 +240,12 @@ class ErrorCatchingMixin:
 
         
 class UIBuilderMixin(ErrorCatchingMixin):
-    def _clear_content(self) -> None:
-        for widget in self.content.winfo_children():
-            widget.destroy()
+    """Helpers de UI que NÃO são reimplementados em AlbericusApp.
 
-    def _page_title(self, title: str, subtitle: str = "") -> None:
-        header = ctk.CTkFrame(self.content, fg_color="transparent")
-        header.grid(row=0, column=0, padx=24, pady=(24, 12), sticky="ew")
-        ctk.CTkLabel(header, text=title, font=ctk.CTkFont(size=24, weight="bold")).pack(anchor="w")
-        if subtitle:
-            ctk.CTkLabel(header, text=subtitle, font=ctk.CTkFont(size=14), text_color="gray60").pack(
-                anchor="w", pady=(2, 0)
-            )
-
-    def _make_panel(self, parent: ctk.CTkFrame) -> ctk.CTkFrame:
-        return ctk.CTkFrame(parent, corner_radius=8)
-
-    def _make_scrollable_panel(self, parent: ctk.CTkFrame, width: int = 260) -> ctk.CTkScrollableFrame:
-        return ctk.CTkScrollableFrame(parent, width=width, corner_radius=8)
+    Primitivos como _page_title, _make_panel, _make_scrollable_panel, _make_tree,
+    _clear_content e _grid_form_buttons vivem em app.py (AlbericusApp) — fonte única
+    de verdade. Não duplique aqui.
+    """
 
     def _make_date_entry(self, parent: Any, width: int = 20) -> DateEntry:
         # width em DateEntry e medido em caracteres, o padrao de 20 e suficiente
@@ -287,37 +275,3 @@ class UIBuilderMixin(ErrorCatchingMixin):
         )
         return entry
 
-    def _make_tree(
-        self,
-        parent: ctk.CTkFrame,
-        columns: list[str],
-        headings: dict[str, str],
-        widths: dict[str, int],
-        height: int = 20,
-    ) -> ttk.Treeview:
-        tree = ttk.Treeview(parent, columns=columns, show="headings", height=height)
-        for col in columns:
-            tree.heading(col, text=headings.get(col, col))
-            tree.column(col, width=widths.get(col, 100), anchor="w")
-        scrollbar_y = ctk.CTkScrollbar(parent, command=tree.yview)
-        scrollbar_x = ctk.CTkScrollbar(parent, command=tree.xview, orientation="horizontal")
-        tree.configure(yscrollcommand=scrollbar_y.set, xscrollcommand=scrollbar_x.set)
-        tree.grid(row=0, column=0, sticky="nsew")
-        scrollbar_y.grid(row=0, column=1, sticky="ns")
-        scrollbar_x.grid(row=1, column=0, sticky="ew")
-        return tree
-
-    def _grid_form_buttons(
-        self,
-        parent: ctk.CTkFrame,
-        button_specs: list[tuple[str, Callable[[], None]]],
-        start_row: int,
-        required_action: str = ""
-    ) -> None:
-        frame = ctk.CTkFrame(parent, fg_color="transparent")
-        frame.grid(row=start_row, column=0, padx=16, pady=24, sticky="ew")
-        for i, (text, cmd) in enumerate(button_specs):
-            btn = ctk.CTkButton(frame, text=text, command=cmd)
-            btn.pack(fill="x", pady=(0 if i == 0 else 8, 0))
-            if required_action:
-                self._disable_if_unauthorized(btn, required_action)
