@@ -313,11 +313,66 @@ class AlbericusApp(
     def show_reports(self) -> None:
         self.show_administrative_reports()
 
-    def _show_toast(self, message: str, is_error: bool = False) -> None:
-        if is_error:
-            self._show_error(AppError(message))
-        else:
-            self._show_info(message)
+    def _show_toast(
+        self,
+        message: str,
+        is_error: bool = False,
+        *,
+        kind: str | None = None,
+        duration_ms: int = 3500,
+    ) -> None:
+        """Notificação não-bloqueante no canto inferior-direito.
+
+        kind ∈ {"info", "success", "warning", "error"}.
+        is_error=True é mantido para compat e equivale a kind="error".
+        Erros com stack-trace devem continuar usando _show_error (modal).
+        """
+        if kind is None:
+            kind = "error" if is_error else "info"
+        palette = {
+            "info":    (THEME_ACCENT,  ("#FFFFFF", "#0B0F19")),
+            "success": (THEME_SUCCESS, ("#FFFFFF", "#FFFFFF")),
+            "warning": (("#F59E0B", "#FBBF24"), ("#0B0F19", "#0B0F19")),
+            "error":   (THEME_DANGER,  ("#FFFFFF", "#FFFFFF")),
+        }
+        bg, fg = palette.get(kind, palette["info"])
+
+        if not hasattr(self, "_active_toasts"):
+            self._active_toasts: list[ctk.CTkFrame] = []
+
+        toast = ctk.CTkFrame(self, fg_color=bg, corner_radius=8)
+        ctk.CTkLabel(
+            toast, text=message, text_color=fg,
+            font=ctk.CTkFont(size=SIZE_BODY),
+            wraplength=320, justify="left",
+        ).pack(padx=14, pady=8)
+
+        self._active_toasts.append(toast)
+        self._restack_toasts()
+        toast.lift()
+
+        def dismiss() -> None:
+            if toast in self._active_toasts:
+                self._active_toasts.remove(toast)
+                try:
+                    toast.destroy()
+                except Exception:
+                    pass
+                self._restack_toasts()
+
+        self.after(duration_ms, dismiss)
+
+    def _restack_toasts(self) -> None:
+        """Reposiciona os toasts ativos empilhados acima da statusbar."""
+        offset = 40
+        for toast in reversed(getattr(self, "_active_toasts", [])):
+            try:
+                toast.update_idletasks()
+                height = toast.winfo_reqheight()
+                toast.place(relx=1.0, rely=1.0, x=-20, y=-offset, anchor="se")
+                offset += height + 8
+            except Exception:
+                pass
 
     def _build_content(self) -> None:
         self.content = ctk.CTkFrame(self, corner_radius=0, fg_color=THEME_APP_BG)

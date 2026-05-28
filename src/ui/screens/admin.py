@@ -2234,7 +2234,7 @@ class AdminPagesMixin:
         def save_trans() -> None:
             try:
                 self.finance_service.save_transaction(trans_payload(), selected_transaction_id["value"])
-                self._show_toast("Transação salva com sucesso!")
+                self._show_toast("Transação salva com sucesso!", kind="success")
                 clear_trans_form()
                 load_transactions()
             except Exception as e:
@@ -2245,7 +2245,7 @@ class AdminPagesMixin:
             if not tx_id:
                 return
             self.finance_service.delete_transaction(tx_id)
-            self._show_toast("Transação excluída!")
+            self._show_toast("Transação excluída!", kind="success")
             clear_trans_form()
             load_transactions()
 
@@ -2319,7 +2319,7 @@ class AdminPagesMixin:
             try:
                 payload = {k: v.get() for k, v in spon_entries.items()}
                 self.finance_service.save_sponsor(payload, selected_sponsor_id["value"])
-                self._show_toast("Patrocinador salvo com sucesso!")
+                self._show_toast("Patrocinador salvo com sucesso!", kind="success")
                 clear_spon_form()
                 load_sponsors()
             except Exception as e:
@@ -2330,7 +2330,7 @@ class AdminPagesMixin:
             if not sp_id:
                 return
             self.finance_service.delete_sponsor(sp_id)
-            self._show_toast("Patrocinador excluído!")
+            self._show_toast("Patrocinador excluído!", kind="success")
             clear_spon_form()
             load_sponsors()
 

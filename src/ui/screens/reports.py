@@ -117,7 +117,7 @@ class ReportPagesMixin:
             if path:
                 try:
                     self.report_engine.generate_dre_report(start_date.get(), end_date.get(), Path(path))
-                    self._show_toast(f"DRE salvo em {Path(path).name}")
+                    self._show_toast(f"DRE salvo em {Path(path).name}", kind="success")
                     logger.info("DRE exportado.")
                 except Exception as exc:
                     self._show_error(exc)
