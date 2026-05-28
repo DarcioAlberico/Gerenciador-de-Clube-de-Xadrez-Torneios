@@ -54,6 +54,68 @@ class PairingService:
         plan = self._individual_next_round_plan(tournament_id, tournament)
         return self._individual_preview_payload(tournament_id, tournament, plan)
 
+    @staticmethod
+    def derive_pairing_state(
+        *,
+        result: str,
+        round_closed: bool,
+        has_pending_submission: bool = False,
+        has_correction: bool = False,
+    ) -> str:
+        """Deriva o ciclo de vida da mesa (constants.RESULT_STATES).
+
+        Ordem de prioridade:
+          corrected > locked > published > submitted > empty
+        Correção tem prioridade sobre locked para manter a marca de auditoria
+        visível mesmo após o fechamento da rodada.
+        """
+        if has_correction:
+            return "corrected"
+        if round_closed:
+            return "locked" if result else "empty"
+        if result:
+            return "published"
+        if has_pending_submission:
+            return "submitted"
+        return "empty"
+
+    def result_states_summary(self, tournament_id: int) -> dict[str, int]:
+        """Conta mesas do torneio por estado derivado de resultado.
+
+        Cobre apenas pairings individuais; tabuleiros de equipe ficam para
+        evolução futura (semântica idêntica, fonte de dados diferente).
+        """
+        counts = {state: 0 for state in RESULT_STATES}
+        pairings = self.db.get_pairings_for_tournament(tournament_id)
+        if not pairings:
+            return counts
+
+        audit_events = self.db.list_audit_events(tournament_id, limit=10000)
+        corrected_pairings = {
+            int(event["entity_id"])
+            for event in audit_events
+            if event.get("entity_type") == "pairing"
+            and event.get("entity_id") is not None
+            and "corrected" in str(event.get("action") or "")
+        }
+        pending_subs = {
+            int(sub["pairing_id"])
+            for sub in self.db.list_result_submissions(
+                tournament_id=tournament_id, status="submitted"
+            )
+            if sub.get("pairing_id") is not None
+        }
+
+        for pairing in pairings:
+            state = self.derive_pairing_state(
+                result=str(pairing.get("result") or ""),
+                round_closed=pairing.get("round_status") == "closed",
+                has_pending_submission=int(pairing.get("id")) in pending_subs,
+                has_correction=int(pairing.get("id")) in corrected_pairings,
+            )
+            counts[state] += 1
+        return counts
+
     def arbitration_dashboard(self, tournament_id: int) -> dict[str, Any]:
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
@@ -84,6 +146,7 @@ class PairingService:
             "ready_to_close": False,
             "can_preview_next_round": False,
             "preview_alerts": 0,
+            "result_states": self.result_states_summary(tournament_id),
         }
         alerts: list[str] = []
         if latest_round:

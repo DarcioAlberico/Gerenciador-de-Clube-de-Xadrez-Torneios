@@ -42,6 +42,59 @@ from src.services.federation_exporters import FederationExporterRegistry, TRF16E
 from src.services.result_server import LocalResultServer
 
 
+class DerivePairingStateTest(unittest.TestCase):
+    """Função pura — exercita a matriz de estados sem precisar de banco."""
+
+    def test_empty_when_no_result(self) -> None:
+        self.assertEqual(
+            PairingService.derive_pairing_state(result="", round_closed=False), "empty"
+        )
+
+    def test_submitted_when_pending_submission_no_result(self) -> None:
+        self.assertEqual(
+            PairingService.derive_pairing_state(
+                result="", round_closed=False, has_pending_submission=True
+            ),
+            "submitted",
+        )
+
+    def test_published_when_result_open_round(self) -> None:
+        self.assertEqual(
+            PairingService.derive_pairing_state(result="1-0", round_closed=False),
+            "published",
+        )
+
+    def test_locked_when_round_closed_with_result(self) -> None:
+        self.assertEqual(
+            PairingService.derive_pairing_state(result="1-0", round_closed=True),
+            "locked",
+        )
+
+    def test_corrected_trumps_locked(self) -> None:
+        self.assertEqual(
+            PairingService.derive_pairing_state(
+                result="0-1", round_closed=True, has_correction=True
+            ),
+            "corrected",
+        )
+
+    def test_corrected_trumps_submitted(self) -> None:
+        self.assertEqual(
+            PairingService.derive_pairing_state(
+                result="1-0", round_closed=False,
+                has_pending_submission=True, has_correction=True,
+            ),
+            "corrected",
+        )
+
+    def test_closed_round_without_result_is_empty(self) -> None:
+        # Mesa sem resultado em rodada fechada ainda é "empty" (não locked).
+        self.assertEqual(
+            PairingService.derive_pairing_state(result="", round_closed=True),
+            "empty",
+        )
+
+
 class PairingServiceTest(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()

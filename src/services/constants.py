@@ -18,6 +18,23 @@ from src.core.database import BASE_DIR, DEFAULT_CERTIFICATE_TEMPLATES, Database
 logger = logging.getLogger(__name__)
 
 RESULTS = ["", "1-0", "0-1", "1/2-1/2", "1F-0F", "0F-1F", "0F-0F"]
+
+# Ciclo de vida do resultado por mesa, derivado de result + round.status +
+# submissões QR + auditoria. Inspirado pelo spec §6.4/§7.3:
+#   empty      -> sem resultado registrado
+#   submitted  -> submissão QR aguardando aprovação do árbitro
+#   published  -> resultado aplicado e visível
+#   corrected  -> resultado foi alterado após primeira aplicação (com auditoria)
+#   locked    -> rodada fechada; alterações exigem reabertura
+# (approved/rejected ficam no submission-level, em result_submissions.status)
+RESULT_STATES = ("empty", "submitted", "published", "corrected", "locked")
+RESULT_STATE_LABELS = {
+    "empty": "Sem resultado",
+    "submitted": "Aguardando aprovação",
+    "published": "Publicado",
+    "corrected": "Corrigido",
+    "locked": "Bloqueado (rodada fechada)",
+}
 FINAL_RESULTS = {"1-0", "0-1", "1/2-1/2", "1F-0F", "0F-1F", "0F-0F", "BYE"}
 RESULT_POINTS = {
     "1-0": (1.0, 0.0),
