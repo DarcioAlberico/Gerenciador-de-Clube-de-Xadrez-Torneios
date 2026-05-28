@@ -252,6 +252,7 @@ class PairingPagesMixin:
 
     def _export_site_from_panel(self) -> None:
         try:
+            self.db.backup_before("publish_site", tournament_id=self.current_tournament_id)
             directory = self._default_export_dir() / f"site_torneio_{self.current_tournament_id}"
             index_path = self.export_service.export_site(self.current_tournament_id, directory)
             self._show_info(f"Site exportado:\n{index_path}")
@@ -260,6 +261,7 @@ class PairingPagesMixin:
 
     def _publish_live_portal_from_panel(self) -> None:
         try:
+            self.db.backup_before("publish_live_portal", tournament_id=self.current_tournament_id)
             if self.local_result_server is None:
                 self.local_result_server = LocalResultServer(self.qr_result_service)
             settings = self.db.get_app_settings()
