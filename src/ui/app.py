@@ -398,6 +398,42 @@ class AlbericusApp(
         panel = ctk.CTkFrame(parent or self.content, fg_color=THEME_PANEL_BG, corner_radius=8)
         return panel
 
+    def _section_title(
+        self,
+        parent: ctk.CTkBaseClass,
+        text: str,
+        *,
+        subsection: bool = False,
+    ) -> ctk.CTkLabel:
+        """Rótulo padronizado de seção. Use subsection=True para sub-cabeçalhos."""
+        font = font_subsection() if subsection else font_section()
+        return ctk.CTkLabel(parent, text=text, font=font, text_color=THEME_TEXT_MAIN)
+
+    def _kpi_card(
+        self,
+        parent: ctk.CTkBaseClass,
+        label: str,
+        value: Any,
+        *,
+        subtitle: str = "",
+    ) -> ctk.CTkFrame:
+        """Card padrão de KPI: label (sub) / valor grande / subtitle opcional.
+
+        O caller posiciona o card com .grid()/.pack() no parent.
+        """
+        card = self._make_panel(parent)
+        ctk.CTkLabel(card, text=label, text_color=THEME_TEXT_SUB).pack(
+            anchor="w", padx=14, pady=(12, 0)
+        )
+        ctk.CTkLabel(card, text=str(value), font=font_kpi_value()).pack(
+            anchor="w", padx=14, pady=(0, 0 if subtitle else 12)
+        )
+        if subtitle:
+            ctk.CTkLabel(card, text=subtitle, text_color=THEME_TEXT_SUB).pack(
+                anchor="w", padx=14, pady=(0, 12)
+            )
+        return card
+
     def _make_scrollable_panel(
         self,
         parent: ctk.CTkBaseClass | None = None,

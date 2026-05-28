@@ -38,11 +38,8 @@ class PairingPagesMixin:
             ("Correcoes", str(metrics["corrections"]), "auditadas"),
         ]
         for index, (title, value, subtitle) in enumerate(card_data):
-            card = self._make_panel(cards)
+            card = self._kpi_card(cards, title, value, subtitle=subtitle)
             card.grid(row=0, column=index, padx=(0 if index == 0 else 8, 0), sticky="ew")
-            ctk.CTkLabel(card, text=title, text_color=THEME_TEXT_SUB).pack(anchor="w", padx=14, pady=(12, 0))
-            ctk.CTkLabel(card, text=value, font=ctk.CTkFont(size=24, weight="bold")).pack(anchor="w", padx=14)
-            ctk.CTkLabel(card, text=subtitle, text_color=THEME_TEXT_SUB).pack(anchor="w", padx=14, pady=(0, 12))
 
         main = ctk.CTkFrame(body, fg_color="transparent")
         main.grid(row=1, column=0, sticky="nsew")
@@ -53,11 +50,9 @@ class PairingPagesMixin:
         alerts_panel = self._make_panel(main)
         alerts_panel.grid(row=0, column=0, padx=(0, 12), sticky="nsew")
         alerts_panel.grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(
-            alerts_panel,
-            text="Alertas operacionais",
-            font=ctk.CTkFont(size=16, weight="bold"),
-        ).grid(row=0, column=0, padx=14, pady=(14, 6), sticky="w")
+        self._section_title(alerts_panel, "Alertas operacionais").grid(
+            row=0, column=0, padx=14, pady=(14, 6), sticky="w"
+        )
         if alerts:
             for row, alert in enumerate(alerts, start=1):
                 ctk.CTkLabel(alerts_panel, text=f"- {alert}", anchor="w", justify="left").grid(
@@ -79,11 +74,9 @@ class PairingPagesMixin:
         actions_panel = self._make_panel(main)
         actions_panel.grid(row=0, column=1, sticky="nsew")
         actions_panel.grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(
-            actions_panel,
-            text="Acoes rapidas",
-            font=ctk.CTkFont(size=16, weight="bold"),
-        ).grid(row=0, column=0, padx=14, pady=(14, 8), sticky="w")
+        self._section_title(actions_panel, "Acoes rapidas").grid(
+            row=0, column=0, padx=14, pady=(14, 8), sticky="w"
+        )
         actions = [
             ("Central de pendencias", self.show_arbitration_issues),
             ("Abrir rodadas", self.show_pairings),
@@ -137,7 +130,7 @@ class PairingPagesMixin:
             ctk.CTkLabel(summary, text=label, text_color=THEME_TEXT_SUB).grid(
                 row=0, column=column, padx=12, pady=(10, 0), sticky="w"
             )
-            ctk.CTkLabel(summary, text=str(value), font=ctk.CTkFont(size=20, weight="bold")).grid(
+            ctk.CTkLabel(summary, text=str(value), font=font_kpi_value()).grid(
                 row=1, column=column, padx=12, pady=(0, 10), sticky="w"
             )
 
@@ -421,7 +414,7 @@ class PairingPagesMixin:
             ctk.CTkLabel(
                 roster_header,
                 text="Chamada inicial antes da primeira rodada",
-                font=ctk.CTkFont(size=15, weight="bold"),
+                font=font_section(),
             ).grid(row=0, column=0, sticky="w")
             self.initial_call_summary_label = ctk.CTkLabel(
                 roster_header,
@@ -1421,7 +1414,7 @@ class PairingPagesMixin:
             ctk.CTkLabel(
                 dialog,
                 text=title,
-                font=ctk.CTkFont(size=15, weight="bold"),
+                font=font_section(),
                 wraplength=380,
                 justify="left",
             ).grid(row=0, column=0, padx=18, pady=(18, 12), sticky="w")
@@ -1498,7 +1491,7 @@ class PairingPagesMixin:
             ctk.CTkLabel(
                 dialog,
                 text=title,
-                font=ctk.CTkFont(size=15, weight="bold"),
+                font=font_section(),
                 wraplength=450,
                 justify="left",
             ).grid(row=0, column=0, padx=18, pady=(18, 12), sticky="w")

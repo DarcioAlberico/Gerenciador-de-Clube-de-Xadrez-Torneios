@@ -69,14 +69,8 @@ class ClubPagesMixin:
             ("Backups", dashboard["backups_count"]),
         ]
         for index, (label, value) in enumerate(cards):
-            card = ctk.CTkFrame(summary_panel, fg_color=THEME_APP_BG, corner_radius=8)
+            card = self._kpi_card(summary_panel, label, value)
             card.grid(row=0, column=index, padx=6, pady=8, sticky="ew")
-            ctk.CTkLabel(card, text=str(value), font=ctk.CTkFont(size=18, weight="bold")).pack(
-                anchor="w",
-                padx=10,
-                pady=(8, 0),
-            )
-            ctk.CTkLabel(card, text=label, text_color=THEME_TEXT_SUB).pack(anchor="w", padx=10, pady=(0, 8))
 
         dashboard_panel = self._make_panel(right_panel)
         dashboard_panel.grid(row=1, column=0, sticky="ew", pady=(0, 12))
@@ -86,12 +80,7 @@ class ClubPagesMixin:
         def add_dashboard_column(column: int, title: str, lines: list[str]) -> None:
             section = ctk.CTkFrame(dashboard_panel, fg_color="transparent")
             section.grid(row=0, column=column, padx=12, pady=8, sticky="nsew")
-            ctk.CTkLabel(
-                section,
-                text=title,
-                font=ctk.CTkFont(size=13, weight="bold"),
-                text_color=THEME_TEXT_MAIN,
-            ).pack(anchor="w")
+            self._section_title(section, title, subsection=True).pack(anchor="w")
             if not lines:
                 lines = ["Sem registros"]
             for line in lines[:4]:
@@ -1017,12 +1006,9 @@ class ClubPagesMixin:
         history_header = ctk.CTkFrame(list_panel, fg_color="transparent")
         history_header.grid(row=2, column=0, padx=12, pady=(0, 8), sticky="ew")
         history_header.grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(
-            history_header,
-            text="Historico de torneios do membro selecionado",
-            font=ctk.CTkFont(size=14, weight="bold"),
-            text_color=THEME_TEXT_MAIN,
-        ).grid(row=0, column=0, sticky="w")
+        self._section_title(history_header, "Historico de torneios do membro selecionado").grid(
+            row=0, column=0, sticky="w"
+        )
 
         history_holder = ctk.CTkFrame(list_panel, fg_color="transparent")
         history_holder.grid(row=3, column=0, padx=12, pady=(0, 12), sticky="nsew")
@@ -1706,12 +1692,9 @@ class ClubPagesMixin:
         minors_header = ctk.CTkFrame(right_panel, fg_color="transparent")
         minors_header.grid(row=4, column=0, sticky="ew")
         minors_header.grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(
-            minors_header,
-            text="Alunos menores sem responsavel",
-            font=ctk.CTkFont(size=14, weight="bold"),
-            text_color=THEME_TEXT_MAIN,
-        ).grid(row=0, column=0, sticky="w")
+        self._section_title(minors_header, "Alunos menores sem responsavel").grid(
+            row=0, column=0, sticky="w"
+        )
 
         minors_holder = self._make_panel(right_panel)
         minors_holder.grid(row=5, column=0, sticky="nsew")

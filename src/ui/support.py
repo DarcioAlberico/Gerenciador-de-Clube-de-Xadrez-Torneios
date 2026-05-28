@@ -78,6 +78,27 @@ from src.core.services import (
     player_pairing_name,
 )
 
+# Escala tipográfica — use estes tokens em vez de literais em CTkFont(size=...)
+SIZE_PAGE_TITLE = 22       # Título de página (consumido por _page_title)
+SIZE_PAGE_SUBTITLE = 14    # Subtítulo de página
+SIZE_SECTION = 15          # Cabeçalho de painel/seção
+SIZE_SUBSECTION = 13       # Mini-cabeçalho dentro de painel
+SIZE_KPI_VALUE = 22        # Valor numérico em card de KPI
+SIZE_BODY = 12             # Texto corrido
+
+
+def font_section() -> ctk.CTkFont:
+    return ctk.CTkFont(size=SIZE_SECTION, weight="bold")
+
+
+def font_subsection() -> ctk.CTkFont:
+    return ctk.CTkFont(size=SIZE_SUBSECTION, weight="bold")
+
+
+def font_kpi_value() -> ctk.CTkFont:
+    return ctk.CTkFont(size=SIZE_KPI_VALUE, weight="bold")
+
+
 # Tema Antigravity (Light / Dark)
 THEME_APP_BG = ("#F8FAFC", "#0B0F19")
 THEME_PANEL_BG = ("#FFFFFF", "#1E293B")
