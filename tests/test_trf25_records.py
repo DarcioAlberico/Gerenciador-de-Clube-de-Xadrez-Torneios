@@ -3,6 +3,7 @@
 import unittest
 
 from src.services.federation_exporters.trf25_records import (
+    encode_time_control,
     record_162,
     record_212,
     record_240,
@@ -231,6 +232,33 @@ class TestRecord802(unittest.TestCase):
         self.assertEqual(cols(line, 42 - 13, 44 - 13), "9  ")
         self.assertEqual(cols(line, 35, 38), "    ")
         self.assertEqual(cols(line, 39, 39), "f")
+
+
+class TestEncodeTimeControl(unittest.TestCase):
+    def test_single_period_no_increment(self):
+        self.assertEqual(encode_time_control("10 min"), "600")
+
+    def test_single_period_with_increment(self):
+        self.assertEqual(encode_time_control("15 min + 10 s"), "900+10")
+        self.assertEqual(encode_time_control("3 min + 2 s"), "180+2")
+        self.assertEqual(encode_time_control("90 min + 30 s"), "5400+30")
+
+    def test_multi_period_with_increment(self):
+        self.assertEqual(
+            encode_time_control("90 min / 40 lances + 30 min + 30 s"),
+            "40/5400+30:1800+30",
+        )
+
+    def test_multi_period_without_increment(self):
+        self.assertEqual(
+            encode_time_control("100 min / 40 lances + 15 min"),
+            "40/6000:900",
+        )
+
+    def test_unparseable_returns_none(self):
+        self.assertIsNone(encode_time_control(""))
+        self.assertIsNone(encode_time_control("ritmo livre"))
+        self.assertIsNone(encode_time_control(None))
 
 
 if __name__ == "__main__":

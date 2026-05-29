@@ -72,6 +72,7 @@ from src.services.constants import RESULT_POINTS, AppError, player_pairing_name
 from src.services.federation_exporters.base import FederationExportFormat
 from src.services.federation_exporters.trf16 import TRF16Exporter
 from src.services.federation_exporters.trf25_records import (
+    encode_time_control,
     record_212,
     record_310,
     record_320,
@@ -87,8 +88,9 @@ _FORFEIT_RESULTS = frozenset({"1F-0F", "0F-1F", "0F-0F"})
 
 
 TRF25_SCAFFOLD_WARNING = (
-    "TRF25: implementação parcial — out-of-order/ajustes (300/299) ainda não "
-    "emitidos, e o layout segue final draft da FIDE. "
+    "TRF25: implementação parcial — ajustes/out-of-order/aceleração/proibições "
+    "(299/300/250/260) não são emitidos por falta de modelo de dados, e o layout "
+    "segue final draft da FIDE. "
     "Use TRF16 para envio oficial até a especificação ser finalizada."
 )
 
@@ -151,8 +153,17 @@ class TRF25Exporter(TRF16Exporter):
             handle.write(service._trf_tournament_line("122", tournament.get("time_control", "")))
             handle.write(service._trf_round_dates_line(round_count, schedule))
 
+            prepared = self._prepare_teams(tournament_id, teams, players, start_rank_by_player)
+            tpn_by_team = {item["team_id"]: number for number, item in enumerate(prepared, start=1)}
+
             # Extensões TRF25 (ESPEC §1).
             handle.write(tournament_line("142", round_count))
+            initial_colour = self._initial_colour_152(players, prepared, rounds, is_team)
+            if initial_colour:
+                handle.write(tournament_line("152", initial_colour))
+            encoded_time = encode_time_control(tournament.get("time_control"))
+            if encoded_time:
+                handle.write(tournament_line("222", encoded_time))
             handle.write(tournament_line("192", self._type_code_192(tournament, settings)))
             handle.write(record_212(self._tiebreak_codes_212(is_team)))
             if is_team:
@@ -168,8 +179,6 @@ class TRF25Exporter(TRF16Exporter):
                         pairings_by_round, round_count, settings,
                     )
                 )
-            prepared = self._prepare_teams(tournament_id, teams, players, start_rank_by_player)
-            tpn_by_team = {item["team_id"]: number for number, item in enumerate(prepared, start=1)}
             for line in self._team_records_310(prepared):
                 handle.write(line)
             if is_team:
@@ -190,6 +199,48 @@ class TRF25Exporter(TRF16Exporter):
     @staticmethod
     def _score_token(name: str) -> str:
         return "GP" if "game" in str(name).casefold() else "MP"
+
+    def _initial_colour_152(
+        self,
+        players: list[dict[str, Any]],
+        prepared: list[dict[str, Any]],
+        rounds: list[dict[str, Any]],
+        is_team: bool,
+    ) -> str | None:
+        """Cor (W/B) do 1º tabuleiro do top seed na rodada 1.
+
+        Devolve None quando não é possível determinar (sem rodada 1, top seed com
+        bye, ou pareamento ausente) — o exporter então omite o 152.
+        """
+        first_round = next((r for r in rounds if int(r["number"]) == 1), None)
+        if not first_round:
+            return None
+        round_id = int(first_round["id"])
+
+        if is_team:
+            if not prepared:
+                return None
+            top_team_id = int(prepared[0]["team_id"])
+            for match in self.db.list_team_matches_for_round(round_id):
+                if match.get("is_bye"):
+                    continue
+                if int(match.get("white_team_id") or 0) == top_team_id:
+                    return "W"
+                if int(match.get("black_team_id") or 0) == top_team_id:
+                    return "B"
+            return None
+
+        if not players:
+            return None
+        top_id = int(players[0]["id"])
+        for pairing in self.db.get_pairings_for_round(round_id):
+            if pairing.get("is_bye"):
+                continue
+            if int(pairing.get("white_player_id") or 0) == top_id:
+                return "W"
+            if int(pairing.get("black_player_id") or 0) == top_id:
+                return "B"
+        return None
 
     def _type_code_192(self, tournament: dict[str, Any], settings: dict[str, Any]) -> str:
         if tournament.get("competition_type") == "team":

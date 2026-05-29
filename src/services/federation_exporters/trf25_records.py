@@ -10,6 +10,7 @@ Posições na spec FIDE são 1-based e inclusivas (ex.: `5 - 7` = colunas 5,6,7)
 
 from __future__ import annotations
 
+import re
 import unicodedata
 
 
@@ -46,6 +47,42 @@ def tournament_line(code: str, value: object) -> str:
     """Registro simples `CCC <texto livre a partir da coluna 5>`."""
     text = trf_ascii(value)
     return f"{code} {text}".rstrip() + "\r\n"
+
+
+def encode_time_control(value: object) -> str | None:
+    """Codifica o ritmo textual do projeto na gramática TRF25 (registro 222).
+
+    Reconhece os formatos gerados pelo construtor de ritmo: `"10 min"`,
+    `"15 min + 10 s"` e `"90 min / 40 lances + 30 min"` (com ou sem incremento).
+    Um *Time Period Descriptor* é `M/S` (lances/segundos), `S` (só segundos) ou
+    `S+I` (com incremento por lance); períodos múltiplos juntam-se com `:`.
+
+    Devolve None quando não consegue interpretar com segurança — assim o exporter
+    omite o 222 em vez de emitir um ritmo enganoso ao árbitro.
+    """
+    text = str(value or "").strip().lower()
+    if not text:
+        return None
+
+    increment = 0
+    inc_match = re.search(r"\+\s*(\d+)\s*(?:s|seg|segundos?)\b", text)
+    if inc_match:
+        increment = int(inc_match.group(1))
+        text = (text[: inc_match.start()] + text[inc_match.end() :]).strip(" +")
+    inc_suffix = f"+{increment}" if increment else ""
+
+    multi = re.fullmatch(r"(\d+)\s*min\s*/\s*(\d+)\s*lances\s*\+\s*(\d+)\s*min", text)
+    if multi:
+        first_seconds = int(multi.group(1)) * 60
+        moves = int(multi.group(2))
+        second_seconds = int(multi.group(3)) * 60
+        return f"{moves}/{first_seconds}{inc_suffix}:{second_seconds}{inc_suffix}"
+
+    single = re.fullmatch(r"(\d+)\s*min", text)
+    if single:
+        return f"{int(single.group(1)) * 60}{inc_suffix}"
+
+    return None
 
 
 def record_310(

@@ -5054,6 +5054,39 @@ class PairingServiceTest(unittest.TestCase):
         self.assertTrue(any(line.startswith("310 ") for line in lines))
         self.assertFalse(any(line.startswith("013 ") for line in lines))
 
+    def test_trf25_export_emits_152_and_222_for_individual(self) -> None:
+        from src.services.federation_exporters import TRF25Exporter
+
+        self.db.update_tournament_details(
+            self.tournament_id, name="Torneio teste", time_control="90 min + 30 s"
+        )
+        self._create_players(4)
+        self.service.generate_next_round(self.tournament_id)
+
+        output_path = Path(self.temp_dir.name) / "ind_trf25.trf"
+        TRF25Exporter(self.export_service).export(self.tournament_id, output_path)
+        lines = output_path.read_text(encoding="utf-8").splitlines()
+
+        # 222: ritmo codificado (90 min = 5400 s, +30 s de incremento).
+        self.assertIn("222 5400+30", lines)
+        # 152: cor do top seed (rank 1) na rodada 1 — W ou B, exatamente um.
+        colour_lines = [line for line in lines if line.startswith("152 ")]
+        self.assertEqual(len(colour_lines), 1)
+        self.assertIn(colour_lines[0], ("152 W", "152 B"))
+
+    def test_trf25_omits_222_when_time_control_unparseable(self) -> None:
+        from src.services.federation_exporters import TRF25Exporter
+
+        self.db.update_tournament_details(
+            self.tournament_id, name="Torneio teste", time_control="ritmo livre"
+        )
+        self._create_players(2)
+
+        output_path = Path(self.temp_dir.name) / "ind_no222.trf"
+        TRF25Exporter(self.export_service).export(self.tournament_id, output_path)
+        lines = output_path.read_text(encoding="utf-8").splitlines()
+        self.assertFalse(any(line.startswith("222 ") for line in lines))
+
     def test_validate_chess_results_trf16_reports_special_result_statuses(self) -> None:
         tournament_id = self.db.create_tournament(
             "Aberto Pendencias",
