@@ -248,15 +248,11 @@ class TRF25Exporter(TRF16Exporter):
         spec = acceleration_spec(method)
         upper = upper_share_size(len(players), spec.get("upper_fraction", 0.5))
         round_count = int(spec.get("round_count", 0) or 0)
-        if upper <= 0 or round_count <= 0:
+        bonus = float(spec.get("bonus", 0.0) or 0.0)
+        # Sem topo, sem rodadas ou sem bônus efetivo → não há aceleração a declarar.
+        if upper <= 0 or round_count <= 0 or bonus <= 0:
             return None
-        return record_250(
-            0.0,
-            float(spec.get("bonus", 0.0) or 0.0),
-            1,
-            round_count,
-            [1, upper],
-        )
+        return record_250(0.0, bonus, 1, round_count, [1, upper])
 
     def _prohibited_pairing_records_260(
         self,

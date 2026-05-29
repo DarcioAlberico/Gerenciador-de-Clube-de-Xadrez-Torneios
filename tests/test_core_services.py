@@ -5459,6 +5459,36 @@ class PairingServiceTest(unittest.TestCase):
         self.assertEqual(line[22:26].strip(), "1")  # rank 1
         self.assertEqual(line[27:31].strip(), "2")  # upper 0.25 de 8 = 2
 
+    def test_custom_acceleration_ignores_nonpositive_params(self) -> None:
+        from src.services.federation_exporters import TRF25Exporter
+        from src.services.pairing import acceleration_bonus, acceleration_spec
+
+        # Bônus zero: sem efeito no motor.
+        spec_zero = acceleration_spec("custom:rounds=2;bonus=0;upper=0.5")
+        self.assertEqual(acceleration_bonus(1, 8, 1, spec_zero), 0.0)
+        # Bônus negativo nunca "desacelera".
+        spec_neg = acceleration_spec("custom:rounds=2;bonus=-1;upper=0.5")
+        self.assertEqual(acceleration_bonus(1, 8, 1, spec_neg), 0.0)
+        # Zero rodadas: sem efeito.
+        spec_no_round = acceleration_spec("custom:rounds=0;bonus=1;upper=0.5")
+        self.assertEqual(acceleration_bonus(1, 8, 1, spec_no_round), 0.0)
+
+        self._create_players(8)
+        exporter = TRF25Exporter(self.export_service)
+        output_path = Path(self.temp_dir.name) / "noop.trf"
+        for method in (
+            "custom:rounds=2;bonus=0;upper=0.5",
+            "custom:rounds=0;bonus=1;upper=0.5",
+            "custom:rounds=2;bonus=1;upper=0",
+        ):
+            self.db.save_tournament_settings(self.tournament_id, {"acceleration_method": method})
+            exporter.export(self.tournament_id, output_path)
+            lines = output_path.read_text(encoding="utf-8").splitlines()
+            self.assertFalse(
+                [line for line in lines if line.startswith("250 ")],
+                msg=f"250 indevido para {method}",
+            )
+
     def test_baku_does_not_apply_bonus_or_emit_250(self) -> None:
         from src.services.federation_exporters import TRF25Exporter
         from src.services.federation_exporters.trf25 import BAKU_NOT_IMPLEMENTED

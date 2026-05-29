@@ -140,10 +140,13 @@ def acceleration_bonus(
         return 0.0
     if start_rank <= 0:
         return 0.0
+    bonus = float(spec.get("bonus", 0.0) or 0.0)
+    if bonus <= 0:
+        return 0.0
     upper = upper_share_size(total_players, spec.get("upper_fraction", CLASSIC_UPPER_FRACTION))
     if upper <= 0:
         return 0.0
-    return float(spec.get("bonus", 0.0) or 0.0) if start_rank <= upper else 0.0
+    return bonus if start_rank <= upper else 0.0
 
 
 def classic_acceleration_bonus(start_rank: int, total_players: int, round_number: int) -> float:

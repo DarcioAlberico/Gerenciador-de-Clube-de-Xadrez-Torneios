@@ -932,11 +932,17 @@ class TournamentPagesMixin:
             accel_key = acceleration_by_label[acceleration_option.get()]
             if accel_key == "custom":
                 try:
-                    rounds = max(int(float(accel_custom_entries["rounds"].get() or 0)), 0)
+                    rounds = int(float(accel_custom_entries["rounds"].get() or 0))
                     bonus = float(accel_custom_entries["bonus"].get() or 0.0)
-                    upper = max(0.0, min(1.0, float(accel_custom_entries["upper"].get() or 0.0)))
+                    upper = float(accel_custom_entries["upper"].get() or 0.0)
                 except (TypeError, ValueError):
-                    raise AppError("Parametros de aceleracao personalizada invalidos.")
+                    raise AppError("Aceleracao personalizada: use numeros validos em rodadas, bonus e fracao do topo.")
+                if rounds < 1:
+                    raise AppError("Aceleracao personalizada: informe ao menos 1 rodada acelerada.")
+                if bonus <= 0:
+                    raise AppError("Aceleracao personalizada: o bonus por jogador deve ser maior que zero.")
+                if not 0 < upper <= 1:
+                    raise AppError("Aceleracao personalizada: a fracao do topo deve estar entre 0 (exclusivo) e 1.")
                 settings_payload["acceleration_method"] = f"custom:rounds={rounds};bonus={bonus};upper={upper}"
             else:
                 settings_payload["acceleration_method"] = accel_key
