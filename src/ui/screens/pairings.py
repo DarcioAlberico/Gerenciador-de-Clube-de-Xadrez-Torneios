@@ -80,6 +80,7 @@ class PairingPagesMixin:
         actions = [
             ("Central de pendencias", self.show_arbitration_issues),
             ("Ajustes de pontos (TRF25)", self.show_point_adjustments),
+            ("Proibicoes de pareamento (TRF25)", self.show_prohibited_pairings),
             ("Abrir rodadas", self.show_pairings),
             ("Pre-visualizar proxima", self._preview_next_round),
             ("Fechar rodada atual", self._close_current_round_from_panel),
@@ -452,6 +453,208 @@ class PairingPagesMixin:
 
         ctk.CTkButton(form, text="Adicionar", command=add_adjustment).grid(
             row=next_row + 4, column=0, padx=16, pady=(14, 14), sticky="ew"
+        )
+
+        footer = ctk.CTkFrame(panel, fg_color="transparent")
+        footer.grid(row=2, column=0, padx=14, pady=(0, 12), sticky="ew")
+        ctk.CTkButton(footer, text="Atualizar", width=120, command=refresh_tree).pack(side="left")
+        ctk.CTkButton(footer, text="Remover selecionado", width=170, command=delete_selected).pack(
+            side="left", padx=(8, 0)
+        )
+        ctk.CTkButton(
+            footer, text="Voltar ao painel", width=140, command=self.show_arbitration_panel
+        ).pack(side="left", padx=(8, 0))
+
+        refresh_tree()
+
+    def show_prohibited_pairings(self) -> None:
+        if not self._require_tournament():
+            return
+        tournament = self.db.get_tournament(self.current_tournament_id)
+        is_team = (tournament or {}).get("competition_type") == "team"
+
+        self._clear_content()
+        self._page_title(
+            "Proibicoes de pareamento (TRF25)",
+            f"Torneio: {tournament['name'] if tournament else ''}",
+        )
+        self._build_tournament_nav("arbiter")
+
+        body = ctk.CTkFrame(self.content, fg_color="transparent")
+        body.grid(row=1, column=0, padx=22, pady=(0, 22), sticky="nsew")
+        body.grid_columnconfigure(0, weight=0)
+        body.grid_columnconfigure(1, weight=1)
+        body.grid_rowconfigure(0, weight=1)
+
+        if is_team:
+            note = self._make_panel(body)
+            note.grid(row=0, column=0, columnspan=2, sticky="nsew")
+            ctk.CTkLabel(
+                note,
+                text=(
+                    "As proibicoes de pareamento (registro 260) sao por jogador e\n"
+                    "aplicam-se a torneios individuais. Este torneio e por equipes."
+                ),
+                justify="left",
+            ).grid(row=0, column=0, padx=16, pady=16, sticky="w")
+            ctk.CTkButton(
+                note, text="Voltar ao painel", width=140, command=self.show_arbitration_panel
+            ).grid(row=1, column=0, padx=16, pady=(0, 16), sticky="w")
+            return
+
+        players = sorted(
+            self.db.list_players(self.current_tournament_id, active_only=False),
+            key=lambda item: str(item.get("name") or "").casefold(),
+        )
+        player_by_label: dict[str, int] = {}
+        for item in players:
+            label = f"{item.get('name') or 's/ nome'} (#{item['id']})"
+            player_by_label[label] = int(item["id"])
+        name_by_id = {int(item["id"]): (item.get("name") or "s/ nome") for item in players}
+        player_labels = list(player_by_label.keys()) or ["(sem jogadores)"]
+
+        # Formulario de lancamento.
+        form = self._make_panel(body)
+        form.grid(row=0, column=0, padx=(0, 12), sticky="nsew")
+        form.grid_columnconfigure(0, weight=1)
+        self._section_title(form, "Nova proibicao").grid(
+            row=0, column=0, padx=16, pady=(14, 8), sticky="w"
+        )
+
+        ctk.CTkLabel(form, text="Jogador A").grid(row=1, column=0, padx=16, pady=(4, 0), sticky="w")
+        player_a_option = ctk.CTkOptionMenu(form, values=player_labels, width=260)
+        player_a_option.grid(row=2, column=0, padx=16, pady=(2, 0), sticky="ew")
+
+        ctk.CTkLabel(form, text="Jogador B").grid(row=3, column=0, padx=16, pady=(8, 0), sticky="w")
+        player_b_option = ctk.CTkOptionMenu(form, values=player_labels, width=260)
+        if len(player_labels) > 1:
+            player_b_option.set(player_labels[1])
+        player_b_option.grid(row=4, column=0, padx=16, pady=(2, 0), sticky="ew")
+
+        ctk.CTkLabel(form, text="Primeira rodada").grid(
+            row=5, column=0, padx=16, pady=(8, 0), sticky="w"
+        )
+        first_round_entry = ctk.CTkEntry(form, width=260, placeholder_text="1")
+        first_round_entry.grid(row=6, column=0, padx=16, pady=(2, 0), sticky="ew")
+
+        ctk.CTkLabel(form, text="Ultima rodada (0 = todas)").grid(
+            row=7, column=0, padx=16, pady=(8, 0), sticky="w"
+        )
+        last_round_entry = ctk.CTkEntry(form, width=260, placeholder_text="0")
+        last_round_entry.grid(row=8, column=0, padx=16, pady=(2, 0), sticky="ew")
+
+        ctk.CTkLabel(form, text="Motivo").grid(row=9, column=0, padx=16, pady=(8, 0), sticky="w")
+        reason_entry = ctk.CTkEntry(form, width=260, placeholder_text="Ex.: mesmo clube/familia")
+        reason_entry.grid(row=10, column=0, padx=16, pady=(2, 0), sticky="ew")
+
+        def parse_round(entry: Any, default: int) -> int:
+            text = (entry.get() if entry else "").strip()
+            if not text:
+                return default
+            try:
+                value = int(text)
+            except ValueError as exc:
+                raise AppError("Rodada invalida: use um numero inteiro.") from exc
+            if value < 0:
+                raise AppError("Rodada nao pode ser negativa.")
+            return value
+
+        # Tabela de proibicoes existentes.
+        panel = self._make_panel(body)
+        panel.grid(row=0, column=1, sticky="nsew")
+        panel.grid_columnconfigure(0, weight=1)
+        panel.grid_rowconfigure(1, weight=1)
+        self._section_title(panel, "Proibicoes cadastradas").grid(
+            row=0, column=0, padx=14, pady=(14, 6), sticky="w"
+        )
+        tree_holder = ctk.CTkFrame(panel, fg_color="transparent")
+        tree_holder.grid(row=1, column=0, padx=14, pady=(0, 8), sticky="nsew")
+        tree_holder.grid_columnconfigure(0, weight=1)
+        tree_holder.grid_rowconfigure(0, weight=1)
+        tree = self._make_tree(
+            tree_holder,
+            ["players", "window", "reason"],
+            {"players": "Jogadores", "window": "Rodadas", "reason": "Motivo"},
+            {"players": 280, "window": 100, "reason": 220},
+            visible_rows=16,
+        )
+
+        row_by_iid: dict[str, int] = {}
+
+        def refresh_tree() -> None:
+            for child in tree.get_children():
+                tree.delete(child)
+            row_by_iid.clear()
+            for index, prohibition in enumerate(
+                self.db.list_prohibited_pairings(self.current_tournament_id), start=1
+            ):
+                iid = str(index)
+                row_by_iid[iid] = int(prohibition["id"])
+                first_round = int(prohibition.get("first_round") or 1)
+                last_round = int(prohibition.get("last_round") or 0)
+                window = f"{first_round}+" if last_round == 0 else (
+                    str(first_round) if first_round == last_round else f"{first_round}-{last_round}"
+                )
+                a_name = prohibition.get("player_a_name") or name_by_id.get(
+                    int(prohibition.get("player_a_id") or 0), "(removido)"
+                )
+                b_name = prohibition.get("player_b_name") or name_by_id.get(
+                    int(prohibition.get("player_b_id") or 0), "(removido)"
+                )
+                tree.insert(
+                    "",
+                    "end",
+                    iid=iid,
+                    values=(f"{a_name} x {b_name}", window, prohibition.get("reason") or ""),
+                )
+
+        def add_prohibition() -> None:
+            try:
+                label_a = player_a_option.get()
+                label_b = player_b_option.get()
+                if label_a not in player_by_label or label_b not in player_by_label:
+                    raise AppError("Selecione dois jogadores validos.")
+                player_a_id = player_by_label[label_a]
+                player_b_id = player_by_label[label_b]
+                if player_a_id == player_b_id:
+                    raise AppError("Escolha dois jogadores diferentes.")
+                first_round = parse_round(first_round_entry, 1) or 1
+                last_round = parse_round(last_round_entry, 0)
+                if last_round and last_round < first_round:
+                    raise AppError("A ultima rodada nao pode ser menor que a primeira.")
+                self.db.add_prohibited_pairing(
+                    self.current_tournament_id,
+                    player_a_id,
+                    player_b_id,
+                    first_round=first_round,
+                    last_round=last_round,
+                    reason=reason_entry.get().strip(),
+                )
+                first_round_entry.delete(0, "end")
+                last_round_entry.delete(0, "end")
+                reason_entry.delete(0, "end")
+                self._show_toast("Proibicao cadastrada.", kind="success")
+                refresh_tree()
+            except Exception as exc:
+                self._show_error(exc)
+
+        def delete_selected() -> None:
+            try:
+                selected = tree.selection()
+                if not selected:
+                    raise AppError("Selecione uma proibicao para remover.")
+                if not self._confirm_action(
+                    "Remover proibicao", "Confirma a remocao da proibicao selecionada?"
+                ):
+                    return
+                self.db.delete_prohibited_pairing(row_by_iid[selected[0]])
+                self._show_toast("Proibicao removida.", kind="success")
+                refresh_tree()
+            except Exception as exc:
+                self._show_error(exc)
+
+        ctk.CTkButton(form, text="Adicionar", command=add_prohibition).grid(
+            row=11, column=0, padx=16, pady=(14, 14), sticky="ew"
         )
 
         footer = ctk.CTkFrame(panel, fg_color="transparent")
