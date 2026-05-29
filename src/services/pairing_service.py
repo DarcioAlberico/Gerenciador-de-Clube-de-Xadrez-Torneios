@@ -275,6 +275,7 @@ class PairingService:
         next_number = int(plan["round_number"])
         pairings = plan["pairings"]
 
+        pairing_system = str(settings.get("pairing_system") or "custom_authorized")
         input_snapshot = self._pairing_input_snapshot(
             tournament_id=tournament_id,
             tournament=tournament,
@@ -282,14 +283,10 @@ class PairingService:
             round_number=next_number,
             participants=players,
         )
-        self.db.create_pairing_snapshot(
-            tournament_id,
-            next_number,
-            "input",
-            input_snapshot,
-            pairing_system=str(settings.get("pairing_system") or "custom_authorized"),
-            pairing_engine_version=self.PAIRING_ENGINE_VERSION,
-            ruleset_version=self.RULESET_VERSION,
+        self._save_pairing_snapshot(
+            tournament_id, next_number, "input", input_snapshot,
+            pairing_system=pairing_system,
+            engine_version=self.PAIRING_ENGINE_VERSION,
         )
         self.db.backup_before("generate_round", tournament_id=tournament_id)
         round_id = self.db.create_round_with_pairings(
@@ -299,15 +296,12 @@ class PairingService:
             pairing_engine_version=self.PAIRING_ENGINE_VERSION,
             ruleset_version=self.RULESET_VERSION,
         )
-        self.db.create_pairing_snapshot(
-            tournament_id,
-            next_number,
-            "output",
+        self._save_pairing_snapshot(
+            tournament_id, next_number, "output",
             {"round_number": next_number, "pairings": pairings},
+            pairing_system=pairing_system,
+            engine_version=self.PAIRING_ENGINE_VERSION,
             round_id=round_id,
-            pairing_system=str(settings.get("pairing_system") or "custom_authorized"),
-            pairing_engine_version=self.PAIRING_ENGINE_VERSION,
-            ruleset_version=self.RULESET_VERSION,
         )
         self.db.create_audit_event(
             action="round_generated",
@@ -322,10 +316,40 @@ class PairingService:
             },
         )
         logger.info("Rodada %s gerada para o torneio %s", next_number, tournament_id)
+        return self._finalize_generated_round(tournament_id, tournament, next_number, round_id)
+
+    def _save_pairing_snapshot(
+        self,
+        tournament_id: int,
+        round_number: int,
+        stage: str,
+        payload: dict[str, Any],
+        *,
+        pairing_system: str,
+        engine_version: str,
+        round_id: int | None = None,
+    ) -> None:
+        self.db.create_pairing_snapshot(
+            tournament_id,
+            round_number,
+            stage,
+            payload,
+            round_id=round_id,
+            pairing_system=pairing_system,
+            pairing_engine_version=engine_version,
+            ruleset_version=self.RULESET_VERSION,
+        )
+
+    def _finalize_generated_round(
+        self,
+        tournament_id: int,
+        tournament: dict[str, Any],
+        round_number: int,
+        round_id: int,
+    ) -> dict[str, Any]:
         if tournament["status"] == "draft":
             self.db.update_tournament_status(tournament_id, "running")
-
-        generated = self.db.get_round_by_number(tournament_id, next_number)
+        generated = self.db.get_round_by_number(tournament_id, round_number)
         if not generated:
             raise AppError("A rodada foi gerada, mas nao pode ser reaberta.")
         generated["id"] = round_id
@@ -418,6 +442,7 @@ class PairingService:
         next_number = int(plan["round_number"])
         matches = plan["matches"]
 
+        pairing_system = str(settings.get("pairing_system") or "team_swiss")
         input_snapshot = self._pairing_input_snapshot(
             tournament_id=tournament_id,
             tournament=tournament,
@@ -426,14 +451,10 @@ class PairingService:
             participants=teams,
             extra={"boards_count": boards_count, "seed_ratings": seed_ratings},
         )
-        self.db.create_pairing_snapshot(
-            tournament_id,
-            next_number,
-            "input",
-            input_snapshot,
-            pairing_system=str(settings.get("pairing_system") or "team_swiss"),
-            pairing_engine_version=self.TEAM_PAIRING_ENGINE_VERSION,
-            ruleset_version=self.RULESET_VERSION,
+        self._save_pairing_snapshot(
+            tournament_id, next_number, "input", input_snapshot,
+            pairing_system=pairing_system,
+            engine_version=self.TEAM_PAIRING_ENGINE_VERSION,
         )
         self.db.backup_before("generate_team_round", tournament_id=tournament_id)
         round_id = self.db.create_round_with_team_matches(
@@ -444,15 +465,12 @@ class PairingService:
             ruleset_version=self.RULESET_VERSION,
         )
         self.db.create_team_lineups_from_round(round_id)
-        self.db.create_pairing_snapshot(
-            tournament_id,
-            next_number,
-            "output",
+        self._save_pairing_snapshot(
+            tournament_id, next_number, "output",
             {"round_number": next_number, "matches": matches},
+            pairing_system=pairing_system,
+            engine_version=self.TEAM_PAIRING_ENGINE_VERSION,
             round_id=round_id,
-            pairing_system=str(settings.get("pairing_system") or "team_swiss"),
-            pairing_engine_version=self.TEAM_PAIRING_ENGINE_VERSION,
-            ruleset_version=self.RULESET_VERSION,
         )
         self.db.create_audit_event(
             action="team_round_generated",
@@ -468,14 +486,7 @@ class PairingService:
             },
         )
         logger.info("Rodada por equipes %s gerada para o torneio %s", next_number, tournament_id)
-        if tournament["status"] == "draft":
-            self.db.update_tournament_status(tournament_id, "running")
-
-        generated = self.db.get_round_by_number(tournament_id, next_number)
-        if not generated:
-            raise AppError("A rodada foi gerada, mas nao pode ser reaberta.")
-        generated["id"] = round_id
-        return generated
+        return self._finalize_generated_round(tournament_id, tournament, next_number, round_id)
 
     def _team_next_round_plan(self, tournament_id: int, tournament: dict[str, Any]) -> dict[str, Any]:
         settings = self.db.get_tournament_settings(tournament_id) or {}
