@@ -5243,6 +5243,35 @@ class PairingServiceTest(unittest.TestCase):
         self.assertEqual(line[16:20].strip(), str(start_rank[a_board2]))
         self.assertEqual(line[21:25].strip(), str(start_rank[a_board1]))
 
+    def test_trf25_emits_250_for_classic_acceleration(self) -> None:
+        from src.services.federation_exporters import TRF25Exporter
+
+        self._create_players(8)
+        exporter = TRF25Exporter(self.export_service)
+        output_path = Path(self.temp_dir.name) / "accel.trf"
+
+        # Sem aceleração: nenhum registro 250.
+        self.db.save_tournament_settings(self.tournament_id, {"acceleration_method": "none"})
+        exporter.export(self.tournament_id, output_path)
+        plain = output_path.read_text(encoding="utf-8").splitlines()
+        self.assertFalse([line for line in plain if line.startswith("250 ")])
+
+        # Aceleração clássica: 250 com bônus 1.0, rodadas 1-2, ranks 1..4 (N//2).
+        self.db.save_tournament_settings(
+            self.tournament_id, {"acceleration_method": "accelerated"}
+        )
+        exporter.export(self.tournament_id, output_path)
+        lines = output_path.read_text(encoding="utf-8").splitlines()
+        accel_lines = [line for line in lines if line.startswith("250 ")]
+        self.assertEqual(len(accel_lines), 1)
+        line = accel_lines[0]
+        self.assertEqual(line[4:8].strip(), "")  # match points em branco (individual)
+        self.assertEqual(float(line[9:13]), 1.0)  # game points
+        self.assertEqual(line[14:17].strip(), "1")  # primeira rodada
+        self.assertEqual(line[18:21].strip(), "2")  # última rodada
+        self.assertEqual(line[22:26].strip(), "1")  # primeiro jogador (rank 1)
+        self.assertEqual(line[27:31].strip(), "4")  # último jogador (N//2 = 4)
+
     def test_classic_acceleration_bonus_boundaries(self) -> None:
         from src.services.pairing import classic_acceleration_bonus
 

@@ -25,11 +25,14 @@ Já implementado:
   tabuleiro, então inferimos de forma conservadora — só emite quando *todos* os
   tabuleiros do match são W.O. consistente (+-/-+/--); forfeit parcial/misto é
   ignorado para não enganar o árbitro.
+- Fatia 6: registros 300 (out-of-order, equipes) e 299 (ajustes anormais de
+  pontos, lançados manualmente). O 250 (aceleração clássica individual) é
+  emitido quando `acceleration_method == "accelerated"`, espelhando o bônus
+  fictício que o motor de pareamento aplica (ver `pairing/acceleration.py`).
 
-Ainda não emitidos (por falta de modelo de dados): 300 (out-of-order) exigiria
-marcação explícita de escalação fora de ordem; 299 (ajuste anormal de pontos)
-exigiria uma tabela de penalidades/bônus manuais. Os construtores puros de
-ambos já existem e estão testados. Como o layout ainda é *final draft*,
+Ainda não emitido (por falta de modelo de dados): 260 (proibições de
+pareamento) exigiria uma feature de restrições explícitas no pareador. O
+construtor puro já existe e está testado. Como o layout ainda é *final draft*,
 `export()` segue devolvendo o TRF25_SCAFFOLD_WARNING — para nunca enganar o
 árbitro.
 
@@ -74,6 +77,7 @@ from src.services.federation_exporters.trf16 import TRF16Exporter
 from src.services.federation_exporters.trf25_records import (
     encode_time_control,
     record_212,
+    record_250,
     record_299,
     record_300,
     record_310,
@@ -83,6 +87,11 @@ from src.services.federation_exporters.trf25_records import (
     record_802,
     tournament_line,
 )
+from src.services.pairing.acceleration import (
+    CLASSIC_ACCELERATION_BONUS,
+    CLASSIC_ACCELERATION_ROUNDS,
+    classic_upper_half_size,
+)
 
 
 # Resultados de tabuleiro que representam W.O. (não jogado).
@@ -90,10 +99,9 @@ _FORFEIT_RESULTS = frozenset({"1F-0F", "0F-1F", "0F-0F"})
 
 
 TRF25_SCAFFOLD_WARNING = (
-    "TRF25: implementação parcial — aceleração/proibições "
-    "(250/260) não são emitidos por falta de modelo de dados, e o layout "
-    "segue final draft da FIDE. "
-    "Use TRF16 para envio oficial até a especificação ser finalizada."
+    "TRF25: implementação parcial — proibições de pareamento (260) não são "
+    "emitidas por falta de modelo de dados, e o layout segue final draft da "
+    "FIDE. Use TRF16 para envio oficial até a especificação ser finalizada."
 )
 
 
@@ -196,12 +204,42 @@ class TRF25Exporter(TRF16Exporter):
                 for line in self._team_records_802(tournament_id, prepared, tpn_by_team, round_count):
                     handle.write(line)
 
+            if not is_team:
+                acceleration_line = self._acceleration_record_250(players, settings)
+                if acceleration_line:
+                    handle.write(acceleration_line)
+
             for line in self._point_adjustment_records_299(
                 tournament_id, is_team, start_rank_by_player, tpn_by_team
             ):
                 handle.write(line)
 
         return warnings
+
+    @staticmethod
+    def _acceleration_record_250(
+        players: list[dict[str, Any]],
+        settings: dict[str, Any],
+    ) -> str | None:
+        """Registro 250 — aceleração clássica (Haley), individual (§5.1).
+
+        Emite só quando o torneio usa aceleração e há metade superior. O esquema
+        clássico dá +`CLASSIC_ACCELERATION_BONUS` ponto fictício de pareamento aos
+        start-ranks 1..N//2 nas rodadas 1 e 2 — exatamente o que o motor aplica em
+        `pairing/acceleration.py`. Match points ficam em branco (individual); o
+        intervalo de jogadores é contíguo [1, metade superior]."""
+        if str(settings.get("acceleration_method") or "none") != "accelerated":
+            return None
+        upper_half = classic_upper_half_size(len(players))
+        if upper_half <= 0:
+            return None
+        return record_250(
+            0.0,
+            CLASSIC_ACCELERATION_BONUS,
+            min(CLASSIC_ACCELERATION_ROUNDS),
+            max(CLASSIC_ACCELERATION_ROUNDS),
+            [1, upper_half],
+        )
 
     def _point_adjustment_records_299(
         self,
