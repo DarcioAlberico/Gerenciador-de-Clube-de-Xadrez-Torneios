@@ -83,6 +83,10 @@ from src.services.pairing.histories import (
     team_played_pairs,
 )
 from src.services.pairing.previews import individual_preview_payload, team_preview_payload
+from src.services.pairing.prohibitions import (
+    prohibited_pairs_for_round,
+    prohibition_applies,
+)
 from src.services.pairing.result_states import derive_pairing_state, result_states_summary
 from src.services.pairing.snapshots import pairing_input_snapshot
 from src.services.pairing.team_swiss import (
@@ -160,6 +164,8 @@ __all__ = [
     "plan_pairing_player_swap",
     "plan_team_board_player_swap",
     "played_pairs",
+    "prohibited_pairs_for_round",
+    "prohibition_applies",
     "performance_components",
     "performance_rating",
     "player_tiebreak_components",

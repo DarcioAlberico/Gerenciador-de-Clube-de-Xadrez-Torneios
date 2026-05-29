@@ -29,12 +29,14 @@ Já implementado:
   pontos, lançados manualmente). O 250 (aceleração clássica individual) é
   emitido quando `acceleration_method == "accelerated"`, espelhando o bônus
   fictício que o motor de pareamento aplica (ver `pairing/acceleration.py`).
+- Fatia 7: registro 260 (proibições de pareamento individuais). O árbitro
+  cadastra pares proibidos (tabela `prohibited_pairings`); o motor os honra
+  unindo-os ao `played_pairs` (bloqueio absoluto já existente) e o exporter
+  emite um 260 por par (ver `pairing/prohibitions.py`).
 
-Ainda não emitido (por falta de modelo de dados): 260 (proibições de
-pareamento) exigiria uma feature de restrições explícitas no pareador. O
-construtor puro já existe e está testado. Como o layout ainda é *final draft*,
-`export()` segue devolvendo o TRF25_SCAFFOLD_WARNING — para nunca enganar o
-árbitro.
+Como o layout ainda é *final draft* (não ratificado), `export()` segue
+devolvendo o TRF25_SCAFFOLD_WARNING e recomendando o TRF16 para envio oficial
+— para nunca enganar o árbitro.
 
 ## O que falta para um TRF25 completo
 
@@ -78,6 +80,7 @@ from src.services.federation_exporters.trf25_records import (
     encode_time_control,
     record_212,
     record_250,
+    record_260,
     record_299,
     record_300,
     record_310,
@@ -99,9 +102,9 @@ _FORFEIT_RESULTS = frozenset({"1F-0F", "0F-1F", "0F-0F"})
 
 
 TRF25_SCAFFOLD_WARNING = (
-    "TRF25: implementação parcial — proibições de pareamento (260) não são "
-    "emitidas por falta de modelo de dados, e o layout segue final draft da "
-    "FIDE. Use TRF16 para envio oficial até a especificação ser finalizada."
+    "TRF25: implementação incremental — o layout segue o final draft da FIDE "
+    "(ainda não ratificado). Use TRF16 para envio oficial até a especificação "
+    "ser finalizada."
 )
 
 
@@ -208,6 +211,10 @@ class TRF25Exporter(TRF16Exporter):
                 acceleration_line = self._acceleration_record_250(players, settings)
                 if acceleration_line:
                     handle.write(acceleration_line)
+                for line in self._prohibited_pairing_records_260(
+                    tournament_id, start_rank_by_player, round_count
+                ):
+                    handle.write(line)
 
             for line in self._point_adjustment_records_299(
                 tournament_id, is_team, start_rank_by_player, tpn_by_team
@@ -240,6 +247,33 @@ class TRF25Exporter(TRF16Exporter):
             max(CLASSIC_ACCELERATION_ROUNDS),
             [1, upper_half],
         )
+
+    def _prohibited_pairing_records_260(
+        self,
+        tournament_id: int,
+        start_rank_by_player: dict[int, int],
+        round_count: int,
+    ) -> list[str]:
+        """Registro 260 — proibições de pareamento arbitrais (§5.2), individual.
+
+        Uma linha por par proibido (start-ranks), com o intervalo de rodadas;
+        `last_round=0` na base de dados vira a última rodada do torneio. Pares
+        cujos jogadores não constam do export, ou com rank repetido, são omitidos
+        — nunca se emite uma proibição que o árbitro não conseguiria conferir. O
+        motor honra a mesma proibição via played_pairs (ver pairing/prohibitions)."""
+        prohibitions = self.db.list_prohibited_pairings(tournament_id)
+        if not prohibitions:
+            return []
+        lines: list[str] = []
+        for prohibition in prohibitions:
+            rank_a = start_rank_by_player.get(int(prohibition.get("player_a_id") or 0))
+            rank_b = start_rank_by_player.get(int(prohibition.get("player_b_id") or 0))
+            if not rank_a or not rank_b or rank_a == rank_b:
+                continue
+            first_round = int(prohibition.get("first_round") or 1)
+            last_round = int(prohibition.get("last_round") or 0) or round_count
+            lines.append(record_260(first_round, last_round, sorted((rank_a, rank_b))))
+        return lines
 
     def _point_adjustment_records_299(
         self,

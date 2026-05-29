@@ -37,6 +37,7 @@ from src.services.pairing import (
     plan_pairing_player_swap as _plan_pairing_player_swap,
     plan_team_board_player_swap as _plan_team_board_player_swap,
     played_pairs as _played_pairs,
+    prohibited_pairs_for_round as _prohibited_pairs_for_round,
     result_submission_issue as _result_submission_issue,
     result_states_summary as _result_states_summary,
     round_robin_pairings as _round_robin_pairings,
@@ -1167,6 +1168,11 @@ class PairingService:
         histories = self._color_histories(tournament_id)
         float_histories = self._float_histories(tournament_id)
         played_pairs = self._played_pairs(tournament_id)
+        prohibited = _prohibited_pairs_for_round(
+            self.db.list_prohibited_pairings(tournament_id), round_number
+        )
+        if prohibited:
+            played_pairs = played_pairs | prohibited
         bye_player_ids = self._bye_player_ids(tournament_id)
         return _swiss_pairings(
             players,

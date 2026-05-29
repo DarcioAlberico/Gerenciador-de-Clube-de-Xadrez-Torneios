@@ -5272,6 +5272,82 @@ class PairingServiceTest(unittest.TestCase):
         self.assertEqual(line[22:26].strip(), "1")  # primeiro jogador (rank 1)
         self.assertEqual(line[27:31].strip(), "4")  # último jogador (N//2 = 4)
 
+    def test_prohibited_pairing_is_never_paired(self) -> None:
+        self._create_players(8)
+        players = self.db.list_players(self.tournament_id, active_only=True)
+        seeding = [
+            int(p["id"])
+            for p in sorted(players, key=lambda p: -int(p.get("rating") or 0))
+        ]
+
+        def pair_set(pairings: list[dict[str, Any]]) -> set[frozenset[int]]:
+            return {
+                frozenset({int(p["white_player_id"]), int(p["black_player_id"])})
+                for p in pairings
+                if p.get("black_player_id") is not None
+            }
+
+        # Sem proibição: seed 1 pareia com seed 5 (topo vs base do mesmo grupo).
+        plain = pair_set(self.service._swiss_pairings(self.tournament_id, players, 2))
+        self.assertIn(frozenset({seeding[0], seeding[4]}), plain)
+
+        # Proibindo seed 1 x seed 5, eles nunca podem ser pareados.
+        self.db.add_prohibited_pairing(self.tournament_id, seeding[0], seeding[4])
+        guarded = pair_set(self.service._swiss_pairings(self.tournament_id, players, 2))
+        self.assertNotIn(frozenset({seeding[0], seeding[4]}), guarded)
+        self.assertEqual(len(guarded), 4)  # 8 jogadores → 4 jogos íntegros
+
+    def test_prohibition_respects_round_window(self) -> None:
+        self._create_players(8)
+        players = self.db.list_players(self.tournament_id, active_only=True)
+        seeding = [
+            int(p["id"])
+            for p in sorted(players, key=lambda p: -int(p.get("rating") or 0))
+        ]
+
+        def pair_set(pairings: list[dict[str, Any]]) -> set[frozenset[int]]:
+            return {
+                frozenset({int(p["white_player_id"]), int(p["black_player_id"])})
+                for p in pairings
+                if p.get("black_player_id") is not None
+            }
+
+        # Proibição válida só na rodada 3.
+        self.db.add_prohibited_pairing(
+            self.tournament_id, seeding[0], seeding[4], first_round=3, last_round=3
+        )
+        # Rodada 2 fora da janela: o par ainda ocorre.
+        self.assertIn(
+            frozenset({seeding[0], seeding[4]}),
+            pair_set(self.service._swiss_pairings(self.tournament_id, players, 2)),
+        )
+        # Rodada 3 dentro da janela: bloqueado.
+        self.assertNotIn(
+            frozenset({seeding[0], seeding[4]}),
+            pair_set(self.service._swiss_pairings(self.tournament_id, players, 3)),
+        )
+
+    def test_trf25_emits_260_for_prohibited_pairing(self) -> None:
+        from src.services.federation_exporters import TRF25Exporter
+
+        player_ids = self._create_players(4)  # ratings decrescentes → rank = ordem
+        # Proíbe rank 1 x rank 3, janela aberta (last_round=0 → última rodada=5).
+        self.db.add_prohibited_pairing(
+            self.tournament_id, player_ids[0], player_ids[2]
+        )
+        exporter = TRF25Exporter(self.export_service)
+        output_path = Path(self.temp_dir.name) / "prohib.trf"
+        exporter.export(self.tournament_id, output_path)
+        lines = output_path.read_text(encoding="utf-8").splitlines()
+
+        prohibition_lines = [line for line in lines if line.startswith("260 ")]
+        self.assertEqual(len(prohibition_lines), 1)
+        line = prohibition_lines[0]
+        self.assertEqual(line[4:7].strip(), "1")  # primeira rodada
+        self.assertEqual(line[8:11].strip(), "5")  # última rodada (rounds_count=5)
+        self.assertEqual(line[12:16].strip(), "1")  # entidade 1 (rank 1)
+        self.assertEqual(line[17:21].strip(), "3")  # entidade 2 (rank 3)
+
     def test_classic_acceleration_bonus_boundaries(self) -> None:
         from src.services.pairing import classic_acceleration_bonus
 
