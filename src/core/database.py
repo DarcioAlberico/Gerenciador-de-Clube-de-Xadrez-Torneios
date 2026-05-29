@@ -1513,6 +1513,22 @@ class Database:
                     payload_json TEXT DEFAULT '',
                     FOREIGN KEY (template_id) REFERENCES certificate_templates(id) ON DELETE SET NULL
                 );
+
+                CREATE TABLE IF NOT EXISTS point_adjustments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    tournament_id INTEGER NOT NULL,
+                    round_number INTEGER NOT NULL DEFAULT 0,
+                    player_id INTEGER,
+                    team_id INTEGER,
+                    aat_type TEXT NOT NULL DEFAULT '',
+                    match_points REAL NOT NULL DEFAULT 0.0,
+                    game_points REAL NOT NULL DEFAULT 0.0,
+                    reason TEXT DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
+                    FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE,
+                    FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE
+                );
                 """
             )
             from src.core.migration_engine import MigrationEngine
@@ -8011,6 +8027,61 @@ class Database:
                 params,
             ).fetchall()
             return self.rows_to_dicts(rows)
+
+    def add_point_adjustment(
+        self,
+        tournament_id: int,
+        *,
+        round_number: int = 0,
+        player_id: int | None = None,
+        team_id: int | None = None,
+        aat_type: str = "",
+        match_points: float = 0.0,
+        game_points: float = 0.0,
+        reason: str = "",
+    ) -> int:
+        with self.connect() as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO point_adjustments (
+                    tournament_id, round_number, player_id, team_id,
+                    aat_type, match_points, game_points, reason, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    int(tournament_id),
+                    int(round_number or 0),
+                    int(player_id) if player_id else None,
+                    int(team_id) if team_id else None,
+                    str(aat_type or "").strip(),
+                    float(match_points or 0.0),
+                    float(game_points or 0.0),
+                    str(reason or "").strip(),
+                    self.now(),
+                ),
+            )
+            return int(cursor.lastrowid)
+
+    def list_point_adjustments(self, tournament_id: int) -> list[dict[str, Any]]:
+        with self.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT pa.*, p.name AS player_name, t.name AS team_name
+                FROM point_adjustments pa
+                LEFT JOIN players p ON p.id = pa.player_id
+                LEFT JOIN teams t ON t.id = pa.team_id
+                WHERE pa.tournament_id = ?
+                ORDER BY pa.round_number ASC, pa.id ASC
+                """,
+                (int(tournament_id),),
+            ).fetchall()
+            return self.rows_to_dicts(rows)
+
+    def delete_point_adjustment(self, adjustment_id: int) -> None:
+        with self.connect() as connection:
+            connection.execute(
+                "DELETE FROM point_adjustments WHERE id = ?", (int(adjustment_id),)
+            )
 
     def update_team_match_summary(
         self,

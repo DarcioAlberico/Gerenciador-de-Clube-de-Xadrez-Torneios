@@ -74,6 +74,7 @@ from src.services.federation_exporters.trf16 import TRF16Exporter
 from src.services.federation_exporters.trf25_records import (
     encode_time_control,
     record_212,
+    record_299,
     record_310,
     record_320,
     record_330,
@@ -88,8 +89,8 @@ _FORFEIT_RESULTS = frozenset({"1F-0F", "0F-1F", "0F-0F"})
 
 
 TRF25_SCAFFOLD_WARNING = (
-    "TRF25: implementação parcial — ajustes/out-of-order/aceleração/proibições "
-    "(299/300/250/260) não são emitidos por falta de modelo de dados, e o layout "
+    "TRF25: implementação parcial — out-of-order/aceleração/proibições "
+    "(300/250/260) não são emitidos por falta de modelo de dados, e o layout "
     "segue final draft da FIDE. "
     "Use TRF16 para envio oficial até a especificação ser finalizada."
 )
@@ -190,7 +191,56 @@ class TRF25Exporter(TRF16Exporter):
                 for line in self._team_records_802(tournament_id, prepared, tpn_by_team, round_count):
                     handle.write(line)
 
+            for line in self._point_adjustment_records_299(
+                tournament_id, is_team, start_rank_by_player, tpn_by_team
+            ):
+                handle.write(line)
+
         return warnings
+
+    def _point_adjustment_records_299(
+        self,
+        tournament_id: int,
+        is_team: bool,
+        start_rank_by_player: dict[int, int],
+        tpn_by_team: dict[int, int],
+    ) -> list[str]:
+        """Registro 299 — abnormal assignment points lançados manualmente (§7.3).
+
+        Agrupa os ajustes por `(aat_type, match_points, game_points, round_number)`
+        e mapeia cada alvo para a entidade TRF25: starting-rank (individual) ou TPN
+        (equipe). Ajustes individuais não usam match points. Alvos que não puderem
+        ser resolvidos (jogador/equipe ausente do export) são omitidos — nunca se
+        emite uma entidade inexistente para não enganar o árbitro.
+        """
+        adjustments = self.db.list_point_adjustments(tournament_id)
+        if not adjustments:
+            return []
+
+        grouped: dict[tuple[str, float, float, int], list[int]] = {}
+        for adjustment in adjustments:
+            if is_team:
+                entity = tpn_by_team.get(int(adjustment.get("team_id") or 0))
+                match_points = float(adjustment.get("match_points") or 0.0)
+            else:
+                entity = start_rank_by_player.get(int(adjustment.get("player_id") or 0))
+                match_points = 0.0
+            if not entity:
+                continue
+            key = (
+                str(adjustment.get("aat_type") or ""),
+                match_points,
+                float(adjustment.get("game_points") or 0.0),
+                int(adjustment.get("round_number") or 0),
+            )
+            grouped.setdefault(key, []).append(int(entity))
+
+        lines: list[str] = []
+        for (aat_type, match_points, game_points, round_number), entities in grouped.items():
+            lines.append(
+                record_299(aat_type, match_points, game_points, round_number, sorted(entities))
+            )
+        return lines
 
     def validate(self, tournament_id: int) -> list[str]:
         warnings = super().validate(tournament_id)

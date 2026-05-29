@@ -5087,6 +5087,44 @@ class PairingServiceTest(unittest.TestCase):
         lines = output_path.read_text(encoding="utf-8").splitlines()
         self.assertFalse(any(line.startswith("222 ") for line in lines))
 
+    def test_trf25_emits_299_for_individual_point_adjustment(self) -> None:
+        from src.services.constants import player_pairing_name
+        from src.services.federation_exporters import TRF25Exporter
+
+        player_ids = self._create_players(4)
+        # Penalidade de meio ponto ao 2º jogador por rating (vira o start-rank
+        # exato no export, qualquer que seja a ordem de seeding).
+        self.db.add_point_adjustment(
+            self.tournament_id,
+            round_number=0,
+            player_id=player_ids[1],
+            aat_type="",
+            game_points=-0.5,
+            reason="Penalidade de comportamento",
+        )
+
+        output_path = Path(self.temp_dir.name) / "ind_299.trf"
+        TRF25Exporter(self.export_service).export(self.tournament_id, output_path)
+        lines = output_path.read_text(encoding="utf-8").splitlines()
+
+        players = sorted(
+            self.db.list_players(self.tournament_id, active_only=False),
+            key=lambda p: (
+                -self.export_service._trf_rating(p),
+                player_pairing_name(p).casefold(),
+                int(p.get("id") or 0),
+            ),
+        )
+        expected_rank = next(
+            i for i, p in enumerate(players, start=1) if int(p["id"]) == player_ids[1]
+        )
+
+        adj_lines = [line for line in lines if line.startswith("299 ")]
+        self.assertEqual(len(adj_lines), 1)
+        line = adj_lines[0]
+        self.assertEqual(line[13:17], "-0.5")
+        self.assertEqual(line[23:27].strip(), str(expected_rank))
+
     def test_validate_chess_results_trf16_reports_special_result_statuses(self) -> None:
         tournament_id = self.db.create_tournament(
             "Aberto Pendencias",
