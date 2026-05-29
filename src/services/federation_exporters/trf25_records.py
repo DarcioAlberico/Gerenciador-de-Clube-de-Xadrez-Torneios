@@ -76,6 +76,37 @@ def record_310(
     return _place(parts).rstrip() + "\r\n"
 
 
+def record_802(
+    team_pairing_number: int,
+    nickname: str,
+    match_points: float,
+    game_points: float,
+    rounds: list[tuple[str, str, float | None, str]],
+) -> str:
+    """Registro 802 — resumo informativo de equipe (comprimento fixo). §8.2.
+
+    Cada item de `rounds` é `(oponente, cor, game_points, forfeit)`:
+    `oponente` = TPN do adversário ou código de bye (`PAB`/`FPB`/`HPB`/`ZPB`),
+    `cor` ∈ {`w`,`b`,``}, `game_points` do match (None = vazio), `forfeit` ∈
+    {`f`,`F`,``}. Rodadas vazias à direita somem no rstrip final.
+    """
+    parts: list[tuple[int, str]] = [
+        (1, "802"),
+        (5, f"{int(team_pairing_number):>3d}"),
+        (9, _fixed(nickname, 5)),
+        (15, _points(match_points, 6)),
+        (22, _points(game_points, 6)),
+    ]
+    column = 29
+    for opponent, colour, gp, forfeit in rounds:
+        parts.append((column, str(opponent)[:3].ljust(3)))
+        parts.append((column + 4, str(colour)[:1]))
+        parts.append((column + 6, "    " if gp is None else _points(gp, 4)))
+        parts.append((column + 10, str(forfeit)[:1]))
+        column += 13
+    return _place(parts).rstrip() + "\r\n"
+
+
 def _signed_points(value: float, width: int) -> str:
     """Pontos com sinal opcional `[-]11.5`, justificado à direita."""
     return f"{float(value or 0.0):>{width}.1f}"[-width:]

@@ -18,11 +18,14 @@ Já implementado:
   só quando diverge do padrão TW=2/TD=1/TL=0). O 162 (individual) nunca é
   emitido: o projeto sempre usa pontos FIDE-padrão (1/0.5/0), então omiti-lo é
   o comportamento correto.
+- Fatia 4: registro 802 (resumo informativo de equipe, comprimento fixo) com
+  oponente/cor/game-points por rodada. O 801 (variável) é dispensado em favor
+  do 802; o indicador de forfeit fica vazio (o modelo não o distingue).
 
 Ainda incompleto (warning obrigatório enquanto for assim): forfeits/
-out-of-order/ajustes estruturados (330/300/299) e informativos 801/802, além
-de o documento ainda ser *final draft*. Por isso `export()` devolve o
-TRF25_SCAFFOLD_WARNING — para nunca enganar o árbitro.
+out-of-order/ajustes estruturados (330/300/299), além de o documento ainda ser
+*final draft*. Por isso `export()` devolve o TRF25_SCAFFOLD_WARNING — para
+nunca enganar o árbitro.
 
 ## O que falta para um TRF25 completo
 
@@ -67,13 +70,14 @@ from src.services.federation_exporters.trf25_records import (
     record_310,
     record_320,
     record_362,
+    record_802,
     tournament_line,
 )
 
 
 TRF25_SCAFFOLD_WARNING = (
     "TRF25: implementação parcial — forfeits/out-of-order/ajustes (330/300/299) "
-    "e informativos (801/802) ainda não emitidos, e o layout segue final draft. "
+    "ainda não emitidos, e o layout segue final draft da FIDE. "
     "Use TRF16 para envio oficial até a especificação ser finalizada."
 )
 
@@ -161,6 +165,8 @@ class TRF25Exporter(TRF16Exporter):
                 pab_line = self._pab_record_320(tournament_id, tpn_by_team, round_count, settings)
                 if pab_line:
                     handle.write(pab_line)
+                for line in self._team_records_802(tournament_id, prepared, tpn_by_team, round_count):
+                    handle.write(line)
 
         return warnings
 
@@ -311,6 +317,57 @@ class TRF25Exporter(TRF16Exporter):
             return None
         sequence = [tpn_by_round.get(rnd, 0) for rnd in range(1, round_count + 1)]
         return record_320(win_points, game_points, sequence)
+
+    def _team_records_802(
+        self,
+        tournament_id: int,
+        prepared: list[dict[str, Any]],
+        tpn_by_team: dict[int, int],
+        round_count: int,
+    ) -> list[str]:
+        """Registros 802 (informativos): por equipe, o resumo rodada-a-rodada
+        (oponente/cor/game points). Forfeit fica vazio — o modelo não distingue
+        W.O. de equipe de um resultado normal."""
+        if not prepared:
+            return []
+        matches_by_round: dict[int, list[dict[str, Any]]] = {}
+        for match in self.db.list_team_matches_for_tournament(tournament_id, closed_only=True):
+            matches_by_round.setdefault(int(match.get("round_number") or 0), []).append(match)
+
+        lines: list[str] = []
+        for pairing_number, item in enumerate(prepared, start=1):
+            team_id = item["team_id"]
+            rounds: list[tuple[str, str, float | None, str]] = []
+            for round_number in range(1, round_count + 1):
+                opponent, colour, game_points = "", "", None
+                for match in matches_by_round.get(round_number, []):
+                    white = int(match.get("white_team_id") or 0)
+                    black = int(match.get("black_team_id") or 0)
+                    if match.get("is_bye") and white == team_id:
+                        opponent = "PAB"
+                        game_points = float(match.get("white_game_points") or 0.0)
+                        break
+                    if white == team_id:
+                        opponent = str(tpn_by_team.get(black, ""))
+                        colour = "w"
+                        game_points = float(match.get("white_game_points") or 0.0)
+                        break
+                    if black == team_id:
+                        opponent = str(tpn_by_team.get(white, ""))
+                        colour = "b"
+                        game_points = float(match.get("black_game_points") or 0.0)
+                        break
+                rounds.append((opponent, colour, game_points, ""))
+            lines.append(
+                record_802(
+                    team_pairing_number=pairing_number,
+                    nickname=self._team_nickname(item["team"]),
+                    match_points=item["match_points"],
+                    game_points=item["game_points"],
+                    rounds=rounds,
+                )
+            )
+        return lines
 
     @staticmethod
     def _team_nickname(team: dict[str, Any]) -> str:

@@ -12,6 +12,7 @@ from src.services.federation_exporters.trf25_records import (
     record_320,
     record_330,
     record_362,
+    record_802,
     tournament_line,
     trf_ascii,
 )
@@ -203,6 +204,33 @@ class TestRecord212(unittest.TestCase):
 
     def test_team_score_base_is_preserved(self):
         self.assertEqual(record_212(["PTS", "BH:MP", "WIN"]), "212 PTS,BH:MP,WIN\r\n")
+
+
+class TestRecord802(unittest.TestCase):
+    def test_fixed_columns_bye_then_played_round(self):
+        line = record_802(
+            3, "GEO", 19.0, 32.5,
+            [("FPB", "", 4.0, ""), ("16", "w", 2.5, "")],
+        ).rstrip("\r\n")
+        self.assertEqual(cols(line, 1, 3), "802")
+        self.assertEqual(cols(line, 5, 7), "  3")
+        self.assertEqual(cols(line, 9, 13), "GEO  ")
+        self.assertEqual(cols(line, 15, 20), "  19.0")
+        self.assertEqual(cols(line, 22, 27), "  32.5")
+        # Rodada 1 (bye full-point): código no 29-31, cor vazia, GP no 35-38.
+        self.assertEqual(cols(line, 29, 31), "FPB")
+        self.assertEqual(cols(line, 33, 33), " ")
+        self.assertEqual(cols(line, 35, 38), " 4.0")
+        # Rodada 2 (+13 colunas): oponente 16, cor w, GP 2.5.
+        self.assertEqual(cols(line, 42, 44), "16 ")
+        self.assertEqual(cols(line, 46, 46), "w")
+        self.assertEqual(cols(line, 48, 51), " 2.5")
+
+    def test_forfeit_indicator_and_blank_gp(self):
+        line = record_802(1, "AAA", 0.0, 0.0, [("9", "b", None, "f")]).rstrip("\r\n")
+        self.assertEqual(cols(line, 42 - 13, 44 - 13), "9  ")
+        self.assertEqual(cols(line, 35, 38), "    ")
+        self.assertEqual(cols(line, 39, 39), "f")
 
 
 if __name__ == "__main__":

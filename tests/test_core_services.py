@@ -4887,6 +4887,7 @@ class PairingServiceTest(unittest.TestCase):
         lines = content.splitlines()
         player_lines = [line for line in lines if line.startswith("001 ")]
         team_310 = [line for line in lines if line.startswith("310 ")]
+        team_802 = [line for line in lines if line.startswith("802 ")]
 
         # Cabeçalho TRF25: nº de rodadas (142), tipo codificado (192) e
         # sequência de cores dos tabuleiros (352) para torneio por equipes.
@@ -4902,6 +4903,8 @@ class PairingServiceTest(unittest.TestCase):
         self.assertFalse(any(line.startswith("013 ") for line in lines))
         # Linhas 001 dos jogadores continuam idênticas ao TRF16.
         self.assertEqual(len(player_lines), 4)
+        # Registro informativo 802: um por equipe, espelhando o TPN do 310.
+        self.assertEqual(len(team_802), 2)
         # Warning de scaffold continua presente.
         self.assertIn(TRF25_SCAFFOLD_WARNING, warnings)
 
