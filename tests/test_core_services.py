@@ -4867,6 +4867,40 @@ class PairingServiceTest(unittest.TestCase):
         self.assertTrue(any("   4 b =" in line for line in player_lines))
         self.assertTrue(any("Jogadores sem FIDE ID" in warning for warning in warnings))
 
+    def test_trf25_export_emits_310_and_header_extensions_for_teams(self) -> None:
+        from src.services.federation_exporters import (
+            TRF25_SCAFFOLD_WARNING,
+            TRF25Exporter,
+        )
+
+        tournament_id, _team_ids = self._create_team_tournament(teams_count=2, boards_count=2)
+        round_data = self.service.generate_next_round(tournament_id)
+        match = self.db.list_team_matches_for_round(round_data["id"])[0]
+        boards = self.db.list_team_boards(int(match["id"]))
+        self.service.update_result(tournament_id, int(boards[0]["id"]), "1-0")
+        self.service.update_result(tournament_id, int(boards[1]["id"]), "1/2-1/2")
+        self.service.close_round(tournament_id, round_data["id"])
+
+        output_path = Path(self.temp_dir.name) / "team_trf25.trf"
+        warnings = TRF25Exporter(self.export_service).export(tournament_id, output_path)
+        content = output_path.read_text(encoding="utf-8")
+        lines = content.splitlines()
+        player_lines = [line for line in lines if line.startswith("001 ")]
+        team_310 = [line for line in lines if line.startswith("310 ")]
+
+        # Cabeçalho TRF25: nº de rodadas (142), tipo codificado (192) e
+        # sequência de cores dos tabuleiros (352) para torneio por equipes.
+        self.assertTrue(any(line.startswith("142 ") for line in lines))
+        self.assertIn("192 FIDE_TEAM_TYPEA_MP_GP", content)
+        self.assertIn("352 WB", content)
+        # Equipes saem como 310 (substitui o 013); o 013 não é mais emitido.
+        self.assertEqual(len(team_310), 2)
+        self.assertFalse(any(line.startswith("013 ") for line in lines))
+        # Linhas 001 dos jogadores continuam idênticas ao TRF16.
+        self.assertEqual(len(player_lines), 4)
+        # Warning de scaffold continua presente.
+        self.assertIn(TRF25_SCAFFOLD_WARNING, warnings)
+
     def test_federation_exporter_registry_keeps_trf16_flow_extensible(self) -> None:
         registry = FederationExporterRegistry()
         exporter = TRF16Exporter(self.export_service)
