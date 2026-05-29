@@ -27,6 +27,11 @@ Para extrair uma nova função:
      via método estático) para preservar a API pública.
 """
 
+from src.services.pairing.acceleration import (
+    accelerated_standings,
+    classic_acceleration_bonus,
+    classic_upper_half_size,
+)
 from src.services.pairing.arbitration import (
     acknowledged_issue_keys,
     audit_issue,
@@ -110,8 +115,11 @@ from src.services.pairing.validators import (
 )
 
 __all__ = [
+    "accelerated_standings",
     "acknowledged_issue_keys",
     "assignment_color_penalty",
+    "classic_acceleration_bonus",
+    "classic_upper_half_size",
     "audit_issue",
     "blocking_issues_message",
     "bye_player_ids",

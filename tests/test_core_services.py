@@ -5243,6 +5243,72 @@ class PairingServiceTest(unittest.TestCase):
         self.assertEqual(line[16:20].strip(), str(start_rank[a_board2]))
         self.assertEqual(line[21:25].strip(), str(start_rank[a_board1]))
 
+    def test_classic_acceleration_bonus_boundaries(self) -> None:
+        from src.services.pairing import classic_acceleration_bonus
+
+        # 8 jogadores: metade superior = ranks 1..4.
+        self.assertEqual(classic_acceleration_bonus(1, 8, 1), 1.0)
+        self.assertEqual(classic_acceleration_bonus(4, 8, 2), 1.0)
+        self.assertEqual(classic_acceleration_bonus(5, 8, 1), 0.0)
+        # Fora das rodadas 1 e 2 não há bônus, mesmo para o topo.
+        self.assertEqual(classic_acceleration_bonus(1, 8, 3), 0.0)
+        # 7 jogadores: piso de N/2 = 3 (ranks 1..3).
+        self.assertEqual(classic_acceleration_bonus(3, 7, 1), 1.0)
+        self.assertEqual(classic_acceleration_bonus(4, 7, 1), 0.0)
+        # start_rank inválido não recebe bônus.
+        self.assertEqual(classic_acceleration_bonus(0, 8, 1), 0.0)
+
+    def test_accelerated_standings_adds_bonus_only_to_top_half(self) -> None:
+        from src.services.pairing import accelerated_standings
+
+        standings = {pid: {"points": 0.0} for pid in range(1, 5)}
+        seeding = [1, 2, 3, 4]
+
+        # Método não acelerado devolve o standings original (sem cópia).
+        self.assertIs(accelerated_standings(standings, seeding, 2, "none"), standings)
+
+        effective = accelerated_standings(standings, seeding, 2, "accelerated")
+        self.assertEqual(effective[1]["points"], 1.0)
+        self.assertEqual(effective[2]["points"], 1.0)
+        self.assertEqual(effective[3]["points"], 0.0)
+        self.assertEqual(effective[4]["points"], 0.0)
+        # O standings real permanece intacto.
+        self.assertEqual(standings[1]["points"], 0.0)
+        # Rodada 3 não recebe bônus.
+        round3 = accelerated_standings(standings, seeding, 3, "accelerated")
+        self.assertEqual(round3[1]["points"], 0.0)
+
+    def test_classic_acceleration_reshapes_round_two_score_groups(self) -> None:
+        self._create_players(8)
+        players = self.db.list_players(self.tournament_id, active_only=True)
+
+        def pair_set(pairings: list[dict[str, Any]]) -> set[frozenset[int]]:
+            return {
+                frozenset({int(p["white_player_id"]), int(p["black_player_id"])})
+                for p in pairings
+                if p.get("black_player_id") is not None
+            }
+
+        seeding = [
+            int(p["id"])
+            for p in sorted(players, key=lambda p: -int(p.get("rating") or 0))
+        ]
+
+        # Sem aceleração: todos no mesmo grupo (0 pontos) → topo vs base.
+        self.db.save_tournament_settings(self.tournament_id, {"acceleration_method": "none"})
+        plain = pair_set(self.service._swiss_pairings(self.tournament_id, players, 2))
+        self.assertIn(frozenset({seeding[0], seeding[4]}), plain)
+
+        # Com aceleração clássica: top-metade (seeds 1..4) ganha +1 fictício,
+        # formando dois grupos de pontuação. Seed 1 pareia dentro do topo (seed 3),
+        # não cruza para a base (seed 5).
+        self.db.save_tournament_settings(
+            self.tournament_id, {"acceleration_method": "accelerated"}
+        )
+        accel = pair_set(self.service._swiss_pairings(self.tournament_id, players, 2))
+        self.assertIn(frozenset({seeding[0], seeding[2]}), accel)
+        self.assertNotIn(frozenset({seeding[0], seeding[4]}), accel)
+
     def test_validate_chess_results_trf16_reports_special_result_statuses(self) -> None:
         tournament_id = self.db.create_tournament(
             "Aberto Pendencias",

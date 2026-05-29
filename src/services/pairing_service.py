@@ -11,6 +11,7 @@ from src.services.constants import (
     RESULT_STATES,
 )
 from src.services.pairing import (
+    accelerated_standings as _accelerated_standings,
     acknowledged_issue_keys as _acknowledged_issue_keys,
     audit_issue as _audit_issue,
     blocking_issues_message as _blocking_issues_message,
@@ -380,7 +381,7 @@ class PairingService:
             if next_number == 1:
                 pairings = _first_round_pairings(players)
             else:
-                pairings = self._swiss_pairings(tournament_id, players)
+                pairings = self._swiss_pairings(tournament_id, players, next_number)
         return {
             "players": players,
             "settings": settings,
@@ -1146,8 +1147,23 @@ class PairingService:
         self,
         tournament_id: int,
         players: list[dict[str, Any]],
+        round_number: int,
     ) -> list[dict[str, Any]]:
         standings = {item["player_id"]: item for item in self.standings(tournament_id)}
+        settings = self.db.get_tournament_settings(tournament_id) or {}
+        seeding = [
+            int(player["id"])
+            for player in sorted(
+                players,
+                key=lambda p: (-int(p.get("rating") or 0), str(p.get("name", "")).casefold()),
+            )
+        ]
+        standings = _accelerated_standings(
+            standings,
+            seeding,
+            round_number,
+            settings.get("acceleration_method", "none"),
+        )
         histories = self._color_histories(tournament_id)
         float_histories = self._float_histories(tournament_id)
         played_pairs = self._played_pairs(tournament_id)
