@@ -4908,6 +4908,62 @@ class PairingServiceTest(unittest.TestCase):
         # Warning de scaffold continua presente.
         self.assertIn(TRF25_SCAFFOLD_WARNING, warnings)
 
+    def test_trf25_export_emits_330_for_double_forfeit_match(self) -> None:
+        from src.services.federation_exporters import TRF25Exporter
+
+        tournament_id, _team_ids = self._create_team_tournament(teams_count=2, boards_count=2)
+        round_data = self.service.generate_next_round(tournament_id)
+        match = self.db.list_team_matches_for_round(round_data["id"])[0]
+        # Match inteiro W.O.: todos os tabuleiros 0F-0F → duplo forfeit (--).
+        for board in self.db.list_team_boards(int(match["id"])):
+            self.service.update_result(tournament_id, int(board["id"]), "0F-0F")
+        self.service.close_round(tournament_id, round_data["id"])
+
+        output_path = Path(self.temp_dir.name) / "team_trf25_ff.trf"
+        TRF25Exporter(self.export_service).export(tournament_id, output_path)
+        lines = output_path.read_text(encoding="utf-8").splitlines()
+        forfeit_lines = [line for line in lines if line.startswith("330 ")]
+        self.assertEqual(len(forfeit_lines), 1)
+        self.assertEqual(forfeit_lines[0][4:6], "--")
+
+    def test_trf25_export_emits_330_directional_walkover(self) -> None:
+        from src.services.federation_exporters import TRF25Exporter
+
+        tournament_id, _team_ids = self._create_team_tournament(teams_count=2, boards_count=2)
+        round_data = self.service.generate_next_round(tournament_id)
+        match = self.db.list_team_matches_for_round(round_data["id"])[0]
+        # Equipe branca do match vence por W.O. em ambos os tabuleiros.
+        # Tabuleiro 1 (ímpar): brancas = equipe branca → 1F-0F.
+        # Tabuleiro 2 (par, cores invertidas): pretas = equipe branca → 0F-1F.
+        boards = self.db.list_team_boards(int(match["id"]))
+        self.service.update_result(tournament_id, int(boards[0]["id"]), "1F-0F")
+        self.service.update_result(tournament_id, int(boards[1]["id"]), "0F-1F")
+        self.service.close_round(tournament_id, round_data["id"])
+
+        output_path = Path(self.temp_dir.name) / "team_trf25_wo.trf"
+        TRF25Exporter(self.export_service).export(tournament_id, output_path)
+        lines = output_path.read_text(encoding="utf-8").splitlines()
+        forfeit_lines = [line for line in lines if line.startswith("330 ")]
+        self.assertEqual(len(forfeit_lines), 1)
+        self.assertEqual(forfeit_lines[0][4:6], "+-")
+
+    def test_trf25_export_skips_330_for_normal_and_partial_results(self) -> None:
+        from src.services.federation_exporters import TRF25Exporter
+
+        tournament_id, _team_ids = self._create_team_tournament(teams_count=2, boards_count=2)
+        round_data = self.service.generate_next_round(tournament_id)
+        match = self.db.list_team_matches_for_round(round_data["id"])[0]
+        # Forfeit parcial: 1 tabuleiro W.O., outro jogado → NÃO é um 330.
+        boards = self.db.list_team_boards(int(match["id"]))
+        self.service.update_result(tournament_id, int(boards[0]["id"]), "1F-0F")
+        self.service.update_result(tournament_id, int(boards[1]["id"]), "1-0")
+        self.service.close_round(tournament_id, round_data["id"])
+
+        output_path = Path(self.temp_dir.name) / "team_trf25_partial.trf"
+        TRF25Exporter(self.export_service).export(tournament_id, output_path)
+        lines = output_path.read_text(encoding="utf-8").splitlines()
+        self.assertFalse(any(line.startswith("330 ") for line in lines))
+
     def test_trf25_export_emits_320_pab_for_team_bye(self) -> None:
         from src.services.federation_exporters import TRF25Exporter
 

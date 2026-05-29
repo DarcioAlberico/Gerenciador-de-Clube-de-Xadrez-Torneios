@@ -21,11 +21,17 @@ Já implementado:
 - Fatia 4: registro 802 (resumo informativo de equipe, comprimento fixo) com
   oponente/cor/game-points por rodada. O 801 (variável) é dispensado em favor
   do 802; o indicador de forfeit fica vazio (o modelo não o distingue).
+- Fatia 5: registro 330 (matches forfeitados). O projeto só marca W.O. por
+  tabuleiro, então inferimos de forma conservadora — só emite quando *todos* os
+  tabuleiros do match são W.O. consistente (+-/-+/--); forfeit parcial/misto é
+  ignorado para não enganar o árbitro.
 
-Ainda incompleto (warning obrigatório enquanto for assim): forfeits/
-out-of-order/ajustes estruturados (330/300/299), além de o documento ainda ser
-*final draft*. Por isso `export()` devolve o TRF25_SCAFFOLD_WARNING — para
-nunca enganar o árbitro.
+Ainda não emitidos (por falta de modelo de dados): 300 (out-of-order) exigiria
+marcação explícita de escalação fora de ordem; 299 (ajuste anormal de pontos)
+exigiria uma tabela de penalidades/bônus manuais. Os construtores puros de
+ambos já existem e estão testados. Como o layout ainda é *final draft*,
+`export()` segue devolvendo o TRF25_SCAFFOLD_WARNING — para nunca enganar o
+árbitro.
 
 ## O que falta para um TRF25 completo
 
@@ -62,22 +68,27 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from src.services.constants import AppError, player_pairing_name
+from src.services.constants import RESULT_POINTS, AppError, player_pairing_name
 from src.services.federation_exporters.base import FederationExportFormat
 from src.services.federation_exporters.trf16 import TRF16Exporter
 from src.services.federation_exporters.trf25_records import (
     record_212,
     record_310,
     record_320,
+    record_330,
     record_362,
     record_802,
     tournament_line,
 )
 
 
+# Resultados de tabuleiro que representam W.O. (não jogado).
+_FORFEIT_RESULTS = frozenset({"1F-0F", "0F-1F", "0F-0F"})
+
+
 TRF25_SCAFFOLD_WARNING = (
-    "TRF25: implementação parcial — forfeits/out-of-order/ajustes (330/300/299) "
-    "ainda não emitidos, e o layout segue final draft da FIDE. "
+    "TRF25: implementação parcial — out-of-order/ajustes (300/299) ainda não "
+    "emitidos, e o layout segue final draft da FIDE. "
     "Use TRF16 para envio oficial até a especificação ser finalizada."
 )
 
@@ -165,6 +176,8 @@ class TRF25Exporter(TRF16Exporter):
                 pab_line = self._pab_record_320(tournament_id, tpn_by_team, round_count, settings)
                 if pab_line:
                     handle.write(pab_line)
+                for line in self._forfeit_records_330(tournament_id, tpn_by_team):
+                    handle.write(line)
                 for line in self._team_records_802(tournament_id, prepared, tpn_by_team, round_count):
                     handle.write(line)
 
@@ -317,6 +330,55 @@ class TRF25Exporter(TRF16Exporter):
             return None
         sequence = [tpn_by_round.get(rnd, 0) for rnd in range(1, round_count + 1)]
         return record_320(win_points, game_points, sequence)
+
+    def _forfeit_records_330(
+        self,
+        tournament_id: int,
+        tpn_by_team: dict[int, int],
+    ) -> list[str]:
+        """Registros 330 — matches de equipe forfeitados (W.O. do match inteiro).
+
+        O projeto só marca W.O. por tabuleiro, então inferimos de forma
+        conservadora: só é um 330 quando *todos* os tabuleiros do match são W.O.
+        e a direção é consistente. As cores invertem nos tabuleiros pares, então
+        os pontos são atribuídos por paridade. Forfeit parcial/misto é ignorado
+        — emiti-lo enganaria o árbitro."""
+        lines: list[str] = []
+        for match in self.db.list_team_matches_for_tournament(tournament_id, closed_only=True):
+            if match.get("is_bye"):
+                continue
+            boards = self.db.list_team_boards(int(match["id"]))
+            results = [str(board.get("result") or "") for board in boards]
+            if not results or any(result not in _FORFEIT_RESULTS for result in results):
+                continue
+
+            white_points = black_points = 0.0
+            for board in boards:
+                white_pts, black_pts = RESULT_POINTS[str(board["result"])]
+                if int(board.get("board_number") or 0) % 2 == 1:
+                    white_points += white_pts
+                    black_points += black_pts
+                else:
+                    white_points += black_pts
+                    black_points += white_pts
+
+            if white_points == 0 and black_points == 0:
+                match_type = "--"
+            elif white_points > 0 and black_points == 0:
+                match_type = "+-"
+            elif black_points > 0 and white_points == 0:
+                match_type = "-+"
+            else:
+                continue
+
+            white_tpn = tpn_by_team.get(int(match.get("white_team_id") or 0))
+            black_tpn = tpn_by_team.get(int(match.get("black_team_id") or 0))
+            if not white_tpn or not black_tpn:
+                continue
+            lines.append(
+                record_330(match_type, int(match.get("round_number") or 0), white_tpn, black_tpn)
+            )
+        return lines
 
     def _team_records_802(
         self,
