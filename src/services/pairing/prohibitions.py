@@ -31,17 +31,22 @@ def prohibition_applies(prohibition: dict[str, Any], round_number: int) -> bool:
 def prohibited_pairs_for_round(
     prohibitions: list[dict[str, Any]],
     round_number: int,
+    key_a: str = "player_a_id",
+    key_b: str = "player_b_id",
 ) -> set[frozenset[int]]:
-    """Conjunto de pares `{player_a, player_b}` proibidos nesta rodada.
+    """Conjunto de pares `{a, b}` proibidos nesta rodada.
 
-    Pares com IDs ausentes ou idênticos são ignorados (uma proibição precisa de
-    dois jogadores distintos para significar algo)."""
+    `key_a`/`key_b` selecionam as colunas de entidade — `player_a_id`/`player_b_id`
+    para indivíduos, `team_a_id`/`team_b_id` para equipes. Pares com IDs ausentes
+    ou idênticos são ignorados (uma proibição precisa de duas entidades distintas
+    para significar algo). O motor une o resultado a `played_pairs`, tanto no
+    Suíço individual quanto no por equipes — mesmo mecanismo de bloqueio absoluto."""
     pairs: set[frozenset[int]] = set()
     for prohibition in prohibitions:
         if not prohibition_applies(prohibition, round_number):
             continue
-        a = int(prohibition.get("player_a_id") or 0)
-        b = int(prohibition.get("player_b_id") or 0)
+        a = int(prohibition.get(key_a) or 0)
+        b = int(prohibition.get(key_b) or 0)
         if a and b and a != b:
             pairs.add(frozenset((a, b)))
     return pairs

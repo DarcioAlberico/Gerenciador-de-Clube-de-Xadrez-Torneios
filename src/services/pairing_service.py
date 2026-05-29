@@ -512,7 +512,9 @@ class PairingService:
         if next_number == 1:
             matches = _first_round_team_matches(teams, rosters, seed_ratings, boards_count, settings)
         else:
-            matches = self._swiss_team_matches(tournament_id, teams, rosters, seed_ratings, boards_count, settings)
+            matches = self._swiss_team_matches(
+                tournament_id, teams, rosters, seed_ratings, boards_count, settings, next_number
+            )
 
         return {
             "settings": settings,
@@ -562,9 +564,18 @@ class PairingService:
         seed_ratings: dict[int, int],
         boards_count: int,
         settings: dict[str, Any],
+        round_number: int,
     ) -> list[dict[str, Any]]:
         standings = {int(item["team_id"]): item for item in self.team_standings(tournament_id)}
         played_pairs = self._team_played_pairs(tournament_id)
+        prohibited = _prohibited_pairs_for_round(
+            self.db.list_prohibited_team_pairings(tournament_id),
+            round_number,
+            "team_a_id",
+            "team_b_id",
+        )
+        if prohibited:
+            played_pairs = played_pairs | prohibited
         bye_team_ids = self._team_bye_ids(tournament_id)
         histories = self._team_color_histories(tournament_id)
         return _swiss_team_matches(

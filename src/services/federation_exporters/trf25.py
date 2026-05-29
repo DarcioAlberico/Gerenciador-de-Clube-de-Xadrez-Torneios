@@ -208,6 +208,10 @@ class TRF25Exporter(TRF16Exporter):
                     handle.write(line)
                 for line in self._team_records_802(tournament_id, prepared, tpn_by_team, round_count):
                     handle.write(line)
+                for line in self._prohibited_team_pairing_records_260(
+                    tournament_id, tpn_by_team, round_count
+                ):
+                    handle.write(line)
 
             if not is_team:
                 if scheme_is_baku(str(settings.get("acceleration_method") or "none")):
@@ -279,6 +283,33 @@ class TRF25Exporter(TRF16Exporter):
             first_round = int(prohibition.get("first_round") or 1)
             last_round = int(prohibition.get("last_round") or 0) or round_count
             lines.append(record_260(first_round, last_round, sorted((rank_a, rank_b))))
+        return lines
+
+    def _prohibited_team_pairing_records_260(
+        self,
+        tournament_id: int,
+        tpn_by_team: dict[int, int],
+        round_count: int,
+    ) -> list[str]:
+        """Registro 260 — proibições arbitrais entre equipes (§5.2), por TPN.
+
+        Espelha a versão individual usando o Team Pairing Number no lugar do
+        start-rank. Proibições cujas equipes não constam do export, ou com TPN
+        repetido, são omitidas — nunca se emite uma proibição que o árbitro não
+        conseguiria conferir. O motor honra a mesma proibição via played_pairs
+        por equipes (ver pairing/prohibitions)."""
+        prohibitions = self.db.list_prohibited_team_pairings(tournament_id)
+        if not prohibitions:
+            return []
+        lines: list[str] = []
+        for prohibition in prohibitions:
+            tpn_a = tpn_by_team.get(int(prohibition.get("team_a_id") or 0))
+            tpn_b = tpn_by_team.get(int(prohibition.get("team_b_id") or 0))
+            if not tpn_a or not tpn_b or tpn_a == tpn_b:
+                continue
+            first_round = int(prohibition.get("first_round") or 1)
+            last_round = int(prohibition.get("last_round") or 0) or round_count
+            lines.append(record_260(first_round, last_round, sorted((tpn_a, tpn_b))))
         return lines
 
     def _point_adjustment_records_299(

@@ -5327,6 +5327,60 @@ class PairingServiceTest(unittest.TestCase):
             pair_set(self.service._swiss_pairings(self.tournament_id, players, 3)),
         )
 
+    def test_prohibited_team_pairing_is_never_paired(self) -> None:
+        tournament_id, _team_ids = self._create_team_tournament(teams_count=4, boards_count=2)
+        teams = self.db.list_teams(tournament_id, active_only=True)
+        settings = self.db.get_tournament_settings(tournament_id) or {}
+        boards_count = int(settings.get("team_boards_count") or 2)
+        rosters, seed_ratings = self.service._team_starter_rosters(teams, boards_count)
+
+        def match_set(matches: list[dict[str, Any]]) -> set[frozenset[int]]:
+            return {
+                frozenset((int(m["white_team_id"]), int(m["black_team_id"])))
+                for m in matches
+                if m.get("black_team_id") is not None and not m.get("is_bye")
+            }
+
+        # Rodada 2 sem resultados: grupo único, dobra por seed.
+        plain = match_set(
+            self.service._swiss_team_matches(
+                tournament_id, teams, rosters, seed_ratings, boards_count, settings, 2
+            )
+        )
+        self.assertEqual(len(plain), 2)
+        sample = next(iter(plain))
+        team_a, team_b = tuple(sample)
+
+        # Proibindo o par, ele nunca pode ser pareado.
+        self.db.add_prohibited_team_pairing(tournament_id, team_a, team_b)
+        guarded = match_set(
+            self.service._swiss_team_matches(
+                tournament_id, teams, rosters, seed_ratings, boards_count, settings, 2
+            )
+        )
+        self.assertIn(sample, plain)
+        self.assertNotIn(sample, guarded)
+        self.assertEqual(len(guarded), 2)  # 4 equipes → 2 confrontos íntegros
+
+    def test_trf25_emits_260_for_prohibited_team_pairing(self) -> None:
+        from src.services.federation_exporters import TRF25Exporter
+
+        tournament_id, team_ids = self._create_team_tournament(teams_count=4, boards_count=2)
+        # Proíbe a equipe seed 1 (TPN 1) x seed 3 (TPN 3), janela aberta.
+        self.db.add_prohibited_team_pairing(tournament_id, team_ids[0], team_ids[2])
+        exporter = TRF25Exporter(self.export_service)
+        output_path = Path(self.temp_dir.name) / "team_prohib.trf"
+        exporter.export(tournament_id, output_path)
+        lines = output_path.read_text(encoding="utf-8").splitlines()
+
+        prohibition_lines = [line for line in lines if line.startswith("260 ")]
+        self.assertEqual(len(prohibition_lines), 1)
+        line = prohibition_lines[0]
+        self.assertEqual(line[4:7].strip(), "1")  # primeira rodada
+        self.assertEqual(line[8:11].strip(), "5")  # última rodada (rounds_count=5)
+        self.assertEqual(line[12:16].strip(), "1")  # TPN da seed 1
+        self.assertEqual(line[17:21].strip(), "3")  # TPN da seed 3
+
     def test_trf25_emits_260_for_prohibited_pairing(self) -> None:
         from src.services.federation_exporters import TRF25Exporter
 

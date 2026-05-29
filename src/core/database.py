@@ -1548,6 +1548,23 @@ class Database:
                 );
                 """
             )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS prohibited_team_pairings (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    tournament_id INTEGER NOT NULL,
+                    team_a_id INTEGER NOT NULL,
+                    team_b_id INTEGER NOT NULL,
+                    first_round INTEGER NOT NULL DEFAULT 1,
+                    last_round INTEGER NOT NULL DEFAULT 0,
+                    reason TEXT DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
+                    FOREIGN KEY (team_a_id) REFERENCES teams(id) ON DELETE CASCADE,
+                    FOREIGN KEY (team_b_id) REFERENCES teams(id) ON DELETE CASCADE
+                );
+                """
+            )
             from src.core.migration_engine import MigrationEngine
             MigrationEngine(self).run_migrations(connection)
             self._create_indexes(connection)
@@ -8152,6 +8169,60 @@ class Database:
         with self.connect() as connection:
             connection.execute(
                 "DELETE FROM prohibited_pairings WHERE id = ?", (int(prohibition_id),)
+            )
+
+    def add_prohibited_team_pairing(
+        self,
+        tournament_id: int,
+        team_a_id: int,
+        team_b_id: int,
+        *,
+        first_round: int = 1,
+        last_round: int = 0,
+        reason: str = "",
+    ) -> int:
+        """Registra uma proibição de pareamento entre duas equipes.
+
+        `last_round=0` significa "até a última rodada" (proibição aberta)."""
+        with self.connect() as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO prohibited_team_pairings (
+                    tournament_id, team_a_id, team_b_id,
+                    first_round, last_round, reason, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    int(tournament_id),
+                    int(team_a_id),
+                    int(team_b_id),
+                    int(first_round or 1),
+                    int(last_round or 0),
+                    str(reason or "").strip(),
+                    self.now(),
+                ),
+            )
+            return int(cursor.lastrowid)
+
+    def list_prohibited_team_pairings(self, tournament_id: int) -> list[dict[str, Any]]:
+        with self.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT pp.*, ta.name AS team_a_name, tb.name AS team_b_name
+                FROM prohibited_team_pairings pp
+                LEFT JOIN teams ta ON ta.id = pp.team_a_id
+                LEFT JOIN teams tb ON tb.id = pp.team_b_id
+                WHERE pp.tournament_id = ?
+                ORDER BY pp.first_round ASC, pp.id ASC
+                """,
+                (int(tournament_id),),
+            ).fetchall()
+            return self.rows_to_dicts(rows)
+
+    def delete_prohibited_team_pairing(self, prohibition_id: int) -> None:
+        with self.connect() as connection:
+            connection.execute(
+                "DELETE FROM prohibited_team_pairings WHERE id = ?", (int(prohibition_id),)
             )
 
     def update_team_match_summary(
