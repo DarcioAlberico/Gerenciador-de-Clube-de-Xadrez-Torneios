@@ -74,3 +74,109 @@ def record_310(
         parts.append((column, f"{int(start_rank):>4d}"))
         column += 5
     return _place(parts).rstrip() + "\r\n"
+
+
+def _signed_points(value: float, width: int) -> str:
+    """Pontos com sinal opcional `[-]11.5`, justificado à direita."""
+    return f"{float(value or 0.0):>{width}.1f}"[-width:]
+
+
+def record_240(bye_type: str, round_number: int, entities: list[int]) -> str:
+    """Registro 240 — full/half/zero-point-bye (ind. e equipes). Layout §6.1.
+
+    `bye_type` ∈ {F, H, Z}; `entities` são starting-ranks (ind.) ou TPNs (equipes).
+    Máx. 1 registro por tipo por rodada (responsabilidade do chamador).
+    """
+    parts: list[tuple[int, str]] = [
+        (1, "240"),
+        (5, str(bye_type)[:1].upper()),
+        (7, f"{int(round_number):>3d}"),
+    ]
+    column = 11
+    for entity in entities:
+        parts.append((column, f"{int(entity):>4d}"))
+        column += 5
+    return _place(parts).rstrip() + "\r\n"
+
+
+def record_320(match_points: float, game_points: float, tpn_by_round: list[int]) -> str:
+    """Registro 320 — pairing-allocated-bye (só equipes, 1 por torneio). §6.2.
+
+    `tpn_by_round[i]` é o TPN que recebeu o PAB na rodada i+1 (0 = ninguém).
+    """
+    parts: list[tuple[int, str]] = [
+        (1, "320"),
+        (5, _points(match_points, 4)),
+        (10, _points(game_points, 4)),
+    ]
+    column = 15
+    for tpn in tpn_by_round:
+        parts.append((column, f"{int(tpn):>3d}" if tpn else "000"))
+        column += 4
+    return _place(parts).rstrip() + "\r\n"
+
+
+def record_330(match_type: str, round_number: int, white_tpn: int, black_tpn: int) -> str:
+    """Registro 330 — forfeited matches (equipes). §7.1.
+
+    `match_type` ∈ {`+-` branca vence, `-+` preta vence, `--` duplo forfeit}.
+    """
+    parts: list[tuple[int, str]] = [
+        (1, "330"),
+        (5, str(match_type)[:2].ljust(2)),
+        (8, f"{int(round_number):>3d}"),
+        (12, f"{int(white_tpn):>3d}"),
+        (16, f"{int(black_tpn):>3d}"),
+    ]
+    return _place(parts).rstrip() + "\r\n"
+
+
+def record_300(
+    round_number: int,
+    team_tpn: int,
+    opponent_tpn: int,
+    board_player_ranks: list[int],
+) -> str:
+    """Registro 300 — out-of-(default)order (equipes). §7.2.
+
+    `board_player_ranks[i]` é o starting-rank do jogador no tabuleiro i+1
+    (0 = `0000`/vazio).
+    """
+    parts: list[tuple[int, str]] = [
+        (1, "300"),
+        (5, f"{int(round_number):>3d}"),
+        (9, f"{int(team_tpn):>3d}"),
+        (13, f"{int(opponent_tpn):>3d}"),
+    ]
+    column = 17
+    for rank in board_player_ranks:
+        parts.append((column, f"{int(rank):>4d}" if rank else "0000"))
+        column += 5
+    return _place(parts).rstrip() + "\r\n"
+
+
+def record_299(
+    aat_type: str,
+    match_points: float,
+    game_points: float,
+    round_number: int,
+    entities: list[int],
+) -> str:
+    """Registro 299 — abnormal assignment points (ind. e equipes). §7.3.
+
+    `aat_type`: W/D/L (→362), F/H/Z (→240), +/- (→330) ou vazio (penalidade/
+    bônus). `round_number` 0 = todas as rodadas; `entities` vazio = todos.
+    Match points só se aplicam a equipes; para indivíduos use só `game_points`.
+    """
+    parts: list[tuple[int, str]] = [
+        (1, "299"),
+        (5, str(aat_type)[:1].upper() if aat_type else " "),
+        (8, _signed_points(match_points, 4)),
+        (14, _signed_points(game_points, 4)),
+        (20, f"{int(round_number):>3d}" if round_number else "000"),
+    ]
+    column = 24
+    for entity in entities:
+        parts.append((column, f"{int(entity):>4d}" if entity else "000"))
+        column += 5
+    return _place(parts).rstrip() + "\r\n"

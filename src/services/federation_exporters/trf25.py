@@ -4,14 +4,19 @@ Status (2026-05-29): TRF25 é um *final draft* da FIDE Technical Commission
 com layout de campo estável (ver `ESPEC_TRF25_FIDE.md`). Esta implementação é
 **parcial e incremental** — cresce por fatias, cada uma com testes.
 
-Já implementado (Fatia 1):
-- registro 310 (equipe, substitui o 013) com match/game points e rank;
-- cabeçalho 142 (nº de rodadas) e 192 (tipo codificado);
-- 352 (sequência de cores dos tabuleiros) em torneios por equipes.
+Já implementado:
+- Fatia 1: registro 310 (equipe, substitui o 013) com match/game points e
+  rank; cabeçalho 142 (nº de rodadas) e 192 (tipo codificado); 352 (sequência
+  de cores dos tabuleiros) em torneios por equipes.
+- Fatia 2: registro 320 (pairing-allocated-bye de equipes), mapeado dos byes
+  de equipe já fechados. Os construtores puros de 240/330/300/299 existem em
+  `trf25_records.py` (com testes de coluna), mas **ainda não são emitidos** —
+  o modelo de dados do projeto não distingue forfeit/out-of-order/ajuste
+  anormal de um resultado normal, então emiti-los enganaria o árbitro.
 
 Ainda equivalente ao TRF16 (warning obrigatório enquanto incompleto):
-tiebreaks 212, sistemas 162/362, byes/forfeits estruturados (240/320/330/
-300/299) e informativos 801/802. Por isso `export()` ainda devolve o
+tiebreaks 212, sistemas 162/362, forfeits/out-of-order/ajustes estruturados
+(330/300/299) e informativos 801/802. Por isso `export()` ainda devolve o
 TRF25_SCAFFOLD_WARNING — para nunca enganar o árbitro.
 
 ## O que falta para um TRF25 completo
@@ -52,7 +57,11 @@ from typing import Any
 from src.services.constants import AppError, player_pairing_name
 from src.services.federation_exporters.base import FederationExportFormat
 from src.services.federation_exporters.trf16 import TRF16Exporter
-from src.services.federation_exporters.trf25_records import record_310, tournament_line
+from src.services.federation_exporters.trf25_records import (
+    record_310,
+    record_320,
+    tournament_line,
+)
 
 
 TRF25_SCAFFOLD_WARNING = (
@@ -133,8 +142,14 @@ class TRF25Exporter(TRF16Exporter):
                         pairings_by_round, round_count, settings,
                     )
                 )
-            for line in self._team_records_310(tournament_id, teams, players, start_rank_by_player):
+            prepared = self._prepare_teams(tournament_id, teams, players, start_rank_by_player)
+            tpn_by_team = {item["team_id"]: number for number, item in enumerate(prepared, start=1)}
+            for line in self._team_records_310(prepared):
                 handle.write(line)
+            if is_team:
+                pab_line = self._pab_record_320(tournament_id, tpn_by_team, round_count, settings)
+                if pab_line:
+                    handle.write(pab_line)
 
         return warnings
 
@@ -164,13 +179,15 @@ class TRF25Exporter(TRF16Exporter):
         boards = int(settings.get("team_boards_count") or 0)
         return "".join("W" if index % 2 == 0 else "B" for index in range(boards))
 
-    def _team_records_310(
+    def _prepare_teams(
         self,
         tournament_id: int,
         teams: list[dict[str, Any]],
         players: list[dict[str, Any]],
         start_rank_by_player: dict[int, int],
-    ) -> list[str]:
+    ) -> list[dict[str, Any]]:
+        """Reúne e ordena os dados de equipe usados pelos 310/320 (ordena por
+        força decrescente; a ordem define o Team Pairing Number sequencial)."""
         if not teams:
             return []
         rating_by_player = {int(p["id"]): self.export_service._trf_rating(p) for p in players}
@@ -199,6 +216,7 @@ class TRF25Exporter(TRF16Exporter):
             prepared.append(
                 {
                     "team": team,
+                    "team_id": team_id,
                     "ranks": board_ranks,
                     "strength": round(sum(ratings) / len(ratings)) if ratings else 0,
                     "match_points": float(standing.get("match_points", 0.0) or 0.0),
@@ -208,6 +226,10 @@ class TRF25Exporter(TRF16Exporter):
             )
 
         prepared.sort(key=lambda item: (-item["strength"], str(item["team"].get("name") or "").casefold()))
+        return prepared
+
+    @staticmethod
+    def _team_records_310(prepared: list[dict[str, Any]]) -> list[str]:
         lines: list[str] = []
         for pairing_number, item in enumerate(prepared, start=1):
             team = item["team"]
@@ -215,7 +237,7 @@ class TRF25Exporter(TRF16Exporter):
                 record_310(
                     team_pairing_number=pairing_number,
                     team_name=team.get("name", ""),
-                    nickname=self._team_nickname(team),
+                    nickname=TRF25Exporter._team_nickname(team),
                     strength_factor=item["strength"],
                     match_points=item["match_points"],
                     game_points=item["game_points"],
@@ -224,6 +246,36 @@ class TRF25Exporter(TRF16Exporter):
                 )
             )
         return lines
+
+    def _pab_record_320(
+        self,
+        tournament_id: int,
+        tpn_by_team: dict[int, int],
+        round_count: int,
+        settings: dict[str, Any],
+    ) -> str | None:
+        """Registro 320 — pairing-allocated-bye das equipes (1 por torneio).
+
+        Cada bye de equipe registrado é um PAB: mapeia rodada → TPN da equipe
+        que recebeu o bye. Só emite se houver pelo menos um bye fechado."""
+        tpn_by_round: dict[int, int] = {}
+        win_points = 0.0
+        game_points = 0.0
+        for match in self.db.list_team_matches_for_tournament(tournament_id, closed_only=True):
+            if not match.get("is_bye"):
+                continue
+            round_number = int(match.get("round_number") or 0)
+            team_id = int(match.get("white_team_id") or 0)
+            tpn = tpn_by_team.get(team_id)
+            if not round_number or not tpn:
+                continue
+            tpn_by_round[round_number] = tpn
+            win_points = float(match.get("white_match_points", win_points) or win_points)
+            game_points = float(match.get("white_game_points", game_points) or game_points)
+        if not tpn_by_round:
+            return None
+        sequence = [tpn_by_round.get(rnd, 0) for rnd in range(1, round_count + 1)]
+        return record_320(win_points, game_points, sequence)
 
     @staticmethod
     def _team_nickname(team: dict[str, Any]) -> str:

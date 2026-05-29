@@ -4901,6 +4901,29 @@ class PairingServiceTest(unittest.TestCase):
         # Warning de scaffold continua presente.
         self.assertIn(TRF25_SCAFFOLD_WARNING, warnings)
 
+    def test_trf25_export_emits_320_pab_for_team_bye(self) -> None:
+        from src.services.federation_exporters import TRF25Exporter
+
+        # 3 equipes → uma recebe bye (pairing-allocated-bye) a cada rodada.
+        tournament_id, _team_ids = self._create_team_tournament(teams_count=3, boards_count=2)
+        round_data = self.service.generate_next_round(tournament_id)
+        matches = self.db.list_team_matches_for_round(round_data["id"])
+        played = [m for m in matches if not m.get("is_bye")]
+        bye = [m for m in matches if m.get("is_bye")]
+        self.assertEqual(len(bye), 1)
+        for board in self.db.list_team_boards(int(played[0]["id"])):
+            self.service.update_result(tournament_id, int(board["id"]), "1-0")
+        self.service.close_round(tournament_id, round_data["id"])
+
+        output_path = Path(self.temp_dir.name) / "team_trf25_bye.trf"
+        TRF25Exporter(self.export_service).export(tournament_id, output_path)
+        lines = output_path.read_text(encoding="utf-8").splitlines()
+        pab_lines = [line for line in lines if line.startswith("320 ")]
+        # Um único registro 320 por torneio, com MP/GP do bye e o TPN na rodada 1.
+        self.assertEqual(len(pab_lines), 1)
+        self.assertEqual(pab_lines[0][4:8], " 2.0")
+        self.assertEqual(pab_lines[0][9:13], " 2.0")
+
     def test_federation_exporter_registry_keeps_trf16_flow_extensible(self) -> None:
         registry = FederationExporterRegistry()
         exporter = TRF16Exporter(self.export_service)
