@@ -155,6 +155,45 @@ def record_300(
     return _place(parts).rstrip() + "\r\n"
 
 
+def record_162(symbol_points: list[tuple[str, float]]) -> str:
+    """Registro 162 — sistema de pontuação individual. §1.1.
+
+    Pares `(símbolo, pontos)` posicionados a cada 9 colunas: símbolo na 6/15/24…,
+    pontos (`11.5`) logo em seguida. Emitir só quando diverge do padrão FIDE.
+    """
+    parts: list[tuple[int, str]] = [(1, "162")]
+    column = 6
+    for symbol, points in symbol_points:
+        parts.append((column, str(symbol)[:1]))
+        parts.append((column + 1, _points(points, 4)))
+        column += 9
+    return _place(parts).rstrip() + "\r\n"
+
+
+def record_362(symbol_points: list[tuple[str, float]]) -> str:
+    """Registro 362 — sistema de pontuação por equipes. §1.4.
+
+    Pares `(símbolo de 2 letras TW/TD/TL, pontos)` a cada 9 colunas: símbolo na
+    5-6/14-15/23-24, pontos (`11.5`) em 7-10/16-19/25-28. Padrão TW=2/TD=1/TL=0.
+    """
+    parts: list[tuple[int, str]] = [(1, "362")]
+    column = 5
+    for symbol, points in symbol_points:
+        parts.append((column, str(symbol)[:2].ljust(2)))
+        parts.append((column + 2, _points(points, 4)))
+        column += 9
+    return _place(parts).rstrip() + "\r\n"
+
+
+def record_212(codes: list[str]) -> str:
+    """Registro 212 — tie-breaks de classificação como CSV de descritores. §11.
+
+    Os códigos já vêm prontos (ex.: `PTS`, `BH/M1`, `BH:MP`); aqui só se junta
+    com vírgula. A lista deve sempre começar por `PTS`.
+    """
+    return tournament_line("212", ",".join(codes))
+
+
 def record_299(
     aat_type: str,
     match_points: float,

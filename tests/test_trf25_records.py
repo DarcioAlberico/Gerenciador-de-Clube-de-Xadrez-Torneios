@@ -3,12 +3,15 @@
 import unittest
 
 from src.services.federation_exporters.trf25_records import (
+    record_162,
+    record_212,
     record_240,
     record_299,
     record_300,
     record_310,
     record_320,
     record_330,
+    record_362,
     tournament_line,
     trf_ascii,
 )
@@ -165,6 +168,41 @@ class TestRecord299(unittest.TestCase):
         self.assertEqual(cols(line, 20, 22), "  3")
         self.assertEqual(cols(line, 24, 27), "   8")
         self.assertEqual(cols(line, 29, 32), "   9")
+
+
+class TestRecord162(unittest.TestCase):
+    def test_individual_scoring_columns(self):
+        line = record_162([("W", 1.0), ("D", 0.5), ("L", 0.0)]).rstrip("\r\n")
+        self.assertEqual(cols(line, 1, 3), "162")
+        self.assertEqual(cols(line, 6, 6), "W")
+        self.assertEqual(cols(line, 7, 10), " 1.0")
+        self.assertEqual(cols(line, 15, 15), "D")
+        self.assertEqual(cols(line, 16, 19), " 0.5")
+        self.assertEqual(cols(line, 24, 24), "L")
+        self.assertEqual(cols(line, 25, 28), " 0.0")
+
+
+class TestRecord362(unittest.TestCase):
+    def test_team_scoring_columns(self):
+        line = record_362([("TW", 3.0), ("TD", 1.0), ("TL", 0.0)]).rstrip("\r\n")
+        self.assertEqual(cols(line, 1, 3), "362")
+        self.assertEqual(cols(line, 5, 6), "TW")
+        self.assertEqual(cols(line, 7, 10), " 3.0")
+        self.assertEqual(cols(line, 14, 15), "TD")
+        self.assertEqual(cols(line, 16, 19), " 1.0")
+        self.assertEqual(cols(line, 23, 24), "TL")
+        self.assertEqual(cols(line, 25, 28), " 0.0")
+
+
+class TestRecord212(unittest.TestCase):
+    def test_csv_descriptor_with_modifiers(self):
+        self.assertEqual(
+            record_212(["PTS", "BH", "BH/M1", "SB", "WIN"]),
+            "212 PTS,BH,BH/M1,SB,WIN\r\n",
+        )
+
+    def test_team_score_base_is_preserved(self):
+        self.assertEqual(record_212(["PTS", "BH:MP", "WIN"]), "212 PTS,BH:MP,WIN\r\n")
 
 
 if __name__ == "__main__":

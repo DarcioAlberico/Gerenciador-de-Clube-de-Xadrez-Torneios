@@ -4893,6 +4893,10 @@ class PairingServiceTest(unittest.TestCase):
         self.assertTrue(any(line.startswith("142 ") for line in lines))
         self.assertIn("192 FIDE_TEAM_TYPEA_MP_GP", content)
         self.assertIn("352 WB", content)
+        # Tie-breaks de classificação (212), sempre começando por PTS.
+        self.assertIn("212 PTS,BH:MP,WIN", content)
+        # Pontuação padrão (TW=2/TD=1/TL=0) → 362 omitido.
+        self.assertFalse(any(line.startswith("362 ") for line in lines))
         # Equipes saem como 310 (substitui o 013); o 013 não é mais emitido.
         self.assertEqual(len(team_310), 2)
         self.assertFalse(any(line.startswith("013 ") for line in lines))
@@ -4923,6 +4927,26 @@ class PairingServiceTest(unittest.TestCase):
         self.assertEqual(len(pab_lines), 1)
         self.assertEqual(pab_lines[0][4:8], " 2.0")
         self.assertEqual(pab_lines[0][9:13], " 2.0")
+
+    def test_trf25_scoring_362_and_individual_212_codes(self) -> None:
+        from src.services.federation_exporters import TRF25Exporter
+
+        # Pontuação de match não-padrão (3-1-0) → emite o 362; padrão → None.
+        self.assertIsNone(
+            TRF25Exporter._scoring_system_362(
+                {"team_match_win_points": "2", "team_match_draw_points": "1", "team_match_loss_points": "0"}
+            )
+        )
+        line_362 = TRF25Exporter._scoring_system_362(
+            {"team_match_win_points": "3", "team_match_draw_points": "1", "team_match_loss_points": "0"}
+        )
+        self.assertEqual(line_362[:6], "362 TW")
+        self.assertIn(" 3.0", line_362)
+        # Ordem de desempate individual espelha pairing/tiebreaks.py.
+        self.assertEqual(
+            TRF25Exporter._tiebreak_codes_212(is_team=False),
+            ["PTS", "BH", "BH/M1", "SB", "WIN"],
+        )
 
     def test_federation_exporter_registry_keeps_trf16_flow_extensible(self) -> None:
         registry = FederationExporterRegistry()

@@ -13,10 +13,15 @@ Já implementado:
   `trf25_records.py` (com testes de coluna), mas **ainda não são emitidos** —
   o modelo de dados do projeto não distingue forfeit/out-of-order/ajuste
   anormal de um resultado normal, então emiti-los enganaria o árbitro.
+- Fatia 3: registro 212 (tie-breaks de classificação, espelhando a ordem fixa
+  de `pairing/tiebreaks.py`) e registro 362 (sistema de pontuação por equipes,
+  só quando diverge do padrão TW=2/TD=1/TL=0). O 162 (individual) nunca é
+  emitido: o projeto sempre usa pontos FIDE-padrão (1/0.5/0), então omiti-lo é
+  o comportamento correto.
 
-Ainda equivalente ao TRF16 (warning obrigatório enquanto incompleto):
-tiebreaks 212, sistemas 162/362, forfeits/out-of-order/ajustes estruturados
-(330/300/299) e informativos 801/802. Por isso `export()` ainda devolve o
+Ainda incompleto (warning obrigatório enquanto for assim): forfeits/
+out-of-order/ajustes estruturados (330/300/299) e informativos 801/802, além
+de o documento ainda ser *final draft*. Por isso `export()` devolve o
 TRF25_SCAFFOLD_WARNING — para nunca enganar o árbitro.
 
 ## O que falta para um TRF25 completo
@@ -58,15 +63,17 @@ from src.services.constants import AppError, player_pairing_name
 from src.services.federation_exporters.base import FederationExportFormat
 from src.services.federation_exporters.trf16 import TRF16Exporter
 from src.services.federation_exporters.trf25_records import (
+    record_212,
     record_310,
     record_320,
+    record_362,
     tournament_line,
 )
 
 
 TRF25_SCAFFOLD_WARNING = (
-    "TRF25: implementação parcial — tiebreaks (212), sistemas de pontuação "
-    "(162/362) e byes/forfeits estruturados ainda não emitidos. "
+    "TRF25: implementação parcial — forfeits/out-of-order/ajustes (330/300/299) "
+    "e informativos (801/802) ainda não emitidos, e o layout segue final draft. "
     "Use TRF16 para envio oficial até a especificação ser finalizada."
 )
 
@@ -132,8 +139,12 @@ class TRF25Exporter(TRF16Exporter):
             # Extensões TRF25 (ESPEC §1).
             handle.write(tournament_line("142", round_count))
             handle.write(tournament_line("192", self._type_code_192(tournament, settings)))
+            handle.write(record_212(self._tiebreak_codes_212(is_team)))
             if is_team:
                 handle.write(tournament_line("352", self._colour_sequence_352(settings)))
+                scoring_362 = self._scoring_system_362(settings)
+                if scoring_362:
+                    handle.write(scoring_362)
 
             for player in players:
                 handle.write(
@@ -173,6 +184,30 @@ class TRF25Exporter(TRF16Exporter):
         if method == "knockout":
             return "WORLDCUP_KNOCKOUT"
         return "FIDE_DUTCH"
+
+    @staticmethod
+    def _tiebreak_codes_212(is_team: bool) -> list[str]:
+        """Códigos FIDE da ordem de desempate efetivamente usada pelo projeto.
+
+        Espelha a ordenação fixa de `pairing/tiebreaks.py` (não há configuração
+        de critérios no projeto): individual = pontos, Buchholz, Buchholz mediano,
+        Sonneborn-Berger, vitórias; equipes = pontos, Buchholz (base match points),
+        vitórias. Fallbacks por rating/nome não são tie-breaks FIDE e ficam de fora.
+        """
+        if is_team:
+            return ["PTS", "BH:MP", "WIN"]
+        return ["PTS", "BH", "BH/M1", "SB", "WIN"]
+
+    @staticmethod
+    def _scoring_system_362(settings: dict[str, Any]) -> str | None:
+        """Registro 362 só quando os pontos de match divergem do padrão FIDE
+        (TW=2.0, TD=1.0, TL=0.0). Caso contrário não emite (omissão = padrão)."""
+        win = float(settings.get("team_match_win_points", 2.0) or 0.0)
+        draw = float(settings.get("team_match_draw_points", 1.0) or 0.0)
+        loss = float(settings.get("team_match_loss_points", 0.0) or 0.0)
+        if (win, draw, loss) == (2.0, 1.0, 0.0):
+            return None
+        return record_362([("TW", win), ("TD", draw), ("TL", loss)])
 
     @staticmethod
     def _colour_sequence_352(settings: dict[str, Any]) -> str:
