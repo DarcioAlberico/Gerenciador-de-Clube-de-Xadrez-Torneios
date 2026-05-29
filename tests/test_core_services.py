@@ -5125,6 +5125,44 @@ class PairingServiceTest(unittest.TestCase):
         self.assertEqual(line[13:17], "-0.5")
         self.assertEqual(line[23:27].strip(), str(expected_rank))
 
+    def test_trf25_emits_299_for_team_point_adjustment(self) -> None:
+        from src.services.federation_exporters import TRF25Exporter
+
+        tournament_id, team_ids = self._create_team_tournament(teams_count=2, boards_count=2)
+        # Penalidade de 2 match points e 1 game point a uma equipe.
+        self.db.add_point_adjustment(
+            tournament_id,
+            round_number=0,
+            team_id=team_ids[0],
+            aat_type="",
+            match_points=-2.0,
+            game_points=-1.0,
+            reason="Penalidade de equipe",
+        )
+
+        output_path = Path(self.temp_dir.name) / "team_299.trf"
+        TRF25Exporter(self.export_service).export(tournament_id, output_path)
+        lines = output_path.read_text(encoding="utf-8").splitlines()
+
+        # Mapeia nome da equipe (cols 9-40) -> TPN (cols 5-7) a partir dos 310.
+        target_name = next(
+            t["name"] for t in self.db.list_teams(tournament_id, active_only=False)
+            if int(t["id"]) == team_ids[0]
+        )
+        tpn_by_name = {
+            line[8:40].strip(): line[4:7].strip()
+            for line in lines
+            if line.startswith("310 ")
+        }
+        expected_tpn = tpn_by_name[target_name]
+
+        adj_lines = [line for line in lines if line.startswith("299 ")]
+        self.assertEqual(len(adj_lines), 1)
+        line = adj_lines[0]
+        self.assertEqual(line[7:11], "-2.0")
+        self.assertEqual(line[13:17], "-1.0")
+        self.assertEqual(line[23:27].strip(), expected_tpn)
+
     def test_validate_chess_results_trf16_reports_special_result_statuses(self) -> None:
         tournament_id = self.db.create_tournament(
             "Aberto Pendencias",
