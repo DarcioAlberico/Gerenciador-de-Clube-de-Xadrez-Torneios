@@ -864,8 +864,10 @@ class SettingsPagesMixin:
                         self.export_service.export_team_lineups(tournament_id, path)
                     elif report == "JSON publico":
                         self.export_service.export_public_json(tournament_id, path)
-                    elif report in ("Chess-Results (TRF16)", "TRF FIDE"):
+                    elif report == "Chess-Results (TRF16)":
                         return self.export_service.export_chess_results_trf(tournament_id, path)
+                    elif report == "TRF FIDE":
+                        return self.export_service.export_chess_results_trf25(tournament_id, path)
                     elif report == "Pendencias TRF":
                         self.export_service.export_chess_results_trf_validation_report(tournament_id, path)
                     elif report == "PGN (Partidas)":

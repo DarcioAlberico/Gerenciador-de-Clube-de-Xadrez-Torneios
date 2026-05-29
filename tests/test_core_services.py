@@ -5039,6 +5039,21 @@ class PairingServiceTest(unittest.TestCase):
         # sem datas, etc) — não devem ser duplicados.
         self.assertEqual(1, sum(1 for w in warnings if w == TRF25_SCAFFOLD_WARNING))
 
+    def test_export_chess_results_trf25_routes_to_trf25_exporter(self) -> None:
+        from src.services.federation_exporters import TRF25_SCAFFOLD_WARNING
+
+        tournament_id, _team_ids = self._create_team_tournament(teams_count=2, boards_count=2)
+        output_path = Path(self.temp_dir.name) / "fide.trf"
+
+        warnings = self.export_service.export_chess_results_trf25(tournament_id, output_path)
+
+        # O método novo deve devolver o aviso de scaffold do TRF25 e emitir
+        # registros 310 (equipe), não o 013 herdado do TRF16.
+        self.assertIn(TRF25_SCAFFOLD_WARNING, warnings)
+        lines = output_path.read_text(encoding="utf-8").splitlines()
+        self.assertTrue(any(line.startswith("310 ") for line in lines))
+        self.assertFalse(any(line.startswith("013 ") for line in lines))
+
     def test_validate_chess_results_trf16_reports_special_result_statuses(self) -> None:
         tournament_id = self.db.create_tournament(
             "Aberto Pendencias",

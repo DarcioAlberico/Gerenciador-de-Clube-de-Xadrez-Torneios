@@ -2343,6 +2343,9 @@ class ExportService:
     def export_chess_results_trf(self, tournament_id: int, file_path: str | Path) -> list[str]:
         return self._federation_exporter("trf16").export(tournament_id, file_path)
 
+    def export_chess_results_trf25(self, tournament_id: int, file_path: str | Path) -> list[str]:
+        return self._federation_exporter("trf25").export(tournament_id, file_path)
+
     def validate_chess_results_trf(self, tournament_id: int) -> list[str]:
         return self._federation_exporter("trf16").validate(tournament_id)
 
