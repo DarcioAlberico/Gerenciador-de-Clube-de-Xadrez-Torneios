@@ -287,3 +287,49 @@ def record_299(
         parts.append((column, f"{int(entity):>4d}" if entity else "000"))
         column += 5
     return _place(parts).rstrip() + "\r\n"
+
+
+def record_250(
+    match_points: float,
+    game_points: float,
+    first_round: int,
+    last_round: int,
+    entities: list[int],
+) -> str:
+    """Registro 250 — accelerated round (ind. e equipes). §5.1.
+
+    Pontos fictícios atribuídos a `entities` da rodada `first_round` à
+    `last_round`. Match points só se aplicam a equipes (vazio = 0.0); game points
+    são obrigatórios (≠0) para indivíduos e opcionais para equipes — campos com
+    valor zero saem em branco.
+    """
+    parts: list[tuple[int, str]] = [
+        (1, "250"),
+        (5, _points(match_points, 4) if match_points else " " * 4),
+        (10, _points(game_points, 4) if game_points else " " * 4),
+        (15, f"{int(first_round):>3d}"),
+        (19, f"{int(last_round):>3d}"),
+    ]
+    column = 23
+    for entity in entities:
+        parts.append((column, f"{int(entity):>4d}"))
+        column += 5
+    return _place(parts).rstrip() + "\r\n"
+
+
+def record_260(first_round: int, last_round: int, entities: list[int]) -> str:
+    """Registro 260 — prohibited pairings (ind. e equipes). §5.2.
+
+    As `entities` (starting-ranks ou TPNs) não podem se enfrentar da rodada
+    `first_round` à `last_round`. Exige ao menos dois participantes.
+    """
+    parts: list[tuple[int, str]] = [
+        (1, "260"),
+        (5, f"{int(first_round):>3d}"),
+        (9, f"{int(last_round):>3d}"),
+    ]
+    column = 13
+    for entity in entities:
+        parts.append((column, f"{int(entity):>4d}"))
+        column += 5
+    return _place(parts).rstrip() + "\r\n"

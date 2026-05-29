@@ -7,6 +7,8 @@ from src.services.federation_exporters.trf25_records import (
     record_162,
     record_212,
     record_240,
+    record_250,
+    record_260,
     record_299,
     record_300,
     record_310,
@@ -232,6 +234,38 @@ class TestRecord802(unittest.TestCase):
         self.assertEqual(cols(line, 42 - 13, 44 - 13), "9  ")
         self.assertEqual(cols(line, 35, 38), "    ")
         self.assertEqual(cols(line, 39, 39), "f")
+
+
+class TestRecord250(unittest.TestCase):
+    def test_individual_acceleration_columns(self):
+        line = record_250(0.0, 1.0, 1, 2, [3, 7]).rstrip("\r\n")
+        self.assertEqual(cols(line, 1, 3), "250")
+        self.assertEqual(cols(line, 5, 8), "    ")
+        self.assertEqual(cols(line, 10, 13), " 1.0")
+        self.assertEqual(cols(line, 15, 17), "  1")
+        self.assertEqual(cols(line, 19, 21), "  2")
+        self.assertEqual(cols(line, 23, 26), "   3")
+        self.assertEqual(cols(line, 28, 31), "   7")
+
+    def test_team_acceleration_with_match_points(self):
+        line = record_250(2.0, 0.0, 1, 1, [5]).rstrip("\r\n")
+        self.assertEqual(cols(line, 5, 8), " 2.0")
+        self.assertEqual(cols(line, 10, 13), "    ")
+        self.assertEqual(cols(line, 23, 26), "   5")
+
+
+class TestRecord260(unittest.TestCase):
+    def test_prohibited_pair_columns(self):
+        line = record_260(1, 9, [4, 12]).rstrip("\r\n")
+        self.assertEqual(cols(line, 1, 3), "260")
+        self.assertEqual(cols(line, 5, 7), "  1")
+        self.assertEqual(cols(line, 9, 11), "  9")
+        self.assertEqual(cols(line, 13, 16), "   4")
+        self.assertEqual(cols(line, 18, 21), "  12")
+
+    def test_third_entity_offset(self):
+        line = record_260(2, 2, [1, 2, 3]).rstrip("\r\n")
+        self.assertEqual(cols(line, 23, 26), "   3")
 
 
 class TestEncodeTimeControl(unittest.TestCase):
