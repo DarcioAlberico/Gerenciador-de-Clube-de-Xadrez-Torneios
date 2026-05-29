@@ -75,6 +75,7 @@ from src.services.federation_exporters.trf25_records import (
     encode_time_control,
     record_212,
     record_299,
+    record_300,
     record_310,
     record_320,
     record_330,
@@ -89,8 +90,8 @@ _FORFEIT_RESULTS = frozenset({"1F-0F", "0F-1F", "0F-0F"})
 
 
 TRF25_SCAFFOLD_WARNING = (
-    "TRF25: implementação parcial — out-of-order/aceleração/proibições "
-    "(300/250/260) não são emitidos por falta de modelo de dados, e o layout "
+    "TRF25: implementação parcial — aceleração/proibições "
+    "(250/260) não são emitidos por falta de modelo de dados, e o layout "
     "segue final draft da FIDE. "
     "Use TRF16 para envio oficial até a especificação ser finalizada."
 )
@@ -187,6 +188,10 @@ class TRF25Exporter(TRF16Exporter):
                 if pab_line:
                     handle.write(pab_line)
                 for line in self._forfeit_records_330(tournament_id, tpn_by_team):
+                    handle.write(line)
+                for line in self._out_of_order_records_300(
+                    tournament_id, prepared, tpn_by_team, start_rank_by_player
+                ):
                     handle.write(line)
                 for line in self._team_records_802(tournament_id, prepared, tpn_by_team, round_count):
                     handle.write(line)
@@ -479,6 +484,77 @@ class TRF25Exporter(TRF16Exporter):
             lines.append(
                 record_330(match_type, int(match.get("round_number") or 0), white_tpn, black_tpn)
             )
+        return lines
+
+    @staticmethod
+    def _is_out_of_default_order(actual_ranks: list[int], default_order: list[int]) -> bool | None:
+        """Decide se a escalação efetiva diverge da ordem padrão do 310.
+
+        `actual_ranks` é o start-rank por tabuleiro (0 = vazio); `default_order` é
+        a lista de ranks na ordem do roster (campo do 310). Considera-se OOdO
+        quando os jogadores presentes não respeitam a ordem do roster entre si.
+        Substituir um titular por um reserva mantendo a ordem NÃO é OOdO.
+
+        Devolve None quando não dá para verificar com segurança (algum jogador
+        escalado não consta da ordem padrão) — aí o exporter omite, para não
+        afirmar ao árbitro uma OOdO que não consegue comprovar.
+        """
+        played = [rank for rank in actual_ranks if rank]
+        try:
+            positions = [default_order.index(rank) for rank in played]
+        except ValueError:
+            return None
+        return positions != sorted(positions)
+
+    def _out_of_order_records_300(
+        self,
+        tournament_id: int,
+        prepared: list[dict[str, Any]],
+        tpn_by_team: dict[int, int],
+        start_rank_by_player: dict[int, int],
+    ) -> list[str]:
+        """Registros 300 — equipes que jogaram fora da ordem padrão (§7.2).
+
+        Para cada lado de cada match fechado, monta o start-rank efetivo por
+        tabuleiro (cores invertem nos pares, como no 330/352) e compara com a
+        ordem do roster. Só emite quando a divergência é comprovável."""
+        ranks_by_team = {item["team_id"]: item["ranks"] for item in prepared}
+        lines: list[str] = []
+        for match in self.db.list_team_matches_for_tournament(tournament_id, closed_only=True):
+            if match.get("is_bye"):
+                continue
+            white_team = int(match.get("white_team_id") or 0)
+            black_team = int(match.get("black_team_id") or 0)
+            white_tpn = tpn_by_team.get(white_team)
+            black_tpn = tpn_by_team.get(black_team)
+            if not white_tpn or not black_tpn:
+                continue
+            boards = sorted(
+                self.db.list_team_boards(int(match["id"])),
+                key=lambda board: int(board.get("board_number") or 0),
+            )
+            round_number = int(match.get("round_number") or 0)
+            for team_id, team_tpn, opponent_tpn, is_white in (
+                (white_team, white_tpn, black_tpn, True),
+                (black_team, black_tpn, white_tpn, False),
+            ):
+                actual_ranks: list[int] = []
+                for board in boards:
+                    odd = int(board.get("board_number") or 0) % 2 == 1
+                    if is_white:
+                        player_id = board.get("white_player_id") if odd else board.get("black_player_id")
+                    else:
+                        player_id = board.get("black_player_id") if odd else board.get("white_player_id")
+                    actual_ranks.append(
+                        start_rank_by_player.get(int(player_id), 0) if player_id else 0
+                    )
+                out_of_order = self._is_out_of_default_order(
+                    actual_ranks, ranks_by_team.get(team_id, [])
+                )
+                if out_of_order:
+                    lines.append(
+                        record_300(round_number, team_tpn, opponent_tpn, actual_ranks)
+                    )
         return lines
 
     def _team_records_802(

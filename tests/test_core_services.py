@@ -5163,6 +5163,86 @@ class PairingServiceTest(unittest.TestCase):
         self.assertEqual(line[13:17], "-1.0")
         self.assertEqual(line[23:27].strip(), expected_tpn)
 
+    def test_trf25_emits_300_only_for_out_of_order_team(self) -> None:
+        from src.services.federation_exporters import TRF25Exporter
+
+        tournament_id, team_ids = self._create_team_tournament(teams_count=2, boards_count=2)
+        team_a, team_b = team_ids[0], team_ids[1]
+
+        def roster(team_id: int) -> list[int]:
+            assignments = sorted(
+                self.db.list_team_players(team_id, active_only=False),
+                key=lambda a: int(a.get("board_number") or 0),
+            )
+            return [int(a["player_id"]) for a in assignments]
+
+        a_board1, a_board2 = roster(team_a)
+        b_board1, b_board2 = roster(team_b)
+
+        # Cores: tab.1 (impar) branco=A/preto=B; tab.2 (par) branco=B/preto=A.
+        # Equipe A escala invertida (tab.1 com o jogador do tab.2 e vice-versa);
+        # equipe B mantém a ordem do roster.
+        round_id = self.db.create_round_with_team_matches(
+            tournament_id,
+            1,
+            [
+                {
+                    "match_number": 1,
+                    "white_team_id": team_a,
+                    "black_team_id": team_b,
+                    "is_bye": 0,
+                    "boards": [
+                        {
+                            "board_number": 1,
+                            "white_player_id": a_board2,
+                            "black_player_id": b_board1,
+                            "result": "1-0",
+                        },
+                        {
+                            "board_number": 2,
+                            "white_player_id": b_board2,
+                            "black_player_id": a_board1,
+                            "result": "0-1",
+                        },
+                    ],
+                }
+            ],
+        )
+        self.db.close_round(round_id)
+
+        output_path = Path(self.temp_dir.name) / "team_300.trf"
+        TRF25Exporter(self.export_service).export(tournament_id, output_path)
+        lines = output_path.read_text(encoding="utf-8").splitlines()
+
+        name_by_id = {
+            int(t["id"]): t["name"]
+            for t in self.db.list_teams(tournament_id, active_only=False)
+        }
+        tpn_by_name = {
+            line[8:40].strip(): line[4:7].strip()
+            for line in lines
+            if line.startswith("310 ")
+        }
+        a_tpn = tpn_by_name[name_by_id[team_a]]
+        start_rank = {
+            int(p["id"]): index
+            for index, p in enumerate(
+                sorted(
+                    self.db.list_players(tournament_id, active_only=False),
+                    key=lambda p: -self.export_service._trf_rating(p),
+                ),
+                start=1,
+            )
+        }
+
+        order_lines = [line for line in lines if line.startswith("300 ")]
+        self.assertEqual(len(order_lines), 1)
+        line = order_lines[0]
+        self.assertEqual(line[4:7].strip(), a_tpn)
+        # Tab.1 jogado pelo jogador do tab.2 do roster; tab.2 pelo do tab.1.
+        self.assertEqual(line[16:20].strip(), str(start_rank[a_board2]))
+        self.assertEqual(line[21:25].strip(), str(start_rank[a_board1]))
+
     def test_validate_chess_results_trf16_reports_special_result_statuses(self) -> None:
         tournament_id = self.db.create_tournament(
             "Aberto Pendencias",
