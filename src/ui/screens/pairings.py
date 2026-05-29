@@ -79,6 +79,7 @@ class PairingPagesMixin:
         )
         actions = [
             ("Central de pendencias", self.show_arbitration_issues),
+            ("Ajustes de pontos (TRF25)", self.show_point_adjustments),
             ("Abrir rodadas", self.show_pairings),
             ("Pre-visualizar proxima", self._preview_next_round),
             ("Fechar rodada atual", self._close_current_round_from_panel),
@@ -240,6 +241,230 @@ class PairingPagesMixin:
         ctk.CTkButton(footer, text="Voltar ao painel", width=140, command=self.show_arbitration_panel).pack(
             side="left", padx=(8, 0)
         )
+
+    # Tipos de "abnormal assignment points" (TRF25 §7.3): rótulo amigável -> código.
+    _AAT_TYPE_CHOICES = [
+        ("Penalidade/Bonus (pontos)", ""),
+        ("Vitoria atribuida (W)", "W"),
+        ("Empate atribuido (D)", "D"),
+        ("Derrota atribuida (L)", "L"),
+        ("Bye full-point (F)", "F"),
+        ("Bye half-point (H)", "H"),
+        ("Bye zero-point (Z)", "Z"),
+        ("W.O. a favor (+)", "+"),
+        ("W.O. contra (-)", "-"),
+    ]
+
+    def show_point_adjustments(self) -> None:
+        if not self._require_tournament():
+            return
+        tournament = self.db.get_tournament(self.current_tournament_id)
+        is_team = (tournament or {}).get("competition_type") == "team"
+
+        self._clear_content()
+        self._page_title(
+            "Ajustes de pontos (TRF25)",
+            f"Torneio: {tournament['name'] if tournament else ''}",
+        )
+        self._build_tournament_nav("arbiter")
+
+        body = ctk.CTkFrame(self.content, fg_color="transparent")
+        body.grid(row=1, column=0, padx=22, pady=(0, 22), sticky="nsew")
+        body.grid_columnconfigure(0, weight=0)
+        body.grid_columnconfigure(1, weight=1)
+        body.grid_rowconfigure(0, weight=1)
+
+        # Alvos: jogadores (individual) ou equipes (por equipes).
+        if is_team:
+            entities = sorted(
+                self.db.list_teams(self.current_tournament_id, active_only=False),
+                key=lambda item: str(item.get("name") or "").casefold(),
+            )
+        else:
+            entities = sorted(
+                self.db.list_players(self.current_tournament_id, active_only=False),
+                key=lambda item: str(item.get("name") or "").casefold(),
+            )
+        target_by_label: dict[str, int] = {}
+        for item in entities:
+            label = f"{item.get('name') or 's/ nome'} (#{item['id']})"
+            target_by_label[label] = int(item["id"])
+        target_labels = list(target_by_label.keys()) or ["(sem participantes)"]
+
+        rounds = sorted(self.db.list_rounds(self.current_tournament_id), key=lambda r: r["number"])
+        round_by_label = {"Todas as rodadas": 0}
+        for item in rounds:
+            round_by_label[f"Rodada {int(item['number'])}"] = int(item["number"])
+        round_labels = list(round_by_label.keys())
+        type_by_label = {label: code for label, code in self._AAT_TYPE_CHOICES}
+
+        # Formulario de lancamento.
+        form = self._make_panel(body)
+        form.grid(row=0, column=0, padx=(0, 12), sticky="nsew")
+        form.grid_columnconfigure(0, weight=1)
+        self._section_title(form, "Novo ajuste").grid(
+            row=0, column=0, padx=16, pady=(14, 8), sticky="w"
+        )
+
+        ctk.CTkLabel(form, text="Equipe" if is_team else "Jogador").grid(
+            row=1, column=0, padx=16, pady=(4, 0), sticky="w"
+        )
+        target_option = ctk.CTkOptionMenu(form, values=target_labels, width=260)
+        target_option.grid(row=2, column=0, padx=16, pady=(2, 0), sticky="ew")
+
+        ctk.CTkLabel(form, text="Rodada").grid(row=3, column=0, padx=16, pady=(8, 0), sticky="w")
+        round_option = ctk.CTkOptionMenu(form, values=round_labels, width=260)
+        round_option.grid(row=4, column=0, padx=16, pady=(2, 0), sticky="ew")
+
+        ctk.CTkLabel(form, text="Tipo").grid(row=5, column=0, padx=16, pady=(8, 0), sticky="w")
+        type_option = ctk.CTkOptionMenu(form, values=list(type_by_label.keys()), width=260)
+        type_option.grid(row=6, column=0, padx=16, pady=(2, 0), sticky="ew")
+
+        next_row = 7
+        match_points_entry = None
+        if is_team:
+            ctk.CTkLabel(form, text="Match points (+/-)").grid(
+                row=next_row, column=0, padx=16, pady=(8, 0), sticky="w"
+            )
+            match_points_entry = ctk.CTkEntry(form, width=260, placeholder_text="0.0")
+            match_points_entry.grid(row=next_row + 1, column=0, padx=16, pady=(2, 0), sticky="ew")
+            next_row += 2
+
+        ctk.CTkLabel(form, text="Game points (+/-)").grid(
+            row=next_row, column=0, padx=16, pady=(8, 0), sticky="w"
+        )
+        game_points_entry = ctk.CTkEntry(form, width=260, placeholder_text="0.0")
+        game_points_entry.grid(row=next_row + 1, column=0, padx=16, pady=(2, 0), sticky="ew")
+
+        ctk.CTkLabel(form, text="Motivo").grid(
+            row=next_row + 2, column=0, padx=16, pady=(8, 0), sticky="w"
+        )
+        reason_entry = ctk.CTkEntry(form, width=260, placeholder_text="Ex.: penalidade disciplinar")
+        reason_entry.grid(row=next_row + 3, column=0, padx=16, pady=(2, 0), sticky="ew")
+
+        def parse_points(entry: Any) -> float:
+            text = (entry.get() if entry else "").strip().replace(",", ".")
+            if not text:
+                return 0.0
+            try:
+                return float(text)
+            except ValueError as exc:
+                raise AppError("Pontos invalidos: use numero decimal (ex.: -0.5).") from exc
+
+        # Tabela de ajustes existentes.
+        panel = self._make_panel(body)
+        panel.grid(row=0, column=1, sticky="nsew")
+        panel.grid_columnconfigure(0, weight=1)
+        panel.grid_rowconfigure(1, weight=1)
+        self._section_title(panel, "Ajustes lancados").grid(
+            row=0, column=0, padx=14, pady=(14, 6), sticky="w"
+        )
+        tree_holder = ctk.CTkFrame(panel, fg_color="transparent")
+        tree_holder.grid(row=1, column=0, padx=14, pady=(0, 8), sticky="nsew")
+        tree_holder.grid_columnconfigure(0, weight=1)
+        tree_holder.grid_rowconfigure(0, weight=1)
+        tree = self._make_tree(
+            tree_holder,
+            ["round", "target", "type", "mp", "gp", "reason"],
+            {
+                "round": "Rodada",
+                "target": "Alvo",
+                "type": "Tipo",
+                "mp": "MP",
+                "gp": "GP",
+                "reason": "Motivo",
+            },
+            {"round": 80, "target": 200, "type": 60, "mp": 60, "gp": 60, "reason": 240},
+            visible_rows=16,
+        )
+
+        row_by_iid: dict[str, int] = {}
+
+        def refresh_tree() -> None:
+            for child in tree.get_children():
+                tree.delete(child)
+            row_by_iid.clear()
+            for index, adjustment in enumerate(
+                self.db.list_point_adjustments(self.current_tournament_id), start=1
+            ):
+                iid = str(index)
+                row_by_iid[iid] = int(adjustment["id"])
+                round_number = int(adjustment.get("round_number") or 0)
+                target = adjustment.get("team_name") if is_team else adjustment.get("player_name")
+                tree.insert(
+                    "",
+                    "end",
+                    iid=iid,
+                    values=(
+                        "Todas" if round_number == 0 else str(round_number),
+                        target or "(removido)",
+                        adjustment.get("aat_type") or "-",
+                        f"{float(adjustment.get('match_points') or 0.0):+.1f}",
+                        f"{float(adjustment.get('game_points') or 0.0):+.1f}",
+                        adjustment.get("reason") or "",
+                    ),
+                )
+
+        def add_adjustment() -> None:
+            try:
+                label = target_option.get()
+                if label not in target_by_label:
+                    raise AppError("Selecione um participante valido.")
+                game_points = parse_points(game_points_entry)
+                match_points = parse_points(match_points_entry) if is_team else 0.0
+                aat_type = type_by_label.get(type_option.get(), "")
+                if not aat_type and match_points == 0.0 and game_points == 0.0:
+                    raise AppError("Informe pontos diferentes de zero ou um tipo de atribuicao.")
+                target_id = target_by_label[label]
+                self.db.add_point_adjustment(
+                    self.current_tournament_id,
+                    round_number=round_by_label.get(round_option.get(), 0),
+                    player_id=None if is_team else target_id,
+                    team_id=target_id if is_team else None,
+                    aat_type=aat_type,
+                    match_points=match_points,
+                    game_points=game_points,
+                    reason=reason_entry.get().strip(),
+                )
+                if match_points_entry:
+                    match_points_entry.delete(0, "end")
+                game_points_entry.delete(0, "end")
+                reason_entry.delete(0, "end")
+                self._show_toast("Ajuste lancado.", kind="success")
+                refresh_tree()
+            except Exception as exc:
+                self._show_error(exc)
+
+        def delete_selected() -> None:
+            try:
+                selected = tree.selection()
+                if not selected:
+                    raise AppError("Selecione um ajuste para remover.")
+                if not self._confirm_action(
+                    "Remover ajuste", "Confirma a remocao do ajuste selecionado?"
+                ):
+                    return
+                self.db.delete_point_adjustment(row_by_iid[selected[0]])
+                self._show_toast("Ajuste removido.", kind="success")
+                refresh_tree()
+            except Exception as exc:
+                self._show_error(exc)
+
+        ctk.CTkButton(form, text="Adicionar", command=add_adjustment).grid(
+            row=next_row + 4, column=0, padx=16, pady=(14, 14), sticky="ew"
+        )
+
+        footer = ctk.CTkFrame(panel, fg_color="transparent")
+        footer.grid(row=2, column=0, padx=14, pady=(0, 12), sticky="ew")
+        ctk.CTkButton(footer, text="Atualizar", width=120, command=refresh_tree).pack(side="left")
+        ctk.CTkButton(footer, text="Remover selecionado", width=170, command=delete_selected).pack(
+            side="left", padx=(8, 0)
+        )
+        ctk.CTkButton(
+            footer, text="Voltar ao painel", width=140, command=self.show_arbitration_panel
+        ).pack(side="left", padx=(8, 0))
+
+        refresh_tree()
 
     def _close_current_round_from_panel(self) -> None:
         latest = self.db.get_latest_round(self.current_tournament_id)
