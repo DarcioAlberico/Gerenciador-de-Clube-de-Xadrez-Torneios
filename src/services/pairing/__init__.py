@@ -28,9 +28,15 @@ Para extrair uma nova função:
 """
 
 from src.services.pairing.acceleration import (
+    acceleration_bonus,
+    acceleration_spec,
     accelerated_standings,
     classic_acceleration_bonus,
     classic_upper_half_size,
+    scheme_applies_bonus,
+    scheme_emits_250,
+    scheme_is_baku,
+    upper_share_size,
 )
 from src.services.pairing.arbitration import (
     acknowledged_issue_keys,
@@ -119,6 +125,8 @@ from src.services.pairing.validators import (
 )
 
 __all__ = [
+    "acceleration_bonus",
+    "acceleration_spec",
     "accelerated_standings",
     "acknowledged_issue_keys",
     "assignment_color_penalty",
@@ -173,6 +181,9 @@ __all__ = [
     "result_submission_issue",
     "result_states_summary",
     "round_robin_pairings",
+    "scheme_applies_bonus",
+    "scheme_emits_250",
+    "scheme_is_baku",
     "score_groups",
     "search_dutch_pairing",
     "search_dutch_team_pairing",
@@ -192,5 +203,6 @@ __all__ = [
     "team_round_dashboard_metrics",
     "team_standing_value",
     "tiebreak_narrative_from_standings",
+    "upper_share_size",
     "would_make_three_colors",
 ]

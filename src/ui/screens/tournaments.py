@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from ..support import *
 
+from src.services.pairing.acceleration import acceleration_spec
+
 
 class TournamentPagesMixin:
     def show_tournaments(self) -> None:
@@ -583,6 +585,7 @@ class TournamentPagesMixin:
         pairing_by_label = {label: value for value, label in PAIRING_METHODS.items()}
         team_pairing_by_label = {label: value for value, label in TEAM_PAIRING_METHODS.items()}
         team_criterion_by_label = {label: value for value, label in TEAM_STANDING_CRITERIA.items()}
+        acceleration_by_label = {label: value for value, label in ACCELERATION_METHODS.items()}
         option_start_row = len(setting_fields) * 2 + 1
         ctk.CTkLabel(settings_panel, text="Ordem inicial").grid(
             row=option_start_row,
@@ -746,6 +749,53 @@ class TournamentPagesMixin:
                 checkbox.select()
             flag_checks[key] = checkbox
 
+        accel_row = option_start_row + 15 + len(TOURNAMENT_FLAG_FIELDS)
+        current_spec = acceleration_spec(settings.get("acceleration_method", "none"))
+        scheme_to_key = {"none": "none", "classic": "accelerated", "custom": "custom", "baku": "baku"}
+        current_accel_key = scheme_to_key.get(current_spec.get("scheme", "none"), "none")
+
+        ctk.CTkLabel(settings_panel, text="Aceleracao (TRF25 reg. 250)").grid(
+            row=accel_row, column=0, padx=16, pady=(12, 0), sticky="w"
+        )
+        acceleration_option = ctk.CTkOptionMenu(
+            settings_panel,
+            values=list(acceleration_by_label.keys()),
+            width=350,
+        )
+        acceleration_option.grid(row=accel_row + 1, column=0, padx=16, pady=(2, 0), sticky="ew")
+        acceleration_option.set(ACCELERATION_METHODS.get(current_accel_key, ACCELERATION_METHODS["none"]))
+
+        custom_frame = ctk.CTkFrame(settings_panel, fg_color="transparent")
+        custom_frame.grid(row=accel_row + 2, column=0, padx=16, pady=(2, 0), sticky="ew")
+        accel_custom_entries: dict[str, ctk.CTkEntry] = {}
+        custom_defaults = {
+            "rounds": str(int(current_spec.get("round_count", 2) or 2)),
+            "bonus": str(float(current_spec.get("bonus", 1.0) or 1.0)),
+            "upper": str(float(current_spec.get("upper_fraction", 0.5) or 0.5)),
+        }
+        custom_labels = [
+            ("rounds", "Rodadas aceleradas"),
+            ("bonus", "Bonus por jogador"),
+            ("upper", "Fracao do topo (0-1)"),
+        ]
+        for column, (key, label) in enumerate(custom_labels):
+            custom_frame.grid_columnconfigure(column, weight=1)
+            ctk.CTkLabel(custom_frame, text=label).grid(
+                row=0, column=column, padx=(0 if column == 0 else 8, 0), pady=(0, 2), sticky="w"
+            )
+            entry = ctk.CTkEntry(custom_frame, width=110)
+            entry.grid(row=1, column=column, padx=(0 if column == 0 else 8, 0), pady=(0, 4), sticky="ew")
+            entry.insert(0, custom_defaults[key])
+            accel_custom_entries[key] = entry
+
+        def refresh_accel_state() -> None:
+            is_custom = acceleration_by_label.get(acceleration_option.get()) == "custom"
+            for entry in accel_custom_entries.values():
+                entry.configure(state="normal" if is_custom else "disabled")
+
+        acceleration_option.configure(command=lambda _value: refresh_accel_state())
+        refresh_accel_state()
+
         ctk.CTkLabel(
             schedule_panel,
             text="Datas e horarios das rodadas",
@@ -879,6 +929,17 @@ class TournamentPagesMixin:
             settings_payload["team_standing_primary"] = team_criterion_by_label[team_primary_option.get()]
             settings_payload["team_standing_secondary"] = team_criterion_by_label[team_secondary_option.get()]
             settings_payload["team_fixed_board_order"] = team_fixed_board_order_check.get()
+            accel_key = acceleration_by_label[acceleration_option.get()]
+            if accel_key == "custom":
+                try:
+                    rounds = max(int(float(accel_custom_entries["rounds"].get() or 0)), 0)
+                    bonus = float(accel_custom_entries["bonus"].get() or 0.0)
+                    upper = max(0.0, min(1.0, float(accel_custom_entries["upper"].get() or 0.0)))
+                except (TypeError, ValueError):
+                    raise AppError("Parametros de aceleracao personalizada invalidos.")
+                settings_payload["acceleration_method"] = f"custom:rounds={rounds};bonus={bonus};upper={upper}"
+            else:
+                settings_payload["acceleration_method"] = accel_key
             for key, checkbox in flag_checks.items():
                 settings_payload[key] = checkbox.get()
             schedule_payload = [

@@ -82,8 +82,9 @@ PAIRING_SYSTEMS = {
 }
 ACCELERATION_METHODS = {
     "none": "Sem aceleracao",
-    "accelerated": "Acelerado",
-    "custom": "Customizado",
+    "accelerated": "Classica (Haley)",
+    "custom": "Personalizada (parametrizavel)",
+    "baku": "Baku (sem formula oficial - nao emite 250)",
 }
 TEAM_PAIRING_METHODS = {"swiss": "Suico", "round_robin": "Schuring (Todos contra todos)"}
 CERTIFICATE_TYPES = {

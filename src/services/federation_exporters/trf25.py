@@ -91,9 +91,11 @@ from src.services.federation_exporters.trf25_records import (
     tournament_line,
 )
 from src.services.pairing.acceleration import (
-    CLASSIC_ACCELERATION_BONUS,
-    CLASSIC_ACCELERATION_ROUNDS,
-    classic_upper_half_size,
+    BAKU_NOT_IMPLEMENTED,
+    acceleration_spec,
+    scheme_emits_250,
+    scheme_is_baku,
+    upper_share_size,
 )
 
 
@@ -208,6 +210,8 @@ class TRF25Exporter(TRF16Exporter):
                     handle.write(line)
 
             if not is_team:
+                if scheme_is_baku(str(settings.get("acceleration_method") or "none")):
+                    warnings = [*warnings, BAKU_NOT_IMPLEMENTED]
                 acceleration_line = self._acceleration_record_250(players, settings)
                 if acceleration_line:
                     handle.write(acceleration_line)
@@ -228,24 +232,30 @@ class TRF25Exporter(TRF16Exporter):
         players: list[dict[str, Any]],
         settings: dict[str, Any],
     ) -> str | None:
-        """Registro 250 — aceleração clássica (Haley), individual (§5.1).
+        """Registro 250 — aceleração de pareamento, individual (§5.1).
 
-        Emite só quando o torneio usa aceleração e há metade superior. O esquema
-        clássico dá +`CLASSIC_ACCELERATION_BONUS` ponto fictício de pareamento aos
-        start-ranks 1..N//2 nas rodadas 1 e 2 — exatamente o que o motor aplica em
-        `pairing/acceleration.py`. Match points ficam em branco (individual); o
-        intervalo de jogadores é contíguo [1, metade superior]."""
-        if str(settings.get("acceleration_method") or "none") != "accelerated":
+        Emite só para esquemas que somam bônus de verdade (clássico/custom). O spec
+        vem da coluna `acceleration_method`: `bonus` por jogador nas rodadas
+        `1..round_count`, aplicado ao topo `upper_fraction` do campo — exatamente o
+        que o motor aplica em `pairing/acceleration.py`. Match points ficam em
+        branco (individual); o intervalo de jogadores é contíguo [1, topo].
+
+        Baku fica de fora: enquanto a fórmula oficial não estiver implementada, não
+        emitimos 250 nem o sufixo `_BAKU`, para nunca enganar o árbitro."""
+        method = str(settings.get("acceleration_method") or "none")
+        if not scheme_emits_250(method):
             return None
-        upper_half = classic_upper_half_size(len(players))
-        if upper_half <= 0:
+        spec = acceleration_spec(method)
+        upper = upper_share_size(len(players), spec.get("upper_fraction", 0.5))
+        round_count = int(spec.get("round_count", 0) or 0)
+        if upper <= 0 or round_count <= 0:
             return None
         return record_250(
             0.0,
-            CLASSIC_ACCELERATION_BONUS,
-            min(CLASSIC_ACCELERATION_ROUNDS),
-            max(CLASSIC_ACCELERATION_ROUNDS),
-            [1, upper_half],
+            float(spec.get("bonus", 0.0) or 0.0),
+            1,
+            round_count,
+            [1, upper],
         )
 
     def _prohibited_pairing_records_260(

@@ -5414,6 +5414,73 @@ class PairingServiceTest(unittest.TestCase):
         self.assertIn(frozenset({seeding[0], seeding[2]}), accel)
         self.assertNotIn(frozenset({seeding[0], seeding[4]}), accel)
 
+    def test_custom_acceleration_applies_configured_params(self) -> None:
+        from src.services.pairing import accelerated_standings, acceleration_spec
+
+        spec = acceleration_spec("custom:rounds=3;bonus=2.0;upper=0.25")
+        self.assertEqual(spec["scheme"], "custom")
+        self.assertEqual(spec["round_count"], 3)
+        self.assertEqual(spec["bonus"], 2.0)
+        self.assertEqual(spec["upper_fraction"], 0.25)
+
+        standings = {pid: {"points": 0.0} for pid in range(1, 9)}
+        seeding = list(range(1, 9))
+        # upper=0.25 de 8 → só ranks 1..2; rodada 3 ainda dentro de round_count=3.
+        effective = accelerated_standings(
+            standings, seeding, 3, "custom:rounds=3;bonus=2.0;upper=0.25"
+        )
+        self.assertEqual(effective[1]["points"], 2.0)
+        self.assertEqual(effective[2]["points"], 2.0)
+        self.assertEqual(effective[3]["points"], 0.0)
+        # Rodada 4 fora da janela.
+        round4 = accelerated_standings(
+            standings, seeding, 4, "custom:rounds=3;bonus=2.0;upper=0.25"
+        )
+        self.assertEqual(round4[1]["points"], 0.0)
+
+    def test_trf25_emits_250_for_custom_acceleration(self) -> None:
+        from src.services.federation_exporters import TRF25Exporter
+
+        self._create_players(8)
+        self.db.save_tournament_settings(
+            self.tournament_id,
+            {"acceleration_method": "custom:rounds=3;bonus=2.0;upper=0.25"},
+        )
+        exporter = TRF25Exporter(self.export_service)
+        output_path = Path(self.temp_dir.name) / "custom.trf"
+        exporter.export(self.tournament_id, output_path)
+        lines = output_path.read_text(encoding="utf-8").splitlines()
+        accel_lines = [line for line in lines if line.startswith("250 ")]
+        self.assertEqual(len(accel_lines), 1)
+        line = accel_lines[0]
+        self.assertEqual(float(line[9:13]), 2.0)  # bônus custom
+        self.assertEqual(line[14:17].strip(), "1")  # primeira rodada
+        self.assertEqual(line[18:21].strip(), "3")  # round_count=3
+        self.assertEqual(line[22:26].strip(), "1")  # rank 1
+        self.assertEqual(line[27:31].strip(), "2")  # upper 0.25 de 8 = 2
+
+    def test_baku_does_not_apply_bonus_or_emit_250(self) -> None:
+        from src.services.federation_exporters import TRF25Exporter
+        from src.services.federation_exporters.trf25 import BAKU_NOT_IMPLEMENTED
+        from src.services.pairing import accelerated_standings
+
+        # Motor: Baku não soma bônus (sem fórmula oficial).
+        standings = {pid: {"points": 0.0} for pid in range(1, 5)}
+        self.assertIs(accelerated_standings(standings, [1, 2, 3, 4], 2, "baku"), standings)
+
+        self._create_players(8)
+        self.db.save_tournament_settings(self.tournament_id, {"acceleration_method": "baku"})
+        exporter = TRF25Exporter(self.export_service)
+        output_path = Path(self.temp_dir.name) / "baku.trf"
+        warnings = exporter.export(self.tournament_id, output_path)
+        lines = output_path.read_text(encoding="utf-8").splitlines()
+        # Nenhum 250 e nenhum sufixo _BAKU no registro 192.
+        self.assertFalse([line for line in lines if line.startswith("250 ")])
+        type_line = next(line for line in lines if line.startswith("192 "))
+        self.assertNotIn("_BAKU", type_line)
+        # Aviso ao árbitro de que Baku não está implementado.
+        self.assertIn(BAKU_NOT_IMPLEMENTED, warnings)
+
     def test_validate_chess_results_trf16_reports_special_result_statuses(self) -> None:
         tournament_id = self.db.create_tournament(
             "Aberto Pendencias",
