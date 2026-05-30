@@ -5685,6 +5685,30 @@ class PairingServiceTest(unittest.TestCase):
             "FIDE_DUTCH",
         )
 
+    def test_trf25_team_192_score_code_reflects_standing_criteria(self) -> None:
+        from src.services.federation_exporters import TRF25Exporter
+
+        exporter = TRF25Exporter(self.export_service)
+        team = {"competition_type": "team"}
+
+        def code(primary: str, secondary: str) -> str:
+            return exporter._type_code_192(
+                team,
+                {"team_standing_primary": primary, "team_standing_secondary": secondary},
+            )
+
+        # Padrao: match points primario, game points secundario.
+        self.assertEqual(code("match_points", "game_points"), "FIDE_TEAM_TYPEA_MP_GP")
+        # Ordem invertida.
+        self.assertEqual(code("game_points", "match_points"), "FIDE_TEAM_TYPEA_GP_MP")
+        # 'wins' e desempate, nao codigo de pontuacao: e ignorado.
+        self.assertEqual(code("match_points", "wins"), "FIDE_TEAM_TYPEA_MP")
+        self.assertEqual(code("wins", "game_points"), "FIDE_TEAM_TYPEA_GP")
+        # Criterios repetidos deduplicam.
+        self.assertEqual(code("match_points", "match_points"), "FIDE_TEAM_TYPEA_MP")
+        # Sem MP/GP configurado, cai no padrao FIDE MP_GP.
+        self.assertEqual(code("wins", "wins"), "FIDE_TEAM_TYPEA_MP_GP")
+
     def test_validate_chess_results_trf16_reports_special_result_statuses(self) -> None:
         tournament_id = self.db.create_tournament(
             "Aberto Pendencias",
