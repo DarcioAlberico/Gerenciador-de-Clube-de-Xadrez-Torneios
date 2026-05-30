@@ -383,10 +383,11 @@ class PairingService:
             else:
                 pairings = self._knockout_pairings(tournament_id, players, next_number, settings)
         else:
+            active_ids = {int(player["id"]) for player in players}
             bye_by_player = {
                 int(item["player_id"]): str(item["bye_type"])
                 for item in self.db.list_requested_byes_for_round(tournament_id, next_number)
-                if any(int(player["id"]) == int(item["player_id"]) for player in players)
+                if int(item["player_id"]) in active_ids
             }
             to_pair = [
                 player for player in players if int(player["id"]) not in bye_by_player
