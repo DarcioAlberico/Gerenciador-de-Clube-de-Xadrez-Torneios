@@ -5381,6 +5381,65 @@ class PairingServiceTest(unittest.TestCase):
         self.assertEqual(line[12:16].strip(), "1")  # TPN da seed 1
         self.assertEqual(line[17:21].strip(), "3")  # TPN da seed 3
 
+    def test_requested_team_bye_excludes_team_from_pairing(self) -> None:
+        # 5 equipes, 1 bye solicitado → 4 a parear (par), sem bye alocado extra.
+        tournament_id, team_ids = self._create_team_tournament(teams_count=5, boards_count=2)
+        self.db.add_requested_team_bye(tournament_id, team_ids[4], 1, "H")
+
+        round_data = self.service.generate_next_round(tournament_id)
+        matches = self.db.list_team_matches_for_round(int(round_data["id"]))
+
+        byes = [m for m in matches if m["is_bye"]]
+        self.assertEqual(len(byes), 1)
+        self.assertEqual(int(byes[0]["white_team_id"]), team_ids[4])
+        self.assertEqual(str(byes[0]["result"]).upper(), "H")
+
+        normal = [m for m in matches if not m["is_bye"]]
+        self.assertEqual(len(normal), 2)  # 4 equipes → 2 confrontos
+        paired = {int(m["white_team_id"]) for m in normal}
+        paired |= {int(m["black_team_id"]) for m in normal if m["black_team_id"]}
+        self.assertNotIn(team_ids[4], paired)
+
+    def test_requested_team_bye_scores_by_type(self) -> None:
+        # H num torneio com win=2/draw=1/loss=0 e 2 tabuleiros:
+        # match = draw (1.0), game = boards/2 (1.0) — distinto da vitória cheia.
+        tournament_id, team_ids = self._create_team_tournament(teams_count=5, boards_count=2)
+        self.db.add_requested_team_bye(tournament_id, team_ids[4], 1, "H")
+        round_data = self.service.generate_next_round(tournament_id)
+
+        for match in self.db.list_team_matches_for_round(int(round_data["id"])):
+            if match["is_bye"]:
+                continue
+            for board in self.db.list_team_boards(int(match["id"])):
+                self.service.update_result(tournament_id, int(board["id"]), "1-0")
+        self.service.close_round(tournament_id, int(round_data["id"]))
+
+        bye = next(
+            m for m in self.db.list_team_matches_for_round(int(round_data["id"])) if m["is_bye"]
+        )
+        self.assertEqual(float(bye["white_match_points"]), 1.0)  # draw points
+        self.assertEqual(float(bye["white_game_points"]), 1.0)  # boards/2
+
+    def test_trf25_emits_240_for_requested_team_bye(self) -> None:
+        from src.services.federation_exporters import TRF25Exporter
+
+        tournament_id, team_ids = self._create_team_tournament(teams_count=5, boards_count=2)
+        # Equipe seed 5 (TPN 5, rating mais baixo) com bye zero-point na rodada 1.
+        self.db.add_requested_team_bye(tournament_id, team_ids[4], 1, "Z")
+        self.service.generate_next_round(tournament_id)
+
+        exporter = TRF25Exporter(self.export_service)
+        output_path = Path(self.temp_dir.name) / "team_bye240.trf"
+        exporter.export(tournament_id, output_path)
+        lines = output_path.read_text(encoding="utf-8").splitlines()
+
+        bye_lines = [line for line in lines if line.startswith("240 ")]
+        self.assertEqual(len(bye_lines), 1)
+        line = bye_lines[0]
+        self.assertEqual(line[4:5], "Z")           # tipo (col 5)
+        self.assertEqual(line[6:9].strip(), "1")   # rodada (col 7-9)
+        self.assertEqual(line[10:14].strip(), "5")  # TPN da equipe (col 11-14)
+
     def test_trf25_emits_260_for_prohibited_pairing(self) -> None:
         from src.services.federation_exporters import TRF25Exporter
 

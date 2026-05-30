@@ -46,19 +46,55 @@ def team_starter_roster(
     return starters, seed_rating
 
 
+def team_bye_points(
+    bye_type: Any,
+    *,
+    win_points: float,
+    draw_points: float,
+    loss_points: float,
+    boards_count: int,
+) -> tuple[float, float]:
+    """Match/game points de um bye de equipe conforme o tipo FIDE (§6.1).
+
+    Convenção do projeto, proporcional ao bye individual (F=1.0/H=0.5/Z=0.0):
+    - F (full) e `BYE` (bye alocado): vitória cheia → win_points e boards game points;
+    - H (half): empate → draw_points e metade dos game points (boards/2);
+    - Z (zero): derrota → loss_points e zero game points.
+    """
+    code = str(bye_type or "").strip().upper()
+    if code == "H":
+        return draw_points, boards_count / 2.0
+    if code == "Z":
+        return loss_points, 0.0
+    return win_points, float(boards_count)
+
+
 def team_bye_summary(
     match: dict[str, Any],
     *,
     win_points: float,
     boards_count: int,
+    draw_points: float = 0.0,
+    loss_points: float = 0.0,
 ) -> dict[str, Any]:
-    """Resumo de fechamento para um confronto de bye (vitória administrativa)."""
+    """Resumo de fechamento de um confronto de bye, pontuado pelo tipo (F/H/Z).
+
+    O tipo vem do `result` do confronto (gravado na geração); `BYE` = bye
+    alocado pelo pareamento, tratado como vitória cheia (comportamento histórico).
+    """
+    match_points, game_points = team_bye_points(
+        match.get("result"),
+        win_points=win_points,
+        draw_points=draw_points,
+        loss_points=loss_points,
+        boards_count=boards_count,
+    )
     return {
         "team_match_id": int(match["id"]),
-        "result": "BYE",
-        "white_match_points": win_points,
+        "result": str(match.get("result") or "BYE"),
+        "white_match_points": match_points,
         "black_match_points": 0.0,
-        "white_game_points": float(boards_count),
+        "white_game_points": game_points,
         "black_game_points": 0.0,
     }
 
@@ -151,15 +187,27 @@ def team_bye_payload(
     team_id: int,
     settings: dict[str, Any],
     boards_count: int,
+    bye_type: str = "BYE",
 ) -> dict[str, Any]:
+    """Confronto de bye de equipe. `bye_type` ∈ {BYE (alocado), F, H, Z}.
+
+    O tipo é gravado em `result` e define os pontos; o fechamento recalcula
+    pelo mesmo `result` (ver team_bye_summary)."""
+    match_points, game_points = team_bye_points(
+        bye_type,
+        win_points=float(settings.get("team_match_win_points", 2.0) or 2.0),
+        draw_points=float(settings.get("team_match_draw_points", 1.0) or 1.0),
+        loss_points=float(settings.get("team_match_loss_points", 0.0) or 0.0),
+        boards_count=boards_count,
+    )
     return {
         "match_number": match_number,
         "white_team_id": team_id,
         "black_team_id": None,
-        "result": "BYE",
-        "white_match_points": float(settings.get("team_match_win_points", 2.0) or 2.0),
+        "result": str(bye_type or "BYE").strip().upper(),
+        "white_match_points": match_points,
         "black_match_points": 0.0,
-        "white_game_points": float(boards_count),
+        "white_game_points": game_points,
         "black_game_points": 0.0,
         "is_bye": 1,
         "boards": [],

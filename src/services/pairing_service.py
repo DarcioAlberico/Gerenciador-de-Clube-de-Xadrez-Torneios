@@ -47,6 +47,7 @@ from src.services.pairing import (
     tiebreak_narrative_from_standings as _tiebreak_narrative_from_standings,
     swiss_pairings as _swiss_pairings,
     swiss_team_matches as _swiss_team_matches,
+    team_bye_payload as _team_bye_payload,
     team_bye_summary as _team_bye_summary,
     team_match_summary as _team_match_summary,
     team_starter_roster as _team_starter_roster,
@@ -528,11 +529,8 @@ class PairingService:
         teams = self.db.list_teams(tournament_id, active_only=True)
         if len(teams) < 2:
             raise AppError("Cadastre pelo menos 2 equipes ativas.")
-        if settings.get("disable_bye") and len(teams) % 2 == 1:
-            raise AppError("O bye esta desativado. Use numero par de equipes ativas.")
 
         boards_count = int(settings.get("team_boards_count") or 4)
-        rosters, seed_ratings = self._team_starter_rosters(teams, boards_count)
 
         latest_round = self.db.get_latest_round(tournament_id)
         if latest_round and latest_round["status"] != "closed":
@@ -542,12 +540,27 @@ class PairingService:
         if next_number > int(tournament["rounds_count"]):
             raise AppError("O numero maximo de rodadas do torneio ja foi atingido.")
 
+        active_team_ids = {int(team["id"]) for team in teams}
+        bye_by_team = {
+            int(item["team_id"]): str(item["bye_type"])
+            for item in self.db.list_requested_team_byes_for_round(tournament_id, next_number)
+            if int(item["team_id"]) in active_team_ids
+        }
+        to_pair = [team for team in teams if int(team["id"]) not in bye_by_team]
+        if bye_by_team and len(to_pair) < 2:
+            raise AppError("Byes solicitados deixariam menos de 2 equipes para parear.")
+        if settings.get("disable_bye") and len(to_pair) % 2 == 1:
+            raise AppError("O bye esta desativado. Use numero par de equipes ativas.")
+
+        rosters, seed_ratings = self._team_starter_rosters(to_pair, boards_count)
+
         if next_number == 1:
-            matches = _first_round_team_matches(teams, rosters, seed_ratings, boards_count, settings)
+            matches = _first_round_team_matches(to_pair, rosters, seed_ratings, boards_count, settings)
         else:
             matches = self._swiss_team_matches(
-                tournament_id, teams, rosters, seed_ratings, boards_count, settings, next_number
+                tournament_id, to_pair, rosters, seed_ratings, boards_count, settings, next_number
             )
+        matches = self._append_requested_team_byes(matches, bye_by_team, settings, boards_count)
 
         return {
             "settings": settings,
@@ -557,6 +570,30 @@ class PairingService:
             "round_number": next_number,
             "matches": matches,
         }
+
+    @staticmethod
+    def _append_requested_team_byes(
+        matches: list[dict[str, Any]],
+        bye_by_team: dict[int, str],
+        settings: dict[str, Any],
+        boards_count: int,
+    ) -> list[dict[str, Any]]:
+        """Anexa confrontos de bye solicitado (F/H/Z) ao final da rodada por equipes.
+
+        O tipo vai no `result` do confronto; pontuacao e 240 derivam dele,
+        distinguindo do bye alocado pelo pareamento (`BYE`)."""
+        if not bye_by_team:
+            return matches
+        result = list(matches)
+        next_number = max((int(m.get("match_number") or 0) for m in result), default=0) + 1
+        for team_id in sorted(bye_by_team):
+            result.append(
+                _team_bye_payload(
+                    next_number, int(team_id), settings, boards_count, bye_by_team[team_id]
+                )
+            )
+            next_number += 1
+        return result
 
     def _team_preview_payload(
         self,
@@ -778,6 +815,8 @@ class PairingService:
                         match,
                         win_points=float(settings.get("team_match_win_points", 2.0) or 2.0),
                         boards_count=int(settings.get("team_boards_count", 4) or 4),
+                        draw_points=float(settings.get("team_match_draw_points", 1.0) or 1.0),
+                        loss_points=float(settings.get("team_match_loss_points", 0.0) or 0.0),
                     )
                 )
                 continue

@@ -487,32 +487,41 @@ class PairingPagesMixin:
         body.grid_columnconfigure(1, weight=1)
         body.grid_rowconfigure(0, weight=1)
 
+        # Configuração por tipo de competição: equipes ou individual.
         if is_team:
-            note = self._make_panel(body)
-            note.grid(row=0, column=0, columnspan=2, sticky="nsew")
-            ctk.CTkLabel(
-                note,
-                text=(
-                    "Byes solicitados (F/H/Z) sao um recurso individual.\n"
-                    "Em torneios por equipes use o pairing-allocated-bye (PAB)."
-                ),
-                justify="left",
-            ).grid(row=0, column=0, padx=18, pady=18, sticky="w")
-            ctk.CTkButton(
-                note, text="Voltar ao painel", width=160,
-                command=self.show_arbitration_panel,
-            ).grid(row=1, column=0, padx=18, pady=(0, 18), sticky="w")
-            return
+            entity_noun = "Equipe"
+            entities = self.db.list_teams(self.current_tournament_id, active_only=False)
+            list_fn = self.db.list_requested_team_byes
+            add_fn = self.db.add_requested_team_bye
+            delete_fn = self.db.delete_requested_team_bye
+            name_key = "team_name"
+            empty_label = "(sem equipes)"
+            hint = (
+                "O bye e aplicado quando a rodada for gerada:\n"
+                "a equipe fica de fora e pontua por tipo (F=vitoria,\n"
+                "H=empate, Z=derrota)."
+            )
+        else:
+            entity_noun = "Jogador"
+            entities = self.db.list_players(self.current_tournament_id, active_only=False)
+            list_fn = self.db.list_requested_byes
+            add_fn = self.db.add_requested_bye
+            delete_fn = self.db.delete_requested_bye
+            name_key = "player_name"
+            empty_label = "(sem jogadores)"
+            hint = (
+                "O bye e aplicado quando a rodada for gerada:\n"
+                "o jogador fica de fora do pareamento e recebe\n"
+                "F=1.0, H=0.5 ou Z=0.0 ponto.\n"
+                "Valido apenas no sistema Suico."
+            )
 
-        players = sorted(
-            self.db.list_players(self.current_tournament_id, active_only=False),
-            key=lambda item: str(item.get("name") or "").casefold(),
-        )
+        entities = sorted(entities, key=lambda item: str(item.get("name") or "").casefold())
         target_by_label: dict[str, int] = {}
-        for item in players:
+        for item in entities:
             label = f"{item.get('name') or 's/ nome'} (#{item['id']})"
             target_by_label[label] = int(item["id"])
-        target_labels = list(target_by_label.keys()) or ["(sem jogadores)"]
+        target_labels = list(target_by_label.keys()) or [empty_label]
 
         configured_rounds = int((tournament or {}).get("rounds_count") or 0)
         round_by_label = {
@@ -528,7 +537,7 @@ class PairingPagesMixin:
             row=0, column=0, padx=16, pady=(14, 8), sticky="w"
         )
 
-        ctk.CTkLabel(form, text="Jogador").grid(row=1, column=0, padx=16, pady=(4, 0), sticky="w")
+        ctk.CTkLabel(form, text=entity_noun).grid(row=1, column=0, padx=16, pady=(4, 0), sticky="w")
         target_option = ctk.CTkOptionMenu(form, values=target_labels, width=260)
         target_option.grid(row=2, column=0, padx=16, pady=(2, 0), sticky="ew")
 
@@ -546,12 +555,7 @@ class PairingPagesMixin:
 
         ctk.CTkLabel(
             form,
-            text=(
-                "O bye e aplicado quando a rodada for gerada:\n"
-                "o jogador fica de fora do pareamento e recebe\n"
-                "F=1.0, H=0.5 ou Z=0.0 ponto.\n"
-                "Valido apenas no sistema Suico."
-            ),
+            text=hint,
             justify="left",
             text_color=("gray40", "gray60"),
         ).grid(row=9, column=0, padx=16, pady=(10, 0), sticky="w")
@@ -569,9 +573,9 @@ class PairingPagesMixin:
         tree_holder.grid_rowconfigure(0, weight=1)
         tree = self._make_tree(
             tree_holder,
-            ["round", "player", "type", "reason"],
-            {"round": "Rodada", "player": "Jogador", "type": "Tipo", "reason": "Motivo"},
-            {"round": 80, "player": 220, "type": 60, "reason": 240},
+            ["round", "entity", "type", "reason"],
+            {"round": "Rodada", "entity": entity_noun, "type": "Tipo", "reason": "Motivo"},
+            {"round": 80, "entity": 220, "type": 60, "reason": 240},
             visible_rows=16,
         )
 
@@ -582,7 +586,7 @@ class PairingPagesMixin:
                 tree.delete(child)
             row_by_iid.clear()
             for index, requested in enumerate(
-                self.db.list_requested_byes(self.current_tournament_id), start=1
+                list_fn(self.current_tournament_id), start=1
             ):
                 iid = str(index)
                 row_by_iid[iid] = int(requested["id"])
@@ -593,7 +597,7 @@ class PairingPagesMixin:
                     iid=iid,
                     values=(
                         str(int(requested.get("round_number") or 0)),
-                        requested.get("player_name") or "(removido)",
+                        requested.get(name_key) or "(removido)",
                         code or "-",
                         requested.get("reason") or "",
                     ),
@@ -603,13 +607,13 @@ class PairingPagesMixin:
             try:
                 label = target_option.get()
                 if label not in target_by_label:
-                    raise AppError("Selecione um jogador valido.")
+                    raise AppError(f"Selecione um(a) {entity_noun.lower()} valido(a).")
                 if round_option.get() not in round_by_label:
                     raise AppError("Selecione uma rodada valida.")
                 bye_type = type_by_label.get(type_option.get(), "")
                 if bye_type not in {"F", "H", "Z"}:
                     raise AppError("Selecione um tipo de bye (F, H ou Z).")
-                self.db.add_requested_bye(
+                add_fn(
                     self.current_tournament_id,
                     target_by_label[label],
                     round_by_label[round_option.get()],
@@ -631,7 +635,7 @@ class PairingPagesMixin:
                     "Remover bye", "Confirma a remocao do bye solicitado selecionado?"
                 ):
                     return
-                self.db.delete_requested_bye(row_by_iid[selected[0]])
+                delete_fn(row_by_iid[selected[0]])
                 self._show_toast("Bye removido.", kind="success")
                 refresh_tree()
             except Exception as exc:
