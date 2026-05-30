@@ -35,7 +35,7 @@ RESULT_STATE_LABELS = {
     "corrected": "Corrigido",
     "locked": "Bloqueado (rodada fechada)",
 }
-FINAL_RESULTS = {"1-0", "0-1", "1/2-1/2", "1F-0F", "0F-1F", "0F-0F", "BYE"}
+FINAL_RESULTS = {"1-0", "0-1", "1/2-1/2", "1F-0F", "0F-1F", "0F-0F", "BYE", "F", "H", "Z"}
 RESULT_POINTS = {
     "1-0": (1.0, 0.0),
     "0-1": (0.0, 1.0),
@@ -43,6 +43,14 @@ RESULT_POINTS = {
     "1F-0F": (1.0, 0.0),
     "0F-1F": (0.0, 1.0),
     "0F-0F": (0.0, 0.0),
+}
+# Pontuação fixa do bye solicitado por tipo FIDE (independe de bye_points):
+# F = full-point-bye, H = half-point-bye, Z = zero-point-bye.
+REQUESTED_BYE_POINTS = {"F": 1.0, "H": 0.5, "Z": 0.0}
+REQUESTED_BYE_TYPES = {
+    "F": "Bye com ponto inteiro (F)",
+    "H": "Bye com meio ponto (H)",
+    "Z": "Bye com zero ponto (Z)",
 }
 MEMBER_TYPES = {"socio", "aluno", "convidado", "visitante"}
 MEMBER_STATUSES = {"active", "inactive", "visitor", "guest", "withdrawn"}

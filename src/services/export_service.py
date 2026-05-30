@@ -2644,7 +2644,9 @@ class ExportService:
         is_bye = bool(pairing.get("is_bye"))
         is_white = int(pairing["white_player_id"]) == player_id
         if is_bye:
-            return "0000 - U  "
+            code = str(pairing.get("result") or "").strip().upper()
+            bye_code = code if code in {"F", "H", "Z"} else "U"
+            return f"0000 - {bye_code}  "
         opponent_id = int(pairing["black_player_id"] if is_white else pairing["white_player_id"])
         opponent_rank = player_id_to_start_rank.get(opponent_id, 0)
         color = "w" if is_white else "b"

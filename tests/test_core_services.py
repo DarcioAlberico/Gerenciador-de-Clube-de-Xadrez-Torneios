@@ -5402,6 +5402,99 @@ class PairingServiceTest(unittest.TestCase):
         self.assertEqual(line[12:16].strip(), "1")  # entidade 1 (rank 1)
         self.assertEqual(line[17:21].strip(), "3")  # entidade 2 (rank 3)
 
+    def test_requested_bye_excludes_player_from_pairing(self) -> None:
+        # 5 jogadores, 1 bye solicitado → 4 a parear (par), sem bye alocado extra.
+        player_ids = self._create_players(5)
+        self.db.add_requested_bye(self.tournament_id, player_ids[4], 1, "H")
+
+        round_data = self.service.generate_next_round(self.tournament_id)
+        pairings = self.db.get_pairings_for_round(int(round_data["id"]))
+
+        byes = [p for p in pairings if p["is_bye"]]
+        self.assertEqual(len(byes), 1)
+        self.assertEqual(int(byes[0]["white_player_id"]), player_ids[4])
+        self.assertEqual(str(byes[0]["result"]).upper(), "H")
+
+        normal = [p for p in pairings if not p["is_bye"]]
+        self.assertEqual(len(normal), 2)  # 4 jogadores → 2 confrontos
+        paired = {int(p["white_player_id"]) for p in normal}
+        paired |= {int(p["black_player_id"]) for p in normal if p["black_player_id"]}
+        self.assertNotIn(player_ids[4], paired)
+
+    def _enable_disable_bye(self) -> None:
+        self.tournament_service.save_profile(
+            self.tournament_id,
+            {"name": "Torneio teste", "rounds_count": "5", "bye_points": "1"},
+            {"initial_order": "rating", "tournament_type": "real", "disable_bye": 1},
+            [],
+        )
+
+    def test_requested_bye_makes_odd_field_pairable_under_disable_bye(self) -> None:
+        # disable_bye + 5 ativos (impar): o bye solicitado deixa 4 a parear, par.
+        # A guarda de paridade deve incidir sobre to_pair, nao sobre todos.
+        self._enable_disable_bye()
+        player_ids = self._create_players(5)
+        self.db.add_requested_bye(self.tournament_id, player_ids[4], 1, "H")
+
+        round_data = self.service.generate_next_round(self.tournament_id)
+        pairings = self.db.get_pairings_for_round(int(round_data["id"]))
+
+        byes = [p for p in pairings if p["is_bye"]]
+        self.assertEqual(len(byes), 1)  # apenas o bye solicitado, nenhum alocado
+        self.assertEqual(int(byes[0]["white_player_id"]), player_ids[4])
+        self.assertEqual(len([p for p in pairings if not p["is_bye"]]), 2)
+
+    def test_disable_bye_still_blocks_odd_field_without_requested_bye(self) -> None:
+        # Sem bye solicitado, disable_bye + impar continua bloqueando.
+        self._enable_disable_bye()
+        self._create_players(5)
+        with self.assertRaises(AppError):
+            self.service.generate_next_round(self.tournament_id)
+
+    def test_requested_bye_scores_by_type(self) -> None:
+        from src.services.pairing import calculate_player_standings
+
+        player_ids = self._create_players(4)  # bye_points padrão = 1.0
+        players = self.db.list_players(self.tournament_id, active_only=False)
+        tournament = self.db.get_tournament(self.tournament_id)
+        closed_pairings = [
+            {"white_player_id": player_ids[0], "black_player_id": None,
+             "result": "F", "is_bye": 1, "round_number": 1},
+            {"white_player_id": player_ids[1], "black_player_id": None,
+             "result": "H", "is_bye": 1, "round_number": 1},
+            {"white_player_id": player_ids[2], "black_player_id": None,
+             "result": "Z", "is_bye": 1, "round_number": 1},
+            {"white_player_id": player_ids[3], "black_player_id": None,
+             "result": "BYE", "is_bye": 1, "round_number": 1},
+        ]
+        standings = calculate_player_standings(tournament, players, closed_pairings)
+        points = {int(s["player_id"]): float(s["points"]) for s in standings}
+        self.assertEqual(points[player_ids[0]], 1.0)  # F = ponto inteiro
+        self.assertEqual(points[player_ids[1]], 0.5)  # H = meio ponto
+        self.assertEqual(points[player_ids[2]], 0.0)  # Z = zero ponto
+        self.assertEqual(points[player_ids[3]], 1.0)  # bye alocado usa bye_points
+
+    def test_trf25_emits_240_for_requested_bye(self) -> None:
+        from src.services.federation_exporters import TRF25Exporter
+
+        player_ids = self._create_players(5)  # ratings decrescentes → rank = ordem
+        self.db.add_requested_bye(self.tournament_id, player_ids[4], 1, "H")
+        self.service.generate_next_round(self.tournament_id)
+
+        exporter = TRF25Exporter(self.export_service)
+        output_path = Path(self.temp_dir.name) / "bye240.trf"
+        exporter.export(self.tournament_id, output_path)
+        lines = output_path.read_text(encoding="utf-8").splitlines()
+
+        bye_lines = [line for line in lines if line.startswith("240 ")]
+        self.assertEqual(len(bye_lines), 1)
+        line = bye_lines[0]
+        self.assertEqual(line[4:5], "H")          # tipo (col 5)
+        self.assertEqual(line[6:9].strip(), "1")  # rodada (col 7-9)
+        self.assertEqual(line[10:14].strip(), "5")  # start-rank do jogador (col 11-14)
+        # A célula do 001 mostra o mesmo bye solicitado, nunca divergindo do 240.
+        self.assertTrue(any("0000 - H" in line for line in lines))
+
     def test_classic_acceleration_bonus_boundaries(self) -> None:
         from src.services.pairing import classic_acceleration_bonus
 

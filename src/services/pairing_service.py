@@ -13,6 +13,7 @@ from src.services.constants import (
 from src.services.pairing import (
     accelerated_standings as _accelerated_standings,
     acknowledged_issue_keys as _acknowledged_issue_keys,
+    append_requested_bye_pairings as _append_requested_bye_pairings,
     audit_issue as _audit_issue,
     blocking_issues_message as _blocking_issues_message,
     bye_player_ids as _bye_player_ids,
@@ -362,8 +363,6 @@ class PairingService:
         if len(players) < 2:
             raise AppError("Cadastre pelo menos 2 jogadores ativos.")
         settings = self.db.get_tournament_settings(tournament_id) or {}
-        if settings.get("disable_bye") and len(players) % 2 == 1:
-            raise AppError("O bye esta desativado. Use numero par de jogadores ativos.")
 
         latest_round = self.db.get_latest_round(tournament_id)
         if latest_round and latest_round["status"] != "closed":
@@ -374,15 +373,36 @@ class PairingService:
             raise AppError("O numero maximo de rodadas do torneio ja foi atingido.")
 
         pairing_method = settings.get("pairing_method", "swiss")
-        if pairing_method == "round_robin":
-            pairings = _round_robin_pairings(players, next_number, settings)
-        elif pairing_method == "knockout":
-            pairings = self._knockout_pairings(tournament_id, players, next_number, settings)
-        else:
-            if next_number == 1:
-                pairings = _first_round_pairings(players)
+        if pairing_method in ("round_robin", "knockout"):
+            # Estes metodos nao descontam byes solicitados: a paridade vale sobre
+            # todos os jogadores ativos (comportamento historico).
+            if settings.get("disable_bye") and len(players) % 2 == 1:
+                raise AppError("O bye esta desativado. Use numero par de jogadores ativos.")
+            if pairing_method == "round_robin":
+                pairings = _round_robin_pairings(players, next_number, settings)
             else:
-                pairings = self._swiss_pairings(tournament_id, players, next_number)
+                pairings = self._knockout_pairings(tournament_id, players, next_number, settings)
+        else:
+            active_ids = {int(player["id"]) for player in players}
+            bye_by_player = {
+                int(item["player_id"]): str(item["bye_type"])
+                for item in self.db.list_requested_byes_for_round(tournament_id, next_number)
+                if int(item["player_id"]) in active_ids
+            }
+            to_pair = [
+                player for player in players if int(player["id"]) not in bye_by_player
+            ]
+            if bye_by_player and len(to_pair) < 2:
+                raise AppError(
+                    "Byes solicitados deixariam menos de 2 jogadores para parear."
+                )
+            if settings.get("disable_bye") and len(to_pair) % 2 == 1:
+                raise AppError("O bye esta desativado. Use numero par de jogadores ativos.")
+            if next_number == 1:
+                pairings = _first_round_pairings(to_pair)
+            else:
+                pairings = self._swiss_pairings(tournament_id, to_pair, next_number)
+            pairings = _append_requested_bye_pairings(pairings, bye_by_player)
         return {
             "players": players,
             "settings": settings,

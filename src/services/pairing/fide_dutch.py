@@ -465,3 +465,31 @@ def swiss_pairings(
     for index, pairing in enumerate(normal_pairings + bye_pairings, start=1):
         pairing["board_number"] = index
     return normal_pairings + bye_pairings
+
+
+def append_requested_bye_pairings(
+    pairings: list[dict[str, Any]],
+    bye_by_player: dict[int, str],
+) -> list[dict[str, Any]]:
+    """Anexa pairings de bye solicitado (F/H/Z) ao final da rodada.
+
+    O tipo é gravado em `result` (letra F/H/Z) para que o cálculo de
+    pontuação e a exportação TRF reconheçam o bye solicitado e o distingam
+    do bye alocado pelo pareamento (`U`)."""
+    if not bye_by_player:
+        return pairings
+    result = list(pairings)
+    next_board = max((int(p["board_number"]) for p in result), default=0) + 1
+    for player_id in sorted(bye_by_player):
+        bye_type = str(bye_by_player[player_id] or "H").strip().upper()
+        result.append(
+            {
+                "board_number": next_board,
+                "white_player_id": int(player_id),
+                "black_player_id": None,
+                "result": bye_type,
+                "is_bye": 1,
+            }
+        )
+        next_board += 1
+    return result

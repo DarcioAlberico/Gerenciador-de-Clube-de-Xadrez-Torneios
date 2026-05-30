@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from src.services.constants import REQUESTED_BYE_POINTS
+
 
 def team_played_pairs(matches: list[dict[str, Any]]) -> set[frozenset[int]]:
     played: set[frozenset[int]] = set()
@@ -91,7 +93,9 @@ def float_histories(
 
         if pairing["is_bye"]:
             histories[white_id].append("bye")
-            scores[white_id] += bye_points
+            scores[white_id] += REQUESTED_BYE_POINTS.get(
+                str(pairing.get("result") or "").strip().upper(), bye_points
+            )
             continue
 
         if black_id is None:
