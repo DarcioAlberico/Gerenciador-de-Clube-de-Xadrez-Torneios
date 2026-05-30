@@ -79,6 +79,7 @@ from src.services.federation_exporters.trf16 import TRF16Exporter
 from src.services.federation_exporters.trf25_records import (
     encode_time_control,
     record_212,
+    record_240,
     record_250,
     record_260,
     record_299,
@@ -223,6 +224,10 @@ class TRF25Exporter(TRF16Exporter):
                     tournament_id, start_rank_by_player, round_count
                 ):
                     handle.write(line)
+                for line in self._requested_bye_records_240(
+                    pairings_by_round, start_rank_by_player
+                ):
+                    handle.write(line)
 
             for line in self._point_adjustment_records_299(
                 tournament_id, is_team, start_rank_by_player, tpn_by_team
@@ -283,6 +288,36 @@ class TRF25Exporter(TRF16Exporter):
             first_round = int(prohibition.get("first_round") or 1)
             last_round = int(prohibition.get("last_round") or 0) or round_count
             lines.append(record_260(first_round, last_round, sorted((rank_a, rank_b))))
+        return lines
+
+    def _requested_bye_records_240(
+        self,
+        pairings_by_round: dict[int, list[dict[str, Any]]],
+        start_rank_by_player: dict[int, int],
+    ) -> list[str]:
+        """Registro 240 — full/half/zero-point-bye solicitado (§6.1), individual.
+
+        Deriva da rodada efetivamente gerada: cada bye com resultado F/H/Z vira
+        uma entidade (start-rank). Uma linha por (tipo, rodada), com os start-ranks
+        ordenados. O bye alocado pelo pareamento (`U`) NÃO entra aqui — só o bye
+        solicitado, exatamente como aparece na célula do registro 001, para nunca
+        divergir do que o árbitro vê no relatório."""
+        lines: list[str] = []
+        for round_number in sorted(pairings_by_round):
+            buckets: dict[str, list[int]] = {"F": [], "H": [], "Z": []}
+            for pairing in pairings_by_round[round_number]:
+                if not pairing.get("is_bye"):
+                    continue
+                code = str(pairing.get("result") or "").strip().upper()
+                if code not in buckets:
+                    continue
+                rank = start_rank_by_player.get(int(pairing["white_player_id"]))
+                if rank:
+                    buckets[code].append(rank)
+            for bye_type in ("F", "H", "Z"):
+                ranks = sorted(buckets[bye_type])
+                if ranks:
+                    lines.append(record_240(bye_type, round_number, ranks))
         return lines
 
     def _prohibited_team_pairing_records_260(

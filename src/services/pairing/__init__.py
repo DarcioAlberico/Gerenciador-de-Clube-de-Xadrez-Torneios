@@ -71,6 +71,7 @@ from src.services.pairing.constraints import (
     would_make_three_colors,
 )
 from src.services.pairing.fide_dutch import (
+    append_requested_bye_pairings,
     dutch_bracket_pairing,
     first_round_pairings,
     knockout_pairings,
@@ -128,6 +129,7 @@ __all__ = [
     "acceleration_bonus",
     "acceleration_spec",
     "accelerated_standings",
+    "append_requested_bye_pairings",
     "acknowledged_issue_keys",
     "assignment_color_penalty",
     "classic_acceleration_bonus",

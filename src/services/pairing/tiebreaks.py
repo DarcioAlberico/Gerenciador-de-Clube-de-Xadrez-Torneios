@@ -9,7 +9,11 @@ from __future__ import annotations
 import math
 from typing import Any
 
-from src.services.constants import RESULT_POINTS, player_full_name
+from src.services.constants import (
+    REQUESTED_BYE_POINTS,
+    RESULT_POINTS,
+    player_full_name,
+)
 
 
 def performance_components(
@@ -256,7 +260,11 @@ def calculate_player_standings(
             continue
 
         if pairing["is_bye"]:
-            stats[white_id]["points"] += float(tournament["bye_points"])
+            bye_points = REQUESTED_BYE_POINTS.get(
+                str(result or "").strip().upper(),
+                float(tournament["bye_points"]),
+            )
+            stats[white_id]["points"] += bye_points
             stats[white_id]["byes"] += 1
             stats[white_id]["games"].append(
                 {
@@ -265,7 +273,7 @@ def calculate_player_standings(
                     "opponent_id": None,
                     "opponent_name": "BYE",
                     "result": result,
-                    "earned": float(tournament["bye_points"]),
+                    "earned": bye_points,
                 }
             )
             continue

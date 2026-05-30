@@ -81,6 +81,7 @@ class PairingPagesMixin:
             ("Central de pendencias", self.show_arbitration_issues),
             ("Ajustes de pontos (TRF25)", self.show_point_adjustments),
             ("Proibicoes de pareamento (TRF25)", self.show_prohibited_pairings),
+            ("Byes solicitados (TRF25)", self.show_requested_byes),
             ("Abrir rodadas", self.show_pairings),
             ("Pre-visualizar proxima", self._preview_next_round),
             ("Fechar rodada atual", self._close_current_round_from_panel),
@@ -453,6 +454,190 @@ class PairingPagesMixin:
 
         ctk.CTkButton(form, text="Adicionar", command=add_adjustment).grid(
             row=next_row + 4, column=0, padx=16, pady=(14, 14), sticky="ew"
+        )
+
+        footer = ctk.CTkFrame(panel, fg_color="transparent")
+        footer.grid(row=2, column=0, padx=14, pady=(0, 12), sticky="ew")
+        ctk.CTkButton(footer, text="Atualizar", width=120, command=refresh_tree).pack(side="left")
+        ctk.CTkButton(footer, text="Remover selecionado", width=170, command=delete_selected).pack(
+            side="left", padx=(8, 0)
+        )
+        ctk.CTkButton(
+            footer, text="Voltar ao painel", width=140, command=self.show_arbitration_panel
+        ).pack(side="left", padx=(8, 0))
+
+        refresh_tree()
+
+    def show_requested_byes(self) -> None:
+        if not self._require_tournament():
+            return
+        tournament = self.db.get_tournament(self.current_tournament_id)
+        is_team = (tournament or {}).get("competition_type") == "team"
+
+        self._clear_content()
+        self._page_title(
+            "Byes solicitados (TRF25)",
+            f"Torneio: {tournament['name'] if tournament else ''}",
+        )
+        self._build_tournament_nav("arbiter")
+
+        body = ctk.CTkFrame(self.content, fg_color="transparent")
+        body.grid(row=1, column=0, padx=22, pady=(0, 22), sticky="nsew")
+        body.grid_columnconfigure(0, weight=0)
+        body.grid_columnconfigure(1, weight=1)
+        body.grid_rowconfigure(0, weight=1)
+
+        if is_team:
+            note = self._make_panel(body)
+            note.grid(row=0, column=0, columnspan=2, sticky="nsew")
+            ctk.CTkLabel(
+                note,
+                text=(
+                    "Byes solicitados (F/H/Z) sao um recurso individual.\n"
+                    "Em torneios por equipes use o pairing-allocated-bye (PAB)."
+                ),
+                justify="left",
+            ).grid(row=0, column=0, padx=18, pady=18, sticky="w")
+            ctk.CTkButton(
+                note, text="Voltar ao painel", width=160,
+                command=self.show_arbitration_panel,
+            ).grid(row=1, column=0, padx=18, pady=(0, 18), sticky="w")
+            return
+
+        players = sorted(
+            self.db.list_players(self.current_tournament_id, active_only=False),
+            key=lambda item: str(item.get("name") or "").casefold(),
+        )
+        target_by_label: dict[str, int] = {}
+        for item in players:
+            label = f"{item.get('name') or 's/ nome'} (#{item['id']})"
+            target_by_label[label] = int(item["id"])
+        target_labels = list(target_by_label.keys()) or ["(sem jogadores)"]
+
+        configured_rounds = int((tournament or {}).get("rounds_count") or 0)
+        round_by_label = {
+            f"Rodada {number}": number for number in range(1, configured_rounds + 1)
+        }
+        round_labels = list(round_by_label.keys()) or ["(sem rodadas)"]
+        type_by_label = {label: code for code, label in REQUESTED_BYE_TYPES.items()}
+
+        form = self._make_panel(body)
+        form.grid(row=0, column=0, padx=(0, 12), sticky="nsew")
+        form.grid_columnconfigure(0, weight=1)
+        self._section_title(form, "Novo bye solicitado").grid(
+            row=0, column=0, padx=16, pady=(14, 8), sticky="w"
+        )
+
+        ctk.CTkLabel(form, text="Jogador").grid(row=1, column=0, padx=16, pady=(4, 0), sticky="w")
+        target_option = ctk.CTkOptionMenu(form, values=target_labels, width=260)
+        target_option.grid(row=2, column=0, padx=16, pady=(2, 0), sticky="ew")
+
+        ctk.CTkLabel(form, text="Rodada").grid(row=3, column=0, padx=16, pady=(8, 0), sticky="w")
+        round_option = ctk.CTkOptionMenu(form, values=round_labels, width=260)
+        round_option.grid(row=4, column=0, padx=16, pady=(2, 0), sticky="ew")
+
+        ctk.CTkLabel(form, text="Tipo").grid(row=5, column=0, padx=16, pady=(8, 0), sticky="w")
+        type_option = ctk.CTkOptionMenu(form, values=list(type_by_label.keys()), width=260)
+        type_option.grid(row=6, column=0, padx=16, pady=(2, 0), sticky="ew")
+
+        ctk.CTkLabel(form, text="Motivo").grid(row=7, column=0, padx=16, pady=(8, 0), sticky="w")
+        reason_entry = ctk.CTkEntry(form, width=260, placeholder_text="Ex.: ausencia comunicada")
+        reason_entry.grid(row=8, column=0, padx=16, pady=(2, 0), sticky="ew")
+
+        ctk.CTkLabel(
+            form,
+            text=(
+                "O bye e aplicado quando a rodada for gerada:\n"
+                "o jogador fica de fora do pareamento e recebe\n"
+                "F=1.0, H=0.5 ou Z=0.0 ponto."
+            ),
+            justify="left",
+            text_color=("gray40", "gray60"),
+        ).grid(row=9, column=0, padx=16, pady=(10, 0), sticky="w")
+
+        panel = self._make_panel(body)
+        panel.grid(row=0, column=1, sticky="nsew")
+        panel.grid_columnconfigure(0, weight=1)
+        panel.grid_rowconfigure(1, weight=1)
+        self._section_title(panel, "Byes solicitados").grid(
+            row=0, column=0, padx=14, pady=(14, 6), sticky="w"
+        )
+        tree_holder = ctk.CTkFrame(panel, fg_color="transparent")
+        tree_holder.grid(row=1, column=0, padx=14, pady=(0, 8), sticky="nsew")
+        tree_holder.grid_columnconfigure(0, weight=1)
+        tree_holder.grid_rowconfigure(0, weight=1)
+        tree = self._make_tree(
+            tree_holder,
+            ["round", "player", "type", "reason"],
+            {"round": "Rodada", "player": "Jogador", "type": "Tipo", "reason": "Motivo"},
+            {"round": 80, "player": 220, "type": 60, "reason": 240},
+            visible_rows=16,
+        )
+
+        row_by_iid: dict[str, int] = {}
+
+        def refresh_tree() -> None:
+            for child in tree.get_children():
+                tree.delete(child)
+            row_by_iid.clear()
+            for index, requested in enumerate(
+                self.db.list_requested_byes(self.current_tournament_id), start=1
+            ):
+                iid = str(index)
+                row_by_iid[iid] = int(requested["id"])
+                code = str(requested.get("bye_type") or "").upper()
+                tree.insert(
+                    "",
+                    "end",
+                    iid=iid,
+                    values=(
+                        str(int(requested.get("round_number") or 0)),
+                        requested.get("player_name") or "(removido)",
+                        code or "-",
+                        requested.get("reason") or "",
+                    ),
+                )
+
+        def add_requested_bye() -> None:
+            try:
+                label = target_option.get()
+                if label not in target_by_label:
+                    raise AppError("Selecione um jogador valido.")
+                if round_option.get() not in round_by_label:
+                    raise AppError("Selecione uma rodada valida.")
+                bye_type = type_by_label.get(type_option.get(), "")
+                if bye_type not in {"F", "H", "Z"}:
+                    raise AppError("Selecione um tipo de bye (F, H ou Z).")
+                self.db.add_requested_bye(
+                    self.current_tournament_id,
+                    target_by_label[label],
+                    round_by_label[round_option.get()],
+                    bye_type,
+                    reason=reason_entry.get().strip(),
+                )
+                reason_entry.delete(0, "end")
+                self._show_toast("Bye solicitado registrado.", kind="success")
+                refresh_tree()
+            except Exception as exc:
+                self._show_error(exc)
+
+        def delete_selected() -> None:
+            try:
+                selected = tree.selection()
+                if not selected:
+                    raise AppError("Selecione um bye para remover.")
+                if not self._confirm_action(
+                    "Remover bye", "Confirma a remocao do bye solicitado selecionado?"
+                ):
+                    return
+                self.db.delete_requested_bye(row_by_iid[selected[0]])
+                self._show_toast("Bye removido.", kind="success")
+                refresh_tree()
+            except Exception as exc:
+                self._show_error(exc)
+
+        ctk.CTkButton(form, text="Adicionar", command=add_requested_bye).grid(
+            row=10, column=0, padx=16, pady=(14, 14), sticky="ew"
         )
 
         footer = ctk.CTkFrame(panel, fg_color="transparent")
