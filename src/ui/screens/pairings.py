@@ -512,7 +512,8 @@ class PairingPagesMixin:
             hint = (
                 "O bye e aplicado quando a rodada for gerada:\n"
                 "o jogador fica de fora do pareamento e recebe\n"
-                "F=1.0, H=0.5 ou Z=0.0 ponto."
+                "F=1.0, H=0.5 ou Z=0.0 ponto.\n"
+                "Valido apenas no sistema Suico."
             )
 
         entities = sorted(entities, key=lambda item: str(item.get("name") or "").casefold())

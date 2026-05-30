@@ -5510,6 +5510,37 @@ class PairingServiceTest(unittest.TestCase):
         with self.assertRaises(AppError):
             self.service.generate_next_round(self.tournament_id)
 
+    def _set_individual_pairing_method(self, method: str) -> None:
+        self.db.get_tournament_settings(self.tournament_id)  # garante a linha
+        with self.db.connect() as connection:
+            connection.execute(
+                "UPDATE tournament_settings SET pairing_method = ? WHERE tournament_id = ?",
+                (method, self.tournament_id),
+            )
+
+    def test_requested_bye_rejected_in_round_robin(self) -> None:
+        player_ids = self._create_players(4)
+        self._set_individual_pairing_method("round_robin")
+        self.db.add_requested_bye(self.tournament_id, player_ids[0], 1, "H")
+        with self.assertRaisesRegex(AppError, "exclusivos do sistema Suico"):
+            self.service.generate_next_round(self.tournament_id)
+
+    def test_requested_bye_rejected_in_knockout(self) -> None:
+        player_ids = self._create_players(4)
+        self._set_individual_pairing_method("knockout")
+        self.db.add_requested_bye(self.tournament_id, player_ids[0], 1, "Z")
+        with self.assertRaisesRegex(AppError, "exclusivos do sistema Suico"):
+            self.service.generate_next_round(self.tournament_id)
+
+    def test_round_robin_still_generates_without_requested_bye(self) -> None:
+        # Regressao: sem bye solicitado, round-robin continua gerando normalmente.
+        self._create_players(4)
+        self._set_individual_pairing_method("round_robin")
+        round_data = self.service.generate_next_round(self.tournament_id)
+        self.assertTrue(int(round_data["id"]))
+        pairings = self.db.get_pairings_for_round(int(round_data["id"]))
+        self.assertEqual(len(pairings), 2)  # 4 jogadores → 2 confrontos
+
     def test_requested_bye_scores_by_type(self) -> None:
         from src.services.pairing import calculate_player_standings
 
@@ -5716,6 +5747,57 @@ class PairingServiceTest(unittest.TestCase):
         self.assertNotIn("_BAKU", type_line)
         # Aviso ao árbitro de que Baku não está implementado.
         self.assertIn(BAKU_NOT_IMPLEMENTED, warnings)
+
+    def test_trf25_dutch_192_is_dated_by_tournament_date(self) -> None:
+        from src.services.federation_exporters import TRF25Exporter
+
+        exporter = TRF25Exporter(self.export_service)
+        settings = {"pairing_method": "swiss"}
+        # Antes do corte (2025-07-01) → regras 2017.
+        self.assertEqual(
+            exporter._type_code_192({"start_date": "2025-06-30"}, settings),
+            "FIDE_DUTCH_2017",
+        )
+        # No corte ou depois → regras 2025.
+        self.assertEqual(
+            exporter._type_code_192({"start_date": "2025-07-01"}, settings),
+            "FIDE_DUTCH_2025",
+        )
+        # Sem start_date, usa o end_date como fallback.
+        self.assertEqual(
+            exporter._type_code_192({"end_date": "2024-01-10"}, settings),
+            "FIDE_DUTCH_2017",
+        )
+        # Sem data parseável → FIDE_DUTCH puro (default-por-data, nunca chuta versão).
+        self.assertEqual(exporter._type_code_192({}, settings), "FIDE_DUTCH")
+        self.assertEqual(
+            exporter._type_code_192({"start_date": "data invalida"}, settings),
+            "FIDE_DUTCH",
+        )
+
+    def test_trf25_team_192_score_code_reflects_standing_criteria(self) -> None:
+        from src.services.federation_exporters import TRF25Exporter
+
+        exporter = TRF25Exporter(self.export_service)
+        team = {"competition_type": "team"}
+
+        def code(primary: str, secondary: str) -> str:
+            return exporter._type_code_192(
+                team,
+                {"team_standing_primary": primary, "team_standing_secondary": secondary},
+            )
+
+        # Padrao: match points primario, game points secundario.
+        self.assertEqual(code("match_points", "game_points"), "FIDE_TEAM_TYPEA_MP_GP")
+        # Ordem invertida.
+        self.assertEqual(code("game_points", "match_points"), "FIDE_TEAM_TYPEA_GP_MP")
+        # 'wins' e desempate, nao codigo de pontuacao: e ignorado.
+        self.assertEqual(code("match_points", "wins"), "FIDE_TEAM_TYPEA_MP")
+        self.assertEqual(code("wins", "game_points"), "FIDE_TEAM_TYPEA_GP")
+        # Criterios repetidos deduplicam.
+        self.assertEqual(code("match_points", "match_points"), "FIDE_TEAM_TYPEA_MP")
+        # Sem MP/GP configurado, cai no padrao FIDE MP_GP.
+        self.assertEqual(code("wins", "wins"), "FIDE_TEAM_TYPEA_MP_GP")
 
     def test_validate_chess_results_trf16_reports_special_result_statuses(self) -> None:
         tournament_id = self.db.create_tournament(

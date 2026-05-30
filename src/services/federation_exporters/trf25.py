@@ -50,7 +50,9 @@ linha 001 **não** carrega tiebreaks/TPR:
   strength factor e nickname.
 - **162 / 362**: sistemas de pontuação (individual / equipes), só quando
   divergem do padrão FIDE.
-- **192**: tipo de torneio codificado (obrigatório p/ pareamento).
+- **192**: tipo de torneio codificado (obrigatório p/ pareamento). O Suíço
+  Dutch é datado pela data do torneio (FIDE_DUTCH_2017/_2025; default-por-data
+  quando a data é desconhecida).
 - **202 / 212**: tie-breaks usados (a classificação fica no 212).
 - **352**: sequência de cores dos tabuleiros (equipes; obrigatório).
 - **142 / 152 / 222**: nº de rodadas, cor inicial, time control codificado.
@@ -70,6 +72,7 @@ Fontes:
 
 from __future__ import annotations
 
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -427,8 +430,35 @@ class TRF25Exporter(TRF16Exporter):
         return [TRF25_SCAFFOLD_WARNING, *warnings]
 
     @staticmethod
-    def _score_token(name: str) -> str:
-        return "GP" if "game" in str(name).casefold() else "MP"
+    def _team_score_code_192(settings: dict[str, Any]) -> str:
+        """Código `<score>` do 192 de equipes (Anexo A): ordem dos pontos
+        MP/GP usada na classificação e na alocação de cores.
+
+        Lê `team_standing_primary`/`_secondary` na ordem configurada. Só
+        match-points (MP) e game-points (GP) entram no código — `wins` é um
+        critério de desempate, não um esquema de pontuação, então é ignorado.
+        Sem nenhum MP/GP configurado, cai no padrão FIDE `MP_GP`."""
+        tokens: list[str] = []
+        for key in ("team_standing_primary", "team_standing_secondary"):
+            criterion = str(settings.get(key, "")).strip().casefold()
+            if criterion == "match_points":
+                token = "MP"
+            elif criterion == "game_points":
+                token = "GP"
+            else:
+                continue  # 'wins' ou desconhecido não é um código de pontuação
+            if token not in tokens:
+                tokens.append(token)
+        return "_".join(tokens) if tokens else "MP_GP"
+
+    def _team_code_192(self, settings: dict[str, Any]) -> str:
+        """Código 192 do Suíço por equipes: `FIDE_TEAM_TYPEA_<score>` (Anexo A).
+
+        O projeto usa sempre a sequência de cores fixa WBWB… (ver 352) e não
+        modela o sistema de cores TYPEB, então mantemos o default `TYPEA` do
+        Anexo A. Baku fica sem o sufixo `_BAKU` enquanto a fórmula oficial não
+        estiver implementada, para não enganar o árbitro."""
+        return f"FIDE_TEAM_TYPEA_{self._team_score_code_192(settings)}"
 
     def _initial_colour_152(
         self,
@@ -474,16 +504,45 @@ class TRF25Exporter(TRF16Exporter):
 
     def _type_code_192(self, tournament: dict[str, Any], settings: dict[str, Any]) -> str:
         if tournament.get("competition_type") == "team":
-            primary = self._score_token(settings.get("team_standing_primary", "match_points"))
-            secondary = self._score_token(settings.get("team_standing_secondary", "game_points"))
-            score = f"{primary}_{secondary}" if secondary != primary else primary
-            return f"FIDE_TEAM_TYPEA_{score}"
+            return self._team_code_192(settings)
         method = str(settings.get("pairing_method", "swiss")).casefold()
         if method == "round_robin":
             return "FIDE_ROUNDROBIN"
         if method == "knockout":
             return "WORLDCUP_KNOCKOUT"
-        return "FIDE_DUTCH"
+        return self._dutch_code_192(tournament)
+
+    # As regras de pareamento Dutch da FIDE mudaram em 2025-07-01: torneios
+    # disputados a partir dessa data usam a versão 2025; antes, a 2017 (Anexo A).
+    _DUTCH_RULES_2025_CUTOFF = date(2025, 7, 1)
+
+    @staticmethod
+    def _parse_tournament_date(value: Any) -> date | None:
+        raw = str(value or "").strip()
+        for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%Y.%m.%d", "%d/%m/%Y", "%d. %m. %Y", "%d.%m.%Y"):
+            try:
+                return datetime.strptime(raw, fmt).date()
+            except ValueError:
+                continue
+        return None
+
+    def _dutch_code_192(self, tournament: dict[str, Any]) -> str:
+        """Código 192 do Suíço Dutch, datado conforme as regras vigentes.
+
+        Usa a data do torneio (início, com fallback no fim). Sem data parseável
+        devolve `FIDE_DUTCH` puro (default-por-data do Anexo A) — nunca inventamos
+        a versão das regras quando a data é desconhecida. Baku continua sem o
+        sufixo `_BAKU`: a fórmula oficial não está implementada, então não a
+        declaramos no 192 para não enganar o árbitro."""
+        event_date = (
+            self._parse_tournament_date(tournament.get("start_date"))
+            or self._parse_tournament_date(tournament.get("end_date"))
+        )
+        if event_date is None:
+            return "FIDE_DUTCH"
+        if event_date >= self._DUTCH_RULES_2025_CUTOFF:
+            return "FIDE_DUTCH_2025"
+        return "FIDE_DUTCH_2017"
 
     @staticmethod
     def _tiebreak_codes_212(is_team: bool) -> list[str]:
