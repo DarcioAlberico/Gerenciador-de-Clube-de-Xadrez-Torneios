@@ -1581,6 +1581,22 @@ class Database:
                 );
                 """
             )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS requested_team_byes (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    tournament_id INTEGER NOT NULL,
+                    team_id INTEGER NOT NULL,
+                    round_number INTEGER NOT NULL,
+                    bye_type TEXT NOT NULL DEFAULT 'H',
+                    reason TEXT DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    UNIQUE (tournament_id, team_id, round_number),
+                    FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
+                    FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE
+                );
+                """
+            )
             from src.core.migration_engine import MigrationEngine
             MigrationEngine(self).run_migrations(connection)
             self._create_indexes(connection)
@@ -8310,6 +8326,77 @@ class Database:
         with self.connect() as connection:
             connection.execute(
                 "DELETE FROM requested_byes WHERE id = ?", (int(requested_bye_id),)
+            )
+
+    def add_requested_team_bye(
+        self,
+        tournament_id: int,
+        team_id: int,
+        round_number: int,
+        bye_type: str = "H",
+        *,
+        reason: str = "",
+    ) -> int:
+        """Registra um bye solicitado (F/H/Z) de uma equipe numa rodada.
+
+        Sobrescreve o tipo caso já exista solicitação para a mesma equipe/rodada."""
+        normalized = str(bye_type or "H").strip().upper()
+        if normalized not in {"F", "H", "Z"}:
+            raise ValueError("Tipo de bye inválido (use F, H ou Z).")
+        with self.connect() as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO requested_team_byes (
+                    tournament_id, team_id, round_number, bye_type, reason, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT (tournament_id, team_id, round_number)
+                DO UPDATE SET bye_type = excluded.bye_type, reason = excluded.reason
+                """,
+                (
+                    int(tournament_id),
+                    int(team_id),
+                    int(round_number),
+                    normalized,
+                    str(reason or "").strip(),
+                    self.now(),
+                ),
+            )
+            return int(cursor.lastrowid)
+
+    def list_requested_team_byes(self, tournament_id: int) -> list[dict[str, Any]]:
+        with self.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT rb.*, t.name AS team_name
+                FROM requested_team_byes rb
+                LEFT JOIN teams t ON t.id = rb.team_id
+                WHERE rb.tournament_id = ?
+                ORDER BY rb.round_number ASC, rb.id ASC
+                """,
+                (int(tournament_id),),
+            ).fetchall()
+            return self.rows_to_dicts(rows)
+
+    def list_requested_team_byes_for_round(
+        self, tournament_id: int, round_number: int
+    ) -> list[dict[str, Any]]:
+        with self.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT rb.*, t.name AS team_name
+                FROM requested_team_byes rb
+                LEFT JOIN teams t ON t.id = rb.team_id
+                WHERE rb.tournament_id = ? AND rb.round_number = ?
+                ORDER BY rb.id ASC
+                """,
+                (int(tournament_id), int(round_number)),
+            ).fetchall()
+            return self.rows_to_dicts(rows)
+
+    def delete_requested_team_bye(self, requested_bye_id: int) -> None:
+        with self.connect() as connection:
+            connection.execute(
+                "DELETE FROM requested_team_byes WHERE id = ?", (int(requested_bye_id),)
             )
 
     def update_team_match_summary(

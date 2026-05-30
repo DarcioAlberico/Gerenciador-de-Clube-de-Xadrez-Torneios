@@ -28,8 +28,13 @@ def individual_preview_payload(
         alerts = []
         explanation = []
         if pairing.get("is_bye"):
-            alerts.append("Bye")
-            explanation.append("Jogador recebeu bye por numero impar de participantes ativos.")
+            code = str(pairing.get("result") or "").strip().upper()
+            if code in {"F", "H", "Z"}:
+                alerts.append("Bye solicitado")
+                explanation.append(f"Bye solicitado pelo arbitro (tipo {code}).")
+            else:
+                alerts.append("Bye")
+                explanation.append("Jogador recebeu bye por numero impar de participantes ativos.")
         elif black_id is not None:
             if frozenset((white_id, black_id)) in played_pairs:
                 alerts.append("Confronto repetido")
@@ -94,8 +99,13 @@ def team_preview_payload(
         alerts = []
         explanation = []
         if match.get("is_bye"):
-            alerts.append("Bye da equipe")
-            explanation.append("Equipe recebeu bye por numero impar de equipes ativas.")
+            code = str(match.get("result") or "").strip().upper()
+            if code in {"F", "H", "Z"}:
+                alerts.append("Bye solicitado")
+                explanation.append(f"Bye solicitado pelo arbitro (tipo {code}).")
+            else:
+                alerts.append("Bye da equipe")
+                explanation.append("Equipe recebeu bye por numero impar de equipes ativas.")
         elif black_team_id is not None:
             if frozenset((white_team_id, black_team_id)) in played_pairs:
                 alerts.append("Confronto repetido")

@@ -213,6 +213,8 @@ class TRF25Exporter(TRF16Exporter):
                     tournament_id, tpn_by_team, round_count
                 ):
                     handle.write(line)
+                for line in self._requested_team_bye_records_240(rounds, tpn_by_team):
+                    handle.write(line)
 
             if not is_team:
                 if scheme_is_baku(str(settings.get("acceleration_method") or "none")):
@@ -318,6 +320,35 @@ class TRF25Exporter(TRF16Exporter):
                 ranks = sorted(buckets[bye_type])
                 if ranks:
                     lines.append(record_240(bye_type, round_number, ranks))
+        return lines
+
+    def _requested_team_bye_records_240(
+        self,
+        rounds: list[dict[str, Any]],
+        tpn_by_team: dict[int, int],
+    ) -> list[str]:
+        """Registro 240 — bye solicitado (F/H/Z) por equipes (§6.1), por TPN.
+
+        Deriva dos confrontos efetivamente gerados: cada bye de equipe com
+        resultado F/H/Z vira uma entidade (TPN). Uma linha por (tipo, rodada),
+        com os TPNs ordenados. O bye alocado (`BYE`/320) não entra aqui — só o
+        bye solicitado, espelhando a versão individual."""
+        lines: list[str] = []
+        for round_data in sorted(rounds, key=lambda r: int(r["number"])):
+            buckets: dict[str, list[int]] = {"F": [], "H": [], "Z": []}
+            for match in self.db.list_team_matches_for_round(int(round_data["id"])):
+                if not match.get("is_bye"):
+                    continue
+                code = str(match.get("result") or "").strip().upper()
+                if code not in buckets:
+                    continue
+                tpn = tpn_by_team.get(int(match["white_team_id"]))
+                if tpn:
+                    buckets[code].append(tpn)
+            for bye_type in ("F", "H", "Z"):
+                tpns = sorted(buckets[bye_type])
+                if tpns:
+                    lines.append(record_240(bye_type, int(round_data["number"]), tpns))
         return lines
 
     def _prohibited_team_pairing_records_260(
