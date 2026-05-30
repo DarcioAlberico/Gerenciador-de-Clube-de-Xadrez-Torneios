@@ -615,27 +615,40 @@ class TRF25Exporter(TRF16Exporter):
         prepared: list[dict[str, Any]] = []
         for team in teams:
             team_id = int(team["id"])
-            assignments = sorted(
-                self.db.list_team_players(team_id, active_only=False),
-                key=lambda a: (int(a.get("board_number") or 0), int(a.get("id") or 0)),
-            )
-            board_ranks: list[int] = []
-            ratings: list[int] = []
-            for assignment in assignments:
+            # Titulares na ordem dos tabuleiros, reservas (sem board) depois.
+            # Reservas têm board_number nulo: se entrassem na chave de ordenação
+            # como 0, viriam ANTES do tabuleiro 1 e o 310 emitiria a reserva como
+            # "1º jogador", desordenando a composição mostrada ao árbitro.
+            starters: list[tuple[int, int, int]] = []  # (board, rank, rating)
+            reserves: list[tuple[int, int, int]] = []  # (id, rank, rating)
+            for assignment in self.db.list_team_players(team_id, active_only=False):
                 player_id = int(assignment["player_id"])
                 rank = start_rank_by_player.get(player_id)
                 if not rank:
                     continue
-                board_ranks.append(rank)
-                if rating_by_player.get(player_id):
-                    ratings.append(rating_by_player[player_id])
+                rating = int(rating_by_player.get(player_id) or 0)
+                board = assignment.get("board_number")
+                if board:
+                    starters.append((int(board), rank, rating))
+                else:
+                    reserves.append((int(assignment.get("id") or 0), rank, rating))
+            starters.sort()
+            reserves.sort()
+            board_ranks = [rank for _, rank, _ in starters] + [rank for _, rank, _ in reserves]
+            # Strength factor = média de rating dos TITULARES (a escalação),
+            # coerente com o seed que o motor usa (ver _team_starter_roster).
+            starter_ratings = [rating for _, _, rating in starters if rating]
             standing = standings.get(team_id, {})
             prepared.append(
                 {
                     "team": team,
                     "team_id": team_id,
                     "ranks": board_ranks,
-                    "strength": round(sum(ratings) / len(ratings)) if ratings else 0,
+                    "strength": (
+                        round(sum(starter_ratings) / len(starter_ratings))
+                        if starter_ratings
+                        else 0
+                    ),
                     "match_points": float(standing.get("match_points", 0.0) or 0.0),
                     "game_points": float(standing.get("game_points", 0.0) or 0.0),
                     "rank": int(standing.get("position") or 0),
