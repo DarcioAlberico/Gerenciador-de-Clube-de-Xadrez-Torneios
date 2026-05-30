@@ -33,10 +33,16 @@ Já implementado:
   cadastra pares proibidos (tabela `prohibited_pairings`); o motor os honra
   unindo-os ao `played_pairs` (bloqueio absoluto já existente) e o exporter
   emite um 260 por par (ver `pairing/prohibitions.py`).
+- Fatia 8: byes solicitados (F/H/Z) individuais e por equipes — registro 240
+  (start-ranks/TPNs), pontuação por tipo e exclusão do pareamento. Coerência
+  entre os registros de bye de equipe: só o bye alocado vira PAB (320/`PAB` no
+  802); os solicitados saem no 240 e como `FPB`/`HPB`/`ZPB` no 802.
 
 Como o layout ainda é *final draft* (não ratificado), `export()` segue
 devolvendo o TRF25_SCAFFOLD_WARNING e recomendando o TRF16 para envio oficial
-— para nunca enganar o árbitro.
+— para nunca enganar o árbitro. Quando a validação herdada não acusa pendência
+de dados, `validate()` acrescenta o TRF25_DATA_COMPLETE_NOTE: os dados estão
+prontos e só falta a ratificação do formato (critério de formato, não de dado).
 
 ## O que falta para um TRF25 completo
 
@@ -111,6 +117,16 @@ TRF25_SCAFFOLD_WARNING = (
     "TRF25: implementação incremental — o layout segue o final draft da FIDE "
     "(ainda não ratificado). Use TRF16 para envio oficial até a especificação "
     "ser finalizada."
+)
+
+# Sinal positivo de prontidão de DADOS: emitido quando a validação herdada do
+# TRF16 não acusa nenhuma pendência (campos obrigatórios preenchidos, rodadas
+# fechadas e sem resultados pendentes). O único bloqueio que resta é a
+# ratificação do formato pela FIDE — não um problema dos dados do torneio.
+TRF25_DATA_COMPLETE_NOTE = (
+    "TRF25: dados completos (campos obrigatórios preenchidos e rodadas "
+    "fechadas). O único bloqueio para envio oficial é a ratificação do formato "
+    "pela FIDE — use TRF16 até lá."
 )
 
 
@@ -426,8 +442,15 @@ class TRF25Exporter(TRF16Exporter):
         return lines
 
     def validate(self, tournament_id: int) -> list[str]:
+        """Avisos do TRF25. O `SCAFFOLD_WARNING` (formato em draft) é permanente
+        até a FIDE ratificar o layout — não há critério de DADOS que torne um
+        formato não ratificado 'oficial'. A completude dos dados é tratada à
+        parte: quando a validação herdada (TRF16) não acusa pendência, sinaliza
+        a prontidão dos dados, deixando claro que só falta a ratificação."""
         warnings = super().validate(tournament_id)
-        return [TRF25_SCAFFOLD_WARNING, *warnings]
+        if warnings:
+            return [TRF25_SCAFFOLD_WARNING, *warnings]
+        return [TRF25_SCAFFOLD_WARNING, TRF25_DATA_COMPLETE_NOTE]
 
     @staticmethod
     def _team_score_code_192(settings: dict[str, Any]) -> str:
@@ -650,14 +673,19 @@ class TRF25Exporter(TRF16Exporter):
     ) -> str | None:
         """Registro 320 — pairing-allocated-bye das equipes (1 por torneio).
 
-        Cada bye de equipe registrado é um PAB: mapeia rodada → TPN da equipe
-        que recebeu o bye. Só emite se houver pelo menos um bye fechado."""
+        Só o bye **alocado pelo pareamento** (resultado `BYE`) é um PAB. Byes
+        **solicitados** (F/H/Z) saem no registro 240, não aqui — incluí-los
+        rotularia um bye solicitado como pairing-allocated e o duplicaria,
+        enganando o árbitro. Mapeia rodada → TPN da equipe que recebeu o PAB;
+        só emite se houver pelo menos um PAB fechado."""
         tpn_by_round: dict[int, int] = {}
         win_points = 0.0
         game_points = 0.0
         for match in self.db.list_team_matches_for_tournament(tournament_id, closed_only=True):
             if not match.get("is_bye"):
                 continue
+            if str(match.get("result") or "").strip().upper() != "BYE":
+                continue  # bye solicitado (F/H/Z) → registro 240, não PAB
             round_number = int(match.get("round_number") or 0)
             team_id = int(match.get("white_team_id") or 0)
             tpn = tpn_by_team.get(team_id)
@@ -791,6 +819,19 @@ class TRF25Exporter(TRF16Exporter):
                     )
         return lines
 
+    @staticmethod
+    def _team_bye_code_802(result: Any) -> str:
+        """Código de bye do 802 conforme o tipo (§8.2): `PAB` (alocado pelo
+        pareamento), `FPB`/`HPB`/`ZPB` (full/half/zero-point-bye solicitado).
+
+        Mantém a coerência com o 240 (byes solicitados) e o 320 (só PAB): o
+        árbitro vê o mesmo tipo de bye nos três registros."""
+        return {
+            "F": "FPB",
+            "H": "HPB",
+            "Z": "ZPB",
+        }.get(str(result or "").strip().upper(), "PAB")
+
     def _team_records_802(
         self,
         tournament_id: int,
@@ -817,7 +858,7 @@ class TRF25Exporter(TRF16Exporter):
                     white = int(match.get("white_team_id") or 0)
                     black = int(match.get("black_team_id") or 0)
                     if match.get("is_bye") and white == team_id:
-                        opponent = "PAB"
+                        opponent = self._team_bye_code_802(match.get("result"))
                         game_points = float(match.get("white_game_points") or 0.0)
                         break
                     if white == team_id:

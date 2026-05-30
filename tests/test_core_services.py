@@ -5440,6 +5440,76 @@ class PairingServiceTest(unittest.TestCase):
         self.assertEqual(line[6:9].strip(), "1")   # rodada (col 7-9)
         self.assertEqual(line[10:14].strip(), "5")  # TPN da equipe (col 11-14)
 
+    def _close_team_round_with_decisive_boards(self, tournament_id: int, round_id: int) -> None:
+        for match in self.db.list_team_matches_for_round(int(round_id)):
+            if match["is_bye"]:
+                continue
+            for board in self.db.list_team_boards(int(match["id"])):
+                self.service.update_result(tournament_id, int(board["id"]), "1-0")
+        self.service.close_round(tournament_id, int(round_id))
+
+    def test_trf25_requested_team_bye_is_not_pab_and_uses_zpb_in_802(self) -> None:
+        from src.services.federation_exporters import TRF25Exporter
+
+        tournament_id, team_ids = self._create_team_tournament(teams_count=5, boards_count=2)
+        self.db.add_requested_team_bye(tournament_id, team_ids[4], 1, "Z")
+        round_data = self.service.generate_next_round(tournament_id)
+        self._close_team_round_with_decisive_boards(tournament_id, int(round_data["id"]))
+
+        exporter = TRF25Exporter(self.export_service)
+        output_path = Path(self.temp_dir.name) / "team_req_bye.trf"
+        exporter.export(tournament_id, output_path)
+        lines = output_path.read_text(encoding="utf-8").splitlines()
+
+        # Bye solicitado nao e pairing-allocated: nenhum registro 320.
+        self.assertEqual([line for line in lines if line.startswith("320 ")], [])
+        # Sai como 240 (tipo Z).
+        self.assertTrue(any(line.startswith("240 ") and line[4:5] == "Z" for line in lines))
+        # O 802 da equipe TPN 5 mostra ZPB (zero-point-bye) na rodada 1.
+        team5_802 = next(line for line in lines if line.startswith("802 ") and line[4:7].strip() == "5")
+        self.assertEqual(team5_802[28:31], "ZPB")
+
+    def test_trf25_allocated_team_bye_is_pab_in_320_and_802(self) -> None:
+        from src.services.federation_exporters import TRF25Exporter
+
+        tournament_id, _team_ids = self._create_team_tournament(teams_count=3, boards_count=2)
+        round_data = self.service.generate_next_round(tournament_id)
+        self._close_team_round_with_decisive_boards(tournament_id, int(round_data["id"]))
+
+        exporter = TRF25Exporter(self.export_service)
+        output_path = Path(self.temp_dir.name) / "team_pab.trf"
+        exporter.export(tournament_id, output_path)
+        lines = output_path.read_text(encoding="utf-8").splitlines()
+
+        # Bye alocado pelo pareamento: ha um 320 (PAB) e nenhum 240 (nada solicitado).
+        self.assertEqual(len([line for line in lines if line.startswith("320 ")]), 1)
+        self.assertFalse(any(line.startswith("240 ") for line in lines))
+        # O 802 do bye alocado usa o codigo PAB.
+        self.assertTrue(any(line.startswith("802 ") and "PAB" in line for line in lines))
+
+    def test_trf25_validate_signals_data_complete_when_no_pending(self) -> None:
+        from src.services.federation_exporters import TRF25Exporter
+        from src.services.federation_exporters.trf16 import TRF16Exporter
+        from src.services.federation_exporters.trf25 import (
+            TRF25_DATA_COMPLETE_NOTE,
+            TRF25_SCAFFOLD_WARNING,
+        )
+
+        exporter = TRF25Exporter(self.export_service)
+        # Sem pendencias herdadas → caveat de formato + nota de prontidao de dados.
+        with mock.patch.object(TRF16Exporter, "validate", return_value=[]):
+            ready = exporter.validate(self.tournament_id)
+        self.assertIn(TRF25_SCAFFOLD_WARNING, ready)
+        self.assertIn(TRF25_DATA_COMPLETE_NOTE, ready)
+        # Com pendencia herdada → sem nota de prontidao (so o caveat + a pendencia).
+        with mock.patch.object(
+            TRF16Exporter, "validate", return_value=["Torneio sem cidade/local."]
+        ):
+            pending = exporter.validate(self.tournament_id)
+        self.assertIn(TRF25_SCAFFOLD_WARNING, pending)
+        self.assertNotIn(TRF25_DATA_COMPLETE_NOTE, pending)
+        self.assertIn("Torneio sem cidade/local.", pending)
+
     def test_trf25_emits_260_for_prohibited_pairing(self) -> None:
         from src.services.federation_exporters import TRF25Exporter
 
