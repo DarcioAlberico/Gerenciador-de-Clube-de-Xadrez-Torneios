@@ -364,8 +364,35 @@ class TRF25Exporter(TRF16Exporter):
         return [TRF25_SCAFFOLD_WARNING, *warnings]
 
     @staticmethod
-    def _score_token(name: str) -> str:
-        return "GP" if "game" in str(name).casefold() else "MP"
+    def _team_score_code_192(settings: dict[str, Any]) -> str:
+        """Código `<score>` do 192 de equipes (Anexo A): ordem dos pontos
+        MP/GP usada na classificação e na alocação de cores.
+
+        Lê `team_standing_primary`/`_secondary` na ordem configurada. Só
+        match-points (MP) e game-points (GP) entram no código — `wins` é um
+        critério de desempate, não um esquema de pontuação, então é ignorado.
+        Sem nenhum MP/GP configurado, cai no padrão FIDE `MP_GP`."""
+        tokens: list[str] = []
+        for key in ("team_standing_primary", "team_standing_secondary"):
+            criterion = str(settings.get(key, "")).strip().casefold()
+            if criterion == "match_points":
+                token = "MP"
+            elif criterion == "game_points":
+                token = "GP"
+            else:
+                continue  # 'wins' ou desconhecido não é um código de pontuação
+            if token not in tokens:
+                tokens.append(token)
+        return "_".join(tokens) if tokens else "MP_GP"
+
+    def _team_code_192(self, settings: dict[str, Any]) -> str:
+        """Código 192 do Suíço por equipes: `FIDE_TEAM_TYPEA_<score>` (Anexo A).
+
+        O projeto usa sempre a sequência de cores fixa WBWB… (ver 352) e não
+        modela o sistema de cores TYPEB, então mantemos o default `TYPEA` do
+        Anexo A. Baku fica sem o sufixo `_BAKU` enquanto a fórmula oficial não
+        estiver implementada, para não enganar o árbitro."""
+        return f"FIDE_TEAM_TYPEA_{self._team_score_code_192(settings)}"
 
     def _initial_colour_152(
         self,
@@ -411,10 +438,7 @@ class TRF25Exporter(TRF16Exporter):
 
     def _type_code_192(self, tournament: dict[str, Any], settings: dict[str, Any]) -> str:
         if tournament.get("competition_type") == "team":
-            primary = self._score_token(settings.get("team_standing_primary", "match_points"))
-            secondary = self._score_token(settings.get("team_standing_secondary", "game_points"))
-            score = f"{primary}_{secondary}" if secondary != primary else primary
-            return f"FIDE_TEAM_TYPEA_{score}"
+            return self._team_code_192(settings)
         method = str(settings.get("pairing_method", "swiss")).casefold()
         if method == "round_robin":
             return "FIDE_ROUNDROBIN"
