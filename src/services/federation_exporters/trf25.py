@@ -89,6 +89,7 @@ from src.services.federation_exporters.trf25_records import (
     encode_time_control,
     record_212,
     record_240,
+    record_national_rating,
     record_250,
     record_260,
     record_299,
@@ -214,6 +215,8 @@ class TRF25Exporter(TRF16Exporter):
                         pairings_by_round, round_count, settings,
                     )
                 )
+            for line in self._national_rating_records(players, start_rank_by_player, settings):
+                handle.write(line)
             for line in self._team_records_310(prepared):
                 handle.write(line)
             if is_team:
@@ -657,6 +660,39 @@ class TRF25Exporter(TRF16Exporter):
 
         prepared.sort(key=lambda item: (-item["strength"], str(item["team"].get("name") or "").casefold()))
         return prepared
+
+    def _national_rating_records(
+        self,
+        players: list[dict[str, Any]],
+        start_rank_by_player: dict[int, int],
+        settings: dict[str, Any],
+    ) -> list[str]:
+        """Registros de rating nacional (§3), um por jogador com rating nacional.
+
+        Só emite quando há uma federação de 3 letras configurada (a que registra
+        o torneio no sistema nacional) e o jogador tem rating nacional > 0 — sem
+        federação ou sem rating nacional, nada é emitido, para nunca inventar um
+        dado nacional que o árbitro não conseguiria conferir."""
+        federation = str(settings.get("federation") or "").strip()
+        if not self.export_service._trf_valid_federation_code(federation):
+            return []
+        lines: list[str] = []
+        for player in players:
+            national = int(player.get("national_rating") or 0)
+            if national <= 0:
+                continue
+            rank = start_rank_by_player.get(int(player["id"]))
+            if not rank:
+                continue
+            lines.append(
+                record_national_rating(
+                    federation,
+                    rank,
+                    national,
+                    national_id=str(player.get("cbx_id") or ""),
+                )
+            )
+        return lines
 
     @staticmethod
     def _team_records_310(prepared: list[dict[str, Any]]) -> list[str]:

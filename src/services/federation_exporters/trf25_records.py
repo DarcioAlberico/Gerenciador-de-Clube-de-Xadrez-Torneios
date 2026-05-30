@@ -85,6 +85,30 @@ def encode_time_control(value: object) -> str | None:
     return None
 
 
+def record_national_rating(
+    federation: str,
+    start_rank: int,
+    national_rating: int,
+    *,
+    national_id: str = "",
+) -> str:
+    """Registro de rating nacional (§3). O 'código' do registro (cols 1-3) é o
+    próprio código de 3 letras da federação que registra o torneio no sistema
+    nacional; liga ao 001 pelo starting-rank (cols 5-8). Campos opcionais iguais
+    ao 001 (sexo/classificação/nome/nascimento) são omitidos — só emitimos o que
+    é específico do sistema nacional: o rating (cols 49-52) e o nº nacional
+    (cols 58-68), este último apenas quando existe."""
+    parts: list[tuple[int, str]] = [
+        (1, str(federation)[:3].upper().ljust(3)),
+        (5, f"{int(start_rank):>4d}"),
+        (49, f"{int(national_rating):>4d}"),
+    ]
+    national_number = trf_ascii(national_id).strip()
+    if national_number:
+        parts.append((58, national_number[:11].ljust(11)))
+    return _place(parts).rstrip() + "\r\n"
+
+
 def record_310(
     team_pairing_number: int,
     team_name: str,

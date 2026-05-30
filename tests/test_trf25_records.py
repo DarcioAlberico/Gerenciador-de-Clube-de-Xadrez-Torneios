@@ -16,6 +16,7 @@ from src.services.federation_exporters.trf25_records import (
     record_330,
     record_362,
     record_802,
+    record_national_rating,
     tournament_line,
     trf_ascii,
 )
@@ -293,6 +294,23 @@ class TestEncodeTimeControl(unittest.TestCase):
         self.assertIsNone(encode_time_control(""))
         self.assertIsNone(encode_time_control("ritmo livre"))
         self.assertIsNone(encode_time_control(None))
+
+
+class TestRecordNationalRating(unittest.TestCase):
+    def test_column_geometry_with_national_id(self):
+        line = record_national_rating("bra", 1, 1928, national_id="55501")
+        self.assertEqual(cols(line, 1, 3), "BRA")     # federacao (maiuscula)
+        self.assertEqual(cols(line, 5, 8).strip(), "1")    # start-rank
+        self.assertEqual(cols(line, 49, 52), "1928")   # rating nacional
+        self.assertEqual(cols(line, 58, 68).strip(), "55501")  # nº nacional
+
+    def test_national_id_omitted_when_absent(self):
+        line = record_national_rating("FID", 12, 2401)
+        self.assertEqual(cols(line, 1, 3), "FID")
+        self.assertEqual(cols(line, 5, 8).strip(), "12")
+        self.assertEqual(cols(line, 49, 52), "2401")
+        # Sem nº nacional, a linha termina no rating (rstrip).
+        self.assertEqual(len(line.rstrip("\r\n")), 52)
 
 
 if __name__ == "__main__":

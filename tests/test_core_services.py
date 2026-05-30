@@ -5567,6 +5567,51 @@ class PairingServiceTest(unittest.TestCase):
         self.assertEqual(ranks[-1], "1")        # reserva (rank 1) por ultimo
         self.assertNotEqual(ranks[0], "1")      # 1o jogador e um titular (board 1)
 
+    def test_trf25_emits_national_rating_records(self) -> None:
+        from src.services.federation_exporters import TRF25Exporter
+
+        self.tournament_service.save_profile(
+            self.tournament_id,
+            {"name": "Torneio teste", "rounds_count": "5", "bye_points": "1"},
+            {"federation": "BRA"},
+            [],
+        )
+        # p1 (rating maior) tem rating nacional; p2 nao tem.
+        self.db.create_player(
+            self.tournament_id, name="Com Nacional", rating=2000,
+            national_rating=1928, cbx_id="55501",
+        )
+        self.db.create_player(self.tournament_id, name="Sem Nacional", rating=1900)
+
+        exporter = TRF25Exporter(self.export_service)
+        output_path = Path(self.temp_dir.name) / "national.trf"
+        exporter.export(self.tournament_id, output_path)
+        lines = output_path.read_text(encoding="utf-8").splitlines()
+
+        nat_lines = [line for line in lines if line.startswith("BRA ")]
+        self.assertEqual(len(nat_lines), 1)  # so o jogador com rating nacional
+        line = nat_lines[0]
+        self.assertEqual(line[4:8].strip(), "1")     # start-rank do p1 (maior rating)
+        self.assertEqual(line[48:52].strip(), "1928")  # rating nacional
+        self.assertIn("55501", line)                  # nº nacional
+
+    def test_trf25_omits_national_rating_without_federation(self) -> None:
+        from src.services.federation_exporters import TRF25Exporter
+
+        # Sem federacao configurada, mesmo com rating nacional nada e emitido.
+        self.db.create_player(
+            self.tournament_id, name="Com Nacional", rating=2000,
+            national_rating=1928, cbx_id="55501",
+        )
+        self.db.create_player(self.tournament_id, name="Outro", rating=1900)
+
+        exporter = TRF25Exporter(self.export_service)
+        output_path = Path(self.temp_dir.name) / "no_fed.trf"
+        exporter.export(self.tournament_id, output_path)
+        lines = output_path.read_text(encoding="utf-8").splitlines()
+
+        self.assertFalse(any("55501" in line for line in lines))
+
     def test_trf25_validate_signals_data_complete_when_no_pending(self) -> None:
         from src.services.federation_exporters import TRF25Exporter
         from src.services.federation_exporters.trf16 import TRF16Exporter
