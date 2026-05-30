@@ -549,7 +549,8 @@ class PairingPagesMixin:
             text=(
                 "O bye e aplicado quando a rodada for gerada:\n"
                 "o jogador fica de fora do pareamento e recebe\n"
-                "F=1.0, H=0.5 ou Z=0.0 ponto."
+                "F=1.0, H=0.5 ou Z=0.0 ponto.\n"
+                "Valido apenas no sistema Suico."
             ),
             justify="left",
             text_color=("gray40", "gray60"),

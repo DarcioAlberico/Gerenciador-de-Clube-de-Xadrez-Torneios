@@ -374,6 +374,19 @@ class PairingService:
 
         pairing_method = settings.get("pairing_method", "swiss")
         if pairing_method in ("round_robin", "knockout"):
+            # Byes solicitados sao um conceito do Suico: nestes formatos o
+            # calendario e predeterminado (rotacao todos-contra-todos / chave de
+            # eliminacao), entao remover um jogador corromperia o esquema. Em vez
+            # de gerar pareamentos enganosos, rejeitamos com mensagem clara.
+            active_ids = {int(player["id"]) for player in players}
+            if any(
+                int(item["player_id"]) in active_ids
+                for item in self.db.list_requested_byes_for_round(tournament_id, next_number)
+            ):
+                raise AppError(
+                    "Byes solicitados sao exclusivos do sistema Suico. Remova o bye "
+                    "solicitado desta rodada ou troque o metodo de pareamento para gera-la."
+                )
             # Estes metodos nao descontam byes solicitados: a paridade vale sobre
             # todos os jogadores ativos (comportamento historico).
             if settings.get("disable_bye") and len(players) % 2 == 1:

@@ -5451,6 +5451,37 @@ class PairingServiceTest(unittest.TestCase):
         with self.assertRaises(AppError):
             self.service.generate_next_round(self.tournament_id)
 
+    def _set_individual_pairing_method(self, method: str) -> None:
+        self.db.get_tournament_settings(self.tournament_id)  # garante a linha
+        with self.db.connect() as connection:
+            connection.execute(
+                "UPDATE tournament_settings SET pairing_method = ? WHERE tournament_id = ?",
+                (method, self.tournament_id),
+            )
+
+    def test_requested_bye_rejected_in_round_robin(self) -> None:
+        player_ids = self._create_players(4)
+        self._set_individual_pairing_method("round_robin")
+        self.db.add_requested_bye(self.tournament_id, player_ids[0], 1, "H")
+        with self.assertRaisesRegex(AppError, "exclusivos do sistema Suico"):
+            self.service.generate_next_round(self.tournament_id)
+
+    def test_requested_bye_rejected_in_knockout(self) -> None:
+        player_ids = self._create_players(4)
+        self._set_individual_pairing_method("knockout")
+        self.db.add_requested_bye(self.tournament_id, player_ids[0], 1, "Z")
+        with self.assertRaisesRegex(AppError, "exclusivos do sistema Suico"):
+            self.service.generate_next_round(self.tournament_id)
+
+    def test_round_robin_still_generates_without_requested_bye(self) -> None:
+        # Regressao: sem bye solicitado, round-robin continua gerando normalmente.
+        self._create_players(4)
+        self._set_individual_pairing_method("round_robin")
+        round_data = self.service.generate_next_round(self.tournament_id)
+        self.assertTrue(int(round_data["id"]))
+        pairings = self.db.get_pairings_for_round(int(round_data["id"]))
+        self.assertEqual(len(pairings), 2)  # 4 jogadores → 2 confrontos
+
     def test_requested_bye_scores_by_type(self) -> None:
         from src.services.pairing import calculate_player_standings
 
