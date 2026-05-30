@@ -5536,6 +5536,37 @@ class PairingServiceTest(unittest.TestCase):
             )
         )
 
+    def test_trf25_310_lists_starters_before_reserves(self) -> None:
+        from src.services.federation_exporters import TRF25Exporter
+
+        tournament_id, team_ids = self._create_team_tournament(teams_count=2, boards_count=2)
+        # Reserva com rating altissimo → start_rank 1; sem fix, viria como 1o jogador.
+        reserve_id = self.db.create_player(
+            tournament_id, name="Reserva Forte", rating=3000, club="Clube 1"
+        )
+        self.team_service.add_player(team_ids[0], reserve_id, role="reserve")
+
+        exporter = TRF25Exporter(self.export_service)
+        output_path = Path(self.temp_dir.name) / "team_reserve.trf"
+        exporter.export(tournament_id, output_path)
+        lines = output_path.read_text(encoding="utf-8").splitlines()
+
+        def ranks_of(line: str) -> list[str]:
+            # Jogadores do 310: a partir da col 74 (indice 73), 4 chars, passo 5.
+            return [
+                line[i:i + 4].strip()
+                for i in range(73, len(line), 5)
+                if line[i:i + 4].strip()
+            ]
+
+        team310 = [line for line in lines if line.startswith("310 ")]
+        # A equipe da reserva e a unica cujo 310 contem o start-rank 1.
+        target = next(line for line in team310 if "1" in ranks_of(line))
+        ranks = ranks_of(target)
+        self.assertEqual(len(ranks), 3)         # 2 titulares + 1 reserva
+        self.assertEqual(ranks[-1], "1")        # reserva (rank 1) por ultimo
+        self.assertNotEqual(ranks[0], "1")      # 1o jogador e um titular (board 1)
+
     def test_trf25_validate_signals_data_complete_when_no_pending(self) -> None:
         from src.services.federation_exporters import TRF25Exporter
         from src.services.federation_exporters.trf16 import TRF16Exporter
