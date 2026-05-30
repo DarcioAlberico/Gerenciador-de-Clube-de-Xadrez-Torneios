@@ -5421,6 +5421,36 @@ class PairingServiceTest(unittest.TestCase):
         paired |= {int(p["black_player_id"]) for p in normal if p["black_player_id"]}
         self.assertNotIn(player_ids[4], paired)
 
+    def _enable_disable_bye(self) -> None:
+        self.tournament_service.save_profile(
+            self.tournament_id,
+            {"name": "Torneio teste", "rounds_count": "5", "bye_points": "1"},
+            {"initial_order": "rating", "tournament_type": "real", "disable_bye": 1},
+            [],
+        )
+
+    def test_requested_bye_makes_odd_field_pairable_under_disable_bye(self) -> None:
+        # disable_bye + 5 ativos (impar): o bye solicitado deixa 4 a parear, par.
+        # A guarda de paridade deve incidir sobre to_pair, nao sobre todos.
+        self._enable_disable_bye()
+        player_ids = self._create_players(5)
+        self.db.add_requested_bye(self.tournament_id, player_ids[4], 1, "H")
+
+        round_data = self.service.generate_next_round(self.tournament_id)
+        pairings = self.db.get_pairings_for_round(int(round_data["id"]))
+
+        byes = [p for p in pairings if p["is_bye"]]
+        self.assertEqual(len(byes), 1)  # apenas o bye solicitado, nenhum alocado
+        self.assertEqual(int(byes[0]["white_player_id"]), player_ids[4])
+        self.assertEqual(len([p for p in pairings if not p["is_bye"]]), 2)
+
+    def test_disable_bye_still_blocks_odd_field_without_requested_bye(self) -> None:
+        # Sem bye solicitado, disable_bye + impar continua bloqueando.
+        self._enable_disable_bye()
+        self._create_players(5)
+        with self.assertRaises(AppError):
+            self.service.generate_next_round(self.tournament_id)
+
     def test_requested_bye_scores_by_type(self) -> None:
         from src.services.pairing import calculate_player_standings
 
