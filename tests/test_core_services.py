@@ -5487,6 +5487,55 @@ class PairingServiceTest(unittest.TestCase):
         # O 802 do bye alocado usa o codigo PAB.
         self.assertTrue(any(line.startswith("802 ") and "PAB" in line for line in lines))
 
+    def test_trf25_802_marks_full_match_forfeit(self) -> None:
+        from src.services.federation_exporters import TRF25Exporter
+
+        tournament_id, _team_ids = self._create_team_tournament(teams_count=2, boards_count=2)
+        round_data = self.service.generate_next_round(tournament_id)
+        match = self.db.list_team_matches_for_round(int(round_data["id"]))[0]
+        boards = self.db.list_team_boards(int(match["id"]))
+        # W.O. consistente: uma equipe vence o match inteiro por forfeit.
+        # Tab. 1 (impar): brancas vencem; tab. 2 (par, cores invertidas): pretas
+        # vencem — ambos os pontos vao para a mesma equipe.
+        self.service.update_result(tournament_id, int(boards[0]["id"]), "1F-0F")
+        self.service.update_result(tournament_id, int(boards[1]["id"]), "0F-1F")
+        self.service.close_round(tournament_id, int(round_data["id"]))
+
+        exporter = TRF25Exporter(self.export_service)
+        output_path = Path(self.temp_dir.name) / "team_ff.trf"
+        exporter.export(tournament_id, output_path)
+        lines = output_path.read_text(encoding="utf-8").splitlines()
+
+        # 330 do match forfeitado e indicadores f/F no 802 (col 39 = indice 38;
+        # nao some no rstrip por ser caractere nao-branco).
+        self.assertTrue(any(line.startswith("330 ") for line in lines))
+        markers = sorted(
+            line[38] for line in lines if line.startswith("802 ") and len(line) >= 39
+        )
+        self.assertEqual(markers, ["F", "f"])  # vencedor por W.O. e perdedor
+
+    def test_trf25_802_no_forfeit_marker_on_normal_match(self) -> None:
+        from src.services.federation_exporters import TRF25Exporter
+
+        tournament_id, _team_ids = self._create_team_tournament(teams_count=2, boards_count=2)
+        round_data = self.service.generate_next_round(tournament_id)
+        self._close_team_round_with_decisive_boards(tournament_id, int(round_data["id"]))
+
+        exporter = TRF25Exporter(self.export_service)
+        output_path = Path(self.temp_dir.name) / "team_normal.trf"
+        exporter.export(tournament_id, output_path)
+        lines = output_path.read_text(encoding="utf-8").splitlines()
+
+        # Resultado normal (sem W.O.): nenhum 330 e nenhum indicador f/F no 802
+        # (a posicao de forfeit fica em branco, somindo no rstrip).
+        self.assertFalse(any(line.startswith("330 ") for line in lines))
+        self.assertFalse(
+            any(
+                line.startswith("802 ") and len(line) >= 39 and line[38] in "fF"
+                for line in lines
+            )
+        )
+
     def test_trf25_validate_signals_data_complete_when_no_pending(self) -> None:
         from src.services.federation_exporters import TRF25Exporter
         from src.services.federation_exporters.trf16 import TRF16Exporter

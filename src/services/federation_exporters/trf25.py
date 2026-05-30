@@ -840,8 +840,9 @@ class TRF25Exporter(TRF16Exporter):
         round_count: int,
     ) -> list[str]:
         """Registros 802 (informativos): por equipe, o resumo rodada-a-rodada
-        (oponente/cor/game points). Forfeit fica vazio — o modelo não distingue
-        W.O. de equipe de um resultado normal."""
+        (oponente/cor/game points/forfeit). O indicador de forfeit (col 39) é
+        inferido de forma conservadora, como o 330 — só em W.O. do match inteiro
+        (ver `_team_match_forfeit_802`)."""
         if not prepared:
             return []
         matches_by_round: dict[int, list[dict[str, Any]]] = {}
@@ -853,7 +854,7 @@ class TRF25Exporter(TRF16Exporter):
             team_id = item["team_id"]
             rounds: list[tuple[str, str, float | None, str]] = []
             for round_number in range(1, round_count + 1):
-                opponent, colour, game_points = "", "", None
+                opponent, colour, game_points, forfeit = "", "", None, ""
                 for match in matches_by_round.get(round_number, []):
                     white = int(match.get("white_team_id") or 0)
                     black = int(match.get("black_team_id") or 0)
@@ -865,13 +866,15 @@ class TRF25Exporter(TRF16Exporter):
                         opponent = str(tpn_by_team.get(black, ""))
                         colour = "w"
                         game_points = float(match.get("white_game_points") or 0.0)
+                        forfeit = self._team_match_forfeit_802(match, team_id)
                         break
                     if black == team_id:
                         opponent = str(tpn_by_team.get(white, ""))
                         colour = "b"
                         game_points = float(match.get("black_game_points") or 0.0)
+                        forfeit = self._team_match_forfeit_802(match, team_id)
                         break
-                rounds.append((opponent, colour, game_points, ""))
+                rounds.append((opponent, colour, game_points, forfeit))
             lines.append(
                 record_802(
                     team_pairing_number=pairing_number,
@@ -882,6 +885,41 @@ class TRF25Exporter(TRF16Exporter):
                 )
             )
         return lines
+
+    def _team_match_forfeit_802(self, match: dict[str, Any], team_id: int) -> str:
+        """Indicador de forfeit do 802 (col 39) para uma equipe num confronto.
+
+        Conservador como o 330: só marca quando o match inteiro é W.O.
+        (todos os tabuleiros com resultado de forfeit, direção consistente),
+        nunca em forfeit parcial/misto — emiti-lo a esmo enganaria o árbitro.
+        Da perspectiva da equipe: `F` venceu por W.O., `f` perdeu por W.O.
+        (inclui duplo forfeit). Caso contrário, vazio."""
+        if match.get("is_bye"):
+            return ""
+        boards = self.db.list_team_boards(int(match["id"]))
+        results = [str(board.get("result") or "") for board in boards]
+        if not results or any(result not in _FORFEIT_RESULTS for result in results):
+            return ""
+
+        white_points = black_points = 0.0
+        for board in boards:
+            white_pts, black_pts = RESULT_POINTS[str(board["result"])]
+            if int(board.get("board_number") or 0) % 2 == 1:
+                white_points += white_pts
+                black_points += black_pts
+            else:
+                white_points += black_pts
+                black_points += white_pts
+
+        is_white = int(match.get("white_team_id") or 0) == team_id
+        own, opponent = (
+            (white_points, black_points) if is_white else (black_points, white_points)
+        )
+        if own > 0 and opponent == 0:
+            return "F"  # venceu por W.O.
+        if own == 0:
+            return "f"  # perdeu por W.O. (inclui duplo forfeit)
+        return ""  # forfeit misto/inconsistente → não declara
 
     @staticmethod
     def _team_nickname(team: dict[str, Any]) -> str:
