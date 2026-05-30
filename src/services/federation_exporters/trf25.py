@@ -50,7 +50,9 @@ linha 001 **não** carrega tiebreaks/TPR:
   strength factor e nickname.
 - **162 / 362**: sistemas de pontuação (individual / equipes), só quando
   divergem do padrão FIDE.
-- **192**: tipo de torneio codificado (obrigatório p/ pareamento).
+- **192**: tipo de torneio codificado (obrigatório p/ pareamento). O Suíço
+  Dutch é datado pela data do torneio (FIDE_DUTCH_2017/_2025; default-por-data
+  quando a data é desconhecida).
 - **202 / 212**: tie-breaks usados (a classificação fica no 212).
 - **352**: sequência de cores dos tabuleiros (equipes; obrigatório).
 - **142 / 152 / 222**: nº de rodadas, cor inicial, time control codificado.
@@ -70,6 +72,7 @@ Fontes:
 
 from __future__ import annotations
 
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -452,7 +455,39 @@ class TRF25Exporter(TRF16Exporter):
             return "FIDE_ROUNDROBIN"
         if method == "knockout":
             return "WORLDCUP_KNOCKOUT"
-        return "FIDE_DUTCH"
+        return self._dutch_code_192(tournament)
+
+    # As regras de pareamento Dutch da FIDE mudaram em 2025-07-01: torneios
+    # disputados a partir dessa data usam a versão 2025; antes, a 2017 (Anexo A).
+    _DUTCH_RULES_2025_CUTOFF = date(2025, 7, 1)
+
+    @staticmethod
+    def _parse_tournament_date(value: Any) -> date | None:
+        raw = str(value or "").strip()
+        for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%Y.%m.%d", "%d/%m/%Y", "%d. %m. %Y", "%d.%m.%Y"):
+            try:
+                return datetime.strptime(raw, fmt).date()
+            except ValueError:
+                continue
+        return None
+
+    def _dutch_code_192(self, tournament: dict[str, Any]) -> str:
+        """Código 192 do Suíço Dutch, datado conforme as regras vigentes.
+
+        Usa a data do torneio (início, com fallback no fim). Sem data parseável
+        devolve `FIDE_DUTCH` puro (default-por-data do Anexo A) — nunca inventamos
+        a versão das regras quando a data é desconhecida. Baku continua sem o
+        sufixo `_BAKU`: a fórmula oficial não está implementada, então não a
+        declaramos no 192 para não enganar o árbitro."""
+        event_date = (
+            self._parse_tournament_date(tournament.get("start_date"))
+            or self._parse_tournament_date(tournament.get("end_date"))
+        )
+        if event_date is None:
+            return "FIDE_DUTCH"
+        if event_date >= self._DUTCH_RULES_2025_CUTOFF:
+            return "FIDE_DUTCH_2025"
+        return "FIDE_DUTCH_2017"
 
     @staticmethod
     def _tiebreak_codes_212(is_team: bool) -> list[str]:

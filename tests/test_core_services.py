@@ -5658,6 +5658,33 @@ class PairingServiceTest(unittest.TestCase):
         # Aviso ao árbitro de que Baku não está implementado.
         self.assertIn(BAKU_NOT_IMPLEMENTED, warnings)
 
+    def test_trf25_dutch_192_is_dated_by_tournament_date(self) -> None:
+        from src.services.federation_exporters import TRF25Exporter
+
+        exporter = TRF25Exporter(self.export_service)
+        settings = {"pairing_method": "swiss"}
+        # Antes do corte (2025-07-01) → regras 2017.
+        self.assertEqual(
+            exporter._type_code_192({"start_date": "2025-06-30"}, settings),
+            "FIDE_DUTCH_2017",
+        )
+        # No corte ou depois → regras 2025.
+        self.assertEqual(
+            exporter._type_code_192({"start_date": "2025-07-01"}, settings),
+            "FIDE_DUTCH_2025",
+        )
+        # Sem start_date, usa o end_date como fallback.
+        self.assertEqual(
+            exporter._type_code_192({"end_date": "2024-01-10"}, settings),
+            "FIDE_DUTCH_2017",
+        )
+        # Sem data parseável → FIDE_DUTCH puro (default-por-data, nunca chuta versão).
+        self.assertEqual(exporter._type_code_192({}, settings), "FIDE_DUTCH")
+        self.assertEqual(
+            exporter._type_code_192({"start_date": "data invalida"}, settings),
+            "FIDE_DUTCH",
+        )
+
     def test_validate_chess_results_trf16_reports_special_result_statuses(self) -> None:
         tournament_id = self.db.create_tournament(
             "Aberto Pendencias",
