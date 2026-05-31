@@ -3957,6 +3957,74 @@ class PairingServiceTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             comm.bulk_email_members(object(), "", "Corpo")
 
+    def test_schedule_email_normalizes_and_persists(self) -> None:
+        from src.services.dashboard_service import CommunicationService
+
+        comm = CommunicationService(self.db)
+        msg_id = comm.schedule_email(
+            "Assunto", "Corpo", "2026-06-01 09:30", audience_kind="all_active"
+        )
+
+        pending = comm.list_scheduled_messages(status="pending")
+        self.assertEqual(len(pending), 1)
+        self.assertEqual(pending[0]["id"], msg_id)
+        self.assertEqual(pending[0]["scheduled_at"], "2026-06-01 09:30:00")
+
+    def test_schedule_email_rejects_bad_datetime(self) -> None:
+        from src.services.dashboard_service import CommunicationService
+
+        comm = CommunicationService(self.db)
+        with self.assertRaises(ValueError):
+            comm.schedule_email("A", "B", "amanha de manha")
+
+    def test_dispatch_sends_due_and_skips_future(self) -> None:
+        from src.services.dashboard_service import CommunicationService
+
+        class _FakeMailer:
+            def __init__(self):
+                self.calls: list[str] = []
+
+            def send_bulk_email(self, recipients, subject, body):
+                for r in recipients:
+                    self.calls.append(r["email"])
+                return {"total": len(recipients), "sent": list(recipients), "failed": [],
+                        "sent_count": len(recipients), "failed_count": 0}
+
+        self.member_service.create_member(
+            {"name": "Ana", "rating": "1500", "member_type": "aluno",
+             "status": "active", "email": "ana@x.com"}
+        )
+        comm = CommunicationService(self.db)
+        due_id = comm.schedule_email("Vencida", "Corpo", "2000-01-01 00:00")
+        comm.schedule_email("Futura", "Corpo", "2999-01-01 00:00")
+
+        mailer = _FakeMailer()
+        dispatched = comm.dispatch_due_scheduled_messages(mailer)
+
+        self.assertEqual(len(dispatched), 1)
+        self.assertEqual(dispatched[0]["id"], due_id)
+        self.assertEqual(dispatched[0]["status"], "sent")
+        self.assertEqual(mailer.calls, ["ana@x.com"])
+        pending = comm.list_scheduled_messages(status="pending")
+        self.assertEqual(len(pending), 1)
+        self.assertEqual(pending[0]["subject"], "Futura")
+
+    def test_cancel_scheduled_message_prevents_dispatch(self) -> None:
+        from src.services.dashboard_service import CommunicationService
+
+        class _FakeMailer:
+            def send_bulk_email(self, recipients, subject, body):
+                raise AssertionError("nao deveria enviar uma mensagem cancelada")
+
+        comm = CommunicationService(self.db)
+        msg_id = comm.schedule_email("X", "Y", "2000-01-01 00:00")
+        comm.cancel_scheduled_message(msg_id)
+
+        dispatched = comm.dispatch_due_scheduled_messages(_FakeMailer())
+
+        self.assertEqual(dispatched, [])
+        self.assertEqual(comm.list_scheduled_messages(status="pending"), [])
+
     def test_app_settings_normalizes_legacy_default_paths(self) -> None:
         base_path = Path(self.temp_dir.name)
         legacy_export_dir = base_path / "repo" / "exports"

@@ -115,9 +115,65 @@ class CommunicationPagesMixin:
         subject_entry.grid(row=4, column=0, padx=16, pady=(0, 12), sticky="ew")
 
         ctk.CTkLabel(parent, text="Mensagem:").grid(row=5, column=0, padx=16, pady=(8, 4), sticky="w")
-        body_entry = ctk.CTkTextbox(parent, height=160)
-        body_entry.grid(row=6, column=0, padx=16, pady=(0, 16), sticky="nsew")
+        body_entry = ctk.CTkTextbox(parent, height=140)
+        body_entry.grid(row=6, column=0, padx=16, pady=(0, 12), sticky="nsew")
         parent.grid_rowconfigure(6, weight=1)
+
+        ctk.CTkLabel(
+            parent, text="Agendar para (AAAA-MM-DD HH:MM, opcional):"
+        ).grid(row=7, column=0, padx=16, pady=(0, 4), sticky="w")
+        schedule_entry = ctk.CTkEntry(parent, width=240, placeholder_text="Vazio = enviar agora")
+        schedule_entry.grid(row=8, column=0, padx=16, pady=(0, 4), sticky="w")
+        ctk.CTkLabel(
+            parent,
+            text="Agendados so disparam com o app aberto (a fila e salva).",
+            text_color="gray",
+        ).grid(row=9, column=0, padx=16, pady=(0, 8), sticky="w")
+
+        # Lista de agendamentos pendentes, com cancelamento.
+        pending_holder = ctk.CTkScrollableFrame(parent, height=120, label_text="Agendados pendentes")
+        pending_holder.grid(row=11, column=0, padx=16, pady=(8, 12), sticky="nsew")
+        pending_holder.grid_columnconfigure(0, weight=1)
+
+        def load_pending() -> None:
+            for child in pending_holder.winfo_children():
+                child.destroy()
+            pending = self.communication_service.list_scheduled_messages(status="pending")
+            if not pending:
+                ctk.CTkLabel(pending_holder, text="Nenhum agendamento pendente.", text_color="gray").grid(
+                    row=0, column=0, sticky="w", padx=4, pady=4
+                )
+                return
+            for idx, item in enumerate(pending):
+                row = ctk.CTkFrame(pending_holder, fg_color="transparent")
+                row.grid(row=idx, column=0, sticky="ew", pady=2)
+                row.grid_columnconfigure(0, weight=1)
+                ctk.CTkLabel(
+                    row, anchor="w",
+                    text=f"{item['scheduled_at']} - {item['subject']}",
+                ).grid(row=0, column=0, sticky="ew", padx=(4, 8))
+                ctk.CTkButton(
+                    row, text="Cancelar", width=80,
+                    command=lambda mid=int(item["id"]): (
+                        self.communication_service.cancel_scheduled_message(mid),
+                        load_pending(),
+                    ),
+                ).grid(row=0, column=1)
+
+        def resolve_audience() -> tuple[dict, str, str, str]:
+            """Devolve (kwargs_imediato, audience_kind, audience_value, descricao)."""
+            audience = audience_option.get()
+            if audience == "Por turma":
+                class_id = class_by_label.get(filter_option.get())
+                if not class_id:
+                    raise AppError("Selecione uma turma valida.")
+                return ({"active_only": True, "class_id": class_id},
+                        "class", str(class_id), f"turma {filter_option.get()}")
+            if audience == "Por tipo de membro":
+                member_type = filter_option.get()
+                return ({"active_only": True, "member_type": member_type},
+                        "member_type", member_type, f"membros do tipo {member_type}")
+            return ({"active_only": True}, "all_active", "", "todos os membros ativos")
 
         def do_send_bulk() -> None:
             subject = subject_entry.get().strip()
@@ -125,20 +181,25 @@ class CommunicationPagesMixin:
             if not subject or not body_text:
                 self._show_error("Preencha o assunto e a mensagem.")
                 return
+            try:
+                kwargs, audience_kind, audience_value, audience_desc = resolve_audience()
+            except AppError as exc:
+                self._show_error(str(exc))
+                return
 
-            audience = audience_option.get()
-            kwargs: dict = {"active_only": True}
-            audience_desc = "todos os membros ativos"
-            if audience == "Por turma":
-                class_id = class_by_label.get(filter_option.get())
-                if not class_id:
-                    self._show_error("Selecione uma turma valida.")
+            schedule_at = schedule_entry.get().strip()
+            if schedule_at:
+                try:
+                    msg_id = self.communication_service.schedule_email(
+                        subject, body_text, schedule_at,
+                        audience_kind=audience_kind, audience_value=audience_value,
+                    )
+                except Exception as exc:
+                    self._show_error(f"Falha ao agendar: {exc}")
                     return
-                kwargs["class_id"] = class_id
-                audience_desc = f"turma {filter_option.get()}"
-            elif audience == "Por tipo de membro":
-                kwargs["member_type"] = filter_option.get()
-                audience_desc = f"membros do tipo {filter_option.get()}"
+                load_pending()
+                self._show_toast(f"Agendado (#{msg_id}) para {schedule_at}.", kind="success")
+                return
 
             if not self._confirm_action(
                 "Disparo em massa",
@@ -162,9 +223,10 @@ class CommunicationPagesMixin:
 
             threading.Thread(target=task, daemon=True).start()
 
-        ctk.CTkButton(parent, text="Enviar para o publico-alvo", command=do_send_bulk).grid(
-            row=7, column=0, padx=16, pady=(0, 16), sticky="w"
+        ctk.CTkButton(parent, text="Enviar / Agendar", command=do_send_bulk).grid(
+            row=10, column=0, padx=16, pady=(0, 8), sticky="w"
         )
+        load_pending()
 
     def _build_whatsapp_tab(self, parent: ctk.CTkFrame, msg_service: MessageService) -> None:
         parent.grid_columnconfigure(1, weight=1)
