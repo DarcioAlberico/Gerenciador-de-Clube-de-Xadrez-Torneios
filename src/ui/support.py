@@ -16,6 +16,7 @@ from tkcalendar import DateEntry
 from src.core.database import BASE_DIR, Database, default_backup_dir, default_export_dir
 from src.core.logging_config import configure_logging, current_log_path
 from src.core.services import (
+    ACCELERATION_METHODS,
     ATTENDANCE_STATUSES,
     BILLING_CYCLES,
     CERTIFICATE_ORIENTATIONS,
