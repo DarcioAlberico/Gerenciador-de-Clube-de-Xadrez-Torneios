@@ -363,7 +363,7 @@ LEGACY_LOGS_DIR = BASE_DIR / "logs"
 
 
 class Database:
-    SCHEMA_VERSION = 30
+    SCHEMA_VERSION = 31
 
     def __init__(
         self,

@@ -183,3 +183,115 @@ class CommunicationService:
             "recipients_total": len(recipients),
             "failed": result["failed"],
         }
+
+    # --- Mensagens agendadas ---------------------------------------------
+    # Atencao: num desktop offline, mensagens agendadas so disparam enquanto o
+    # app estiver aberto. A fila e persistida; o despacho roda na inicializacao
+    # e em um tick periodico (ver app._dispatch_scheduled_messages_once).
+
+    _AUDIENCE_KINDS = {"all_active", "class", "member_type"}
+
+    @staticmethod
+    def _normalize_schedule_datetime(value: Any) -> str:
+        text = str(value or "").strip()
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
+            try:
+                return datetime.strptime(text, fmt).strftime("%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                continue
+        raise ValueError("Data/hora invalida. Use o formato AAAA-MM-DD HH:MM.")
+
+    def schedule_email(
+        self,
+        subject: str,
+        body: str,
+        scheduled_at: str,
+        *,
+        audience_kind: str = "all_active",
+        audience_value: str = "",
+        club_id: int | None = None,
+    ) -> int:
+        """Enfileira um e-mail em massa para disparo futuro. O envio em si
+        acontece quando `dispatch_due_scheduled_messages` roda (na inicializacao
+        e no tick periodico do app)."""
+        subject = (subject or "").strip()
+        body = (body or "").strip()
+        if not subject or not body:
+            raise ValueError("Assunto e mensagem são obrigatórios.")
+        if audience_kind not in self._AUDIENCE_KINDS:
+            raise ValueError("Público-alvo inválido.")
+        return self.db._insert(
+            "scheduled_messages",
+            {
+                "club_id": club_id,
+                "channel": "email",
+                "subject": subject,
+                "body": body,
+                "audience_kind": audience_kind,
+                "audience_value": str(audience_value or ""),
+                "scheduled_at": self._normalize_schedule_datetime(scheduled_at),
+                "status": "pending",
+                "created_at": self.db.now(),
+            },
+        )
+
+    def list_scheduled_messages(self, status: str | None = None) -> list[dict[str, Any]]:
+        if status:
+            return self.db._fetch_all(
+                "SELECT * FROM scheduled_messages WHERE status = ? ORDER BY scheduled_at ASC",
+                (status,),
+            )
+        return self.db._fetch_all(
+            "SELECT * FROM scheduled_messages ORDER BY scheduled_at ASC"
+        )
+
+    def cancel_scheduled_message(self, message_id: int) -> None:
+        self.db._update("scheduled_messages", int(message_id), {"status": "cancelled"})
+
+    def dispatch_due_scheduled_messages(
+        self, message_service: Any, now: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Envia as mensagens pendentes cujo horario ja chegou (`scheduled_at <=
+        now`). Cada mensagem e marcada como `sent` (com resumo) ou `failed` (com
+        erro); uma falha numa mensagem nao impede as demais."""
+        now = now or self.db.now()
+        due = self.db._fetch_all(
+            "SELECT * FROM scheduled_messages "
+            "WHERE status = 'pending' AND scheduled_at <= ? ORDER BY scheduled_at ASC",
+            (now,),
+        )
+        dispatched: list[dict[str, Any]] = []
+        for message in due:
+            kwargs: dict[str, Any] = {"active_only": True}
+            kind = str(message.get("audience_kind") or "all_active")
+            value = str(message.get("audience_value") or "")
+            if kind == "class" and value:
+                kwargs["class_id"] = int(value)
+            elif kind == "member_type" and value:
+                kwargs["member_type"] = value
+            try:
+                summary = self.bulk_email_members(
+                    message_service, message["subject"], message["body"], **kwargs
+                )
+                self.db._update(
+                    "scheduled_messages",
+                    int(message["id"]),
+                    {
+                        "status": "sent",
+                        "sent_at": self.db.now(),
+                        "result_summary": (
+                            f"enviados={summary['sent_count']} "
+                            f"falhas={summary['failed_count']} "
+                            f"sem_email={summary['skipped_no_email']}"
+                        ),
+                    },
+                )
+                dispatched.append({"id": int(message["id"]), "status": "sent", "summary": summary})
+            except Exception as exc:
+                self.db._update(
+                    "scheduled_messages",
+                    int(message["id"]),
+                    {"status": "failed", "error": str(exc), "sent_at": self.db.now()},
+                )
+                dispatched.append({"id": int(message["id"]), "status": "failed", "error": str(exc)})
+        return dispatched

@@ -42,6 +42,7 @@ class LegacyMigrations:
             28: self._migrate_to_v28,
             29: self._migrate_to_v29,
             30: self._migrate_to_v30,
+            31: self._migrate_to_v31,
         }
 
     def _run_schema_migrations(self, connection: sqlite3.Connection) -> None:
@@ -120,6 +121,8 @@ class LegacyMigrations:
             self._migrate_to_v29(connection)
         if self.db.SCHEMA_VERSION >= 30:
             self._migrate_to_v30(connection)
+        if self.db.SCHEMA_VERSION >= 31:
+            self._migrate_to_v31(connection)
 
     def _migrate_to_v1(self, connection: sqlite3.Connection) -> None:
         now = self.db.now()
@@ -1555,3 +1558,26 @@ class LegacyMigrations:
             connection.execute(
                 "ALTER TABLE library_items ADD COLUMN cover_image TEXT NOT NULL DEFAULT ''"
             )
+
+    def _migrate_to_v31(self, connection: sqlite3.Connection) -> None:
+        connection.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS scheduled_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                club_id INTEGER,
+                channel TEXT NOT NULL DEFAULT 'email',
+                subject TEXT NOT NULL,
+                body TEXT NOT NULL,
+                audience_kind TEXT NOT NULL DEFAULT 'all_active',
+                audience_value TEXT DEFAULT '',
+                scheduled_at TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                result_summary TEXT DEFAULT '',
+                error TEXT DEFAULT '',
+                created_at TEXT NOT NULL,
+                sent_at TEXT DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_scheduled_messages_status
+                ON scheduled_messages(status, scheduled_at);
+            """
+        )

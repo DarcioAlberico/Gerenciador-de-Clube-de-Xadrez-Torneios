@@ -20,6 +20,7 @@ from .screens.reports import ReportPagesMixin
 from .screens.audit import AuditPagesMixin
 from .screens.communication import CommunicationPagesMixin
 from .screens.integrations import IntegrationPagesMixin
+from src.services.message_service import MessageService
 from src.services.report_engine import ReportEngine
 
 
@@ -87,6 +88,7 @@ class AlbericusApp(
         self.pairing_row_map: dict[str, int] = {}
         self.pairing_detail_map: dict[str, dict[str, Any]] = {}
         self.local_result_server: LocalResultServer | None = None
+        self._scheduled_dispatch_job: str | None = None
 
         self._configure_grid()
         self._configure_tree_style()
@@ -98,9 +100,51 @@ class AlbericusApp(
             self.security_service.create_backup("auto_shutdown")
         except Exception as exc:
             logger.error("Erro ao gerar backup no fechamento: %s", exc)
+        if self._scheduled_dispatch_job is not None:
+            try:
+                self.after_cancel(self._scheduled_dispatch_job)
+            except Exception:
+                pass
+            self._scheduled_dispatch_job = None
         if self.local_result_server is not None:
             self.local_result_server.stop()
         self.destroy()
+
+    # Intervalo do tick de mensagens agendadas (5 min). Num desktop offline, o
+    # disparo so ocorre com o app aberto; a fila persistida garante que nada se
+    # perde, mas o envio fica para a proxima vez que o app estiver rodando.
+    _SCHEDULED_DISPATCH_INTERVAL_MS = 5 * 60 * 1000
+
+    def _start_scheduled_dispatch(self) -> None:
+        """Dispara as mensagens agendadas vencidas na inicializacao e reagenda um
+        tick periodico enquanto o app estiver aberto."""
+        self._dispatch_scheduled_messages_once()
+        self._scheduled_dispatch_job = self.after(
+            self._SCHEDULED_DISPATCH_INTERVAL_MS, self._scheduled_dispatch_tick
+        )
+
+    def _scheduled_dispatch_tick(self) -> None:
+        self._dispatch_scheduled_messages_once()
+        self._scheduled_dispatch_job = self.after(
+            self._SCHEDULED_DISPATCH_INTERVAL_MS, self._scheduled_dispatch_tick
+        )
+
+    def _dispatch_scheduled_messages_once(self) -> None:
+        """Roda o despacho da fila de mensagens agendadas. Nunca propaga erro: uma
+        falha de envio nao pode derrubar a interface."""
+        try:
+            settings = self.db.get_app_settings()
+            mailer = MessageService(
+                smtp_server=settings.get("smtp_server", ""),
+                smtp_port=int(settings.get("smtp_port", 587) or 587),
+                smtp_user=settings.get("smtp_user", ""),
+                smtp_password=settings.get("smtp_password", ""),
+            )
+            results = self.communication_service.dispatch_due_scheduled_messages(mailer)
+            if results:
+                logger.info("Mensagens agendadas despachadas: %s", len(results))
+        except Exception as exc:
+            logger.error("Falha no despacho de mensagens agendadas: %s", exc)
 
     def _build_login_screen(self) -> None:
         self.login_frame = ctk.CTkFrame(self, corner_radius=10)
@@ -132,6 +176,7 @@ class AlbericusApp(
                 self._register_shortcuts()
                 self.show_club()
                 self._refresh_statusbar()
+                self._start_scheduled_dispatch()
             else:
                 self.login_error_label.configure(text="Credenciais inválidas.")
 
