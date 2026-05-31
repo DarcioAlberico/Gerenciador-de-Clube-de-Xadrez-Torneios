@@ -4,6 +4,7 @@ import base64
 import ctypes
 import hashlib
 import json
+import logging
 import os
 import shutil
 import sqlite3
@@ -14,6 +15,8 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 from .categories import competition_category_payload, reference_year
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_LEARNING_LEVELS = (
     (
@@ -370,6 +373,11 @@ class Database:
         using_default_db_path = db_path is None
         self.db_path = default_db_path() if db_path is None else Path(db_path)
         self.backup_dir = Path(backup_dir) if backup_dir else default_backup_dir()
+        # Resultado da ultima copia de backup para a nuvem (pasta sincronizada).
+        # Preenchido por backup(); lido pela UI/SecurityService para reportar
+        # status sem repetir a copia. Inicializado antes de qualquer backup de
+        # migracao disparado no __init__.
+        self.last_cloud_backup: dict[str, str] | None = None
         if using_default_db_path:
             self._copy_legacy_default_database_if_needed()
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -2093,19 +2101,34 @@ class Database:
         finally:
             source.close()
 
-        try:
-            settings = self.get_app_settings()
-            cloud_dir_str = settings.get("cloud_sync_dir")
-            if cloud_dir_str:
-                cloud_dir = Path(cloud_dir_str)
-                if cloud_dir.exists() and cloud_dir.is_dir():
-                    import shutil
-                    cloud_backup_path = cloud_dir / backup_path.name
-                    shutil.copy2(backup_path, cloud_backup_path)
-        except Exception:
-            pass
-
+        self.last_cloud_backup = self.copy_backup_to_cloud(backup_path)
         return backup_path
+
+    def copy_backup_to_cloud(self, backup_path: Path | str) -> dict[str, str]:
+        """Copia um backup para a pasta de nuvem configurada (`cloud_sync_dir`),
+        no estilo Dropbox/OneDrive/Drive desktop. Nunca levanta excecao — o
+        backup local ja foi gravado, entao uma falha de nuvem e registrada e
+        reportada, mas nao interrompe o fluxo. Devolve `{status, path}` com
+        status em {`success`, `not_configured`, `invalid_directory`,
+        `error: <msg>`}."""
+        try:
+            cloud_dir_str = (self.get_app_settings().get("cloud_sync_dir") or "").strip()
+        except Exception:
+            # Cedo no __init__ (backup de migracao) as settings podem nao existir.
+            return {"status": "not_configured", "path": ""}
+        if not cloud_dir_str:
+            return {"status": "not_configured", "path": ""}
+        cloud_dir = Path(cloud_dir_str)
+        if not (cloud_dir.exists() and cloud_dir.is_dir()):
+            logger.warning("Pasta de nuvem invalida para backup: %s", cloud_dir_str)
+            return {"status": "invalid_directory", "path": ""}
+        try:
+            target = cloud_dir / Path(backup_path).name
+            shutil.copy2(backup_path, target)
+            return {"status": "success", "path": str(target)}
+        except Exception as exc:
+            logger.error("Falha ao copiar backup para nuvem %s: %s", cloud_dir_str, exc)
+            return {"status": f"error: {exc}", "path": ""}
 
     def backup_before(
         self,

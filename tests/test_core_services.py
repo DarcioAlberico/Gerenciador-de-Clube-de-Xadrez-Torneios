@@ -3838,6 +3838,43 @@ class PairingServiceTest(unittest.TestCase):
         self.assertNotIn("Depois do backup", member_names)
         self.assertIsNotNone(self.db.get_member(before_member_id))
 
+    def test_backup_copies_to_configured_cloud_dir(self) -> None:
+        cloud_dir = Path(self.temp_dir.name) / "nuvem"
+        cloud_dir.mkdir()
+        self.db.save_app_settings({"cloud_sync_dir": str(cloud_dir)})
+
+        backup_path = self.db.backup("com_nuvem")
+
+        self.assertEqual(self.db.last_cloud_backup["status"], "success")
+        self.assertTrue((cloud_dir / backup_path.name).exists())
+        self.assertEqual(self.db.last_cloud_backup["path"], str(cloud_dir / backup_path.name))
+
+    def test_backup_without_cloud_dir_reports_not_configured(self) -> None:
+        self.db.save_app_settings({"cloud_sync_dir": ""})
+
+        self.db.backup("sem_nuvem")
+
+        self.assertEqual(self.db.last_cloud_backup["status"], "not_configured")
+
+    def test_backup_with_invalid_cloud_dir_does_not_raise(self) -> None:
+        missing = Path(self.temp_dir.name) / "nao_existe"
+        self.db.save_app_settings({"cloud_sync_dir": str(missing)})
+
+        # Falha de nuvem nao pode derrubar o backup local.
+        backup_path = self.db.backup("nuvem_invalida")
+
+        self.assertTrue(backup_path.exists())
+        self.assertEqual(self.db.last_cloud_backup["status"], "invalid_directory")
+
+    def test_create_backup_reports_cloud_status_from_db(self) -> None:
+        cloud_dir = Path(self.temp_dir.name) / "nuvem2"
+        cloud_dir.mkdir()
+        self.db.save_app_settings({"cloud_sync_dir": str(cloud_dir)})
+
+        result = self.security_service.create_backup("manual")
+
+        self.assertEqual(result["cloud_status"], "success")
+
     def test_app_settings_normalizes_legacy_default_paths(self) -> None:
         base_path = Path(self.temp_dir.name)
         legacy_export_dir = base_path / "repo" / "exports"
