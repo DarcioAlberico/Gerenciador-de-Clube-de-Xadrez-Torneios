@@ -109,6 +109,30 @@ def record_national_rating(
     return _place(parts).rstrip() + "\r\n"
 
 
+# Métodos válidos do registro 172 (§1.2): descrevem como o ranking inicial foi
+# construído em relação aos registros NRS de rating nacional.
+STARTING_RANK_METHODS = frozenset(
+    {"FIDE", "NRO", "FIDON", "NIDOF", "HBFN", "LBFN", "OTHER"}
+)
+
+
+def record_172(federation: str, method: str = "FIDE") -> str:
+    """Registro 172 — Encoded Starting Rank Method (§1.2). Obrigatório quando há
+    registros NRS de rating nacional: liga a federação desses registros (cols
+    5-7) ao método de construção do ranking inicial (cols 9-13). O projeto sempre
+    monta o ranking pela ordem do rating FIDE, então o método é `FIDE`. Códigos
+    desconhecidos caem em `OTHER` para nunca afirmar um método que não se aplica."""
+    code = trf_ascii(method).upper().strip() or "FIDE"
+    if code not in STARTING_RANK_METHODS:
+        code = "OTHER"
+    parts: list[tuple[int, str]] = [
+        (1, "172"),
+        (5, str(federation)[:3].upper().ljust(3)),
+        (9, code[:5].ljust(5)),
+    ]
+    return _place(parts).rstrip() + "\r\n"
+
+
 def record_310(
     team_pairing_number: int,
     team_name: str,

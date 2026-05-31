@@ -5595,6 +5595,12 @@ class PairingServiceTest(unittest.TestCase):
         self.assertEqual(line[48:52].strip(), "1928")  # rating nacional
         self.assertIn("55501", line)                  # nº nacional
 
+        # 172 (Encoded Starting Rank Method) e obrigatorio quando ha registros NRS.
+        header_172 = [ln for ln in lines if ln.startswith("172 ")]
+        self.assertEqual(len(header_172), 1)
+        self.assertEqual(header_172[0][4:7], "BRA")          # federacao (cols 5-7)
+        self.assertEqual(header_172[0][8:13].strip(), "FIDE")  # metodo (cols 9-13)
+
     def test_trf25_omits_national_rating_without_federation(self) -> None:
         from src.services.federation_exporters import TRF25Exporter
 
@@ -5611,6 +5617,8 @@ class PairingServiceTest(unittest.TestCase):
         lines = output_path.read_text(encoding="utf-8").splitlines()
 
         self.assertFalse(any("55501" in line for line in lines))
+        # Sem registros NRS, o 172 tambem nao deve aparecer.
+        self.assertFalse(any(line.startswith("172 ") for line in lines))
 
     def test_trf25_validate_signals_data_complete_when_no_pending(self) -> None:
         from src.services.federation_exporters import TRF25Exporter

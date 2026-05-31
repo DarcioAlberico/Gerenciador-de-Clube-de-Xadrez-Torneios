@@ -44,27 +44,38 @@ devolvendo o TRF25_SCAFFOLD_WARNING e recomendando o TRF16 para envio oficial
 de dados, `validate()` acrescenta o TRF25_DATA_COMPLETE_NOTE: os dados estão
 prontos e só falta a ratificação do formato (critério de formato, não de dado).
 
-## O que falta para um TRF25 completo
+## Estado dos registros (ref.: `ESPEC_TRF25_FIDE.md` na raiz)
 
-O layout exato dos registros já foi consolidado em `ESPEC_TRF25_FIDE.md`
-(na raiz do projeto). Quando implementado, estes registros precisam ser
-adicionados (sobrescrevendo `export`); os nomes abaixo são os códigos
-numéricos reais da spec — **não** existem "linha TC" nem "XXR/XXC", e a
-linha 001 **não** carrega tiebreaks/TPR:
+Os nomes abaixo são os códigos numéricos reais da spec — **não** existem
+"linha TC" nem "XXR/XXC", e a linha 001 **não** carrega tiebreaks/TPR.
 
-- **310** (equipes): substitui o 013, com match points, game points, rank,
-  strength factor e nickname.
-- **162 / 362**: sistemas de pontuação (individual / equipes), só quando
-  divergem do padrão FIDE.
-- **192**: tipo de torneio codificado (obrigatório p/ pareamento). O Suíço
-  Dutch é datado pela data do torneio (FIDE_DUTCH_2017/_2025; default-por-data
-  quando a data é desconhecida).
-- **202 / 212**: tie-breaks usados (a classificação fica no 212).
-- **352**: sequência de cores dos tabuleiros (equipes; obrigatório).
-- **142 / 152 / 222**: nº de rodadas, cor inicial, time control codificado.
-- **240 / 320 / 330 / 300 / 299**: byes, PAB, forfeits, out-of-order e
-  ajustes anormais de pontos.
-- **801 / 802**: registros informativos opcionais (priorizar 802).
+Já implementados e emitidos (com testes de coluna em `trf25_records.py`):
+
+- **142 / 152 / 172 / 192 / 212 / 222 / 352 / 362**: cabeçalho de torneio
+  (nº de rodadas, cor inicial, método de ranking p/ NRS, tipo codificado,
+  tie-breaks de classificação, time control, sequência de cores e pontuação
+  de equipes). O 172 sai só quando há registros NRS; o 362 só quando diverge
+  do padrão; o 222 só quando o ritmo é interpretável.
+- **310** (equipes): substitui o 013, com match/game points, rank, strength
+  factor e nickname.
+- **240 / 320 / 330 / 300 / 299**: byes, PAB, forfeits, out-of-order e ajustes
+  anormais de pontos.
+- **250 / 260**: aceleração clássica e proibições de pareamento.
+- **XXX**: registros de rating nacional (NRS), um por jogador com rating
+  nacional, sob federação válida.
+- **802**: resumo informativo de equipe (comprimento fixo).
+
+Omissões deliberadas (não são lacunas):
+
+- **162** (scoring individual): o projeto sempre usa pontos padrão FIDE.
+- **801** (variável): dispensado em favor do **802** (fixo).
+- **202**: a classificação usa o **212**.
+
+Lacunas conhecidas:
+
+- **Aceleração de Baku** (`_BAKU` no 192 e fórmula no 250): guardada — a fórmula
+  exata da FIDE não é pública; emite `BAKU_NOT_IMPLEMENTED` em vez de enganar o
+  árbitro (ver `pairing/acceleration.py`).
 
 Tabelas de código (192 e 212) já consolidadas: ver Anexos A e B da
 ESPEC_TRF25_FIDE.md (Tournament-Type Code Table e Mandatory Tie-Breaks).
@@ -87,6 +98,7 @@ from src.services.federation_exporters.base import FederationExportFormat
 from src.services.federation_exporters.trf16 import TRF16Exporter
 from src.services.federation_exporters.trf25_records import (
     encode_time_control,
+    record_172,
     record_212,
     record_240,
     record_national_rating,
@@ -200,6 +212,9 @@ class TRF25Exporter(TRF16Exporter):
             encoded_time = encode_time_control(tournament.get("time_control"))
             if encoded_time:
                 handle.write(tournament_line("222", encoded_time))
+            starting_rank_172 = self._starting_rank_method_172(players, settings)
+            if starting_rank_172:
+                handle.write(starting_rank_172)
             handle.write(tournament_line("192", self._type_code_192(tournament, settings)))
             handle.write(record_212(self._tiebreak_codes_212(is_team)))
             if is_team:
@@ -660,6 +675,20 @@ class TRF25Exporter(TRF16Exporter):
 
         prepared.sort(key=lambda item: (-item["strength"], str(item["team"].get("name") or "").casefold()))
         return prepared
+
+    def _starting_rank_method_172(
+        self, players: list[dict[str, Any]], settings: dict[str, Any]
+    ) -> str | None:
+        """Registro 172 — obrigatório quando há registros NRS (§1.2). Emite só
+        sob a mesma condição do `_national_rating_records`: federação válida e ao
+        menos um jogador com rating nacional. O ranking é montado pela ordem FIDE,
+        então o método é `FIDE`."""
+        federation = str(settings.get("federation") or "").strip()
+        if not self.export_service._trf_valid_federation_code(federation):
+            return None
+        if not any(int(p.get("national_rating") or 0) > 0 for p in players):
+            return None
+        return record_172(federation, "FIDE")
 
     def _national_rating_records(
         self,
