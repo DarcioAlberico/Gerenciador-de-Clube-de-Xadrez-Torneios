@@ -121,3 +121,65 @@ class CommunicationService:
             "SELECT * FROM communication_logs WHERE member_id = ? ORDER BY sent_at DESC",
             (member_id,)
         )
+
+    def bulk_email_members(
+        self,
+        message_service: Any,
+        subject: str,
+        body: str,
+        *,
+        active_only: bool = True,
+        club_id: int | None = None,
+        class_id: int | None = None,
+        member_type: str = "",
+    ) -> dict[str, Any]:
+        """Dispara o mesmo e-mail para um publico-alvo de membros e registra cada
+        envio bem-sucedido em `communication_logs`.
+
+        O publico vem de `list_members` (filtros `active_only`/`club_id`/
+        `class_id`) e pode ser refinado por `member_type`. Membros sem e-mail sao
+        contados em `skipped_no_email` e nunca contam como falha de envio. Devolve
+        um resumo com `sent_count`, `failed_count`, `skipped_no_email`,
+        `recipients_total` e a lista `failed` (motivo por destinatario)."""
+        subject = (subject or "").strip()
+        body = (body or "").strip()
+        if not subject or not body:
+            raise ValueError("Assunto e mensagem são obrigatórios.")
+
+        members = self.db.list_members(
+            active_only=active_only, club_id=club_id, class_id=class_id
+        )
+        member_type = (member_type or "").strip()
+        recipients: list[dict[str, Any]] = []
+        skipped_no_email = 0
+        for member in members:
+            if member_type and str(member.get("member_type") or "") != member_type:
+                continue
+            email = str(member.get("email") or "").strip()
+            if not email:
+                skipped_no_email += 1
+                continue
+            recipients.append(
+                {"member_id": int(member["id"]), "email": email, "name": member.get("name", "")}
+            )
+
+        if not recipients:
+            return {
+                "sent_count": 0,
+                "failed_count": 0,
+                "skipped_no_email": skipped_no_email,
+                "recipients_total": 0,
+                "failed": [],
+            }
+
+        result = message_service.send_bulk_email(recipients, subject, body)
+        for recipient in result["sent"]:
+            self.log_communication(int(recipient["member_id"]), subject, body)
+
+        return {
+            "sent_count": result["sent_count"],
+            "failed_count": result["failed_count"],
+            "skipped_no_email": skipped_no_email,
+            "recipients_total": len(recipients),
+            "failed": result["failed"],
+        }

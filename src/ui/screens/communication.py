@@ -29,10 +29,12 @@ class CommunicationPagesMixin:
         tabview = ctk.CTkTabview(body)
         tabview.grid(row=0, column=0, sticky="nsew")
         tab_email = tabview.add("E-mail")
+        tab_bulk = tabview.add("Disparo em massa")
         tab_whatsapp = tabview.add("WhatsApp")
         tab_config = tabview.add("Config. SMTP")
 
         self._build_email_tab(tab_email, msg_service)
+        self._build_bulk_tab(tab_bulk, msg_service)
         self._build_whatsapp_tab(tab_whatsapp, msg_service)
         self._build_smtp_config_tab(tab_config, settings)
 
@@ -73,6 +75,96 @@ class CommunicationPagesMixin:
 
         btn = ctk.CTkButton(parent, text="Enviar E-mail", command=do_send_email)
         btn.grid(row=6, column=0, padx=16, pady=(0, 16), sticky="w")
+
+    def _build_bulk_tab(self, parent: ctk.CTkFrame, msg_service: MessageService) -> None:
+        parent.grid_columnconfigure(0, weight=1)
+
+        # Publico-alvo: define como os destinatarios sao resolvidos.
+        classes = self.db.list_classes(active_only=True)
+        class_by_label = {f"{c['name']}": int(c["id"]) for c in classes}
+        # Ordem de exibicao estavel, restrita aos tipos validos (sem drift).
+        member_types = [t for t in ["socio", "aluno", "convidado", "visitante"] if t in MEMBER_TYPES]
+
+        ctk.CTkLabel(parent, text="Publico-alvo:").grid(row=0, column=0, padx=16, pady=(16, 4), sticky="w")
+        audience_option = ctk.CTkOptionMenu(
+            parent, width=240,
+            values=["Todos os ativos", "Por turma", "Por tipo de membro"],
+        )
+        audience_option.grid(row=1, column=0, padx=16, pady=(0, 8), sticky="w")
+
+        filter_option = ctk.CTkOptionMenu(parent, width=240, values=[""])
+        filter_option.grid(row=2, column=0, padx=16, pady=(0, 12), sticky="w")
+
+        def on_audience_change(choice: str) -> None:
+            if choice == "Por turma":
+                values = list(class_by_label.keys()) or ["(nenhuma turma)"]
+                filter_option.configure(values=values, state="normal")
+                filter_option.set(values[0])
+            elif choice == "Por tipo de membro":
+                filter_option.configure(values=member_types, state="normal")
+                filter_option.set(member_types[0])
+            else:
+                filter_option.configure(values=[""], state="disabled")
+                filter_option.set("")
+
+        audience_option.configure(command=on_audience_change)
+        on_audience_change("Todos os ativos")
+
+        ctk.CTkLabel(parent, text="Assunto:").grid(row=3, column=0, padx=16, pady=(8, 4), sticky="w")
+        subject_entry = ctk.CTkEntry(parent, width=400)
+        subject_entry.grid(row=4, column=0, padx=16, pady=(0, 12), sticky="ew")
+
+        ctk.CTkLabel(parent, text="Mensagem:").grid(row=5, column=0, padx=16, pady=(8, 4), sticky="w")
+        body_entry = ctk.CTkTextbox(parent, height=160)
+        body_entry.grid(row=6, column=0, padx=16, pady=(0, 16), sticky="nsew")
+        parent.grid_rowconfigure(6, weight=1)
+
+        def do_send_bulk() -> None:
+            subject = subject_entry.get().strip()
+            body_text = body_entry.get("1.0", "end-1c").strip()
+            if not subject or not body_text:
+                self._show_error("Preencha o assunto e a mensagem.")
+                return
+
+            audience = audience_option.get()
+            kwargs: dict = {"active_only": True}
+            audience_desc = "todos os membros ativos"
+            if audience == "Por turma":
+                class_id = class_by_label.get(filter_option.get())
+                if not class_id:
+                    self._show_error("Selecione uma turma valida.")
+                    return
+                kwargs["class_id"] = class_id
+                audience_desc = f"turma {filter_option.get()}"
+            elif audience == "Por tipo de membro":
+                kwargs["member_type"] = filter_option.get()
+                audience_desc = f"membros do tipo {filter_option.get()}"
+
+            if not self._confirm_action(
+                "Disparo em massa",
+                f"Enviar este e-mail para {audience_desc}? O envio usa o SMTP configurado.",
+            ):
+                return
+
+            def task() -> None:
+                try:
+                    summary = self.communication_service.bulk_email_members(
+                        msg_service, subject, body_text, **kwargs
+                    )
+                    self.after(0, lambda s=summary: self._show_info(
+                        "Disparo concluido.\n\n"
+                        f"Enviados: {s['sent_count']}\n"
+                        f"Falhas: {s['failed_count']}\n"
+                        f"Sem e-mail (ignorados): {s['skipped_no_email']}"
+                    ))
+                except Exception as exc:
+                    self.after(0, lambda error=exc: self._show_error(f"Falha no disparo: {error}"))
+
+            threading.Thread(target=task, daemon=True).start()
+
+        ctk.CTkButton(parent, text="Enviar para o publico-alvo", command=do_send_bulk).grid(
+            row=7, column=0, padx=16, pady=(0, 16), sticky="w"
+        )
 
     def _build_whatsapp_tab(self, parent: ctk.CTkFrame, msg_service: MessageService) -> None:
         parent.grid_columnconfigure(1, weight=1)
