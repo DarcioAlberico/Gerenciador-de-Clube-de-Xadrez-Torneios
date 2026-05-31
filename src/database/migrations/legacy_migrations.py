@@ -41,6 +41,7 @@ class LegacyMigrations:
             27: self._migrate_to_v27,
             28: self._migrate_to_v28,
             29: self._migrate_to_v29,
+            30: self._migrate_to_v30,
         }
 
     def _run_schema_migrations(self, connection: sqlite3.Connection) -> None:
@@ -117,6 +118,8 @@ class LegacyMigrations:
             self._migrate_to_v28(connection)
         if self.db.SCHEMA_VERSION >= 29:
             self._migrate_to_v29(connection)
+        if self.db.SCHEMA_VERSION >= 30:
+            self._migrate_to_v30(connection)
 
     def _migrate_to_v1(self, connection: sqlite3.Connection) -> None:
         now = self.db.now()
@@ -1545,3 +1548,10 @@ class LegacyMigrations:
                 ON tiebreak_components(tournament_id, round_id);
             """
         )
+
+    def _migrate_to_v30(self, connection: sqlite3.Connection) -> None:
+        columns = self.db._table_columns(connection, "library_items")
+        if "cover_image" not in columns:
+            connection.execute(
+                "ALTER TABLE library_items ADD COLUMN cover_image TEXT NOT NULL DEFAULT ''"
+            )

@@ -472,6 +472,14 @@ class LibraryService:
         self.db = db
 
     def save_item(self, data: dict[str, Any], item_id: int | None = None) -> int:
+        from src.services.chess_validation import ChessValidationService
+        fen_pgn = data.get('fen_pgn', '').strip()
+        if fen_pgn:
+            if '[' in fen_pgn or '1.' in fen_pgn:
+                ChessValidationService.parse_pgn(fen_pgn, strict=False)
+            else:
+                ChessValidationService.validate_fen(fen_pgn)
+
         now = self.db.now()
         payload = {
             "title": data.get("title", "").strip(),
@@ -484,6 +492,7 @@ class LibraryService:
             "solution": data.get("solution", ""),
             "tags": data.get("tags", ""),
             "author": data.get("author", ""),
+            "cover_image": data.get("cover_image", "").strip(),
             "updated_at": now
         }
         with self.db.connect() as conn:
@@ -567,7 +576,7 @@ class LibraryService:
         <p>{item.get('content')}</p>
     </div>
     <div class="board">
-        {svg_content}
+        {("<img src='" + item.get("cover_image") + "' style='max-width: 100%; max-height: 400px;' />") if item.get("cover_image") else svg_content}
     </div>
     <div class="solution">
         <h3>Solução / Gabarito</h3>
@@ -692,7 +701,7 @@ class LibraryService:
         <h3>{idx}. {item.get('title')}</h3>
         <p><em>Fase: {item.get('phase')} | Nível: {item.get('level')}</em></p>
         <p>{item.get('content', '')}</p>
-        <div class="board">{svg_content}</div>
+        {("<img src='" + item.get("cover_image") + "' style='max-width: 100%; max-height: 400px;' />") if item.get("cover_image") else svg_content}
     </div>
 """
 
