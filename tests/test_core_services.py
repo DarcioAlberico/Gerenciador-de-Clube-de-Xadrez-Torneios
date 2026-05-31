@@ -3875,6 +3875,88 @@ class PairingServiceTest(unittest.TestCase):
 
         self.assertEqual(result["cloud_status"], "success")
 
+    def test_send_bulk_email_collects_per_recipient_results(self) -> None:
+        from src.services.message_service import MessageService
+
+        class _RecordingMailer(MessageService):
+            def __init__(self, fail=()):
+                super().__init__()
+                self.fail = set(fail)
+                self.sent: list[str] = []
+
+            def send_email(self, to_email, subject, body):
+                if to_email in self.fail:
+                    raise RuntimeError("smtp down")
+                self.sent.append(to_email)
+                return True
+
+        mailer = _RecordingMailer(fail={"erro@x.com"})
+        recipients = [
+            {"member_id": 1, "email": "ok@x.com"},
+            {"member_id": 2, "email": "erro@x.com"},
+            {"member_id": 3, "email": ""},  # sem e-mail -> falha sem tentar enviar
+        ]
+
+        summary = mailer.send_bulk_email(recipients, "Assunto", "Corpo")
+
+        self.assertEqual(summary["sent_count"], 1)
+        self.assertEqual(summary["failed_count"], 2)
+        self.assertEqual(mailer.sent, ["ok@x.com"])
+        self.assertEqual(summary["total"], 3)
+
+    def test_bulk_email_members_targets_audience_and_logs(self) -> None:
+        from src.services.dashboard_service import CommunicationService
+
+        class _FakeMailer:
+            def __init__(self):
+                self.calls: list[tuple[str, str, str]] = []
+
+            def send_bulk_email(self, recipients, subject, body):
+                sent = []
+                for r in recipients:
+                    self.calls.append((r["email"], subject, body))
+                    sent.append(r)
+                return {"total": len(recipients), "sent": sent, "failed": [],
+                        "sent_count": len(sent), "failed_count": 0}
+
+        ana = self.member_service.create_member(
+            {"name": "Ana", "rating": "1500", "member_type": "aluno",
+             "status": "active", "email": "ana@x.com"}
+        )
+        self.member_service.create_member(
+            {"name": "Beto", "rating": "1600", "member_type": "socio",
+             "status": "active", "email": "beto@x.com"}
+        )
+        self.member_service.create_member(
+            {"name": "Carla", "rating": "1400", "member_type": "aluno",
+             "status": "active", "email": ""}  # sem e-mail -> ignorada
+        )
+
+        comm = CommunicationService(self.db)
+        mailer = _FakeMailer()
+
+        summary = comm.bulk_email_members(
+            mailer, "Aviso", "Corpo do aviso", active_only=True, member_type="aluno"
+        )
+
+        # So Ana (aluno com e-mail). Beto e socio; Carla nao tem e-mail.
+        self.assertEqual(summary["sent_count"], 1)
+        self.assertEqual(summary["recipients_total"], 1)
+        self.assertEqual(summary["skipped_no_email"], 1)
+        self.assertEqual(summary["failed_count"], 0)
+        self.assertEqual([call[0] for call in mailer.calls], ["ana@x.com"])
+        # Envio bem-sucedido foi registrado em communication_logs.
+        logs = comm.list_member_communications(ana)
+        self.assertEqual(len(logs), 1)
+        self.assertEqual(logs[0]["subject"], "Aviso")
+
+    def test_bulk_email_members_requires_subject_and_body(self) -> None:
+        from src.services.dashboard_service import CommunicationService
+
+        comm = CommunicationService(self.db)
+        with self.assertRaises(ValueError):
+            comm.bulk_email_members(object(), "", "Corpo")
+
     def test_app_settings_normalizes_legacy_default_paths(self) -> None:
         base_path = Path(self.temp_dir.name)
         legacy_export_dir = base_path / "repo" / "exports"

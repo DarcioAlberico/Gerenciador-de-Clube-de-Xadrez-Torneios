@@ -39,6 +39,32 @@ class MessageService:
         except Exception as e:
             raise RuntimeError(f"Erro ao enviar e-mail: {e}")
 
+    def send_bulk_email(self, recipients: list[dict], subject: str, body: str) -> dict:
+        """Envia o mesmo e-mail para varios destinatarios. `recipients` e uma
+        lista de dicts; cada um precisa da chave 'email' (os demais campos sao
+        repassados intactos no resumo, ex.: 'member_id'/'name'). Nunca
+        interrompe no meio: um destinatario que falha entra em 'failed' com o
+        motivo e o envio continua. Devolve um resumo com contagens e listas."""
+        sent: list[dict] = []
+        failed: list[dict] = []
+        for recipient in recipients:
+            email = str(recipient.get("email") or "").strip()
+            if not email:
+                failed.append({"recipient": recipient, "error": "sem e-mail"})
+                continue
+            try:
+                self.send_email(email, subject, body)
+                sent.append(recipient)
+            except Exception as exc:
+                failed.append({"recipient": recipient, "error": str(exc)})
+        return {
+            "total": len(recipients),
+            "sent": sent,
+            "failed": failed,
+            "sent_count": len(sent),
+            "failed_count": len(failed),
+        }
+
     def generate_whatsapp_link(self, phone_number: str, message: str) -> str:
         """
         Gera um link do WhatsApp (wa.me) para o número e mensagem fornecidos.
