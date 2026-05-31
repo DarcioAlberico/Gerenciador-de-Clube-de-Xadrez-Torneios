@@ -5,6 +5,7 @@ import unittest
 from src.services.federation_exporters.trf25_records import (
     encode_time_control,
     record_162,
+    record_172,
     record_212,
     record_240,
     record_250,
@@ -311,6 +312,21 @@ class TestRecordNationalRating(unittest.TestCase):
         self.assertEqual(cols(line, 49, 52), "2401")
         # Sem nº nacional, a linha termina no rating (rstrip).
         self.assertEqual(len(line.rstrip("\r\n")), 52)
+
+
+class TestRecord172(unittest.TestCase):
+    def test_column_geometry(self):
+        line = record_172("bra", "FIDE")
+        self.assertEqual(cols(line, 1, 3), "172")
+        self.assertEqual(cols(line, 5, 7), "BRA")            # federacao (maiuscula)
+        self.assertEqual(cols(line, 9, 13).strip(), "FIDE")  # metodo
+        self.assertTrue(line.endswith("\r\n"))
+
+    def test_defaults_to_fide(self):
+        self.assertEqual(cols(record_172("FID"), 9, 13).strip(), "FIDE")
+
+    def test_unknown_method_falls_back_to_other(self):
+        self.assertEqual(cols(record_172("FID", "estranho"), 9, 13).strip(), "OTHER")
 
 
 if __name__ == "__main__":
