@@ -147,14 +147,40 @@ fluxo normal do arbitro.
 - **Notificacoes:** sao opcionais e auditadas. Sem configuracao ativa, sao
   registradas como ignoradas.
 
-### Checklist rapido
+### Checklist de seguranca operacional
 
-- Backup configurado e testado.
-- Jogadores presentes conferidos antes da primeira rodada.
-- Configuracoes oficiais revisadas para TRF quando aplicavel.
-- Rodada anterior fechada antes de gerar a proxima.
-- Pendencias e alertas revisados no painel do arbitro.
-- Exportacoes finais e backup final arquivados.
+Cobre as cinco areas criticas: backup, auditoria, TRF, publicacao e
+sincronizacao opcional.
+
+- **Backup:** pasta de backups configurada e testada; backup manual antes da
+  primeira rodada e backup final arquivado junto das exportacoes.
+- **Jogadores:** presentes conferidos na chamada inicial antes da primeira
+  rodada.
+- **Rodadas:** rodada anterior fechada antes de gerar a proxima; pendencias e
+  alertas revisados no painel do arbitro.
+- **Auditoria:** relatorio de auditoria do torneio conferido; correcoes em
+  rodada fechada feitas com motivo registrado.
+- **TRF:** configuracoes oficiais revisadas e `Pendencias TRF` sem bloqueios
+  antes de gerar o `Chess-Results (TRF16)`, quando aplicavel.
+- **Publicacao:** portal live / site HTML revisado para nao expor dados
+  sensiveis no modo publico.
+- **Sincronizacao:** se usada, `sync_outbox` drenado (sem eventos pendentes)
+  antes de arquivar o torneio.
+
+### Proximos incrementos
+
+Backlog restante do roadmap de arbitragem (detalhes em
+`ROADMAP_ARBITRAGEM_XADREZ.md`). Nenhum deles altera as regras de
+emparceiramento ou os resultados ja existentes:
+
+- **Notificacoes em massa/agendadas:** disparo de avisos de rodada e cobranca a
+  partir do `MessageService` (hoje o envio e manual, um a um).
+- **Plugin de relogio de hardware real:** a interface de plugins ja existe (so o
+  registro manual esta implementado); um plugin especifico entra sob demanda.
+- **Aceleracao de Baku (TRF25):** guardada ate a FIDE publicar a formula
+  oficial; o exportador emite aviso em vez de um valor potencialmente enganoso.
+- **Submissao automatica a federacao:** fora de escopo enquanto nao houver API
+  publica utilizavel; o fluxo atual gera o arquivo TRF para upload manual.
 
 ## Instalar com uv
 
