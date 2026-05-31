@@ -42,9 +42,11 @@ class LibraryMixin:
         fields = [
             ("title", "Título"),
             ("fen_pgn", "FEN / PGN"),
+            ("theme", "Tema"),
             ("solution", "Solução / Gabarito"),
             ("tags", "Tags"),
             ("author", "Fonte / Autor"),
+            ("cover_image", "Imagem (Capa)"),
         ]
         
         ctk.CTkLabel(form, text="Tipo").grid(row=0, column=0, padx=16, pady=(8, 0), sticky="w")
@@ -65,10 +67,33 @@ class LibraryMixin:
             if key == "fen_pgn":
                 entry = ctk.CTkTextbox(form, width=280, height=80)
                 entry.grid(row=current_row + 1, column=0, padx=16, pady=(2, 0), sticky="ew")
+                entries[key] = entry
+            elif key == "cover_image":
+                frame = ctk.CTkFrame(form, fg_color="transparent")
+                frame.grid(row=current_row + 1, column=0, padx=16, pady=(2, 0), sticky="ew")
+                frame.grid_columnconfigure(0, weight=1)
+                entry = ctk.CTkEntry(frame)
+                entry.grid(row=0, column=0, sticky="ew", padx=(0, 4))
+                btn = ctk.CTkButton(frame, text="...", width=30, command=lambda e=entry: [e.delete(0, "end"), e.insert(0, ctk.filedialog.askopenfilename(filetypes=[("Imagens", "*.png;*.jpg;*.jpeg;*.gif;*.webp;*.svg"), ("Todos", "*.*")]))])
+                btn.grid(row=0, column=1)
+                def _prev(e=entry):
+                    img_path = e.get().strip()
+                    if not img_path or not __import__('os').path.exists(img_path): return
+                    top = ctk.CTkToplevel()
+                    top.title("Preview")
+                    try:
+                        from PIL import Image
+                        img = ctk.CTkImage(light_image=Image.open(img_path), size=(300, 300))
+                        ctk.CTkLabel(top, image=img, text="").pack(padx=20, pady=20)
+                    except Exception as ex:
+                        ctk.CTkLabel(top, text=str(ex)).pack(padx=20, pady=20)
+                btn_prev = ctk.CTkButton(frame, text="✩", width=30, command=_prev)
+                btn_prev.grid(row=0, column=2, padx=(4,0))
+                entries[key] = entry
             else:
                 entry = ctk.CTkEntry(form, width=280)
                 entry.grid(row=current_row + 1, column=0, padx=16, pady=(2, 0), sticky="ew")
-            entries[key] = entry
+                entries[key] = entry
             current_row += 2
 
         # PAINEL DIREITO: Busca e Listagem
@@ -165,9 +190,11 @@ class LibraryMixin:
                 "phase": phase_option.get(),
                 "level": level_option.get(),
                 "fen_pgn": entries["fen_pgn"].get("1.0", "end-1c").strip(),
+                "theme": entries["theme"].get().strip(),
                 "solution": entries["solution"].get().strip(),
                 "tags": entries["tags"].get().strip(),
                 "author": entries["author"].get().strip(),
+                "cover_image": entries["cover_image"].get().strip(),
             }
             try:
                 self.library_service.save_item(payload, selected_item_id["value"])
