@@ -3,6 +3,20 @@ from __future__ import annotations
 from ..support import *
 
 
+def _cloud_status_label(status: str) -> str:
+    """Texto amigavel para o status de copia do backup para a nuvem."""
+    status = (status or "").strip()
+    if status == "success":
+        return "copiado para a pasta de nuvem."
+    if status == "not_configured":
+        return "pasta de nuvem nao configurada."
+    if status == "invalid_directory":
+        return "pasta de nuvem invalida (verifique o caminho)."
+    if status.startswith("error:"):
+        return f"falha ao copiar ({status[len('error:'):].strip()})."
+    return status or "sem informacao."
+
+
 class SettingsPagesMixin:
     def show_app_settings(self) -> None:
         self._clear_content()
@@ -365,7 +379,10 @@ class SettingsPagesMixin:
                     lambda result: (
                         load_backups(),
                         load_audit_logs(),
-                        self._show_info(f"Backup criado:\n{result['path']}"),
+                        self._show_info(
+                            f"Backup criado:\n{result['path']}\n\n"
+                            f"Nuvem: {_cloud_status_label(result.get('cloud_status', ''))}"
+                        ),
                     ),
                     "Criando backup...",
                 )

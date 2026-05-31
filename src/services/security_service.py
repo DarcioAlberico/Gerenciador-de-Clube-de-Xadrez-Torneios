@@ -8,7 +8,6 @@ import logging
 import math
 import os
 import secrets
-import shutil
 import sqlite3
 import unicodedata
 from datetime import date, datetime, time, timedelta
@@ -243,25 +242,13 @@ class SecurityService:
         self.require_permission("settings_write")
         path = self.db.backup(reason)
         deleted = self.enforce_backup_retention()
-        
-        cloud_sync_dir = self.db.get_app_settings().get("cloud_sync_dir", "").strip()
-        cloud_status = "not_configured"
-        cloud_path = ""
-        
-        if cloud_sync_dir:
-            cloud_dir_path = Path(cloud_sync_dir)
-            if cloud_dir_path.exists() and cloud_dir_path.is_dir():
-                try:
-                    cloud_target = cloud_dir_path / path.name
-                    shutil.copy2(path, cloud_target)
-                    cloud_status = "success"
-                    cloud_path = str(cloud_target)
-                except Exception as exc:
-                    logger.error("Falha ao copiar backup para nuvem %s: %s", cloud_sync_dir, exc)
-                    cloud_status = f"error: {exc}"
-            else:
-                cloud_status = "invalid_directory"
-        
+
+        # db.backup() ja copiou para a nuvem (caminho unico, sem duplicar). Aqui
+        # so lemos o resultado para auditar e reportar.
+        cloud_result = self.db.last_cloud_backup or {"status": "not_configured", "path": ""}
+        cloud_status = cloud_result.get("status", "not_configured")
+        cloud_path = cloud_result.get("path", "")
+
         self.audit(
             "backup_created",
             entity_type="backup",
