@@ -6,6 +6,7 @@ from src.services.constants import AppError, RESULT_POINTS
 from src.services.pairing import (
     clock_event_issue,
     finalize_issues,
+    performance_rating,
     plan_pairing_player_swap,
     plan_team_board_player_swap,
     team_bye_summary,
@@ -178,6 +179,32 @@ class TestFinalizeIssues(unittest.TestCase):
         ]
         result = finalize_issues(issues, acknowledged_keys=set(), limit=1)
         self.assertEqual([item["issue_key"] for item in result], ["b"])
+
+
+class TestPerformanceRating(unittest.TestCase):
+    def test_unrated_opponents_excluded_from_score_and_average(self):
+        # Empate contra ranqueado (1600) + vitoria contra nao-ranqueado.
+        # A vitoria contra o sem-rating nao pode entrar no score nem na media:
+        # performance = media(1600) + 0 (50% sobre 1 jogo ranqueado) = 1600.
+        player_stat = {"earned_against": [(1, 0.5), (2, 1.0)]}
+        stats = {1: {"rating": 1600}, 2: {"rating": 0}}
+        self.assertEqual(performance_rating(player_stat, stats), 1600)
+
+    def test_no_rated_opponents_returns_empty(self):
+        player_stat = {"earned_against": [(1, 1.0)]}
+        stats = {1: {"rating": 0}}
+        self.assertEqual(performance_rating(player_stat, stats), "")
+
+    def test_fifty_percent_returns_average_rating(self):
+        # Vitoria sobre 1600 e derrota para 1800: 50% -> media (1700).
+        player_stat = {"earned_against": [(1, 1.0), (2, 0.0)]}
+        stats = {1: {"rating": 1600}, 2: {"rating": 1800}}
+        self.assertEqual(performance_rating(player_stat, stats), 1700)
+
+    def test_perfect_score_caps_at_plus_800(self):
+        player_stat = {"earned_against": [(1, 1.0)]}
+        stats = {1: {"rating": 1600}}
+        self.assertEqual(performance_rating(player_stat, stats), 2400)
 
 
 if __name__ == "__main__":

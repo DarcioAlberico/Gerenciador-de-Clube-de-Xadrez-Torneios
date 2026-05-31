@@ -52,20 +52,21 @@ def performance_rating(
     player_stat: dict[str, Any],
     stats: dict[int, dict[str, Any]],
 ) -> int | str:
-    games = len(player_stat["earned_against"])
-    if not games:
-        return ""
-
-    opponent_ratings = [
-        int(stats[opponent_id]["rating"] or 0)
-        for opponent_id, _earned in player_stat["earned_against"]
+    # Performance só faz sentido sobre adversários COM rating. O percentual
+    # (score/games) e a média precisam usar o MESMO conjunto — senão jogos
+    # contra não-ranqueados inflariam/deflacionariam a performance sem alterar
+    # a média (definição padrão FIDE: ambos sobre os jogos ranqueados).
+    rated = [
+        (int(stats[opponent_id]["rating"] or 0), float(earned))
+        for opponent_id, earned in player_stat["earned_against"]
         if opponent_id in stats and int(stats[opponent_id]["rating"] or 0) > 0
     ]
-    if not opponent_ratings:
+    if not rated:
         return ""
 
-    score = sum(float(earned) for _opponent_id, earned in player_stat["earned_against"])
-    average_rating = sum(opponent_ratings) / len(opponent_ratings)
+    games = len(rated)
+    score = sum(earned for _rating, earned in rated)
+    average_rating = sum(rating for rating, _earned in rated) / games
     diff: float
     if score <= 0:
         diff = -800
