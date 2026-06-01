@@ -43,6 +43,14 @@ class LegacyMigrations:
             29: self._migrate_to_v29,
             30: self._migrate_to_v30,
             31: self._migrate_to_v31,
+            32: self._migrate_to_v32,
+            33: self._migrate_to_v33,
+            34: self._migrate_to_v34,
+            35: self._migrate_to_v35,
+            36: self._migrate_to_v36,
+            37: self._migrate_to_v37,
+            38: self._migrate_to_v38,
+            39: self._migrate_to_v39,
         }
 
     def _run_schema_migrations(self, connection: sqlite3.Connection) -> None:
@@ -123,6 +131,22 @@ class LegacyMigrations:
             self._migrate_to_v30(connection)
         if self.db.SCHEMA_VERSION >= 31:
             self._migrate_to_v31(connection)
+        if self.db.SCHEMA_VERSION >= 32:
+            self._migrate_to_v32(connection)
+        if self.db.SCHEMA_VERSION >= 33:
+            self._migrate_to_v33(connection)
+        if self.db.SCHEMA_VERSION >= 34:
+            self._migrate_to_v34(connection)
+        if self.db.SCHEMA_VERSION >= 35:
+            self._migrate_to_v35(connection)
+        if self.db.SCHEMA_VERSION >= 36:
+            self._migrate_to_v36(connection)
+        if self.db.SCHEMA_VERSION >= 37:
+            self._migrate_to_v37(connection)
+        if self.db.SCHEMA_VERSION >= 38:
+            self._migrate_to_v38(connection)
+        if self.db.SCHEMA_VERSION >= 39:
+            self._migrate_to_v39(connection)
 
     def _migrate_to_v1(self, connection: sqlite3.Connection) -> None:
         now = self.db.now()
@@ -1581,3 +1605,146 @@ class LegacyMigrations:
                 ON scheduled_messages(status, scheduled_at);
             """
         )
+
+    def _migrate_to_v32(self, connection: sqlite3.Connection) -> None:
+        """LBX (Liga Brasileira de Xadrez) como fonte de rating oficial: numero
+        de registro proprio da LBX (ID_No) nos jogadores e arbitros, ao lado de
+        fide_id/cbx_id. Aditivo e idempotente — bancos antigos so ganham a coluna
+        que falta."""
+        for table in ("players", "referees"):
+            columns = self.db._table_columns(connection, table)
+            if "lbx_id" not in columns:
+                connection.execute(
+                    f"ALTER TABLE {table} ADD COLUMN lbx_id TEXT DEFAULT ''"
+                )
+
+    def _migrate_to_v33(self, connection: sqlite3.Connection) -> None:
+        """Congela o horario final das rodadas fechadas para o relogio arbitral."""
+        columns = self.db._table_columns(connection, "rounds")
+        if "closed_at" not in columns:
+            connection.execute("ALTER TABLE rounds ADD COLUMN closed_at TEXT DEFAULT ''")
+        connection.execute(
+            """
+            UPDATE rounds
+            SET closed_at = created_at
+            WHERE status = 'closed' AND (closed_at IS NULL OR closed_at = '')
+            """
+        )
+
+    def _migrate_to_v34(self, connection: sqlite3.Connection) -> None:
+        """Adiciona taxas locais por base para prestacao de contas de rating."""
+        columns = self.db._table_columns(connection, "tournament_settings")
+        for column in ("rating_fee_fide", "rating_fee_cbx", "rating_fee_lbx"):
+            if column not in columns:
+                connection.execute(
+                    f"ALTER TABLE tournament_settings ADD COLUMN {column} REAL NOT NULL DEFAULT 0.0"
+                )
+
+    def _migrate_to_v35(self, connection: sqlite3.Connection) -> None:
+        """Sequencia de desempates configuravel por torneio (individual e equipes).
+
+        Coluna vazia preserva a ordem historica (pontos, Buchholz, Buchholz
+        mediano, Sonneborn-Berger, vitorias), entao bancos antigos nao mudam de
+        classificacao.
+        """
+        columns = self.db._table_columns(connection, "tournament_settings")
+        for column in ("tiebreak_sequence", "team_tiebreak_sequence"):
+            if column not in columns:
+                connection.execute(
+                    f"ALTER TABLE tournament_settings ADD COLUMN {column} TEXT NOT NULL DEFAULT ''"
+                )
+
+    def _migrate_to_v36(self, connection: sqlite3.Connection) -> None:
+        """Relatorio de variacao de rating FIDE (Fase B) + fator K por jogador.
+
+        Apenas adiciona a coluna opcional players.k_factor e cria a tabela de
+        relatorios; nao altera dados existentes nem classificacoes.
+        """
+        player_columns = self.db._table_columns(connection, "players")
+        if "k_factor" not in player_columns:
+            connection.execute("ALTER TABLE players ADD COLUMN k_factor INTEGER")
+        connection.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS fide_rating_reports (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tournament_id INTEGER NOT NULL,
+                player_id INTEGER NOT NULL,
+                rating_type TEXT NOT NULL DEFAULT 'fide',
+                ro INTEGER,
+                k INTEGER,
+                games_rated INTEGER,
+                score REAL,
+                we REAL,
+                delta REAL,
+                rc REAL,
+                rp INTEGER,
+                n_over_400 INTEGER,
+                created_at TEXT NOT NULL,
+                UNIQUE (tournament_id, rating_type, player_id),
+                FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
+                FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_fide_rating_reports_lookup
+                ON fide_rating_reports(tournament_id, rating_type);
+            """
+        )
+
+    def _migrate_to_v37(self, connection: sqlite3.Connection) -> None:
+        """Distribuicao de premios (Fase C): tabela de premios + politica/imposto.
+
+        Apenas adiciona colunas/ tabela novas; nao altera classificacoes nem
+        premios ja calculados (nao havia premios estruturados antes).
+        """
+        settings_columns = self.db._table_columns(connection, "tournament_settings")
+        if "prize_policy" not in settings_columns:
+            connection.execute(
+                "ALTER TABLE tournament_settings ADD COLUMN prize_policy TEXT NOT NULL DEFAULT 'best_only'"
+            )
+        if "prize_tax_percent" not in settings_columns:
+            connection.execute(
+                "ALTER TABLE tournament_settings ADD COLUMN prize_tax_percent REAL NOT NULL DEFAULT 0.0"
+            )
+        connection.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS tournament_prizes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tournament_id INTEGER NOT NULL,
+                kind TEXT NOT NULL DEFAULT 'overall',
+                label TEXT NOT NULL DEFAULT '',
+                category TEXT NOT NULL DEFAULT '',
+                rank_from INTEGER NOT NULL DEFAULT 1,
+                rank_to INTEGER NOT NULL DEFAULT 1,
+                amount REAL NOT NULL DEFAULT 0,
+                position INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_tournament_prizes_lookup
+                ON tournament_prizes(tournament_id, position);
+            """
+        )
+
+    def _migrate_to_v38(self, connection: sqlite3.Connection) -> None:
+        """Layout configuravel de listas (Fase F): tabela report_layouts.
+
+        Tabela nova e opcional; sem ela, as listas usam as colunas padrao.
+        """
+        connection.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS report_layouts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tournament_id INTEGER NOT NULL,
+                report_key TEXT NOT NULL,
+                columns_json TEXT NOT NULL DEFAULT '',
+                updated_at TEXT NOT NULL,
+                UNIQUE (tournament_id, report_key),
+                FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE
+            );
+            """
+        )
+
+    def _migrate_to_v39(self, connection: sqlite3.Connection) -> None:
+        """Divisao de torneios (Fase I): vinculo opcional ao torneio de origem."""
+        columns = self.db._table_columns(connection, "tournaments")
+        if "parent_tournament_id" not in columns:
+            connection.execute("ALTER TABLE tournaments ADD COLUMN parent_tournament_id INTEGER")

@@ -14,6 +14,12 @@ from typing import Any, Mapping, TYPE_CHECKING
 
 from src.core.database import BASE_DIR, DEFAULT_CERTIFICATE_TEMPLATES, Database
 from src.services.constants import *
+from src.services.pairing import (
+    parse_player_tiebreak_sequence,
+    parse_team_tiebreak_sequence,
+    serialize_tiebreak_sequence,
+)
+from src.services.prizes import PRIZE_POLICIES
 
 if TYPE_CHECKING:
     from src.services.club_service import ClubService
@@ -124,6 +130,17 @@ class TournamentService:
         schedule_payload = self._validated_schedule(schedule, tournament_payload["rounds_count"])
         self._validate_team_settings_compatibility(tournament_id, tournament_payload, settings_payload)
 
+        current_settings = self.db.get_tournament_settings(tournament_id) or {}
+        requested_method = str(settings_data.get("pairing_method") or "").strip()
+        if (
+            requested_method
+            and requested_method != str(current_settings.get("pairing_method", "swiss"))
+            and self.db.list_rounds(tournament_id)
+        ):
+            raise AppError(
+                "Nao e possivel mudar o metodo de pareamento depois de gerar a primeira rodada."
+            )
+
         self.db.update_tournament_details(
             tournament_id=tournament_id,
             **tournament_payload,
@@ -131,6 +148,95 @@ class TournamentService:
         self.db.save_tournament_settings(tournament_id, settings_payload)
         self.db.save_round_schedule(tournament_id, schedule_payload)
         logger.info("Configuracoes do torneio %s atualizadas", tournament_id)
+
+    def change_tournament_type(self, tournament_id: int, pairing_method: str) -> None:
+        """Muda o metodo de pareamento (RR <-> Suico <-> ...), bloqueado apos a R1."""
+        tournament = self.db.get_tournament(tournament_id)
+        if not tournament:
+            raise AppError("Selecione um torneio valido.")
+        method = str(pairing_method or "").strip()
+        if method not in PAIRING_METHODS:
+            raise AppError("Metodo de pareamento invalido.")
+        if self.db.list_rounds(tournament_id):
+            raise AppError(
+                "Nao e possivel mudar o metodo de pareamento depois de gerar a primeira rodada."
+            )
+        self.db.update_pairing_method(tournament_id, method)
+        logger.info("Torneio %s teve o pareamento alterado para %s", tournament_id, method)
+
+    def split_tournament(self, tournament_id: int, group_count: int) -> list[int]:
+        """Divide os jogadores em N torneios-filho por ranking inicial (A=mais forte)."""
+        tournament = self.db.get_tournament(tournament_id)
+        if not tournament:
+            raise AppError("Selecione um torneio valido.")
+        if tournament.get("competition_type") == "team":
+            raise AppError("A divisao esta disponivel apenas para torneios individuais.")
+        try:
+            groups = int(group_count)
+        except (TypeError, ValueError) as exc:
+            raise AppError("Quantidade de grupos invalida.") from exc
+        if groups < 2:
+            raise AppError("Divida em pelo menos 2 grupos.")
+        if self.db.list_rounds(tournament_id):
+            raise AppError("Divida o torneio antes de gerar a primeira rodada.")
+
+        players = self.db.list_players(tournament_id, active_only=False)
+        if len(players) < groups:
+            raise AppError("Jogadores insuficientes para a quantidade de grupos.")
+
+        ordered = sorted(
+            players,
+            key=lambda player: (
+                -int(player.get("international_rating") or player.get("rating") or 0),
+                str(player.get("name") or "").casefold(),
+            ),
+        )
+        base_size, remainder = divmod(len(ordered), groups)
+
+        child_ids: list[int] = []
+        index = 0
+        for group_index in range(groups):
+            size = base_size + (1 if group_index < remainder else 0)
+            chunk = ordered[index:index + size]
+            index += size
+            label = chr(ord("A") + group_index)
+            child_id = self.db.create_tournament(
+                name=f"{tournament['name']} - {label}",
+                club_id=tournament.get("club_id"),
+                location=str(tournament.get("location") or ""),
+                rounds_count=int(tournament.get("rounds_count") or 5),
+                time_control=str(tournament.get("time_control") or ""),
+                start_date=str(tournament.get("start_date") or ""),
+                end_date=str(tournament.get("end_date") or ""),
+                bye_points=float(tournament.get("bye_points") or 1.0),
+                class_id=tournament.get("class_id"),
+                competition_type="individual",
+            )
+            self.db.set_tournament_parent(child_id, tournament_id)
+            for player in chunk:
+                self.db.create_player(
+                    tournament_id=child_id,
+                    name=str(player.get("name") or ""),
+                    surname=str(player.get("surname") or ""),
+                    given_name=str(player.get("given_name") or ""),
+                    title=str(player.get("title") or ""),
+                    sex=str(player.get("sex") or ""),
+                    club=str(player.get("club") or ""),
+                    rating=int(player.get("rating") or 0),
+                    national_rating=int(player.get("national_rating") or 0),
+                    international_rating=int(player.get("international_rating") or 0),
+                    category=str(player.get("category") or ""),
+                    federation_id=str(player.get("federation_id") or ""),
+                    fide_id=str(player.get("fide_id") or ""),
+                    cbx_id=str(player.get("cbx_id") or ""),
+                    lbx_id=str(player.get("lbx_id") or ""),
+                    birth_date=str(player.get("birth_date") or ""),
+                    member_id=player.get("member_id"),
+                )
+            child_ids.append(child_id)
+
+        logger.info("Torneio %s dividido em %s grupos: %s", tournament_id, groups, child_ids)
+        return child_ids
 
     def _validate_team_settings_compatibility(
         self,
@@ -307,6 +413,20 @@ class TournamentService:
                 raise AppError(message)
             team_points[field] = value
 
+        rating_fees: dict[str, float] = {}
+        for field, label in (
+            ("rating_fee_fide", "FIDE"),
+            ("rating_fee_cbx", "CBX"),
+            ("rating_fee_lbx", "LBX"),
+        ):
+            try:
+                value = float(str(data.get(field) or "0").replace(",", "."))
+            except ValueError as exc:
+                raise AppError(f"Taxa de rating {label} invalida.") from exc
+            if value < 0:
+                raise AppError(f"Taxa de rating {label} nao pode ser negativa.")
+            rating_fees[field] = value
+
         team_pairing_method = str(data.get("team_pairing_method", "swiss")).strip() or "swiss"
         if team_pairing_method not in TEAM_PAIRING_METHODS:
             raise AppError("Metodo de emparceiramento por equipes invalido.")
@@ -318,6 +438,23 @@ class TournamentService:
             raise AppError("Criterio secundario por equipes invalido.")
         if team_standing_primary == team_standing_secondary:
             raise AppError("Use criterios diferentes para classificacao por equipes.")
+
+        tiebreak_sequence = serialize_tiebreak_sequence(
+            parse_player_tiebreak_sequence(data.get("tiebreak_sequence"))
+        )
+        team_tiebreak_sequence = serialize_tiebreak_sequence(
+            parse_team_tiebreak_sequence(data.get("team_tiebreak_sequence"))
+        )
+
+        prize_policy = str(data.get("prize_policy", "best_only")).strip() or "best_only"
+        if prize_policy not in PRIZE_POLICIES:
+            raise AppError("Politica de premiacao invalida.")
+        try:
+            prize_tax_percent = float(str(data.get("prize_tax_percent") or "0").replace(",", "."))
+        except ValueError as exc:
+            raise AppError("Imposto de premiacao invalido.") from exc
+        if not 0.0 <= prize_tax_percent <= 100.0:
+            raise AppError("Imposto de premiacao deve estar entre 0 e 100%.")
 
         payload = {
             "fide_event_id": str(data.get("fide_event_id", "")),
@@ -346,11 +483,16 @@ class TournamentService:
             "team_pairing_method": team_pairing_method,
             "team_standing_primary": team_standing_primary,
             "team_standing_secondary": team_standing_secondary,
+            "tiebreak_sequence": tiebreak_sequence,
+            "team_tiebreak_sequence": team_tiebreak_sequence,
+            "prize_policy": prize_policy,
+            "prize_tax_percent": prize_tax_percent,
             "team_fixed_board_order": 1 if data.get("team_fixed_board_order", 1) else 0,
             "team_board_order_policy": str(data.get("team_board_order_policy", "fixed")).strip() or "fixed",
             "team_reserve_policy": str(data.get("team_reserve_policy", "same_team")).strip() or "same_team",
             "team_lineup_deadline": str(data.get("team_lineup_deadline", "")).strip(),
             "team_max_substitutions": max(0, int(data.get("team_max_substitutions", 0) or 0)),
+            **rating_fees,
         }
         for field in TOURNAMENT_FLAG_FIELDS:
             payload[field] = 1 if data.get(field) else 0

@@ -2,7 +2,7 @@
 
 import unittest
 
-from src.services.constants import AppError, RESULT_POINTS
+from src.services.constants import RESULT_POINTS, AppError
 from src.services.pairing import (
     clock_event_issue,
     finalize_issues,

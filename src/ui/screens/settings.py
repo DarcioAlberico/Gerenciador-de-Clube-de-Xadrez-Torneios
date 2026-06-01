@@ -710,6 +710,14 @@ class SettingsPagesMixin:
         report_values = [
             "Completo",
             "Classificacao",
+            "Tabela cruzada",
+            "Taxas de rating",
+            "Rating FIDE",
+            "Premiacao",
+            "Estatistica de federacoes",
+            "Estatistica de partidas",
+            "Fichas individuais",
+            "Normas FIDE",
             "Desempates",
             "Rodada especifica",
             "Todas as rodadas",
@@ -760,6 +768,15 @@ class SettingsPagesMixin:
                 round_option.configure(state="normal")
             else:
                 round_option.configure(state="disabled")
+            if report_option.get() == "Tabela cruzada":
+                formats = ["csv", "xlsx", "pdf", "html"]
+            elif report_option.get() == "Taxas de rating":
+                formats = ["xlsx", "pdf"]
+            else:
+                formats = ["csv", "xlsx", "pdf"]
+            format_option.configure(values=formats)
+            if format_option.get() not in formats:
+                format_option.set(formats[0])
             if report_option.get() in ("Site HTML", "JSON publico", "Chess-Results (TRF16)", "TRF FIDE", "PGN (Partidas)"):
                 format_option.configure(state="disabled")
             else:
@@ -774,6 +791,14 @@ class SettingsPagesMixin:
             names = {
                 "Completo": f"{safe_name}_completo",
                 "Classificacao": f"{safe_name}_classificacao",
+                "Tabela cruzada": f"{safe_name}_tabela_cruzada",
+                "Taxas de rating": f"{safe_name}_taxas_rating",
+                "Rating FIDE": f"{safe_name}_rating_fide",
+                "Premiacao": f"{safe_name}_premiacao",
+                "Estatistica de federacoes": f"{safe_name}_estatistica_federacoes",
+                "Estatistica de partidas": f"{safe_name}_estatistica_partidas",
+                "Fichas individuais": f"{safe_name}_fichas",
+                "Normas FIDE": f"{safe_name}_normas_fide",
                 "Desempates": f"{safe_name}_desempates",
                 "Rodada especifica": f"{safe_name}_rodada",
                 "Todas as rodadas": f"{safe_name}_rodadas",
@@ -865,6 +890,22 @@ class SettingsPagesMixin:
                         self.export_service.export_complete(tournament_id, path)
                     elif report == "Classificacao":
                         self.export_service.export_standings(tournament_id, path)
+                    elif report == "Tabela cruzada":
+                        self.export_service.export_crosstable(tournament_id, path)
+                    elif report == "Taxas de rating":
+                        self.export_service.export_rating_fee_report(tournament_id, path)
+                    elif report == "Rating FIDE":
+                        self.export_service.export_fide_rating_report(tournament_id, path, "fide")
+                    elif report == "Premiacao":
+                        self.export_service.export_prize_report(tournament_id, path)
+                    elif report == "Estatistica de federacoes":
+                        self.export_service.export_federation_statistics(tournament_id, path)
+                    elif report == "Estatistica de partidas":
+                        self.export_service.export_game_statistics(tournament_id, path)
+                    elif report == "Fichas individuais":
+                        self.export_service.export_player_cards(tournament_id, path)
+                    elif report == "Normas FIDE":
+                        self.export_service.export_norm_report(tournament_id, path)
                     elif report == "Desempates":
                         self.export_service.export_tiebreak_report(tournament_id, path)
                     elif report == "Rodada especifica":

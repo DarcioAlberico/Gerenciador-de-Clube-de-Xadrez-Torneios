@@ -1,0 +1,299 @@
+{
+  "generated_at": "2026-06-01T01:59:28-03:00",
+  "scenarios": [
+    {
+      "players": 121,
+      "boards": 60,
+      "measurements": [
+        {
+          "operation": "Cadastrar inscritos",
+          "elapsed_ms": 570.6268999783788,
+          "limit_ms": 10000,
+          "details": "",
+          "status": "OK"
+        },
+        {
+          "operation": "Pre-visualizar primeira rodada",
+          "elapsed_ms": 14.277500013122335,
+          "limit_ms": 1000,
+          "details": "61 emparceiramentos planejados",
+          "status": "OK"
+        },
+        {
+          "operation": "Gerar primeira rodada",
+          "elapsed_ms": 75.37460001185536,
+          "limit_ms": 2000,
+          "details": "",
+          "status": "OK"
+        },
+        {
+          "operation": "Carregar painel do arbitro",
+          "elapsed_ms": 14.252199995098636,
+          "limit_ms": 500,
+          "details": "60 pendentes; 50 exibidos inline",
+          "status": "OK"
+        },
+        {
+          "operation": "Exportar lista de chamada PDF",
+          "elapsed_ms": 51.061500009382144,
+          "limit_ms": 5000,
+          "details": "4 paginas",
+          "status": "OK"
+        },
+        {
+          "operation": "Exportar sumulas PDF",
+          "elapsed_ms": 67.33159997384064,
+          "limit_ms": 5000,
+          "details": "60 paginas",
+          "status": "OK"
+        },
+        {
+          "operation": "Exportar mural PDF com QR",
+          "elapsed_ms": 602.9565000208095,
+          "limit_ms": 30000,
+          "details": "5 paginas",
+          "status": "OK"
+        },
+        {
+          "operation": "Lancar resultado e recarregar painel",
+          "elapsed_ms": 39.48358000052394,
+          "limit_ms": 250,
+          "details": "media de 20 lancamentos",
+          "status": "OK"
+        },
+        {
+          "operation": "Fechar primeira rodada",
+          "elapsed_ms": 106.45330001716502,
+          "limit_ms": 5000,
+          "details": "",
+          "status": "OK"
+        },
+        {
+          "operation": "Calcular tabela cruzada",
+          "elapsed_ms": 9.026599989738315,
+          "limit_ms": 2000,
+          "details": "121 linhas",
+          "status": "OK"
+        },
+        {
+          "operation": "Exportar tabela cruzada HTML",
+          "elapsed_ms": 10.794200003147125,
+          "limit_ms": 2000,
+          "details": "15123 bytes",
+          "status": "OK"
+        },
+        {
+          "operation": "Criar backup final",
+          "elapsed_ms": 12.930900003993884,
+          "limit_ms": 5000,
+          "details": "1454080 bytes",
+          "status": "OK"
+        },
+        {
+          "operation": "Restaurar backup em segunda instalacao",
+          "elapsed_ms": 622.2023000009358,
+          "limit_ms": 5000,
+          "details": "1 rodada; 61 mesas validadas",
+          "status": "OK"
+        },
+        {
+          "operation": "Validar continuidade offline",
+          "elapsed_ms": 866.7484000034165,
+          "limit_ms": 5000,
+          "details": "painel, 4 resultados, fechamento, classificacao, exportacoes e backup validados",
+          "status": "OK"
+        },
+        {
+          "operation": "Simular envios QR simultaneos e aprovar",
+          "elapsed_ms": 3099.6494999853894,
+          "limit_ms": 5000,
+          "details": "20 envios concorrentes recebidos e aprovados",
+          "status": "OK"
+        },
+        {
+          "operation": "Cadastrar inscricao de ultima hora e atualizar previa",
+          "elapsed_ms": 45.19810000783764,
+          "limit_ms": 2000,
+          "details": "122 inscritos; 0,5 ponto; historico preservado; jogador presente na previa seguinte",
+          "status": "OK"
+        },
+        {
+          "operation": "Importar base oficial FIDE local",
+          "elapsed_ms": 29.455200012307614,
+          "limit_ms": 5000,
+          "details": "121 registros oficiais importados",
+          "status": "OK"
+        },
+        {
+          "operation": "Comparar ratings oficiais antes da rodada 1",
+          "elapsed_ms": 139.29759999155067,
+          "limit_ms": 2000,
+          "details": "121 alteracoes; 0 sem correspondencia; sem persistir",
+          "status": "OK"
+        },
+        {
+          "operation": "Confirmar correcoes oficiais selecionadas",
+          "elapsed_ms": 700.3100999863818,
+          "limit_ms": 10000,
+          "details": "121 alteracoes aplicadas seletivamente",
+          "status": "OK"
+        },
+        {
+          "operation": "Localizar mesa e lancar resultado pelo painel",
+          "elapsed_ms": 48.81760000716895,
+          "limit_ms": 1000,
+          "details": "mesa 60 localizada fora do recorte inline, lancada e removida das pendencias",
+          "status": "OK"
+        }
+      ],
+      "status": "OK"
+    },
+    {
+      "players": 801,
+      "boards": 400,
+      "measurements": [
+        {
+          "operation": "Cadastrar inscritos",
+          "elapsed_ms": 3918.268999987049,
+          "limit_ms": 10000,
+          "details": "",
+          "status": "OK"
+        },
+        {
+          "operation": "Pre-visualizar primeira rodada",
+          "elapsed_ms": 29.974799981573597,
+          "limit_ms": 1000,
+          "details": "401 emparceiramentos planejados",
+          "status": "OK"
+        },
+        {
+          "operation": "Gerar primeira rodada",
+          "elapsed_ms": 86.08189999358729,
+          "limit_ms": 2000,
+          "details": "",
+          "status": "OK"
+        },
+        {
+          "operation": "Carregar painel do arbitro",
+          "elapsed_ms": 23.021500004688278,
+          "limit_ms": 500,
+          "details": "400 pendentes; 50 exibidos inline",
+          "status": "OK"
+        },
+        {
+          "operation": "Exportar lista de chamada PDF",
+          "elapsed_ms": 67.84269999479875,
+          "limit_ms": 5000,
+          "details": "22 paginas",
+          "status": "OK"
+        },
+        {
+          "operation": "Exportar sumulas PDF",
+          "elapsed_ms": 419.1881000006106,
+          "limit_ms": 5000,
+          "details": "400 paginas",
+          "status": "OK"
+        },
+        {
+          "operation": "Exportar mural PDF com QR",
+          "elapsed_ms": 3701.6010000079405,
+          "limit_ms": 30000,
+          "details": "27 paginas",
+          "status": "OK"
+        },
+        {
+          "operation": "Lancar resultado e recarregar painel",
+          "elapsed_ms": 49.42339500557864,
+          "limit_ms": 250,
+          "details": "media de 20 lancamentos",
+          "status": "OK"
+        },
+        {
+          "operation": "Fechar primeira rodada",
+          "elapsed_ms": 192.06679999479093,
+          "limit_ms": 5000,
+          "details": "",
+          "status": "OK"
+        },
+        {
+          "operation": "Calcular tabela cruzada",
+          "elapsed_ms": 23.920999985421076,
+          "limit_ms": 2000,
+          "details": "801 linhas",
+          "status": "OK"
+        },
+        {
+          "operation": "Exportar tabela cruzada HTML",
+          "elapsed_ms": 25.556899985531345,
+          "limit_ms": 2000,
+          "details": "96042 bytes",
+          "status": "OK"
+        },
+        {
+          "operation": "Criar backup final",
+          "elapsed_ms": 19.608700007665902,
+          "limit_ms": 5000,
+          "details": "4890624 bytes",
+          "status": "OK"
+        },
+        {
+          "operation": "Restaurar backup em segunda instalacao",
+          "elapsed_ms": 699.9134999932721,
+          "limit_ms": 5000,
+          "details": "1 rodada; 401 mesas validadas",
+          "status": "OK"
+        },
+        {
+          "operation": "Validar continuidade offline",
+          "elapsed_ms": 860.895799996797,
+          "limit_ms": 5000,
+          "details": "painel, 4 resultados, fechamento, classificacao, exportacoes e backup validados",
+          "status": "OK"
+        },
+        {
+          "operation": "Simular envios QR simultaneos e aprovar",
+          "elapsed_ms": 2846.3054000167176,
+          "limit_ms": 5000,
+          "details": "20 envios concorrentes recebidos e aprovados",
+          "status": "OK"
+        },
+        {
+          "operation": "Cadastrar inscricao de ultima hora e atualizar previa",
+          "elapsed_ms": 117.02890001470223,
+          "limit_ms": 2000,
+          "details": "802 inscritos; 0,5 ponto; historico preservado; jogador presente na previa seguinte",
+          "status": "OK"
+        },
+        {
+          "operation": "Importar base oficial FIDE local",
+          "elapsed_ms": 146.09579998068511,
+          "limit_ms": 5000,
+          "details": "700 registros oficiais importados",
+          "status": "OK"
+        },
+        {
+          "operation": "Comparar ratings oficiais antes da rodada 1",
+          "elapsed_ms": 882.3479000129737,
+          "limit_ms": 2000,
+          "details": "700 alteracoes; 101 sem correspondencia; sem persistir",
+          "status": "OK"
+        },
+        {
+          "operation": "Confirmar correcoes oficiais selecionadas",
+          "elapsed_ms": 4325.695100007579,
+          "limit_ms": 10000,
+          "details": "700 alteracoes aplicadas seletivamente",
+          "status": "OK"
+        },
+        {
+          "operation": "Localizar mesa e lancar resultado pelo painel",
+          "elapsed_ms": 73.51680001011118,
+          "limit_ms": 1000,
+          "details": "mesa 400 localizada fora do recorte inline, lancada e removida das pendencias",
+          "status": "OK"
+        }
+      ],
+      "status": "OK"
+    }
+  ]
+}

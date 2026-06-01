@@ -129,6 +129,51 @@ def round_robin_pairings(
     return pairings
 
 
+def scheveningen_pairings(
+    players: list[dict[str, Any]],
+    next_number: int,
+    settings: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Sistema Scheveningen: cada jogador do grupo A enfrenta todos do grupo B.
+
+    Os grupos são as metades por ranking inicial (top = A, base = B), exige
+    número par de jogadores. Em N rodadas (N = jogadores por grupo) cada par
+    A×B se enfrenta exatamente uma vez; as cores alternam para equilibrar.
+    """
+    ordered = sorted(
+        players,
+        key=lambda player: (-int(player["rating"] or 0), player["name"].casefold()),
+    )
+    if len(ordered) % 2 == 1:
+        raise AppError("Scheveningen exige numero par de jogadores (dois grupos iguais).")
+
+    per_group = len(ordered) // 2
+    if next_number > per_group:
+        raise AppError("O numero maximo de rodadas do Scheveningen ja foi atingido.")
+
+    group_a = ordered[:per_group]
+    group_b = ordered[per_group:]
+
+    pairings: list[dict[str, Any]] = []
+    for index in range(per_group):
+        opponent = group_b[(index + next_number - 1) % per_group]
+        player = group_a[index]
+        if (index + next_number) % 2 == 0:
+            white_id, black_id = player["id"], opponent["id"]
+        else:
+            white_id, black_id = opponent["id"], player["id"]
+        pairings.append(
+            {
+                "board_number": index + 1,
+                "white_player_id": white_id,
+                "black_player_id": black_id,
+                "result": "",
+                "is_bye": 0,
+            }
+        )
+    return pairings
+
+
 def knockout_pairings(
     players: list[dict[str, Any]],
     next_number: int,

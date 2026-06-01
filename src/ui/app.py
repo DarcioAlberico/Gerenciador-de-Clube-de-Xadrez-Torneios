@@ -52,6 +52,9 @@ class AlbericusApp(
         self.minsize(980, 640)
 
         self.db = db or Database()
+        self._arbitration_auto_refresh_enabled = True
+        self._arbitration_refresh_interval_seconds = 15
+        self._arbitration_inline_tables_limit = 20
         self._apply_app_settings()
         self._set_window_icon()
         self.dashboard_service = DashboardService(self.db)
@@ -75,6 +78,10 @@ class AlbericusApp(
         self.import_service = ImportService(self.db)
         self.official_rating_service = OfficialRatingService(self.db)
         self.internal_rating_service = InternalRatingService(self.db)
+        self.fide_rating_service = FideRatingService(self.db)
+        self.norm_assistant_service = NormAssistantService(self.db)
+        self.prize_service = PrizeService(self.db)
+        self.list_layout_service = ListLayoutService(self.db)
         self.export_service = ExportService(self.db, self.pairing_service)
         self.certificate_service = CertificateService(self.db, self.pairing_service)
         self.communication_service = CommunicationService(self.db)
@@ -89,6 +96,7 @@ class AlbericusApp(
         self.pairing_detail_map: dict[str, dict[str, Any]] = {}
         self.local_result_server: LocalResultServer | None = None
         self._scheduled_dispatch_job: str | None = None
+        self._arbitration_refresh_job: str | None = None
 
         self._configure_grid()
         self._configure_tree_style()
@@ -106,6 +114,12 @@ class AlbericusApp(
             except Exception:
                 pass
             self._scheduled_dispatch_job = None
+        if self._arbitration_refresh_job is not None:
+            try:
+                self.after_cancel(self._arbitration_refresh_job)
+            except Exception:
+                pass
+            self._arbitration_refresh_job = None
         if self.local_result_server is not None:
             self.local_result_server.stop()
         self.destroy()
@@ -670,6 +684,12 @@ class AlbericusApp(
 
     def _clear_content(self) -> None:
         self._pairing_shortcuts_enabled = False
+        if self._arbitration_refresh_job is not None:
+            try:
+                self.after_cancel(self._arbitration_refresh_job)
+            except Exception:
+                pass
+            self._arbitration_refresh_job = None
         # Rastreia o show_* que disparou esta limpeza para o F5 saber o que recarregar.
         caller = inspect.currentframe().f_back
         if caller is not None:
@@ -765,6 +785,7 @@ class AlbericusApp(
         value: Any,
         *,
         subtitle: str = "",
+        command: Callable[[], None] | None = None,
     ) -> ctk.CTkFrame:
         """Card padrão de KPI: label (sub) / valor grande / subtitle opcional.
 
@@ -781,6 +802,14 @@ class AlbericusApp(
             ctk.CTkLabel(card, text=subtitle, text_color=THEME_TEXT_SUB).pack(
                 anchor="w", padx=14, pady=(0, 12)
             )
+        if command is not None:
+            def bind_click(widget: ctk.CTkBaseClass) -> None:
+                widget.configure(cursor="hand2")
+                widget.bind("<Button-1>", lambda _event: command())
+                for child in widget.winfo_children():
+                    bind_click(child)
+
+            bind_click(card)
         return card
 
     def _make_scrollable_panel(
@@ -888,8 +917,40 @@ class AlbericusApp(
             scale = scale_percent / 100
             ctk.set_widget_scaling(scale)
             ctk.set_window_scaling(scale)
+            self._arbitration_auto_refresh_enabled = str(
+                settings.get("arbitration_auto_refresh_enabled") or "1"
+            ).strip().lower() not in {"0", "false", "off", "no"}
+            self._arbitration_refresh_interval_seconds = self._bounded_int_setting(
+                settings,
+                "arbitration_refresh_interval_seconds",
+                default=15,
+                minimum=10,
+                maximum=120,
+            )
+            self._arbitration_inline_tables_limit = self._bounded_int_setting(
+                settings,
+                "arbitration_inline_tables_limit",
+                default=20,
+                minimum=10,
+                maximum=50,
+            )
         except Exception:
             logger.exception("Falha ao aplicar configuracoes do aplicativo")
+
+    @staticmethod
+    def _bounded_int_setting(
+        settings: dict[str, Any],
+        key: str,
+        *,
+        default: int,
+        minimum: int,
+        maximum: int,
+    ) -> int:
+        try:
+            value = int(str(settings.get(key) or default))
+        except ValueError:
+            return default
+        return value if minimum <= value <= maximum else default
 
     def _set_window_icon(self) -> None:
         icon_path = resource_path("assets/app_icon.ico")

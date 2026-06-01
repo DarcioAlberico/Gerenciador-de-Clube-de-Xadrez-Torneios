@@ -1,5 +1,7 @@
 from __future__ import annotations
+import json
 import logging
+from datetime import datetime
 from typing import Any
 
 from src.core.database import Database
@@ -9,6 +11,7 @@ from src.services.constants import (
     RESULTS,
     RESULT_POINTS,
     RESULT_STATES,
+    pairing_player_name,
 )
 from src.services.pairing import (
     accelerated_standings as _accelerated_standings,
@@ -35,6 +38,8 @@ from src.services.pairing import (
     issue_metrics as _issue_metrics,
     knockout_pairings as _knockout_pairings,
     pairing_input_snapshot as _pairing_input_snapshot,
+    parse_player_tiebreak_sequence as _parse_player_tiebreak_sequence,
+    parse_team_tiebreak_sequence as _parse_team_tiebreak_sequence,
     plan_pairing_player_swap as _plan_pairing_player_swap,
     plan_team_board_player_swap as _plan_team_board_player_swap,
     played_pairs as _played_pairs,
@@ -42,6 +47,7 @@ from src.services.pairing import (
     result_submission_issue as _result_submission_issue,
     result_states_summary as _result_states_summary,
     round_robin_pairings as _round_robin_pairings,
+    scheveningen_pairings as _scheveningen_pairings,
     team_preview_payload as _team_preview_payload,
     team_round_dashboard_metrics as _team_round_dashboard_metrics,
     tiebreak_narrative_from_standings as _tiebreak_narrative_from_standings,
@@ -113,7 +119,12 @@ class PairingService:
         )
         return _result_states_summary(pairings, audit_events, result_submissions, RESULT_STATES)
 
-    def arbitration_dashboard(self, tournament_id: int) -> dict[str, Any]:
+    def arbitration_dashboard(
+        self,
+        tournament_id: int,
+        pending_limit: int = 20,
+        pending_query: str = "",
+    ) -> dict[str, Any]:
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
             raise AppError("Selecione um torneio valido.")
@@ -144,6 +155,7 @@ class PairingService:
             "can_preview_next_round": False,
             "preview_alerts": 0,
             "result_states": self.result_states_summary(tournament_id),
+            **self._round_clock_metrics(latest_round),
         }
         alerts: list[str] = []
         if latest_round:
@@ -183,7 +195,126 @@ class PairingService:
             except AppError as exc:
                 alerts.append(str(exc))
 
-        return {"metrics": metrics, "alerts": alerts}
+        pending_items = self._pending_round_items(
+            latest_round,
+            metrics["competition_type"],
+            pending_limit,
+            pending_query,
+        )
+        return {"metrics": metrics, "alerts": alerts, "pending_items": pending_items}
+
+    def _round_clock_metrics(self, latest_round: dict[str, Any] | None) -> dict[str, Any]:
+        if not latest_round:
+            return {
+                "round_clock_status": "sem_rodada",
+                "round_started_at": "",
+                "round_closed_at": "",
+                "round_started_label": "--",
+                "round_duration_seconds": 0,
+                "round_duration_label": "--",
+            }
+        started_at = str(latest_round.get("created_at") or "")
+        is_closed = latest_round.get("status") == "closed"
+        closed_at = str(latest_round.get("closed_at") or "")
+        ended_at = closed_at if is_closed and closed_at else self.db.now()
+        duration_seconds = self._elapsed_seconds(started_at, ended_at)
+        return {
+            "round_clock_status": "fechada" if is_closed else "em_andamento",
+            "round_started_at": started_at,
+            "round_closed_at": closed_at,
+            "round_started_label": self._timestamp_label(started_at),
+            "round_duration_seconds": duration_seconds,
+            "round_duration_label": self._duration_label(duration_seconds),
+        }
+
+    @staticmethod
+    def _elapsed_seconds(started_at: str, ended_at: str) -> int:
+        try:
+            started = datetime.strptime(started_at, "%Y-%m-%d %H:%M:%S")
+            ended = datetime.strptime(ended_at, "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            return 0
+        return max(0, int((ended - started).total_seconds()))
+
+    @staticmethod
+    def _timestamp_label(value: str) -> str:
+        try:
+            return datetime.strptime(value, "%Y-%m-%d %H:%M:%S").strftime("%d/%m %H:%M")
+        except ValueError:
+            return "--"
+
+    @staticmethod
+    def _duration_label(seconds: int) -> str:
+        hours, remainder = divmod(max(0, int(seconds)), 3600)
+        minutes, seconds = divmod(remainder, 60)
+        return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+    def _pending_round_items(
+        self,
+        latest_round: dict[str, Any] | None,
+        competition_type: str,
+        limit: int = 20,
+        query: str = "",
+    ) -> list[dict[str, Any]]:
+        if not latest_round or latest_round.get("status") == "closed":
+            return []
+        safe_limit = max(1, min(int(limit or 20), 100))
+        normalized_query = str(query or "").strip().casefold()
+
+        def matches_query(item: dict[str, Any]) -> bool:
+            if not normalized_query:
+                return True
+            if normalized_query.isdigit():
+                return int(item.get("board") or 0) == int(normalized_query)
+            searchable = " ".join(
+                str(item.get(field) or "")
+                for field in ("board", "context", "white", "black")
+            ).casefold()
+            return normalized_query in searchable
+
+        if competition_type != "team":
+            return [
+                {
+                    "pairing_id": int(pairing["id"]),
+                    "board": int(pairing.get("board_number") or 0),
+                    "white": pairing_player_name(pairing, "white"),
+                    "black": "BYE" if pairing.get("is_bye") else pairing_player_name(pairing, "black"),
+                    "context": "",
+                }
+                for pairing in self.db.get_pairings_for_round(int(latest_round["id"]))
+                if not pairing.get("result") or pairing.get("result") not in FINAL_RESULTS
+                if matches_query(
+                    {
+                        "board": int(pairing.get("board_number") or 0),
+                        "white": pairing_player_name(pairing, "white"),
+                        "black": "BYE" if pairing.get("is_bye") else pairing_player_name(pairing, "black"),
+                        "context": "",
+                    }
+                )
+            ][:safe_limit]
+
+        pending_items: list[dict[str, Any]] = []
+        for match in self.db.list_team_matches_for_round(int(latest_round["id"])):
+            if match.get("is_bye"):
+                continue
+            for board in self.db.list_team_boards(int(match["id"])):
+                if board.get("result") and board.get("result") in FINAL_RESULTS:
+                    continue
+                pending_items.append(
+                    {
+                        "pairing_id": int(board["id"]),
+                        "board": int(board.get("board_number") or 0),
+                        "white": str(board.get("white_player_name") or ""),
+                        "black": str(board.get("black_player_name") or ""),
+                        "context": f"Match {match.get('match_number') or ''}",
+                    }
+                )
+                if not matches_query(pending_items[-1]):
+                    pending_items.pop()
+                    continue
+                if len(pending_items) >= safe_limit:
+                    return pending_items
+        return pending_items
 
     def arbitration_issues(self, tournament_id: int, limit: int = 200) -> dict[str, Any]:
         tournament = self.db.get_tournament(tournament_id)
@@ -209,6 +340,41 @@ class PairingService:
         issues = _finalize_issues(issues, acknowledged_keys, safe_limit)
         metrics = _issue_metrics(issues)
         return {"metrics": metrics, "issues": issues}
+
+    @staticmethod
+    def filter_arbitration_issues(
+        issues: list[dict[str, Any]],
+        issue_filter: str = "all",
+        query: str = "",
+    ) -> list[dict[str, Any]]:
+        normalized_filter = str(issue_filter or "all").strip().casefold()
+        normalized_query = str(query or "").strip().casefold()
+
+        def matches_filter(issue: dict[str, Any]) -> bool:
+            if normalized_filter in {"", "all"}:
+                return True
+            if normalized_filter == "decision":
+                return issue.get("severity") == "decision"
+            return str(issue.get("source") or "").casefold() == normalized_filter
+
+        def matches_query(issue: dict[str, Any]) -> bool:
+            if not normalized_query:
+                return True
+            payload = json.dumps(issue.get("payload") or {}, ensure_ascii=False, sort_keys=True)
+            searchable = " ".join(
+                [
+                    str(issue.get("severity") or ""),
+                    str(issue.get("source") or ""),
+                    str(issue.get("kind") or ""),
+                    str(issue.get("title") or ""),
+                    str(issue.get("detail") or ""),
+                    str(issue.get("round_id") or ""),
+                    payload,
+                ]
+            ).casefold()
+            return normalized_query in searchable
+
+        return [issue for issue in issues if matches_filter(issue) and matches_query(issue)]
 
     def acknowledge_arbitration_issue(self, tournament_id: int, issue_key: str, note: str = "") -> int:
         tournament = self.db.get_tournament(tournament_id)
@@ -374,7 +540,7 @@ class PairingService:
             raise AppError("O numero maximo de rodadas do torneio ja foi atingido.")
 
         pairing_method = settings.get("pairing_method", "swiss")
-        if pairing_method in ("round_robin", "knockout"):
+        if pairing_method in ("round_robin", "knockout", "scheveningen"):
             # Byes solicitados sao um conceito do Suico: nestes formatos o
             # calendario e predeterminado (rotacao todos-contra-todos / chave de
             # eliminacao), entao remover um jogador corromperia o esquema. Em vez
@@ -394,6 +560,8 @@ class PairingService:
                 raise AppError("O bye esta desativado. Use numero par de jogadores ativos.")
             if pairing_method == "round_robin":
                 pairings = _round_robin_pairings(players, next_number, settings)
+            elif pairing_method == "scheveningen":
+                pairings = _scheveningen_pairings(players, next_number, settings)
             else:
                 pairings = self._knockout_pairings(tournament_id, players, next_number, settings)
         else:
@@ -1159,7 +1327,157 @@ class PairingService:
 
         players = self.db.list_players(tournament_id, active_only=False)
         closed_pairings = self.db.get_pairings_for_tournament(tournament_id, closed_only=True)
-        return _calculate_player_standings(tournament, players, closed_pairings)
+        settings = self.db.get_tournament_settings(tournament_id) or {}
+        sequence = _parse_player_tiebreak_sequence(settings.get("tiebreak_sequence"))
+        return _calculate_player_standings(tournament, players, closed_pairings, sequence=sequence)
+
+    def crosstable(self, tournament_id: int) -> dict[str, Any]:
+        tournament = self.db.get_tournament(tournament_id)
+        if not tournament:
+            raise AppError("Selecione um torneio valido.")
+        if tournament.get("competition_type") == "team":
+            return self.team_crosstable(tournament_id)
+        standings = self.standings(tournament_id)
+        standings_by_player = {int(item["player_id"]): item for item in standings}
+        rounds = sorted(
+            int(round_data["number"])
+            for round_data in self.db.list_rounds(tournament_id)
+            if round_data.get("status") == "closed"
+        )
+        rows = []
+        for standing in standings:
+            games_by_round = {int(game["round"]): game for game in standing.get("games", [])}
+            round_cells: dict[int, dict[str, Any]] = {}
+            for round_number in rounds:
+                game = games_by_round.get(round_number)
+                if not game:
+                    round_cells[round_number] = {
+                        "kind": "absent",
+                        "label": "-",
+                        "round": round_number,
+                    }
+                    continue
+                if game.get("color") == "bye":
+                    round_cells[round_number] = {
+                        **game,
+                        "kind": "bye",
+                        "label": f"BYE {game.get('result') or ''}".strip(),
+                    }
+                    continue
+                opponent = standings_by_player.get(int(game.get("opponent_id") or 0), {})
+                color = "B" if game.get("color") == "white" else "P"
+                result = str(game.get("result") or "")
+                opponent_position = int(opponent.get("position") or 0)
+                round_cells[round_number] = {
+                    **game,
+                    "kind": "game",
+                    "color_label": color,
+                    "opponent_position": opponent_position,
+                    "label": f"{opponent_position}{color} {result}".strip(),
+                }
+            rows.append(
+                {
+                    **standing,
+                    "rounds": round_cells,
+                }
+            )
+        return {
+            "tournament_id": int(tournament_id),
+            "tournament_name": tournament["name"],
+            "competition_type": "individual",
+            "rounds": rounds,
+            "rows": rows,
+        }
+
+    def team_crosstable(self, tournament_id: int) -> dict[str, Any]:
+        tournament = self.db.get_tournament(tournament_id)
+        if not tournament:
+            raise AppError("Selecione um torneio valido.")
+        if tournament.get("competition_type") != "team":
+            raise AppError("Tabela cruzada por equipes disponivel apenas para torneios por equipes.")
+        standings = self.team_standings(tournament_id)
+        standings_by_team = {int(item["team_id"]): item for item in standings}
+        rounds = sorted(
+            int(round_data["number"])
+            for round_data in self.db.list_rounds(tournament_id)
+            if round_data.get("status") == "closed"
+        )
+        matches_by_team_round: dict[tuple[int, int], dict[str, Any]] = {}
+        boards_by_match_id: dict[int, list[dict[str, Any]]] = {}
+        for match in self.db.list_team_matches_for_tournament(tournament_id, closed_only=True):
+            round_number = int(match["round_number"])
+            white_team_id = int(match["white_team_id"])
+            matches_by_team_round[(white_team_id, round_number)] = match
+            if match.get("black_team_id"):
+                matches_by_team_round[(int(match["black_team_id"]), round_number)] = match
+                boards_by_match_id[int(match["id"])] = self.db.list_team_boards(int(match["id"]))
+
+        rows = []
+        for standing in standings:
+            team_id = int(standing["team_id"])
+            round_cells: dict[int, dict[str, Any]] = {}
+            for round_number in rounds:
+                match = matches_by_team_round.get((team_id, round_number))
+                if not match:
+                    round_cells[round_number] = {
+                        "kind": "absent",
+                        "label": "-",
+                        "round": round_number,
+                        "boards": [],
+                    }
+                    continue
+                if match.get("is_bye"):
+                    round_cells[round_number] = {
+                        **match,
+                        "kind": "bye",
+                        "label": (
+                            f"BYE MP {self._compact_number(match.get('white_match_points'))} "
+                            f"GP {self._compact_number(match.get('white_game_points'))}"
+                        ),
+                        "boards": [],
+                    }
+                    continue
+                is_white = team_id == int(match["white_team_id"])
+                opponent_id = int(match["black_team_id"] if is_white else match["white_team_id"])
+                opponent = standings_by_team.get(opponent_id, {})
+                match_points = match.get("white_match_points" if is_white else "black_match_points")
+                game_points = match.get("white_game_points" if is_white else "black_game_points")
+                result = str(match.get("result") or "")
+                round_cells[round_number] = {
+                    **match,
+                    "kind": "match",
+                    "opponent_id": opponent_id,
+                    "opponent_position": int(opponent.get("position") or 0),
+                    "color_label": "B" if is_white else "P",
+                    "match_points": float(match_points or 0),
+                    "game_points": float(game_points or 0),
+                    "label": (
+                        f"{int(opponent.get('position') or 0)}{'B' if is_white else 'P'} "
+                        f"{self._oriented_match_result(result, is_white)} "
+                        f"MP {self._compact_number(match_points)} GP {self._compact_number(game_points)}"
+                    ),
+                    "boards": boards_by_match_id[int(match["id"])],
+                }
+            rows.append({**standing, "rounds": round_cells})
+        return {
+            "tournament_id": int(tournament_id),
+            "tournament_name": tournament["name"],
+            "competition_type": "team",
+            "rounds": rounds,
+            "rows": rows,
+        }
+
+    @staticmethod
+    def _oriented_match_result(result: str, is_white: bool) -> str:
+        if is_white or "-" not in result:
+            return result
+        white, black = result.split("-", maxsplit=1)
+        return f"{black}-{white}"
+
+    @staticmethod
+    def _compact_number(value: Any) -> str:
+        numeric = float(value or 0)
+        return str(int(numeric)) if numeric.is_integer() else f"{numeric:.2f}".rstrip("0").rstrip(".")
 
     def tiebreak_report(self, tournament_id: int, player_id: int | None = None) -> list[dict[str, Any]]:
         standings = self.standings(tournament_id)
@@ -1209,7 +1527,8 @@ class PairingService:
         settings = self.db.get_tournament_settings(tournament_id) or {}
         teams = self.db.list_teams(tournament_id, active_only=False)
         closed_matches = self.db.list_team_matches_for_tournament(tournament_id, closed_only=True)
-        return _calculate_team_standings(settings, teams, closed_matches)
+        sequence = _parse_team_tiebreak_sequence(settings.get("team_tiebreak_sequence"))
+        return _calculate_team_standings(settings, teams, closed_matches, sequence=sequence)
 
     def _knockout_pairings(self, tournament_id: int, players: list[dict[str, Any]], next_number: int, settings: dict[str, Any]) -> list[dict[str, Any]]:
         previous_pairings = None

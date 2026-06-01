@@ -79,6 +79,7 @@ PAIRING_METHODS = {
     "swiss": "Suíço",
     "round_robin": "Schuring (Todos contra todos)",
     "knockout": "Mata-mata",
+    "scheveningen": "Scheveningen (A x B)",
 }
 PAIRING_SYSTEMS = {
     "fide_dutch": "FIDE Dutch",

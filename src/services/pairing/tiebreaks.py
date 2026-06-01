@@ -6,7 +6,9 @@ e devolvem estruturas explicáveis. PairingService delega para elas.
 
 from __future__ import annotations
 
+import json
 import math
+from dataclasses import dataclass
 from typing import Any
 
 from src.services.constants import (
@@ -14,6 +16,371 @@ from src.services.constants import (
     RESULT_POINTS,
     player_full_name,
 )
+
+
+# ---------------------------------------------------------------------------
+# Registro de critérios de desempate configuráveis (spec E1/E2).
+#
+# Cada critério tem rótulo + fórmula curta. A ORDEM dos critérios é configurável
+# por torneio (tabela tournament_settings.tiebreak_sequence). Quando nenhuma
+# sequência é informada, usa-se DEFAULT_PLAYER_TIEBREAKS, que reproduz EXATAMENTE
+# a classificação histórica: pontos (sempre primeiro), Buchholz, Buchholz
+# mediano, Sonneborn-Berger, vitórias, e por fim rating/nome como criténos
+# técnicos finais.
+#
+# `points`, `rating` e `name` são aplicados FORA da sequência (pontos sempre em
+# primeiro; rating/nome sempre por último), por isso não aparecem no registro.
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class TiebreakCriterion:
+    code: str
+    label: str
+    formula: str
+    needs_cut: bool = False
+
+
+PLAYER_TIEBREAKS: dict[str, TiebreakCriterion] = {
+    "buchholz": TiebreakCriterion(
+        "buchholz", "Buchholz", "Soma dos pontos finais dos adversários enfrentados."
+    ),
+    "buchholz_cut1": TiebreakCriterion(
+        "buchholz_cut1",
+        "Buchholz Cut-1",
+        "Buchholz descartando o adversário de menor pontuação.",
+        needs_cut=True,
+    ),
+    "buchholz_cut2": TiebreakCriterion(
+        "buchholz_cut2",
+        "Buchholz Cut-2",
+        "Buchholz descartando os dois adversários de menor pontuação.",
+        needs_cut=True,
+    ),
+    "buchholz_median": TiebreakCriterion(
+        "buchholz_median",
+        "Buchholz mediano",
+        "Buchholz descartando o maior e o menor adversário (3+ jogos).",
+    ),
+    "sonneborn_berger": TiebreakCriterion(
+        "sonneborn_berger",
+        "Sonneborn-Berger",
+        "Pontos do adversário multiplicados pelo resultado obtido contra ele.",
+    ),
+    "direct_encounter": TiebreakCriterion(
+        "direct_encounter",
+        "Confronto direto",
+        "Pontos marcados contra adversários empatados em pontos.",
+    ),
+    "wins": TiebreakCriterion(
+        "wins", "Vitórias", "Número de partidas vencidas no tabuleiro."
+    ),
+    "cumulative": TiebreakCriterion(
+        "cumulative",
+        "Progressivo",
+        "Soma das pontuações acumuladas após cada rodada.",
+    ),
+    "cumulative_opp": TiebreakCriterion(
+        "cumulative_opp",
+        "Progressivo dos adversários",
+        "Soma do progressivo de todos os adversários enfrentados.",
+    ),
+    "koya": TiebreakCriterion(
+        "koya",
+        "Sistema Koya",
+        "Pontos obtidos contra adversários com ao menos 50% dos pontos.",
+    ),
+    "aro": TiebreakCriterion(
+        "aro",
+        "Rating médio dos adversários",
+        "Média de rating dos adversários ranqueados.",
+    ),
+    "aroc": TiebreakCriterion(
+        "aroc",
+        "Rating médio (cortado)",
+        "Média de rating dos adversários descartando os extremos.",
+    ),
+    "performance": TiebreakCriterion(
+        "performance", "Performance", "Rating performance estimado no torneio."
+    ),
+    "black_games": TiebreakCriterion(
+        "black_games", "Partidas com pretas", "Número de partidas jogadas com as pretas."
+    ),
+    "black_wins": TiebreakCriterion(
+        "black_wins", "Vitórias com pretas", "Número de vitórias jogando de pretas."
+    ),
+    "games_played": TiebreakCriterion(
+        "games_played", "Partidas jogadas", "Número de partidas disputadas no tabuleiro."
+    ),
+}
+
+DEFAULT_PLAYER_TIEBREAKS: list[str] = [
+    "buchholz",
+    "buchholz_median",
+    "sonneborn_berger",
+    "wins",
+]
+
+TEAM_TIEBREAKS: dict[str, TiebreakCriterion] = {
+    "match_points": TiebreakCriterion(
+        "match_points", "Match points", "Pontos de confronto da equipe (vitória/empate/derrota)."
+    ),
+    "game_points": TiebreakCriterion(
+        "game_points", "Game points", "Soma dos pontos de tabuleiro da equipe."
+    ),
+    "buchholz": TiebreakCriterion(
+        "buchholz", "Buchholz (equipes)", "Soma dos match points dos adversários da equipe."
+    ),
+    "wins": TiebreakCriterion(
+        "wins", "Vitórias (equipes)", "Número de confrontos vencidos pela equipe."
+    ),
+}
+
+DEFAULT_TEAM_TIEBREAKS: list[str] = ["match_points", "game_points", "buchholz", "wins"]
+
+
+def _as_float(value: Any) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _dedup_codes(codes: list[str]) -> list[str]:
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for code in codes:
+        if code and code not in seen:
+            seen.add(code)
+            ordered.append(code)
+    return ordered
+
+
+def _parse_tiebreak_sequence(
+    raw: Any,
+    registry: dict[str, TiebreakCriterion],
+    drop: set[str],
+) -> list[dict[str, Any]]:
+    """Normaliza uma sequência de desempates vinda do banco/UI.
+
+    Aceita string JSON ou lista; cada item pode ser um código (str) ou um dict
+    {"code", "params"}. Descarta códigos desconhecidos, duplicados e os de
+    `drop`. Sequência inválida/vazia retorna [] (= usar o padrão).
+    """
+    if not raw:
+        return []
+    items: Any = raw
+    if isinstance(raw, str):
+        try:
+            items = json.loads(raw)
+        except (ValueError, TypeError):
+            return []
+    if not isinstance(items, list):
+        return []
+    result: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for entry in items:
+        if isinstance(entry, str):
+            code, params = entry.strip(), {}
+        elif isinstance(entry, dict):
+            code = str(entry.get("code") or "").strip()
+            raw_params = entry.get("params")
+            params = dict(raw_params) if isinstance(raw_params, dict) else {}
+        else:
+            continue
+        if code in drop or code not in registry or code in seen:
+            continue
+        seen.add(code)
+        result.append({"code": code, "params": params})
+    return result
+
+
+def parse_player_tiebreak_sequence(raw: Any) -> list[dict[str, Any]]:
+    return _parse_tiebreak_sequence(raw, PLAYER_TIEBREAKS, drop={"points"})
+
+
+def parse_team_tiebreak_sequence(raw: Any) -> list[dict[str, Any]]:
+    return _parse_tiebreak_sequence(raw, TEAM_TIEBREAKS, drop=set())
+
+
+def serialize_tiebreak_sequence(sequence: list[dict[str, Any]]) -> str:
+    return json.dumps(
+        [{"code": item["code"], "params": item.get("params", {})} for item in sequence],
+        ensure_ascii=False,
+    )
+
+
+def _resolve_player_codes(sequence: list[dict[str, Any]] | None) -> list[tuple[str, dict[str, Any]]]:
+    if sequence:
+        return [(item["code"], item.get("params", {})) for item in sequence]
+    return [(code, {}) for code in DEFAULT_PLAYER_TIEBREAKS]
+
+
+def _resolve_team_codes(
+    settings: dict[str, Any],
+    sequence: list[dict[str, Any]] | None,
+) -> list[str]:
+    if sequence:
+        codes = [item["code"] for item in sequence if item.get("code") in TEAM_TIEBREAKS]
+        if codes:
+            return _dedup_codes(codes)
+    primary = str(settings.get("team_standing_primary", "match_points") or "match_points")
+    secondary = str(settings.get("team_standing_secondary", "game_points") or "game_points")
+    return _dedup_codes([primary, secondary, "buchholz", "wins"])
+
+
+def _opponent_points(player_stat: dict[str, Any], stats: dict[int, dict[str, Any]]) -> list[float]:
+    return [
+        float(stats[opponent_id]["points"])
+        for opponent_id in player_stat["opponents"]
+        if opponent_id in stats
+    ]
+
+
+def _buchholz_with_cut(
+    player_stat: dict[str, Any],
+    stats: dict[int, dict[str, Any]],
+    cut_low: int,
+    cut_high: int,
+    unplayed: str = "real",
+) -> float:
+    scores = _opponent_points(player_stat, stats)
+    if unplayed == "self":
+        own = float(player_stat["points"])
+        scores = scores + [own] * int(player_stat.get("byes", 0) or 0)
+    if not scores:
+        return 0.0
+    ordered = sorted(scores)
+    low = max(0, int(cut_low))
+    high = max(0, int(cut_high))
+    if low + high >= len(ordered):
+        return 0.0
+    kept = ordered[low: len(ordered) - high] if high else ordered[low:]
+    return round(sum(kept), 2)
+
+
+def _average_rating_opponents(
+    player_stat: dict[str, Any],
+    stats: dict[int, dict[str, Any]],
+    cut: int = 0,
+) -> float:
+    ratings = [
+        int(stats[opponent_id]["rating"] or 0)
+        for opponent_id in player_stat["opponents"]
+        if opponent_id in stats and int(stats[opponent_id]["rating"] or 0) > 0
+    ]
+    if not ratings:
+        return 0.0
+    ordered = sorted(ratings)
+    trim = max(0, int(cut))
+    if trim and len(ordered) > 2 * trim:
+        ordered = ordered[trim: len(ordered) - trim]
+    return round(sum(ordered) / len(ordered), 2)
+
+
+def _direct_encounter_score(
+    player_stat: dict[str, Any],
+    stats: dict[int, dict[str, Any]],
+) -> float:
+    points = float(player_stat["points"])
+    total = 0.0
+    for game in player_stat["games"]:
+        opponent_id = game.get("opponent_id")
+        if opponent_id in stats and float(stats[opponent_id]["points"]) == points:
+            total += float(game.get("earned") or 0.0)
+    return round(total, 2)
+
+
+def _cumulative_score(player_stat: dict[str, Any]) -> float:
+    running = float(player_stat.get("starting_points", 0.0) or 0.0)
+    total = 0.0
+    for game in sorted(player_stat["games"], key=lambda item: int(item.get("round") or 0)):
+        running += float(game.get("earned") or 0.0)
+        total += running
+    return round(total, 2)
+
+
+def _koya_score(
+    player_stat: dict[str, Any],
+    stats: dict[int, dict[str, Any]],
+    rounds_total: int,
+) -> float:
+    threshold = 0.5 * float(rounds_total or 0)
+    total = 0.0
+    for opponent_id, earned in player_stat["earned_against"]:
+        if opponent_id in stats and float(stats[opponent_id]["points"]) >= threshold:
+            total += float(earned)
+    return round(total, 2)
+
+
+def _black_wins(player_stat: dict[str, Any]) -> int:
+    return sum(
+        1
+        for game in player_stat["games"]
+        if game.get("color") == "black" and float(game.get("earned") or 0.0) == 1.0
+    )
+
+
+def player_tiebreak_value(
+    code: str,
+    player_stat: dict[str, Any],
+    stats: dict[int, dict[str, Any]],
+    params: dict[str, Any],
+    rounds_total: int,
+) -> float:
+    """Valor escalar ordenável (maior = melhor) de um critério para um jogador.
+
+    Lê de campos canônicos já calculados quando existem (buchholz, mediano, SB,
+    vitórias, performance) para garantir consistência total com a classificação
+    histórica; calcula os critérios novos sob demanda.
+    """
+    if code == "points":
+        return float(player_stat["points"])
+    if code == "buchholz":
+        return float(player_stat["buchholz"])
+    if code == "buchholz_median":
+        return float(player_stat["buchholz_median"])
+    if code == "sonneborn_berger":
+        return float(player_stat["sonneborn_berger"])
+    if code == "wins":
+        return float(player_stat["wins"])
+    if code == "performance":
+        perf = player_stat.get("performance")
+        return float(perf) if isinstance(perf, (int, float)) else 0.0
+    if code in ("buchholz_cut1", "buchholz_cut2"):
+        default_low = 1 if code == "buchholz_cut1" else 2
+        cut_low = int(params.get("cut_low", default_low))
+        cut_high = int(params.get("cut_high", 0))
+        unplayed = str(params.get("unplayed", "real"))
+        return _buchholz_with_cut(player_stat, stats, cut_low, cut_high, unplayed)
+    if code == "aro":
+        return _average_rating_opponents(player_stat, stats, cut=0)
+    if code == "aroc":
+        return _average_rating_opponents(player_stat, stats, cut=int(params.get("cut", 1)))
+    if code == "direct_encounter":
+        return _direct_encounter_score(player_stat, stats)
+    if code == "cumulative":
+        return float(player_stat.get("cumulative", 0.0) or 0.0)
+    if code == "cumulative_opp":
+        return float(player_stat.get("cumulative_opp", 0.0) or 0.0)
+    if code == "koya":
+        return _koya_score(player_stat, stats, rounds_total)
+    if code == "black_games":
+        return float(player_stat.get("black_count", 0) or 0)
+    if code == "black_wins":
+        return float(_black_wins(player_stat))
+    if code == "games_played":
+        return float(len(player_stat["opponents"]))
+    return 0.0
+
+
+def _ordering_value(item: dict[str, Any], code: str) -> float:
+    values = item.get("tiebreak_values")
+    if isinstance(values, dict) and code in values:
+        return _as_float(values[code])
+    if code == "points":
+        return float(item.get("points", 0.0) or 0.0)
+    return _as_float(item.get(code, 0.0))
 
 
 def performance_components(
@@ -83,6 +450,8 @@ def team_standing_value(item: dict[str, Any], criterion: str) -> float:
         return float(item.get("wins", 0) or 0)
     if criterion == "game_points":
         return float(item.get("game_points", 0.0) or 0.0)
+    if criterion == "buchholz":
+        return float(item.get("buchholz", 0.0) or 0.0)
     return float(item.get("match_points", 0.0) or 0.0)
 
 
@@ -148,7 +517,10 @@ def tiebreak_narrative_from_standings(
             "• Pontos: empate com " + ", ".join(tied_names[:-1]) + f" e {tied_names[-1]}."
         )
 
-    criteria_order = [
+    configured_order = [
+        str(code) for code in (target.get("tiebreak_order") or []) if str(code) in components
+    ]
+    criteria_order = configured_order or [
         "buchholz",
         "buchholz_median",
         "sonneborn_berger",
@@ -156,7 +528,9 @@ def tiebreak_narrative_from_standings(
         "wins",
         "performance",
     ]
-    ordinals = ["1º", "2º", "3º", "4º", "5º", "6º"]
+
+    def ordinal(index: int) -> str:
+        return f"{index + 1}º"
 
     decisive: str | None = None
     for index, key in enumerate(criteria_order):
@@ -177,8 +551,7 @@ def tiebreak_narrative_from_standings(
         if not others:
             continue
 
-        ordinal = ordinals[index] if index < len(ordinals) else f"{index + 1}º"
-        lines.append(f"• {ordinal} desempate ({label}): {value}.")
+        lines.append(f"• {ordinal(index)} desempate ({label}): {value}.")
         for other_name, other_value in others:
             lines.append(f"     – {other_name}: {other_value}")
 
@@ -200,20 +573,25 @@ def tiebreak_narrative_from_standings(
     }
 
 
-def order_player_standings(stats: dict[int, dict[str, Any]]) -> list[dict[str, Any]]:
-    ordered_stats = sorted(
-        stats.values(),
-        key=lambda item: (
-            -item["points"],
-            -item["buchholz"],
-            -item["buchholz_median"],
-            -item["sonneborn_berger"],
-            -item["wins"],
-            -item["rating"],
-            item["name"].casefold(),
-        ),
-    )
+def order_player_standings(
+    stats: dict[int, dict[str, Any]],
+    sequence: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    """Ordena a classificação por pontos + sequência de desempates configurável.
 
+    Pontos são sempre o critério primário e rating/nome os critérios técnicos
+    finais. `sequence` vazia/None usa DEFAULT_PLAYER_TIEBREAKS, reproduzindo a
+    classificação histórica byte a byte.
+    """
+    codes = [code for code, _params in _resolve_player_codes(sequence)]
+
+    def sort_key(item: dict[str, Any]) -> tuple[Any, ...]:
+        head = (-float(item.get("points", 0.0) or 0.0),)
+        mids = tuple(-_ordering_value(item, code) for code in codes)
+        tail = (-float(item.get("rating", 0) or 0), str(item.get("name", "")).casefold())
+        return head + mids + tail
+
+    ordered_stats = sorted(stats.values(), key=sort_key)
     for index, item in enumerate(ordered_stats, start=1):
         item["position"] = index
     return ordered_stats
@@ -223,6 +601,7 @@ def calculate_player_standings(
     tournament: dict[str, Any],
     players: list[dict[str, Any]],
     closed_pairings: list[dict[str, Any]],
+    sequence: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     stats: dict[int, dict[str, Any]] = {}
     for player in players:
@@ -316,6 +695,12 @@ def calculate_player_standings(
         if black_points == 1.0 and white_points == 0.0:
             stats[black_id]["wins"] += 1
 
+    rounds_total = max(
+        (int(game.get("round") or 0) for player_stat in stats.values() for game in player_stat["games"]),
+        default=0,
+    )
+    codes = _resolve_player_codes(sequence)
+
     for player_stat in stats.values():
         opponent_scores = [
             stats[opponent_id]["points"]
@@ -334,15 +719,39 @@ def calculate_player_standings(
             sb += stats[opponent_id]["points"] * earned
         player_stat["sonneborn_berger"] = round(sb, 2)
         player_stat["performance"] = performance_rating(player_stat, stats)
-        player_stat["tiebreak_components"] = player_tiebreak_components(player_stat, stats)
+        player_stat["cumulative"] = _cumulative_score(player_stat)
 
-    return order_player_standings(stats)
+    # Critério progressivo dos adversários depende do progressivo já calculado.
+    for player_stat in stats.values():
+        player_stat["cumulative_opp"] = round(
+            sum(
+                float(stats[opponent_id]["cumulative"])
+                for opponent_id in player_stat["opponents"]
+                if opponent_id in stats
+            ),
+            2,
+        )
+
+    # Escalares ordenáveis dos critérios ativos (sem sobrescrever campos
+    # canônicos como performance/wins) + componentes explicáveis.
+    for player_stat in stats.values():
+        player_stat["tiebreak_values"] = {
+            code: player_tiebreak_value(code, player_stat, stats, params, rounds_total)
+            for code, params in codes
+        }
+        player_stat["tiebreak_order"] = [code for code, _params in codes]
+        player_stat["tiebreak_components"] = player_tiebreak_components(
+            player_stat, stats, codes=codes, rounds_total=rounds_total
+        )
+
+    return order_player_standings(stats, sequence)
 
 
 def calculate_team_standings(
     settings: dict[str, Any],
     teams: list[dict[str, Any]],
     closed_matches: list[dict[str, Any]],
+    sequence: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     stats: dict[int, dict[str, Any]] = {}
     for team in teams:
@@ -411,19 +820,14 @@ def calculate_team_standings(
             2,
         )
 
-    primary = str(settings.get("team_standing_primary", "match_points") or "match_points")
-    secondary = str(settings.get("team_standing_secondary", "game_points") or "game_points")
+    codes = _resolve_team_codes(settings, sequence)
     ordered_stats = sorted(
         stats.values(),
-        key=lambda item: (
-            -team_standing_value(item, primary),
-            -team_standing_value(item, secondary),
-            -float(item["buchholz"]),
-            -int(item["wins"]),
-            str(item["name"]).casefold(),
-        ),
+        key=lambda item: tuple(-team_standing_value(item, code) for code in codes)
+        + (str(item["name"]).casefold(),),
     )
     for index, item in enumerate(ordered_stats, start=1):
+        item["team_tiebreak_order"] = list(codes)
         item["position"] = index
     return ordered_stats
 
@@ -431,11 +835,16 @@ def calculate_team_standings(
 def player_tiebreak_components(
     player_stat: dict[str, Any],
     stats: dict[int, dict[str, Any]],
+    codes: list[tuple[str, dict[str, Any]]] | None = None,
+    rounds_total: int = 0,
 ) -> dict[str, dict[str, Any]]:
     """Componentes brutos dos critérios de desempate de um jogador.
 
-    Retorna um dict indexado por código de critério: buchholz, buchholz_median,
-    sonneborn_berger, direct_encounter, wins, performance.
+    Sempre retorna os seis critérios históricos (buchholz, buchholz_median,
+    sonneborn_berger, direct_encounter, wins, performance) para compatibilidade
+    com relatórios/exportações existentes. Quando `codes` é informado, acrescenta
+    um componente explicável para cada critério ativo adicional (Buchholz Cut,
+    progressivo, Koya, ARO, etc.).
     """
     opponent_rows = []
     opponent_scores = []
@@ -486,7 +895,7 @@ def player_tiebreak_components(
     direct_score = round(sum(float(game.get("earned") or 0.0) for game in tied_opponents), 2)
     performance = performance_components(player_stat, stats)
 
-    return {
+    components: dict[str, dict[str, Any]] = {
         "buchholz": {
             "label": "Buchholz",
             "value": player_stat["buchholz"],
@@ -526,3 +935,18 @@ def player_tiebreak_components(
         },
         "performance": performance,
     }
+
+    if codes:
+        for code, params in codes:
+            if code in components or code not in PLAYER_TIEBREAKS:
+                continue
+            value = player_tiebreak_value(code, player_stat, stats, params, rounds_total)
+            criterion = PLAYER_TIEBREAKS[code]
+            components[code] = {
+                "label": criterion.label,
+                "value": value,
+                "formula": criterion.formula,
+                "total": value,
+            }
+
+    return components

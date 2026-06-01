@@ -26,12 +26,12 @@ Aplicativo desktop em Python para emparceiramento de torneios de xadrez.
 - Ajuste de tamanho da interface/fonte pela tela `Config. app`.
 - Torneios podem ser selecionados, duplicados, excluidos e salvos como novo
   modelo a partir das configuracoes atuais.
-- Cadastro e importacao CSV/XLS/XLSX de jogadores, incluindo FIDE ID, CBX ID,
+- Cadastro e importacao CSV/XLS/XLSX de jogadores, incluindo FIDE ID, CBX ID, LBX ID,
   titulos e ratings nacional/internacional.
 - Importacao de inscricoes por arquivo CSV/XLS/XLSX ou link publicado do
   Google Forms/Sheets em formato CSV.
-- Importacao de listas oficiais FIDE/CBX em CSV para uma base local de ratings.
-- Atualizacao dos jogadores inscritos a partir da base oficial por FIDE ID/CBX ID.
+- Importacao de listas oficiais FIDE/CBX em CSV e das listas online LBX para uma base local de ratings.
+- Atualizacao dos jogadores inscritos a partir da base oficial por FIDE ID/CBX ID/LBX ID.
 - Inscricao de membros em torneios integrados, filtrando por escopo do torneio.
 - Inscricao em massa de membros ativos no torneio selecionado.
 - Filtros de membros por tipo de vinculo, status e categoria.
@@ -64,15 +64,82 @@ Aplicativo desktop em Python para emparceiramento de torneios de xadrez.
   flags de interface/publicacao e agenda de datas/horarios por rodada.
 - Classificacao com pontos, Buchholz, Buchholz mediano, Sonneborn-Berger,
   vitorias e performance estimada do jogador.
+- Desempates configuraveis por torneio: escolha e ordene os criterios na tela
+  `Config. torneio`. Alem dos historicos, ha Buchholz Cut-1/Cut-2, progressivo,
+  progressivo dos adversarios, Koya, rating medio dos adversarios (ARO/ARO
+  cortado), partidas/vitorias com pretas e partidas jogadas. Pontos sao sempre o
+  criterio primario; rating/nome os tecnicos finais. Sem configuracao, mantem a
+  ordem historica (pontos, Buchholz, Buchholz mediano, Sonneborn-Berger,
+  vitorias).
 - Exportacao de jogadores, classificacao, rodada especifica, todas as rodadas e relatorio completo em CSV, XLSX e PDF.
 - Exportacao de site estatico em HTML/CSS com dados do torneio, jogadores,
   agenda, rodadas e classificacao.
+- Sumulas de mesa em PDF para impressao, com grade de lances, dados oficiais,
+  resultado e assinaturas.
+- Lista de chamada em PDF para impressao, ordenada pelo ranking inicial e com
+  coluna de assinatura.
+- Folha de emparceiramento de mural em PDF, com QR de envio de resultado para
+  cada mesa enquanto a rodada estiver aberta.
+- Cartoes de mesa em PDF por intervalo configuravel, com numero em destaque,
+  identificacao da rodada e QR opcional.
+- Tabela cruzada individual por rodada, com adversario, cor, resultado, pontos
+  e desempates, exportavel em CSV, XLSX, PDF e HTML.
+- Tabela cruzada por equipes com adversario, resultado, match points, game
+  points e detalhe dos tabuleiros, exportavel em CSV, XLSX, PDF e HTML.
 - Exportacao e validacao TRF/FIDE/Chess-Results, com avisos para dados
   oficiais incompletos antes da geracao do arquivo `.trf`.
 - Auditoria operacional do torneio com snapshots de emparceiramento,
   classificacao e correcoes de resultado.
 - Pre-visualizacao da proxima rodada antes de gravar o emparceiramento.
 - Painel do arbitro com pendencias, correcoes e acoes rapidas.
+- Lancamento inline de resultados no painel do arbitro, com botoes, atalhos e
+  selecao automatica da proxima mesa pendente.
+- Busca direta por numero da mesa no painel, inclusive fora do recorte inline.
+- Preferencias persistidas do painel do arbitro para auto-refresh, intervalo
+  entre atualizacoes e quantidade de mesas exibidas inline.
+- Relogio local no painel do arbitro com inicio, tempo decorrido e duracao final
+  congelada quando a rodada e fechada.
+- Relatorio de taxas de rating por torneio, separado por FIDE, CBX e LBX, com
+  configuracao de valores unitarios e exportacao XLSX/PDF.
+- Relatorio de variacao de rating FIDE (estimativa de apoio): tabela oficial de
+  expectativa com regra dos 400, fator K (10/20/40 com override por jogador),
+  Ro, We, ΔElo, Rc e performance (Rp) por jogador. Disponivel na tela
+  `Relatorios` como `Rating FIDE`, exportavel em CSV/XLSX/PDF e com snapshot
+  persistido para reimpressao. Nao substitui a homologacao oficial da federacao.
+- Distribuicao de premios em dinheiro: cadastro de premios por colocacao (geral),
+  por categoria, especiais e de tabuleiro na tela `Config. torneio`; politicas de
+  combinacao geral×categoria (apenas o maior, acumular ou Sistema Hort), divisao
+  igual entre empatados por pontos e desconto de imposto do organizador. A lista
+  de premiacao sai na tela `Relatorios` como `Premiacao`, exportavel em
+  CSV/XLSX/PDF.
+- Estatisticas e fichas no padrao FIDE, na tela `Relatorios`: `Estatistica de
+  federacoes` (jogadores, % e pontos por federacao), `Estatistica de partidas`
+  (vitorias de brancas/empates/pretas, WO e byes) e `Fichas individuais` (resumo
+  por jogador com V/E/D, cores e performance, mais os resultados rodada a
+  rodada). Tudo exportavel em CSV/XLSX/PDF.
+- Assistente de normas/titulos FIDE (estimativa de apoio), na tela `Relatorios`
+  como `Normas FIDE`: por jogador, performance, media dos adversarios, numero de
+  federacoes e de titulados enfrentados, e o veredito por titulo (GM/IM e, para
+  jogadoras, WGM/WIM) com o que falta para atingir. Nao concede norma nem titulo
+  (isso e exclusivo da FIDE).
+- Editor de colunas da classificacao na tela `Config. torneio`: escolha e ordene
+  quais colunas aparecem no relatorio de classificacao (vazio = colunas padrao),
+  aplicado a CSV/XLSX/PDF.
+- Sistema Scheveningen: cada jogador de um grupo enfrenta todos do outro (grupos
+  = metades por ranking inicial). Selecione `Scheveningen` no metodo de
+  pareamento em `Config. torneio`.
+- Importacao de torneio do Swiss-Manager por arquivo TRF (FIDE/Krause): botao
+  `Importar TRF (Swiss-Manager)` na tela de torneios cria um novo torneio com o
+  cabecalho e todos os jogadores (nome, rating, federacao, FIDE ID, nascimento).
+- Mudar metodo de pareamento e dividir torneio: a troca de pareamento fica
+  bloqueada apos a primeira rodada; o botao `Dividir` reparte os jogadores em N
+  torneios-filho por ranking inicial (A = mais fortes), vinculados ao torneio de
+  origem.
+- Pre-visualizacao da atualizacao oficial dos inscritos com comparacao
+  antes/depois, lista separada de jogadores sem correspondencia e confirmacao
+  explicita das divergencias selecionadas.
+- Central de pendencias com filtros por decisao, QR, sincronizacao e relogio,
+  busca por mesa ou detalhe e contador atualizado.
 - Explicacao/exportacao de desempates com componentes persistidos.
 - QR local opcional para submissao de resultado por mesa, sempre com aprovacao
   do arbitro antes de alterar a partida.
@@ -96,13 +163,39 @@ dispositivos, relogios e notificacoes sao camadas auxiliares. Elas podem sugerir
 ou registrar eventos, mas resultado fechado e alteracao critica dependem do
 fluxo normal do arbitro.
 
+Para uso presencial, imprima o
+[`Manual Operacional de Arbitragem`](docs/Manual_Operacional_Arbitragem.pdf).
+A fonte editavel com checklist por rodada e registro de incidentes fica em
+[`docs/Manual_Operacional_Arbitragem.md`](docs/Manual_Operacional_Arbitragem.md).
+
+Antes de um piloto presencial ou depois de alterar o painel, rode a simulacao
+operacional reproduzivel:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\run_referee_operational_pilot.py --strict
+```
+
+O comando gera
+[`docs/PILOTO_OPERACIONAL_BASELINE.md`](docs/PILOTO_OPERACIONAL_BASELINE.md) e
+o equivalente estruturado em JSON. O ensaio automatizado cobre 121 e 801
+jogadores, incluindo criacao de backup final e restauracao em uma segunda
+instalacao temporaria. Ele tambem bloqueia a rede em uma instalacao isolada e
+confirma painel, lancamentos, fechamento, classificacao, exportacoes e backup
+locais. Uma rajada concorrente de 20 envios QR tambem e recebida e aprovada
+pela fila do arbitro. O cadastro de ultima hora tambem e medido depois de uma
+rodada fechada, incluindo atualizacao da lista, classificacao e previa seguinte.
+A conferencia oficial antes da rodada 1 valida importacao local, comparacao sem
+persistencia e confirmacao seletiva. O checklist presencial continua necessario
+para avaliar impressora, rede local, legibilidade, quantidade de cliques e o
+computador fisico reserva.
+
 ### Antes do torneio
 
 1. Crie ou carregue o torneio e confira nome, local, datas, ritmo, quantidade
    de rodadas, perfil FIDE e dados do arbitro.
 2. Importe jogadores por CSV/XLS/XLSX, Google Forms/Sheets publicado em CSV,
    base local de membros ou cadastro manual.
-3. Atualize ratings oficiais quando houver lista FIDE/CBX importada.
+3. Compare e confirme os ratings oficiais quando houver lista FIDE/CBX/LBX importada.
 4. Use a chamada inicial na tela de rodadas antes da primeira rodada para
    marcar presentes e ausentes.
 5. Gere um backup manual ou confirme que a pasta de backups esta configurada em
@@ -977,7 +1070,7 @@ Os mesmos cabecalhos podem ser usados em arquivos `.csv`, `.xls` e `.xlsx`.
 
 ## CSV de ratings oficiais
 
-Para importar uma lista FIDE ou CBX na tela `Jogadores`, use CSV com colunas como:
+Para importar uma lista FIDE, CBX ou LBX por arquivo na tela `Jogadores`, use CSV com colunas como:
 
 ```csv
 name,fide,cbx,title,fide_rating,rating_nacional,federation,club,birth_date
@@ -987,6 +1080,10 @@ Ana Silva,123456,7890,WFM,1820,1850,BRA,Clube A,2008-01-01
 Tambem sao aceitos nomes como `nome`, `titulo`, `id_fide`, `id_cbx`,
 `rating_internacional`, `elo_fide`, `rating_nacional`, `elo_nacional`,
 `fed`, `federacao`, `clube`, `sexo` e `data_nascimento`.
+
+Para a LBX, a acao `Atualizar base LBX` baixa e consolida automaticamente as listas
+standard, rapid e blitz publicadas pela entidade. Tambem sao aceitos `lbx_id`,
+`id_lbx` e o formato Swiss-Manager com `ID_No`, `Rtg_Nat`, `ClubName` e `Birthday`.
 
 ## Observacao
 

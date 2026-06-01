@@ -9,7 +9,10 @@ import tempfile
 import unittest
 from datetime import date
 from pathlib import Path
+from time import perf_counter
+from typing import Any
 from unittest import mock
+from urllib.parse import parse_qs, urlparse
 
 from src.core import database as database_module
 from src.core.database import APP_DATA_DIR_ENV_VAR, Database, resolve_app_data_dir
@@ -28,9 +31,12 @@ from src.core.services import (
     InternalRatingService,
     InventoryService,
     LearningLevelService,
+    ListLayoutService,
     MemberService,
+    NormAssistantService,
     OfficialRatingService,
     PairingService,
+    PrizeService,
     QRResultService,
     SecurityService,
     SyncService,
@@ -242,6 +248,9 @@ class PairingServiceTest(unittest.TestCase):
         self.export_service = ExportService(self.db, self.service)
         self.certificate_service = CertificateService(self.db, self.service)
         self.finance_service = FinanceService(self.db)
+        self.prize_service = PrizeService(self.db)
+        self.norm_assistant_service = NormAssistantService(self.db)
+        self.list_layout_service = ListLayoutService(self.db)
         self.tournament_id = self.db.create_tournament("Torneio teste", rounds_count=5)
 
     def tearDown(self) -> None:
@@ -762,10 +771,14 @@ class PairingServiceTest(unittest.TestCase):
         self.assertIn("team_reserve_policy", settings_columns)
         self.assertIn("team_lineup_deadline", settings_columns)
         self.assertIn("team_max_substitutions", settings_columns)
+        self.assertIn("rating_fee_fide", settings_columns)
+        self.assertIn("rating_fee_cbx", settings_columns)
+        self.assertIn("rating_fee_lbx", settings_columns)
         self.assertIn("learning_level_id", member_columns)
         self.assertIn("training_list_id", training_session_columns)
         self.assertIn("pairing_engine_version", round_columns)
         self.assertIn("ruleset_version", round_columns)
+        self.assertIn("closed_at", round_columns)
         self.assertEqual({"learning_levels"}, learning_tables)
         self.assertIn("idx_learning_levels_order", learning_indexes)
         self.assertIn("idx_pairings_white_player", pairing_indexes)
@@ -883,12 +896,16 @@ class PairingServiceTest(unittest.TestCase):
         pending_dashboard = self.service.arbitration_dashboard(self.tournament_id)
         self.assertEqual(1, pending_dashboard["metrics"]["pending_results"])
         self.assertFalse(pending_dashboard["metrics"]["ready_to_close"])
+        self.assertEqual(1, len(pending_dashboard["pending_items"]))
+        self.assertEqual(1, pending_dashboard["pending_items"][0]["board"])
+        self.assertTrue(pending_dashboard["pending_items"][0]["pairing_id"])
 
         pairing = self.db.get_pairings_for_round(int(round_data["id"]))[0]
         self.service.update_result(self.tournament_id, int(pairing["id"]), "1-0")
         ready_dashboard = self.service.arbitration_dashboard(self.tournament_id)
         self.assertEqual(0, ready_dashboard["metrics"]["pending_results"])
         self.assertTrue(ready_dashboard["metrics"]["ready_to_close"])
+        self.assertEqual([], ready_dashboard["pending_items"])
 
         self.service.close_round(self.tournament_id, int(round_data["id"]))
         settings = self.db.get_tournament_settings(self.tournament_id) or {}
@@ -899,6 +916,55 @@ class PairingServiceTest(unittest.TestCase):
         corrected_dashboard = self.service.arbitration_dashboard(self.tournament_id)
         self.assertEqual(1, corrected_dashboard["metrics"]["corrections"])
         self.assertTrue(corrected_dashboard["metrics"]["can_preview_next_round"])
+
+    def test_phase2_arbitration_dashboard_respects_pending_items_limit(self) -> None:
+        self._create_players(24)
+        self.service.generate_next_round(self.tournament_id)
+
+        dashboard = self.service.arbitration_dashboard(self.tournament_id, pending_limit=10)
+
+        self.assertEqual(12, dashboard["metrics"]["pending_results"])
+        self.assertEqual(10, len(dashboard["pending_items"]))
+        self.assertEqual(list(range(1, 11)), [item["board"] for item in dashboard["pending_items"]])
+
+    def test_phase2_arbitration_dashboard_searches_exact_pending_board_before_limit(self) -> None:
+        self._create_players(120)
+        self.service.generate_next_round(self.tournament_id)
+
+        dashboard = self.service.arbitration_dashboard(
+            self.tournament_id,
+            pending_limit=50,
+            pending_query="60",
+        )
+
+        self.assertEqual(60, dashboard["metrics"]["pending_results"])
+        self.assertEqual([60], [item["board"] for item in dashboard["pending_items"]])
+
+    def test_phase2_arbitration_dashboard_round_clock_freezes_when_round_closes(self) -> None:
+        self._create_players(2)
+        round_data = self.service.generate_next_round(self.tournament_id)
+        with self.db.connect() as connection:
+            connection.execute(
+                "UPDATE rounds SET created_at = '2026-05-31 10:00:00' WHERE id = ?",
+                (int(round_data["id"]),),
+            )
+
+        with mock.patch.object(self.db, "now", return_value="2026-05-31 11:30:00"):
+            open_dashboard = self.service.arbitration_dashboard(self.tournament_id)
+        self.assertEqual("em_andamento", open_dashboard["metrics"]["round_clock_status"])
+        self.assertEqual("31/05 10:00", open_dashboard["metrics"]["round_started_label"])
+        self.assertEqual("01:30:00", open_dashboard["metrics"]["round_duration_label"])
+
+        pairing = self.db.get_pairings_for_round(int(round_data["id"]))[0]
+        self.service.update_result(self.tournament_id, int(pairing["id"]), "1-0")
+        with mock.patch.object(self.db, "now", return_value="2026-05-31 12:00:00"):
+            self.service.close_round(self.tournament_id, int(round_data["id"]))
+        with mock.patch.object(self.db, "now", return_value="2026-05-31 14:00:00"):
+            closed_dashboard = self.service.arbitration_dashboard(self.tournament_id)
+
+        self.assertEqual("2026-05-31 12:00:00", self.db.get_round(int(round_data["id"]))["closed_at"])
+        self.assertEqual("fechada", closed_dashboard["metrics"]["round_clock_status"])
+        self.assertEqual("02:00:00", closed_dashboard["metrics"]["round_duration_label"])
 
     def test_phase2_round_close_blocks_arbitration_decision_issues(self) -> None:
         self._create_players(2)
@@ -978,6 +1044,41 @@ class PairingServiceTest(unittest.TestCase):
         self.assertEqual({"qr", "sync", "clock"}, sources)
         self.assertTrue(all(item.get("payload") for item in issues["issues"]))
         self.assertTrue(all(item.get("issue_key") for item in issues["issues"]))
+
+    def test_phase2_arbitration_issue_filters_are_pure_and_search_payload_board(self) -> None:
+        issues = [
+            {
+                "severity": "decision",
+                "source": "qr",
+                "kind": "result_submission",
+                "title": "Resultado QR pendente - mesa 17",
+                "detail": "Resultado enviado: 1-0",
+                "payload": {"board_number": 17},
+            },
+            {
+                "severity": "decision",
+                "source": "sync",
+                "kind": "remote_rejected",
+                "title": "Evento remoto rejeitado",
+                "detail": "Conferir conflito",
+                "payload": {"board_number": 42},
+            },
+            {
+                "severity": "attention",
+                "source": "clock",
+                "kind": "flag_fall",
+                "title": "Queda de seta registrada",
+                "detail": "Mesa decisiva",
+                "payload": {"board_number": 3},
+            },
+        ]
+
+        self.assertEqual(issues, self.service.filter_arbitration_issues(issues))
+        self.assertEqual([issues[0], issues[1]], self.service.filter_arbitration_issues(issues, "decision"))
+        self.assertEqual([issues[0]], self.service.filter_arbitration_issues(issues, "qr"))
+        self.assertEqual([issues[1]], self.service.filter_arbitration_issues(issues, query="42"))
+        self.assertEqual([issues[2]], self.service.filter_arbitration_issues(issues, query="mesa decisiva"))
+        self.assertEqual(3, len(issues))
 
     def test_phase2_arbitration_issue_acknowledgement_hides_non_qr_issue(self) -> None:
         self._create_players(2)
@@ -1622,6 +1723,34 @@ class PairingServiceTest(unittest.TestCase):
         self.assertEqual("revoked", first_row["status"])
         self.assertEqual("active", second_row["status"])
         self.assertEqual("submitted", submission["status"])
+
+    def test_phase4_qr_batch_links_revoke_previous_token_and_audit_round(self) -> None:
+        self._create_players(4)
+        round_data = self.service.generate_next_round(self.tournament_id)
+        pairings = self.db.get_pairings_for_round(int(round_data["id"]))
+        first_pairing = pairings[0]
+        previous = self.qr_result_service.result_url_for_pairing(
+            self.tournament_id,
+            int(first_pairing["id"]),
+        )
+
+        urls = self.qr_result_service.result_urls_for_pairings(
+            self.tournament_id,
+            [{**pairing, "tournament_id": self.tournament_id} for pairing in pairings],
+        )
+
+        previous_row = self.db.get_public_token_by_hash(self.qr_result_service._token_hash(previous["token"]))
+        active_tokens = []
+        for pairing_id, url in urls.items():
+            token = parse_qs(urlparse(url).query)["token"][0]
+            active_tokens.append(self.qr_result_service._validate_token(token))
+            self.assertEqual(pairing_id, int(active_tokens[-1]["pairing_id"]))
+        audit_events = self.db.list_audit_events(self.tournament_id, limit=20)
+        batch_event = next(event for event in audit_events if event["action"] == "public_result_tokens_created")
+
+        self.assertEqual("revoked", previous_row["status"])
+        self.assertEqual(2, len(active_tokens))
+        self.assertIn('"tokens_count":2', batch_event["after_json"])
 
     def test_phase4_qr_does_not_override_desktop_result(self) -> None:
         self._create_players(2)
@@ -3804,6 +3933,9 @@ class PairingServiceTest(unittest.TestCase):
                 "appearance_mode": "Dark",
                 "default_export_dir": str(export_dir),
                 "backup_dir": str(self.backup_dir),
+                "arbitration_auto_refresh_enabled": "0",
+                "arbitration_refresh_interval_seconds": "60",
+                "arbitration_inline_tables_limit": "40",
             }
         )
         before_member_id = self.member_service.create_member(
@@ -3832,6 +3964,9 @@ class PairingServiceTest(unittest.TestCase):
 
         self.assertEqual(settings["appearance_mode"], "Dark")
         self.assertEqual(settings["default_export_dir"], str(export_dir))
+        self.assertEqual(settings["arbitration_auto_refresh_enabled"], "0")
+        self.assertEqual(settings["arbitration_refresh_interval_seconds"], "60")
+        self.assertEqual(settings["arbitration_inline_tables_limit"], "40")
         self.assertTrue(safety_backup.exists())
         self.assertTrue(any(backup["name"] == backup_path.name for backup in backups))
         self.assertIn("Antes do backup", member_names)
@@ -4309,6 +4444,9 @@ class PairingServiceTest(unittest.TestCase):
                 "allow_public_registration": 1,
                 "calculate_performance": 1,
                 "late_entry_points": "0.5",
+                "rating_fee_fide": "2.50",
+                "rating_fee_cbx": "3.75",
+                "rating_fee_lbx": "1.25",
             },
             [
                 {"round_number": 1, "date": "2026-06-01", "time": "09:00"},
@@ -4329,6 +4467,9 @@ class PairingServiceTest(unittest.TestCase):
         self.assertEqual(settings["allow_public_registration"], 1)
         self.assertEqual(settings["calculate_performance"], 1)
         self.assertEqual(settings["late_entry_points"], 0.5)
+        self.assertEqual(settings["rating_fee_fide"], 2.5)
+        self.assertEqual(settings["rating_fee_cbx"], 3.75)
+        self.assertEqual(settings["rating_fee_lbx"], 1.25)
         self.assertEqual(len(schedule), 3)
         self.assertEqual(schedule[1]["date"], "2026-06-01")
         self.assertEqual(schedule[1]["time"], "14:00")
@@ -4686,6 +4827,94 @@ class PairingServiceTest(unittest.TestCase):
         self.assertEqual(player["rating"], 1850)
         self.assertEqual(player["club"], "Clube novo")
 
+    def test_official_rating_preview_does_not_persist_before_confirmation(self) -> None:
+        matched_player_id = self.db.create_player(
+            self.tournament_id,
+            name="Nome antigo",
+            rating=1500,
+            fide_id="222",
+            club="Clube antigo",
+        )
+        unmatched_player_id = self.db.create_player(
+            self.tournament_id,
+            name="Sem cadastro oficial",
+            rating=1400,
+            fide_id="999",
+        )
+        fide_csv = Path(self.temp_dir.name) / "fide_preview.csv"
+        fide_csv.write_text(
+            "name,fide,title,fide_rating,club\n"
+            "Nome oficial,222,FM,1810,Clube novo\n",
+            encoding="utf-8",
+        )
+        self.official_rating_service.import_official_csv(fide_csv, "FIDE", "2026-05")
+
+        preview = self.official_rating_service.preview_tournament_player_updates(self.tournament_id)
+        matched_before_confirmation = self.db.get_player(matched_player_id)
+        unmatched = self.db.get_player(unmatched_player_id)
+
+        self.assertEqual(preview["total"], 2)
+        self.assertEqual(preview["matched"], 1)
+        self.assertEqual(preview["changed"], 1)
+        self.assertEqual(preview["unchanged"], 0)
+        self.assertEqual(preview["unmatched_count"], 1)
+        self.assertEqual(preview["rows"][0]["status"], "changed")
+        self.assertEqual(
+            preview["rows"][0]["changed_fields"],
+            ["name", "club", "title", "rating", "international_rating"],
+        )
+        self.assertEqual(preview["unmatched"][0]["name"], unmatched["name"])
+        self.assertEqual(matched_before_confirmation["name"], "Nome antigo")
+        self.assertEqual(matched_before_confirmation["club"], "Clube antigo")
+        self.assertEqual(matched_before_confirmation["rating"], 1500)
+
+        result = self.official_rating_service.apply_tournament_player_updates(
+            self.tournament_id,
+            [matched_player_id],
+        )
+        matched_after_confirmation = self.db.get_player(matched_player_id)
+
+        self.assertEqual(result["updated"], 1)
+        self.assertEqual(result["unmatched"], ["Sem cadastro oficial"])
+        self.assertEqual(matched_after_confirmation["name"], "Nome oficial")
+        self.assertEqual(matched_after_confirmation["club"], "Clube novo")
+        self.assertEqual(matched_after_confirmation["title"], "FM")
+        self.assertEqual(matched_after_confirmation["rating"], 1810)
+
+    def test_official_rating_preview_confirmation_applies_only_selected_players(self) -> None:
+        first_player_id = self.db.create_player(
+            self.tournament_id,
+            name="Primeiro antigo",
+            rating=1500,
+            fide_id="101",
+        )
+        second_player_id = self.db.create_player(
+            self.tournament_id,
+            name="Segundo antigo",
+            rating=1400,
+            fide_id="202",
+        )
+        fide_csv = Path(self.temp_dir.name) / "fide_selected.csv"
+        fide_csv.write_text(
+            "name,fide,fide_rating\n"
+            "Primeiro oficial,101,1800\n"
+            "Segundo oficial,202,1700\n",
+            encoding="utf-8",
+        )
+        self.official_rating_service.import_official_csv(fide_csv, "FIDE", "2026-05")
+
+        preview = self.official_rating_service.preview_tournament_player_updates(self.tournament_id)
+        result = self.official_rating_service.apply_tournament_player_updates(
+            self.tournament_id,
+            [first_player_id],
+        )
+
+        self.assertEqual(preview["changed"], 2)
+        self.assertEqual(result["updated"], 1)
+        self.assertEqual(result["skipped"], 1)
+        self.assertEqual(self.db.get_player(first_player_id)["name"], "Primeiro oficial")
+        self.assertEqual(self.db.get_player(second_player_id)["name"], "Segundo antigo")
+
     def test_official_rating_import_accepts_semicolon_csv_and_normalized_headers(self) -> None:
         player_id = self.db.create_player(
             self.tournament_id,
@@ -4711,6 +4940,58 @@ class PairingServiceTest(unittest.TestCase):
         self.assertEqual(player["title"], "WCM")
         self.assertEqual(player["international_rating"], 1888)
         self.assertEqual(player["rating"], 1888)
+
+    def test_lbx_online_import_combines_lists_and_updates_player_by_lbx_id(self) -> None:
+        player_id = self.db.create_player(
+            self.tournament_id,
+            name="Nome antigo",
+            rating=1200,
+            lbx_id="350004",
+        )
+        header = "ID_No;Name;Fed;Sex;Clubnumber;ClubName;Birthday;Rtg_Nat;Fide_No;Rtg_Int;Title;Type;Status;K;\n"
+        ratings = {
+            "LBXstandard.php": 2348,
+            "LBXrapid.php": 2438,
+            "LBXblitz.php": 2436,
+        }
+
+        class FakeResponse:
+            def __init__(self, content: str) -> None:
+                self.content = content.encode("utf-8")
+
+            def __enter__(self) -> FakeResponse:
+                return self
+
+            def __exit__(self, *_args: object) -> None:
+                return None
+
+            def read(self) -> bytes:
+                return self.content
+
+        def fake_urlopen(request: object, timeout: int = 0) -> FakeResponse:
+            url = str(getattr(request, "full_url", ""))
+            rating = next(value for suffix, value in ratings.items() if url.endswith(suffix))
+            row = f"350004;Reis, Paulo F Jatoba de Oliveira;BRA;;29;Salvador (BA);1973-01-01;{rating};350004;{rating};FM;;;30;\n"
+            return FakeResponse(header + row)
+
+        with mock.patch("src.services.rating_service.urllib.request.urlopen", side_effect=fake_urlopen):
+            result = self.official_rating_service.import_lbx_lists_from_url()
+        update_result = self.official_rating_service.update_tournament_players(self.tournament_id)
+        player = self.db.get_player(player_id)
+        official = self.db.find_latest_official_player(lbx_id="350004")
+
+        self.assertEqual(result["imported"], 1)
+        self.assertEqual(result["errors"], [])
+        self.assertEqual(update_result["updated"], 1)
+        self.assertEqual(official["standard_rating"], 2348)
+        self.assertEqual(official["rapid_rating"], 2438)
+        self.assertEqual(official["blitz_rating"], 2436)
+        self.assertEqual(official["fide_id"], "")
+        self.assertEqual(player["lbx_id"], "350004")
+        self.assertEqual(player["fide_id"], "")
+        self.assertEqual(player["national_rating"], 2348)
+        self.assertEqual(player["rating"], 2348)
+        self.assertEqual(player["club"], "Salvador (BA)")
 
     def test_official_rating_import_without_header_does_not_create_snapshot(self) -> None:
         bad_csv = Path(self.temp_dir.name) / "official_empty.csv"
@@ -5954,6 +6235,880 @@ class PairingServiceTest(unittest.TestCase):
         self.assertEqual(points[player_ids[2]], 0.0)  # Z = zero ponto
         self.assertEqual(points[player_ids[3]], 1.0)  # bye alocado usa bye_points
 
+    # --- Fase A: desempates configuraveis e completos (E1/E2) -------------
+
+    def _phase_a_fixture(self) -> tuple[dict, list[dict], list[int]]:
+        """Cenario deterministico de 4 jogadores e 3 rodadas.
+
+        R1: 1>4, 2>3 ; R2: 1>2, 3>4 ; R3: 1=3, 2>4.
+        Pontos finais: P1=2.5, P2=2.0, P3=1.5, P4=0.0.
+        """
+        ids = self._create_players(4)  # ratings 2000,1950,1900,1850
+        tournament = self.db.get_tournament(self.tournament_id)
+        closed = [
+            {"white_player_id": ids[0], "black_player_id": ids[3], "result": "1-0", "is_bye": 0, "round_number": 1},
+            {"white_player_id": ids[1], "black_player_id": ids[2], "result": "1-0", "is_bye": 0, "round_number": 1},
+            {"white_player_id": ids[0], "black_player_id": ids[1], "result": "1-0", "is_bye": 0, "round_number": 2},
+            {"white_player_id": ids[2], "black_player_id": ids[3], "result": "1-0", "is_bye": 0, "round_number": 2},
+            {"white_player_id": ids[0], "black_player_id": ids[2], "result": "1/2-1/2", "is_bye": 0, "round_number": 3},
+            {"white_player_id": ids[1], "black_player_id": ids[3], "result": "1-0", "is_bye": 0, "round_number": 3},
+        ]
+        return tournament, closed, ids
+
+    def test_tiebreak_default_sequence_reproduces_legacy_order(self) -> None:
+        from src.services.pairing import DEFAULT_PLAYER_TIEBREAKS, calculate_player_standings
+
+        tournament, closed, ids = self._phase_a_fixture()
+        players = self.db.list_players(self.tournament_id, active_only=False)
+
+        standings = calculate_player_standings(tournament, players, closed)
+
+        # Ordem por pontos (P1>P2>P3>P4) e a sequencia padrao (sem config) e usada.
+        self.assertEqual([s["player_id"] for s in standings], [ids[0], ids[1], ids[2], ids[3]])
+        self.assertEqual(standings[0]["tiebreak_order"], DEFAULT_PLAYER_TIEBREAKS)
+        # Componentes historicos seguem presentes (compat. com exportacoes).
+        self.assertLessEqual(
+            {"buchholz", "buchholz_median", "sonneborn_berger", "direct_encounter", "wins", "performance"},
+            set(standings[0]["tiebreak_components"].keys()),
+        )
+
+    def test_tiebreak_new_criteria_values_match_manual(self) -> None:
+        from src.services.pairing import calculate_player_standings, parse_player_tiebreak_sequence
+
+        tournament, closed, ids = self._phase_a_fixture()
+        players = self.db.list_players(self.tournament_id, active_only=False)
+        sequence = parse_player_tiebreak_sequence(
+            [{"code": "buchholz_cut1"}, {"code": "cumulative"}, {"code": "koya"}, {"code": "aro"}, {"code": "black_games"}]
+        )
+
+        standings = calculate_player_standings(tournament, players, closed, sequence=sequence)
+        leader = next(s for s in standings if s["player_id"] == ids[0])
+        components = leader["tiebreak_components"]
+
+        # P1 enfrentou P4(0 pts), P2(2.0 pts), P3(1.5 pts); ratings 1850/1950/1900.
+        self.assertEqual(components["buchholz_cut1"]["value"], 3.5)   # descarta o 0 → 2.0+1.5
+        self.assertEqual(components["cumulative"]["value"], 5.5)      # 1+2+2.5
+        self.assertEqual(components["koya"]["value"], 1.5)            # vs P2 (1.0) + vs P3 (0.5)
+        self.assertEqual(components["aro"]["value"], 1900.0)          # (1850+1950+1900)/3
+        self.assertEqual(components["black_games"]["value"], 0.0)     # P1 jogou sempre de brancas
+
+    def test_tiebreak_buchholz_cut_handles_bye_via_unplayed_param(self) -> None:
+        from src.services.pairing import calculate_player_standings
+
+        ids = self._create_players(3)  # X=ids[0], Y=ids[1], Z=ids[2]
+        tournament = self.db.get_tournament(self.tournament_id)
+        players = self.db.list_players(self.tournament_id, active_only=False)
+        closed = [
+            {"white_player_id": ids[0], "black_player_id": ids[1], "result": "1-0", "is_bye": 0, "round_number": 1},
+            {"white_player_id": ids[0], "black_player_id": ids[2], "result": "1-0", "is_bye": 0, "round_number": 2},
+            {"white_player_id": ids[0], "black_player_id": None, "result": "BYE", "is_bye": 1, "round_number": 3},
+        ]
+
+        def cut1(unplayed: str) -> float:
+            standings = calculate_player_standings(
+                tournament, players, closed,
+                sequence=[{"code": "buchholz_cut1", "params": {"cut_low": 1, "unplayed": unplayed}}],
+            )
+            leader = next(s for s in standings if s["player_id"] == ids[0])
+            return leader["tiebreak_values"]["buchholz_cut1"]
+
+        # Adversarios Y e Z terminam com 0 pts. "real" ignora o bye → descarta um 0 → 0.0.
+        self.assertEqual(cut1("real"), 0.0)
+        # "self" injeta a propria pontuacao do jogador (3.0) para a rodada de bye.
+        self.assertEqual(cut1("self"), 3.0)
+
+    def test_tiebreak_sequence_changes_final_order(self) -> None:
+        from src.services.pairing import calculate_player_standings
+
+        ids = self._create_players(8)  # A=ids[0] (2000), B=ids[1] (1950)
+        tournament = self.db.get_tournament(self.tournament_id)
+        players = self.db.list_players(self.tournament_id, active_only=False)
+        closed = [
+            # A: 2 vitorias de brancas e 1 derrota → 2 pts, 2 vitorias, 0 partidas de pretas.
+            {"white_player_id": ids[0], "black_player_id": ids[2], "result": "1-0", "is_bye": 0, "round_number": 1},
+            {"white_player_id": ids[0], "black_player_id": ids[3], "result": "1-0", "is_bye": 0, "round_number": 2},
+            {"white_player_id": ids[0], "black_player_id": ids[4], "result": "0-1", "is_bye": 0, "round_number": 3},
+            # B: vitoria de pretas + 2 empates de pretas → 2 pts, 1 vitoria, 3 partidas de pretas.
+            {"white_player_id": ids[5], "black_player_id": ids[1], "result": "0-1", "is_bye": 0, "round_number": 1},
+            {"white_player_id": ids[6], "black_player_id": ids[1], "result": "1/2-1/2", "is_bye": 0, "round_number": 2},
+            {"white_player_id": ids[7], "black_player_id": ids[1], "result": "1/2-1/2", "is_bye": 0, "round_number": 3},
+        ]
+
+        def position_of(player_id: int, sequence: list[dict]) -> int:
+            standings = calculate_player_standings(tournament, players, closed, sequence=sequence)
+            return next(s["position"] for s in standings if s["player_id"] == player_id)
+
+        # Empatados em pontos (2.0). Por vitorias, A (2) fica a frente de B (1).
+        self.assertLess(position_of(ids[0], [{"code": "wins"}]), position_of(ids[1], [{"code": "wins"}]))
+        # Por partidas com pretas, B (3) fica a frente de A (0) — ordem invertida.
+        self.assertLess(position_of(ids[1], [{"code": "black_games"}]), position_of(ids[0], [{"code": "black_games"}]))
+
+    def test_tiebreak_sequence_persists_and_threads_into_standings(self) -> None:
+        from src.services.pairing import serialize_tiebreak_sequence
+
+        self._create_players(4)
+        sequence = [{"code": "direct_encounter", "params": {}}, {"code": "cumulative", "params": {}}, {"code": "wins", "params": {}}]
+        self.db.save_tournament_settings(
+            self.tournament_id, {"tiebreak_sequence": serialize_tiebreak_sequence(sequence)}
+        )
+
+        round_data = self.service.generate_next_round(self.tournament_id)
+        round_id = int(round_data["id"])
+        for pairing in self.db.get_pairings_for_round(round_id):
+            self.service.update_result(self.tournament_id, int(pairing["id"]), "1-0")
+        self.service.close_round(self.tournament_id, round_id)
+
+        # A sequencia gravada chega ate o calculo da classificacao.
+        standings = self.service.standings(self.tournament_id)
+        self.assertEqual(standings[0]["tiebreak_order"], ["direct_encounter", "cumulative", "wins"])
+        settings = self.db.get_tournament_settings(self.tournament_id)
+        self.assertEqual(settings["tiebreak_sequence"], serialize_tiebreak_sequence(sequence))
+
+    def test_validated_settings_normalizes_tiebreak_sequence(self) -> None:
+        from src.services.pairing import serialize_tiebreak_sequence
+
+        payload = self.tournament_service._validated_settings(
+            {"tiebreak_sequence": [{"code": "points"}, {"code": "buchholz"}, {"code": "xxx"}, {"code": "buchholz"}]}
+        )
+
+        # 'points' (implicito), criterio desconhecido e duplicata sao descartados.
+        self.assertEqual(payload["tiebreak_sequence"], serialize_tiebreak_sequence([{"code": "buchholz", "params": {}}]))
+        self.assertEqual(payload["team_tiebreak_sequence"], "[]")
+
+    def test_v35_database_adds_tiebreak_sequence_columns(self) -> None:
+        legacy_path = Path(self.temp_dir.name) / "legacy_v35_tiebreaks.db"
+        connection = sqlite3.connect(legacy_path)
+        try:
+            connection.executescript(
+                """
+                CREATE TABLE tournament_settings (
+                    tournament_id INTEGER PRIMARY KEY,
+                    updated_at TEXT NOT NULL DEFAULT ''
+                );
+                INSERT INTO tournament_settings (tournament_id, updated_at)
+                VALUES (1, '2026-06-01 00:00:00');
+                PRAGMA user_version = 34;
+                """
+            )
+            connection.commit()
+        finally:
+            connection.close()
+
+        migrated = Database(legacy_path, backup_dir=self.backup_dir)
+        with migrated.connect() as migrated_connection:
+            columns = {
+                row["name"]
+                for row in migrated_connection.execute("PRAGMA table_info(tournament_settings)").fetchall()
+            }
+            user_version = migrated_connection.execute("PRAGMA user_version").fetchone()[0]
+
+        self.assertIn("tiebreak_sequence", columns)
+        self.assertIn("team_tiebreak_sequence", columns)
+        self.assertEqual(Database.SCHEMA_VERSION, user_version)
+
+    # --- Fase B: relatorio de variacao de rating FIDE (E3) ----------------
+
+    @staticmethod
+    def _fide_player(pid: int, rating: int, *, intl: int | None = None, birth: str = "") -> dict:
+        return {
+            "id": pid, "name": f"P{pid}", "surname": "", "given_name": "",
+            "international_rating": rating if intl is None else intl,
+            "national_rating": 0, "rating": rating, "birth_date": birth, "k_factor": None,
+        }
+
+    def test_fide_expected_score_applies_400_rule(self) -> None:
+        from src.services.fide_rating import fide_expected_score
+
+        self.assertEqual(fide_expected_score(2000, 2000), 0.50)
+        self.assertEqual(fide_expected_score(2000, 1800), 0.76)
+        self.assertEqual(fide_expected_score(1800, 2000), 0.24)
+        # Diferenca de 500 e tratada como 400 (regra dos 400).
+        self.assertEqual(fide_expected_score(2000, 1500), 0.92)
+        self.assertEqual(fide_expected_score(1500, 2000), 0.08)
+
+    def test_fide_k_factor_rules(self) -> None:
+        from src.services.fide_rating import fide_k_factor
+
+        self.assertEqual(fide_k_factor(2500), 10)
+        self.assertEqual(fide_k_factor(2000), 20)
+        self.assertEqual(fide_k_factor(2000, k_override=40), 40)
+        self.assertEqual(fide_k_factor(2200, birth_year=2012, tournament_year=2026), 40)  # sub-18 <2300
+        self.assertEqual(fide_k_factor(2350, birth_year=2012, tournament_year=2026), 20)  # sub-18 mas >=2300
+
+    def test_fide_report_delta_matches_manual(self) -> None:
+        from src.services.fide_rating import build_fide_report_rows
+
+        rows = build_fide_report_rows(
+            [self._fide_player(1, 2000), self._fide_player(2, 1800)],
+            [{"white_player_id": 1, "black_player_id": 2, "result": "1-0", "is_bye": 0}],
+            "fide",
+        )
+        by_id = {row["player_id"]: row for row in rows}
+        # We(A)=0.76, K=20, ΔA=20*(1-0.76)=4.8, Rc=2005.
+        self.assertEqual(by_id[1]["we"], 0.76)
+        self.assertEqual(by_id[1]["k"], 20)
+        self.assertEqual(by_id[1]["delta"], 4.8)
+        self.assertEqual(by_id[1]["rc"], 2005)
+        # We(B)=0.24, ΔB=-4.8, Rc=1795.
+        self.assertEqual(by_id[2]["delta"], -4.8)
+        self.assertEqual(by_id[2]["rc"], 1795)
+
+    def test_fide_report_400_rule_and_unrated_opponent(self) -> None:
+        from src.services.fide_rating import build_fide_report_rows
+
+        # 400: A=2000 vence C=1500 → We=0.92, n_over_400=1, Δ=1.6.
+        rows = build_fide_report_rows(
+            [self._fide_player(1, 2000), self._fide_player(3, 1500)],
+            [{"white_player_id": 1, "black_player_id": 3, "result": "1-0", "is_bye": 0}],
+            "fide",
+        )
+        leader = next(row for row in rows if row["player_id"] == 1)
+        self.assertEqual(leader["we"], 0.92)
+        self.assertEqual(leader["n_over_400"], 1)
+        self.assertEqual(leader["delta"], 1.6)
+
+        # Adversario sem rating e ignorado no calculo; jogador sem rating recebe so Rp.
+        rows = build_fide_report_rows(
+            [self._fide_player(1, 2000), self._fide_player(2, 1800), self._fide_player(4, 0, intl=0)],
+            [
+                {"white_player_id": 1, "black_player_id": 2, "result": "1-0", "is_bye": 0},
+                {"white_player_id": 1, "black_player_id": 4, "result": "1-0", "is_bye": 0},
+            ],
+            "fide",
+        )
+        by_id = {row["player_id"]: row for row in rows}
+        self.assertEqual(by_id[1]["games_rated"], 1)   # D (sem rating) nao conta para A
+        self.assertEqual(by_id[1]["we"], 0.76)
+        self.assertEqual(by_id[4]["ro"], 0)
+        self.assertIsNone(by_id[4]["delta"])
+        self.assertEqual(by_id[4]["rp"], 1200)         # 2000 + dp(0.0) = 2000 - 800
+
+    def test_fide_report_excludes_byes_and_walkovers(self) -> None:
+        from src.services.fide_rating import build_fide_report_rows
+
+        rows = build_fide_report_rows(
+            [self._fide_player(1, 2000), self._fide_player(2, 1800)],
+            [
+                {"white_player_id": 1, "black_player_id": 2, "result": "1F-0F", "is_bye": 0},  # WO: nao conta
+                {"white_player_id": 1, "black_player_id": None, "result": "BYE", "is_bye": 1},  # bye: nao conta
+            ],
+            "fide",
+        )
+        # Nenhuma partida valida para rating → ninguem entra no relatorio.
+        self.assertEqual(rows, [])
+
+    def test_fide_rating_report_persists_idempotently(self) -> None:
+        from src.services.rating_service import FideRatingService
+
+        self._create_players(4)
+        round_data = self.service.generate_next_round(self.tournament_id)
+        round_id = int(round_data["id"])
+        for pairing in self.db.get_pairings_for_round(round_id):
+            self.service.update_result(self.tournament_id, int(pairing["id"]), "1-0")
+        self.service.close_round(self.tournament_id, round_id)
+
+        service = FideRatingService(self.db)
+        service.save_report(self.tournament_id, "fide")
+        service.save_report(self.tournament_id, "fide")  # recomputar nao duplica
+
+        saved = self.db.get_fide_rating_report(self.tournament_id, "fide")
+        self.assertEqual(len(saved), 4)                       # 4 jogadores, 1 partida ranqueada cada
+        self.assertEqual(len({row["player_id"] for row in saved}), 4)
+        self.assertTrue(all(row["games_rated"] == 1 for row in saved))
+
+    def test_export_fide_rating_report_writes_file(self) -> None:
+        self._create_players(4)
+        round_data = self.service.generate_next_round(self.tournament_id)
+        round_id = int(round_data["id"])
+        for pairing in self.db.get_pairings_for_round(round_id):
+            self.service.update_result(self.tournament_id, int(pairing["id"]), "1-0")
+        self.service.close_round(self.tournament_id, round_id)
+
+        path = Path(self.temp_dir.name) / "rating_fide.csv"
+        self.export_service.export_fide_rating_report(self.tournament_id, path, "fide")
+
+        self.assertTrue(path.exists())
+        content = path.read_text(encoding="utf-8-sig")
+        self.assertIn("Variacao de rating FIDE", content)
+        self.assertIn("Rp", content)
+        # Exportar persiste um snapshot para auditoria/reimpressao.
+        self.assertEqual(len(self.db.get_fide_rating_report(self.tournament_id, "fide")), 4)
+
+    def test_v36_database_adds_fide_rating_schema(self) -> None:
+        legacy_path = Path(self.temp_dir.name) / "legacy_v36_fide.db"
+        connection = sqlite3.connect(legacy_path)
+        try:
+            connection.executescript(
+                """
+                CREATE TABLE players (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    tournament_id INTEGER,
+                    name TEXT NOT NULL
+                );
+                PRAGMA user_version = 35;
+                """
+            )
+            connection.commit()
+        finally:
+            connection.close()
+
+        migrated = Database(legacy_path, backup_dir=self.backup_dir)
+        with migrated.connect() as migrated_connection:
+            player_columns = {
+                row["name"]
+                for row in migrated_connection.execute("PRAGMA table_info(players)").fetchall()
+            }
+            tables = {
+                row["name"]
+                for row in migrated_connection.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'table'"
+                ).fetchall()
+            }
+            user_version = migrated_connection.execute("PRAGMA user_version").fetchone()[0]
+
+        self.assertIn("k_factor", player_columns)
+        self.assertIn("fide_rating_reports", tables)
+        self.assertEqual(Database.SCHEMA_VERSION, user_version)
+
+    # --- Fase C: distribuicao de premios (E4) -----------------------------
+
+    @staticmethod
+    def _prize_standings() -> list[dict]:
+        # P1 e P2 empatados em pontos (3.0) ocupam as posicoes 1-2.
+        return [
+            {"player_id": 1, "name": "P1", "position": 1, "points": 3.0, "category": "A"},
+            {"player_id": 2, "name": "P2", "position": 2, "points": 3.0, "category": "B"},
+            {"player_id": 3, "name": "P3", "position": 3, "points": 2.0, "category": "A"},
+            {"player_id": 4, "name": "P4", "position": 4, "points": 1.0, "category": "B"},
+        ]
+
+    @staticmethod
+    def _prize_rows() -> list[dict]:
+        return [
+            {"kind": "overall", "label": "1o", "rank_from": 1, "rank_to": 1, "amount": 1000},
+            {"kind": "overall", "label": "2o", "rank_from": 2, "rank_to": 2, "amount": 600},
+            {"kind": "overall", "label": "3o", "rank_from": 3, "rank_to": 3, "amount": 200},
+            {"kind": "category", "label": "Cat A 1o", "category": "A", "rank_from": 1, "rank_to": 1, "amount": 300},
+            {"kind": "category", "label": "Cat B 1o", "category": "B", "rank_from": 1, "rank_to": 1, "amount": 300},
+        ]
+
+    def test_prize_best_only_splits_ties_without_double_counting(self) -> None:
+        from src.services.prizes import allocate_prizes
+
+        result = allocate_prizes(self._prize_standings(), self._prize_rows(), "best_only", 0.0)
+        by_id = {row["player_id"]: row for row in result["allocations"]}
+        # Empate 1-2 divide (1000+600)/2 = 800 cada; sem somar a categoria.
+        self.assertEqual(by_id[1]["gross"], 800.0)
+        self.assertEqual(by_id[2]["gross"], 800.0)
+        self.assertEqual(by_id[3]["gross"], 200.0)
+        self.assertNotIn(4, by_id)
+        self.assertEqual(result["total_gross"], 1800.0)
+
+    def test_prize_cumulative_adds_overall_and_category(self) -> None:
+        from src.services.prizes import allocate_prizes
+
+        result = allocate_prizes(self._prize_standings(), self._prize_rows(), "cumulative", 0.0)
+        by_id = {row["player_id"]: row for row in result["allocations"]}
+        self.assertEqual(by_id[1]["gross"], 1100.0)  # 800 + 300
+        self.assertEqual(by_id[2]["gross"], 1100.0)
+        self.assertEqual(by_id[3]["gross"], 200.0)
+        self.assertEqual(result["total_gross"], 2400.0)
+
+    def test_prize_hort_policy_combines_overall_and_category(self) -> None:
+        from src.services.prizes import allocate_prizes
+
+        standings = [
+            {"player_id": 1, "name": "P1", "position": 1, "points": 5.0, "category": "Y"},
+            {"player_id": 2, "name": "P2", "position": 2, "points": 4.0, "category": "Y"},
+            {"player_id": 3, "name": "P3", "position": 3, "points": 3.0, "category": "Y"},
+            {"player_id": 10, "name": "P10", "position": 4, "points": 1.0, "category": "X"},
+        ]
+        prizes = [
+            {"kind": "overall", "label": "4o", "rank_from": 4, "rank_to": 4, "amount": 100},
+            {"kind": "category", "label": "Cat X 1o", "category": "X", "rank_from": 1, "rank_to": 1, "amount": 500},
+        ]
+
+        def gross(policy: str) -> float:
+            return allocate_prizes(standings, prizes, policy, 0.0)["allocations"][0]["gross"]
+
+        self.assertEqual(gross("best_only"), 500.0)        # max(100, 500)
+        self.assertEqual(gross("cumulative"), 600.0)       # 100 + 500
+        self.assertEqual(gross("hort"), 300.0)             # max(100, (100+500)/2)
+
+    def test_prize_tax_deduction(self) -> None:
+        from src.services.prizes import allocate_prizes
+
+        result = allocate_prizes(self._prize_standings(), self._prize_rows(), "best_only", 10.0)
+        by_id = {row["player_id"]: row for row in result["allocations"]}
+        self.assertEqual(by_id[1]["net"], 720.0)           # 800 * 0.9
+        self.assertEqual(result["total_net"], 1620.0)      # 1800 * 0.9
+        self.assertEqual(result["total_tax"], 180.0)
+
+    def test_prize_special_listed_as_manual(self) -> None:
+        from src.services.prizes import allocate_prizes
+
+        prizes = self._prize_rows() + [{"kind": "special", "label": "Melhor feminino", "amount": 150}]
+        result = allocate_prizes(self._prize_standings(), prizes, "best_only", 0.0)
+        self.assertEqual(len(result["manual_prizes"]), 1)
+        self.assertEqual(result["manual_prizes"][0]["label"], "Melhor feminino")
+        self.assertEqual(result["total_gross"], 1800.0)    # especial nao entra no total automatico
+
+    def test_prize_service_persists_validates_and_allocates(self) -> None:
+        self._create_players(4)  # categoria "Absoluto"
+        round_data = self.service.generate_next_round(self.tournament_id)
+        round_id = int(round_data["id"])
+        for pairing in self.db.get_pairings_for_round(round_id):
+            self.service.update_result(self.tournament_id, int(pairing["id"]), "1-0")
+        self.service.close_round(self.tournament_id, round_id)
+
+        self.prize_service.replace_prizes(
+            self.tournament_id,
+            [
+                {"kind": "overall", "label": "1o", "rank_from": 1, "rank_to": 1, "amount": 1000},
+                {"kind": "overall", "label": "2o", "rank_from": 2, "rank_to": 2, "amount": 600},
+            ],
+        )
+        # Persistencia idempotente.
+        self.assertEqual(len(self.db.list_tournament_prizes(self.tournament_id)), 2)
+
+        result = self.prize_service.allocate(self.tournament_id)
+        # 2 vencedores empatados em 1.0 dividem (1000+600)/2 = 800 cada.
+        self.assertEqual(result["winners"], 2)
+        self.assertEqual(result["total_gross"], 1600.0)
+        self.assertTrue(all(row["gross"] == 800.0 for row in result["allocations"]))
+
+        with self.assertRaisesRegex(AppError, "categoria"):
+            self.prize_service.replace_prizes(
+                self.tournament_id,
+                [{"kind": "category", "label": "Sub-12", "amount": 100}],  # sem categoria
+            )
+
+    def test_export_prize_report_writes_file(self) -> None:
+        self._create_players(4)
+        round_data = self.service.generate_next_round(self.tournament_id)
+        round_id = int(round_data["id"])
+        for pairing in self.db.get_pairings_for_round(round_id):
+            self.service.update_result(self.tournament_id, int(pairing["id"]), "1-0")
+        self.service.close_round(self.tournament_id, round_id)
+        self.prize_service.replace_prizes(
+            self.tournament_id,
+            [{"kind": "overall", "label": "1o", "rank_from": 1, "rank_to": 1, "amount": 1000}],
+        )
+
+        path = Path(self.temp_dir.name) / "premiacao.csv"
+        self.export_service.export_prize_report(self.tournament_id, path)
+        self.assertTrue(path.exists())
+        content = path.read_text(encoding="utf-8-sig")
+        self.assertIn("Premiacao por jogador", content)
+        self.assertIn("Total liquido distribuido", content)
+
+    def test_v37_database_adds_prize_schema(self) -> None:
+        legacy_path = Path(self.temp_dir.name) / "legacy_v37_prizes.db"
+        connection = sqlite3.connect(legacy_path)
+        try:
+            connection.executescript(
+                """
+                CREATE TABLE tournament_settings (
+                    tournament_id INTEGER PRIMARY KEY,
+                    updated_at TEXT NOT NULL DEFAULT ''
+                );
+                INSERT INTO tournament_settings (tournament_id, updated_at)
+                VALUES (1, '2026-06-01 00:00:00');
+                PRAGMA user_version = 36;
+                """
+            )
+            connection.commit()
+        finally:
+            connection.close()
+
+        migrated = Database(legacy_path, backup_dir=self.backup_dir)
+        with migrated.connect() as migrated_connection:
+            settings_columns = {
+                row["name"]
+                for row in migrated_connection.execute("PRAGMA table_info(tournament_settings)").fetchall()
+            }
+            tables = {
+                row["name"]
+                for row in migrated_connection.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'table'"
+                ).fetchall()
+            }
+            user_version = migrated_connection.execute("PRAGMA user_version").fetchone()[0]
+
+        self.assertIn("prize_policy", settings_columns)
+        self.assertIn("prize_tax_percent", settings_columns)
+        self.assertIn("tournament_prizes", tables)
+        self.assertEqual(Database.SCHEMA_VERSION, user_version)
+
+    # --- Fase D: estatisticas e fichas no padrao FIDE (E6) ----------------
+
+    def _play_first_round(self, results: list[str]) -> None:
+        round_data = self.service.generate_next_round(self.tournament_id)
+        round_id = int(round_data["id"])
+        pairings = self.db.get_pairings_for_round(round_id)
+        for pairing, result in zip(pairings, results):
+            self.service.update_result(self.tournament_id, int(pairing["id"]), result)
+        self.service.close_round(self.tournament_id, round_id)
+
+    def test_game_statistics_counts_results(self) -> None:
+        self._create_players(8)  # 4 partidas na rodada 1
+        self._play_first_round(["1-0", "0-1", "1/2-1/2", "1F-0F"])
+
+        sections = self.export_service._game_statistics_sections(self.tournament_id)
+        summary = {row[0]: row[1] for row in sections[0][2]}
+        distribution = {row[0]: row[1] for row in sections[1][2]}
+
+        self.assertEqual(summary["Partidas jogadas (tabuleiro)"], 3)  # WO nao conta
+        self.assertEqual(summary["WO / forfait"], 1)
+        self.assertEqual(summary["Byes"], 0)
+        self.assertEqual(summary["Total de pareamentos fechados"], 4)
+        self.assertEqual(distribution["Vitorias de brancas"], 1)
+        self.assertEqual(distribution["Empates"], 1)
+        self.assertEqual(distribution["Vitorias de pretas"], 1)
+
+    def test_federation_statistics_groups_players(self) -> None:
+        ids = self._create_players(8)
+        with self.db.connect() as connection:
+            for pid in ids[:3]:
+                connection.execute("UPDATE players SET federation_id = ? WHERE id = ?", ("BRA", pid))
+        self._play_first_round(["1-0", "1-0", "1-0", "1-0"])
+
+        sections = self.export_service._federation_sections(self.tournament_id)
+        summary = {row[0]: row[1] for row in sections[0][2]}
+        fed_rows = {row[0]: row[1] for row in sections[1][2]}
+
+        self.assertEqual(summary["Jogadores"], 8)
+        self.assertEqual(summary["Federacoes"], 2)   # BRA e "—"
+        self.assertEqual(fed_rows["BRA"], 3)
+        self.assertEqual(fed_rows["—"], 5)
+
+    def test_player_cards_summary_and_round_by_round(self) -> None:
+        self._create_players(8)
+        self._play_first_round(["1-0", "0-1", "1/2-1/2", "1-0"])
+
+        sections = self.export_service._player_cards_sections(self.tournament_id)
+        summary_rows = sections[0][2]
+        game_rows = sections[1][2]
+
+        self.assertEqual(len(summary_rows), 8)   # uma linha de resumo por jogador
+        self.assertEqual(len(game_rows), 8)       # 8 jogadores, 1 partida cada na rodada 1
+        # V + E + D somados entre todos = 8 jogadores com 1 jogo cada.
+        total_results = sum(int(row[6]) + int(row[7]) + int(row[8]) for row in summary_rows)
+        self.assertEqual(total_results, 8)
+
+    def test_export_player_cards_writes_file(self) -> None:
+        self._create_players(8)
+        self._play_first_round(["1-0", "0-1", "1/2-1/2", "1-0"])
+
+        path = Path(self.temp_dir.name) / "fichas.csv"
+        self.export_service.export_player_cards(self.tournament_id, path)
+        self.assertTrue(path.exists())
+        content = path.read_text(encoding="utf-8-sig")
+        self.assertIn("Resumo por jogador", content)
+        self.assertIn("Resultados rodada a rodada", content)
+
+    def test_fide_statistics_reject_team_tournaments(self) -> None:
+        team_tournament_id, _team_ids = self._create_team_tournament()
+        with self.assertRaisesRegex(AppError, "individuais"):
+            self.export_service._game_statistics_sections(team_tournament_id)
+
+    # --- Fase E: assistente de normas/titulos FIDE (E5) -------------------
+
+    def test_norm_verdict_meets_and_lists_missing(self) -> None:
+        from src.services.fide_norms import evaluate_titles
+
+        meets = next(
+            item for item in evaluate_titles({"sex": "M"}, 2650, 9, 3, 3, 2400) if item["title"] == "GM"
+        )
+        self.assertTrue(meets["meets"])
+        self.assertEqual(meets["missing"], [])
+
+        fails = next(
+            item for item in evaluate_titles({"sex": "M"}, 2500, 9, 2, 1, 2200) if item["title"] == "GM"
+        )
+        self.assertFalse(fails["meets"])
+        joined = " | ".join(fails["missing"])
+        self.assertIn("Performance", joined)
+        self.assertIn("Federacoes", joined)
+
+    def test_norm_report_identifies_gm_candidate(self) -> None:
+        from src.services.fide_norms import build_norm_report
+
+        def player(pid: int, rating: int, title: str = "", federation: str = "") -> dict:
+            return {
+                "id": pid, "name": f"P{pid}", "surname": "", "given_name": "",
+                "international_rating": rating, "national_rating": 0, "rating": rating,
+                "title": title, "federation_id": federation, "sex": "M",
+            }
+
+        players = [player(1, 2700, federation="A")]
+        federations = ["A", "B", "C"]
+        for opponent in range(2, 11):
+            players.append(player(opponent, 2500, "GM" if opponent % 2 else "IM", federations[opponent % 3]))
+        pairings = [
+            {"white_player_id": 1, "black_player_id": opponent, "result": "1-0" if index < 6 else "0-1", "is_bye": 0}
+            for index, opponent in enumerate(range(2, 11))
+        ]
+
+        report = build_norm_report(players, pairings, "fide")
+        leader = next(item for item in report if item["player_id"] == 1)
+        self.assertEqual(leader["games"], 9)
+        self.assertGreaterEqual(leader["performance"], 2600)
+        self.assertTrue(any(title["title"] == "GM" and title["meets"] for title in leader["titles"]))
+
+    def test_norm_service_and_export(self) -> None:
+        self._create_players(8)
+        self._play_first_round(["1-0", "0-1", "1/2-1/2", "1-0"])
+
+        report = self.norm_assistant_service.evaluate_tournament(self.tournament_id)
+        self.assertTrue(report["players"])  # todos jogaram 1 partida
+
+        path = Path(self.temp_dir.name) / "normas.csv"
+        self.export_service.export_norm_report(self.tournament_id, path)
+        self.assertTrue(path.exists())
+        content = path.read_text(encoding="utf-8-sig")
+        self.assertIn("Indicadores de norma por jogador", content)
+        self.assertIn("NAO concede norma", content)
+
+    def test_norm_report_rejects_team_tournaments(self) -> None:
+        team_tournament_id, _team_ids = self._create_team_tournament()
+        with self.assertRaisesRegex(AppError, "individuais"):
+            self.norm_assistant_service.evaluate_tournament(team_tournament_id)
+
+    # --- Fase F: editor de colunas da classificacao (E7) ------------------
+
+    def test_standings_default_columns_unchanged(self) -> None:
+        self._create_players(4)
+        _title, headers, rows = self.export_service._standings_section(self.tournament_id)
+        self.assertEqual(
+            headers,
+            [
+                "Pos", "Nome", "Categoria", "Categoria idade", "Categoria rating",
+                "Tags premiacao", "Pts", "Buchholz", "Buchholz M", "SB",
+                "Vitorias", "Performance", "Rating", "Clube",
+            ],
+        )
+        self.assertEqual(len(rows), 4)
+        self.assertTrue(all(len(row) == 14 for row in rows))
+
+    def test_standings_layout_changes_columns(self) -> None:
+        self._create_players(4)
+        self.list_layout_service.save_columns(self.tournament_id, ["position", "name", "points"], "standings")
+
+        _title, headers, rows = self.export_service._standings_section(self.tournament_id)
+        self.assertEqual(headers, ["Pos", "Nome", "Pts"])
+        self.assertTrue(all(len(row) == 3 for row in rows))
+
+    def test_list_layout_normalizes_and_validates(self) -> None:
+        self._create_players(2)
+        # Coluna desconhecida e duplicata sao descartadas; ordem preservada.
+        saved = self.list_layout_service.save_columns(
+            self.tournament_id, ["position", "xxx", "name", "name"], "standings"
+        )
+        self.assertEqual(saved, ["position", "name"])
+        self.assertEqual(
+            self.list_layout_service.get_columns(self.tournament_id, "standings")["selected"],
+            ["position", "name"],
+        )
+        # Selecao vazia / so codigos invalidos sao rejeitadas.
+        with self.assertRaisesRegex(AppError, "ao menos uma coluna"):
+            self.list_layout_service.save_columns(self.tournament_id, [], "standings")
+        with self.assertRaisesRegex(AppError, "ao menos uma coluna"):
+            self.list_layout_service.save_columns(self.tournament_id, ["xxx"], "standings")
+
+    def test_list_layout_reset_returns_to_default(self) -> None:
+        self._create_players(2)
+        self.list_layout_service.save_columns(self.tournament_id, ["position", "name"], "standings")
+        self.list_layout_service.reset(self.tournament_id, "standings")
+        # Apos reset, a classificacao volta a usar as colunas padrao.
+        _title, headers, _rows = self.export_service._standings_section(self.tournament_id)
+        self.assertEqual(len(headers), 14)
+
+    def test_v38_database_adds_report_layouts(self) -> None:
+        legacy_path = Path(self.temp_dir.name) / "legacy_v38_layouts.db"
+        connection = sqlite3.connect(legacy_path)
+        try:
+            connection.executescript("PRAGMA user_version = 37;")
+            connection.commit()
+        finally:
+            connection.close()
+
+        migrated = Database(legacy_path, backup_dir=self.backup_dir)
+        with migrated.connect() as migrated_connection:
+            tables = {
+                row["name"]
+                for row in migrated_connection.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'table'"
+                ).fetchall()
+            }
+            user_version = migrated_connection.execute("PRAGMA user_version").fetchone()[0]
+
+        self.assertIn("report_layouts", tables)
+        self.assertEqual(Database.SCHEMA_VERSION, user_version)
+
+    # --- Fase G: sistema Scheveningen (E8) --------------------------------
+
+    def test_scheveningen_requires_even_field(self) -> None:
+        from src.services.pairing import scheveningen_pairings
+
+        players = [{"id": index, "name": f"P{index}", "rating": 2000 - index} for index in range(5)]
+        with self.assertRaisesRegex(AppError, "par"):
+            scheveningen_pairings(players, 1, {})
+
+    def test_scheveningen_pairs_every_cross_group_match(self) -> None:
+        ids = self._create_players(6)  # A = 3 de maior rating, B = 3 de menor
+        group_a, group_b = set(ids[:3]), set(ids[3:])
+        self._set_individual_pairing_method("scheveningen")
+
+        seen: set[tuple[int, int]] = set()
+        for _round in range(3):  # 3 jogadores por grupo => 3 rodadas
+            round_data = self.service.generate_next_round(self.tournament_id)
+            round_id = int(round_data["id"])
+            pairings = self.db.get_pairings_for_round(round_id)
+            self.assertEqual(len(pairings), 3)
+            for pairing in pairings:
+                white, black = int(pairing["white_player_id"]), int(pairing["black_player_id"])
+                self.assertFalse(pairing["is_bye"])
+                # Cada confronto cruza os grupos (exatamente um lado em A).
+                self.assertTrue((white in group_a) != (black in group_a))
+                a_player = white if white in group_a else black
+                b_player = black if white in group_a else white
+                seen.add((a_player, b_player))
+                self.service.update_result(self.tournament_id, int(pairing["id"]), "1-0")
+            self.service.close_round(self.tournament_id, round_id)
+
+        # Todos os 9 cruzamentos A×B ocorreram exatamente uma vez.
+        self.assertEqual(seen, {(a, b) for a in group_a for b in group_b})
+
+    # --- Fase H: importar torneio do Swiss-Manager via TRF (E9) -----------
+
+    def test_trf_import_round_trips_players_and_header(self) -> None:
+        self.db.create_player(
+            self.tournament_id, name="Ana Silva", surname="Silva", given_name="Ana",
+            rating=2000, international_rating=2000, federation_id="BRA",
+            fide_id="123456", birth_date="2008-01-01", sex="w", title="WFM",
+        )
+        self.db.create_player(
+            self.tournament_id, name="Bruno Souza", surname="Souza", given_name="Bruno",
+            rating=1800, international_rating=1800, federation_id="BRA", fide_id="234567",
+        )
+        self.db.create_player(
+            self.tournament_id, name="Carla Dias", surname="Dias", given_name="Carla",
+            rating=1700, international_rating=1700, federation_id="ARG", fide_id="345678",
+        )
+
+        trf_path = Path(self.temp_dir.name) / "torneio.trf"
+        self.export_service.export_chess_results_trf(self.tournament_id, trf_path)
+
+        result = self.import_service.import_trf(trf_path)
+        self.assertEqual(result["players_imported"], 3)
+
+        imported = self.db.list_players(result["tournament_id"], active_only=False)
+        by_fide = {str(player["fide_id"]): player for player in imported}
+        self.assertEqual(set(by_fide), {"123456", "234567", "345678"})
+        self.assertEqual(int(by_fide["123456"]["international_rating"]), 2000)
+        self.assertEqual(by_fide["123456"]["federation_id"], "BRA")
+        self.assertEqual(by_fide["123456"]["name"], "Ana Silva")
+        self.assertEqual(by_fide["345678"]["federation_id"], "ARG")
+        # Cabecalho: novo torneio herda nome e federacao do TRF.
+        new_tournament = self.db.get_tournament(result["tournament_id"])
+        self.assertEqual(new_tournament["name"], "Torneio teste")
+
+    def test_trf_import_rejects_file_without_players(self) -> None:
+        empty_path = Path(self.temp_dir.name) / "vazio.trf"
+        empty_path.write_text("012 Torneio sem jogadores\r\n022 Cidade\r\n", encoding="utf-8")
+        with self.assertRaisesRegex(AppError, "sem jogadores"):
+            self.import_service.import_trf(empty_path)
+
+    # --- Fase I: mudar tipo / dividir torneio (E10) -----------------------
+
+    def test_change_tournament_type_blocked_after_first_round(self) -> None:
+        self._create_players(4)
+        self.tournament_service.change_tournament_type(self.tournament_id, "round_robin")
+        settings = self.db.get_tournament_settings(self.tournament_id)
+        self.assertEqual(settings["pairing_method"], "round_robin")
+
+        self.service.generate_next_round(self.tournament_id)
+        with self.assertRaisesRegex(AppError, "primeira rodada"):
+            self.tournament_service.change_tournament_type(self.tournament_id, "swiss")
+
+    def test_split_tournament_partitions_by_ranking(self) -> None:
+        self._create_players(6)  # ratings 2000..1750 decrescentes
+        children = self.tournament_service.split_tournament(self.tournament_id, 2)
+        self.assertEqual(len(children), 2)
+        for child_id in children:
+            self.assertEqual(
+                self.db.get_tournament(child_id)["parent_tournament_id"], self.tournament_id
+            )
+        group_a = self.db.list_players(children[0], active_only=False)
+        group_b = self.db.list_players(children[1], active_only=False)
+        self.assertEqual(len(group_a), 3)
+        self.assertEqual(len(group_b), 3)
+        # Grupo A reune os tres maiores ratings (divisao por ranking).
+        self.assertGreaterEqual(
+            min(int(player["rating"]) for player in group_a),
+            max(int(player["rating"]) for player in group_b),
+        )
+
+    def test_split_tournament_requires_clean_state(self) -> None:
+        self._create_players(4)
+        self.service.generate_next_round(self.tournament_id)
+        with self.assertRaisesRegex(AppError, "antes de gerar"):
+            self.tournament_service.split_tournament(self.tournament_id, 2)
+
+    def test_split_tournament_rejects_insufficient_players(self) -> None:
+        self._create_players(2)
+        with self.assertRaisesRegex(AppError, "insuficientes"):
+            self.tournament_service.split_tournament(self.tournament_id, 3)
+
+    def test_save_profile_blocks_pairing_change_after_round(self) -> None:
+        self._create_players(4)
+        self.service.generate_next_round(self.tournament_id)
+        with self.assertRaisesRegex(AppError, "primeira rodada"):
+            self.tournament_service.save_profile(
+                self.tournament_id,
+                {
+                    "name": "Torneio teste",
+                    "scope": "standalone",
+                    "competition_type": "individual",
+                    "rounds_count": "5",
+                    "bye_points": "1",
+                },
+                {"pairing_method": "round_robin"},
+                [],
+            )
+
+    def test_v39_database_adds_parent_tournament_column(self) -> None:
+        legacy_path = Path(self.temp_dir.name) / "legacy_v39_split.db"
+        connection = sqlite3.connect(legacy_path)
+        try:
+            connection.executescript(
+                """
+                CREATE TABLE tournaments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    club_id INTEGER,
+                    class_id INTEGER,
+                    created_at TEXT
+                );
+                PRAGMA user_version = 38;
+                """
+            )
+            connection.commit()
+        finally:
+            connection.close()
+
+        migrated = Database(legacy_path, backup_dir=self.backup_dir)
+        with migrated.connect() as migrated_connection:
+            columns = {
+                row["name"]
+                for row in migrated_connection.execute("PRAGMA table_info(tournaments)").fetchall()
+            }
+            user_version = migrated_connection.execute("PRAGMA user_version").fetchone()[0]
+
+        self.assertIn("parent_tournament_id", columns)
+        self.assertEqual(Database.SCHEMA_VERSION, user_version)
+
     def test_trf25_emits_240_for_requested_bye(self) -> None:
         from src.services.federation_exporters import TRF25Exporter
 
@@ -6325,6 +7480,70 @@ class PairingServiceTest(unittest.TestCase):
         self.assertIn("Nunez, Maria", trf_content)
         self.assertIn("Partidas jogadas", report_content)
         self.assertIn("1", report_content)
+
+    def test_rating_fee_report_counts_bases_rated_unrated_and_exports(self) -> None:
+        self.db.save_tournament_settings(
+            self.tournament_id,
+            {
+                "rating_fee_fide": "2",
+                "rating_fee_cbx": "3",
+                "rating_fee_lbx": "4",
+            },
+        )
+        self.db.create_player(
+            self.tournament_id,
+            name="Multibase rated",
+            fide_id="1001",
+            cbx_id="2001",
+            lbx_id="3001",
+            rating=1800,
+            national_rating=1900,
+            international_rating=2000,
+        )
+        self.db.create_player(
+            self.tournament_id,
+            name="FIDE sem rating",
+            fide_id="1002",
+            cbx_id="2002",
+            national_rating=1600,
+        )
+        self.db.create_player(self.tournament_id, name="LBX sem rating", lbx_id="3002")
+        self.db.create_player(self.tournament_id, name="Rated sem ID", rating=1400)
+
+        summary = self.export_service.rating_fee_summary(self.tournament_id)
+        bases = {item["base"]: item for item in summary["bases"]}
+
+        self.assertEqual(4, summary["players_count"])
+        self.assertEqual(3, summary["players_with_base"])
+        self.assertEqual(1, summary["players_without_base"])
+        self.assertEqual(3, summary["rated_players"])
+        self.assertEqual(1, summary["unrated_players"])
+        self.assertEqual({"identified": 2, "rated": 1, "unrated": 1}, {
+            key: bases["FIDE"][key] for key in ("identified", "rated", "unrated")
+        })
+        self.assertEqual(6.0, bases["CBX"]["subtotal"])
+        self.assertEqual(8.0, bases["LBX"]["subtotal"])
+        self.assertEqual(18.0, summary["total"])
+
+        xlsx_path = Path(self.temp_dir.name) / "taxas_rating.xlsx"
+        pdf_path = Path(self.temp_dir.name) / "taxas_rating.pdf"
+        self.export_service.export_rating_fee_report(self.tournament_id, xlsx_path)
+        self.export_service.export_rating_fee_report(self.tournament_id, pdf_path)
+
+        from openpyxl import load_workbook
+        from pypdf import PdfReader
+
+        workbook = load_workbook(xlsx_path, read_only=True)
+        pdf_text = "\n".join(page.extract_text() or "" for page in PdfReader(pdf_path).pages)
+        self.assertEqual(["Resumo de taxas de rating", "Taxas por base", "Inscritos por base"], workbook.sheetnames)
+        workbook.close()
+        self.assertIn("Total das taxas", pdf_text)
+        self.assertIn("R$ 18,00", pdf_text)
+        with self.assertRaisesRegex(AppError, "XLSX ou PDF"):
+            self.export_service.export_rating_fee_report(
+                self.tournament_id,
+                Path(self.temp_dir.name) / "taxas_rating.csv",
+            )
 
     def test_export_club_portal_creates_static_html_package(self) -> None:
         club_id = self.club_service.save_profile(
@@ -6956,12 +8175,14 @@ class PairingServiceTest(unittest.TestCase):
         pairings_path = Path(self.temp_dir.name) / "team_pairings.csv"
         teams_path = Path(self.temp_dir.name) / "teams.csv"
         complete_path = Path(self.temp_dir.name) / "team_complete.csv"
+        scoresheets_path = Path(self.temp_dir.name) / "team_scoresheets.pdf"
         site_dir = Path(self.temp_dir.name) / "team_site"
 
         self.export_service.export_standings(tournament_id, standings_path)
         self.export_service.export_pairings(round_data["id"], pairings_path)
         self.export_service.export_teams(tournament_id, teams_path)
         self.export_service.export_complete(tournament_id, complete_path)
+        self.export_service.export_scoresheets(round_data["id"], scoresheets_path)
         index_path = self.export_service.export_site(tournament_id, site_dir)
 
         standings_csv = standings_path.read_text(encoding="utf-8-sig")
@@ -6982,6 +8203,384 @@ class PairingServiceTest(unittest.TestCase):
         self.assertIn("Equipes", html)
         self.assertIn("Escalacoes", html)
         self.assertIn("2 x 0", html)
+        self.assertEqual(scoresheets_path.read_bytes()[:4], b"%PDF")
+        from pypdf import PdfReader
+
+        self.assertEqual(2, len(PdfReader(scoresheets_path).pages))
+
+    def test_team_crosstable_preserves_board_history_totals_and_exports(self) -> None:
+        tournament_id, _team_ids = self._create_team_tournament(teams_count=2, boards_count=2)
+        round_data = self.service.generate_next_round(tournament_id)
+        match = self.db.list_team_matches_for_round(int(round_data["id"]))[0]
+        boards = self.db.list_team_boards(int(match["id"]))
+        source_team = self.db.get_team_player_by_player(int(boards[0]["white_player_id"]))
+        reserve_id = self.db.create_player(tournament_id, name="Reserva escalado", rating=1750)
+        self.team_service.add_player(int(source_team["team_id"]), reserve_id, board_number="", role="reserve")
+        self.service.adjust_team_board_player(
+            tournament_id,
+            int(round_data["id"]),
+            int(boards[0]["id"]),
+            "white",
+            reserve_id,
+        )
+        for board in boards:
+            white_player_team = self.db.get_team_player_by_player(int(board["white_player_id"]))
+            result = "1-0" if int(white_player_team["team_id"]) == int(match["white_team_id"]) else "0-1"
+            self.service.update_result(tournament_id, int(board["id"]), result)
+        self.service.close_round(tournament_id, int(round_data["id"]))
+
+        payload = self.service.team_crosstable(tournament_id)
+        standings = self.service.team_standings(tournament_id)
+        white_row = next(item for item in payload["rows"] if int(item["team_id"]) == int(match["white_team_id"]))
+        black_row = next(item for item in payload["rows"] if int(item["team_id"]) == int(match["black_team_id"]))
+        white_cell = white_row["rounds"][1]
+        black_cell = black_row["rounds"][1]
+
+        self.assertEqual("team", payload["competition_type"])
+        self.assertIn("B 1-0 MP 2 GP 2", white_cell["label"])
+        self.assertIn("P 0-1 MP 0 GP 0", black_cell["label"])
+        self.assertEqual("Reserva escalado", white_cell["boards"][0]["white_player_name"])
+        self.assertEqual(
+            sum(float(item["match_points"]) for item in standings),
+            sum(float(item["match_points"]) for item in payload["rows"]),
+        )
+        self.assertEqual(
+            sum(float(item["game_points"]) for item in standings),
+            sum(float(item["game_points"]) for item in payload["rows"]),
+        )
+
+        for extension in ("csv", "xlsx", "pdf", "html"):
+            output_path = Path(self.temp_dir.name) / f"tabela_cruzada_equipes.{extension}"
+            self.export_service.export_crosstable(tournament_id, output_path)
+            self.assertTrue(output_path.exists())
+        csv_content = (Path(self.temp_dir.name) / "tabela_cruzada_equipes.csv").read_text(encoding="utf-8-sig")
+        html_content = (Path(self.temp_dir.name) / "tabela_cruzada_equipes.html").read_text(encoding="utf-8")
+        self.assertIn("Equipe", csv_content)
+        self.assertIn("MP 2 GP 2", csv_content)
+        self.assertIn("Tabela cruzada por equipes", html_content)
+
+    def test_scoresheets_pdf_skips_bye_and_includes_player_data(self) -> None:
+        self.db.create_player(
+            self.tournament_id,
+            name="Ana Silva",
+            rating=1810,
+            club="Clube A",
+            fide_id="1234567",
+        )
+        self.db.create_player(
+            self.tournament_id,
+            name="Bruno Souza",
+            rating=1720,
+            club="Clube B",
+            cbx_id="7654",
+        )
+        self.db.create_player(self.tournament_id, name="Carla Lima", rating=1650, club="Clube C")
+        round_data = self.service.generate_next_round(self.tournament_id)
+        output_path = Path(self.temp_dir.name) / "sumulas.pdf"
+
+        self.export_service.export_scoresheets(int(round_data["id"]), output_path)
+
+        from pypdf import PdfReader
+
+        reader = PdfReader(output_path)
+        text = "\n".join(page.extract_text() or "" for page in reader.pages)
+        self.assertEqual(output_path.read_bytes()[:4], b"%PDF")
+        self.assertEqual(1, len(reader.pages))
+        self.assertIn("Resultado:", text)
+        self.assertIn("Assinatura das brancas", text)
+        self.assertTrue("Ana Silva" in text or "Bruno Souza" in text or "Carla Lima" in text)
+
+    def test_scoresheets_pdf_exports_121_players_under_five_seconds(self) -> None:
+        for index in range(121):
+            self.db.create_player(
+                self.tournament_id,
+                name=f"Jogador {index + 1:03d}",
+                rating=2400 - index,
+                club="Clube",
+            )
+        round_data = self.service.generate_next_round(self.tournament_id)
+        output_path = Path(self.temp_dir.name) / "sumulas_121.pdf"
+
+        started_at = perf_counter()
+        self.export_service.export_scoresheets(int(round_data["id"]), output_path)
+        elapsed = perf_counter() - started_at
+
+        from pypdf import PdfReader
+
+        self.assertEqual(60, len(PdfReader(output_path).pages))
+        self.assertLess(elapsed, 5.0)
+
+    def test_pairings_wall_pdf_includes_valid_qr_only_for_open_round(self) -> None:
+        self.db.create_player(self.tournament_id, name="Ana Silva", rating=1810)
+        self.db.create_player(self.tournament_id, name="Bruno Souza", rating=1720)
+        round_data = self.service.generate_next_round(self.tournament_id)
+        pairing = self.db.get_pairings_for_round(int(round_data["id"]))[0]
+        open_path = Path(self.temp_dir.name) / "mural_aberto.pdf"
+        captured_urls: list[str] = []
+
+        original_qr_urls = self.export_service._qr_result_urls
+
+        def capture_qr_urls(tournament_id: int, pairings: list[dict[str, object]]) -> dict[int, str]:
+            urls = original_qr_urls(tournament_id, pairings)
+            captured_urls.extend(urls.values())
+            return urls
+
+        with mock.patch.object(self.export_service, "_qr_result_urls", side_effect=capture_qr_urls):
+            self.export_service.export_pairings(int(round_data["id"]), open_path)
+
+        from urllib.parse import parse_qs, urlparse
+
+        from pypdf import PdfReader
+
+        open_text = "\n".join(page.extract_text() or "" for page in PdfReader(open_path).pages)
+        token = parse_qs(urlparse(captured_urls[0]).query)["token"][0]
+        token_row = self.qr_result_service._validate_token(token)
+        self.assertEqual(1, len(captured_urls))
+        self.assertEqual(int(pairing["id"]), int(token_row["pairing_id"]))
+        self.assertIn("Rodada aberta - QR para envio de resultado", open_text)
+        self.assertIn("Ana Silva", open_text)
+        self.assertIn("Bruno Souza", open_text)
+
+        self.service.update_result(self.tournament_id, int(pairing["id"]), "1-0")
+        self.service.close_round(self.tournament_id, int(round_data["id"]))
+        closed_path = Path(self.temp_dir.name) / "mural_fechado.pdf"
+        with mock.patch.object(self.export_service, "_qr_result_urls") as qr_urls:
+            self.export_service.export_pairings(int(round_data["id"]), closed_path)
+
+        closed_text = "\n".join(page.extract_text() or "" for page in PdfReader(closed_path).pages)
+        qr_urls.assert_called_once_with(self.tournament_id, [])
+        self.assertIn("Rodada fechada - QR desativado", closed_text)
+
+    def test_pairings_wall_pdf_exports_60_tables_under_five_seconds(self) -> None:
+        for index in range(120):
+            self.db.create_player(
+                self.tournament_id,
+                name=f"Jogador {index + 1:03d}",
+                rating=2400 - index,
+            )
+        round_data = self.service.generate_next_round(self.tournament_id)
+        output_path = Path(self.temp_dir.name) / "mural_60_mesas.pdf"
+
+        started_at = perf_counter()
+        self.export_service.export_pairings(int(round_data["id"]), output_path)
+        elapsed = perf_counter() - started_at
+
+        from pypdf import PdfReader
+
+        self.assertEqual(4, len(PdfReader(output_path).pages))
+        self.assertLess(elapsed, 5.0)
+
+    def test_table_cards_pdf_exports_configured_range_with_optional_qr(self) -> None:
+        for index in range(6):
+            self.db.create_player(
+                self.tournament_id,
+                name=f"Jogador {index + 1}",
+                rating=1800 - index,
+            )
+        round_data = self.service.generate_next_round(self.tournament_id)
+        output_path = Path(self.temp_dir.name) / "cartoes.pdf"
+        captured_pairing_ids: list[int] = []
+        original_qr_urls = self.export_service._qr_result_urls
+
+        def capture_qr_urls(tournament_id: int, pairings: list[dict[str, object]]) -> dict[int, str]:
+            captured_pairing_ids.extend(int(pairing["id"]) for pairing in pairings)
+            return original_qr_urls(tournament_id, pairings)
+
+        with mock.patch.object(self.export_service, "_qr_result_urls", side_effect=capture_qr_urls):
+            self.export_service.export_table_cards(
+                output_path,
+                1,
+                6,
+                round_id=int(round_data["id"]),
+                include_qr=True,
+            )
+
+        from pypdf import PdfReader
+
+        reader = PdfReader(output_path)
+        text = "\n".join(page.extract_text() or "" for page in reader.pages)
+        pairings = self.db.get_pairings_for_round(int(round_data["id"]))
+        self.assertEqual(2, len(reader.pages))
+        self.assertEqual([int(pairing["id"]) for pairing in pairings], captured_pairing_ids)
+        self.assertIn("MESA", text)
+        self.assertIn("1", text)
+        self.assertIn("6", text)
+        self.assertIn("Rodada 1", text)
+        self.assertIn("QR para enviar resultado", text)
+
+        for pairing in pairings:
+            self.service.update_result(self.tournament_id, int(pairing["id"]), "1-0")
+        self.service.close_round(self.tournament_id, int(round_data["id"]))
+        closed_path = Path(self.temp_dir.name) / "cartoes_fechados.pdf"
+        with mock.patch.object(self.export_service, "_qr_result_urls") as qr_urls:
+            self.export_service.export_table_cards(
+                closed_path,
+                1,
+                2,
+                round_id=int(round_data["id"]),
+                include_qr=True,
+            )
+        closed_text = "\n".join(page.extract_text() or "" for page in PdfReader(closed_path).pages)
+        qr_urls.assert_called_once_with(self.tournament_id, [])
+        self.assertIn("QR indisponivel para esta mesa", closed_text)
+
+    def test_table_cards_pdf_exports_200_cards_under_five_seconds(self) -> None:
+        output_path = Path(self.temp_dir.name) / "cartoes_200.pdf"
+
+        started_at = perf_counter()
+        self.export_service.export_table_cards(output_path, 1, 200)
+        elapsed = perf_counter() - started_at
+
+        from pypdf import PdfReader
+
+        self.assertEqual(50, len(PdfReader(output_path).pages))
+        self.assertLess(elapsed, 5.0)
+
+    def test_individual_crosstable_round_robin_fixture_and_exports(self) -> None:
+        player_ids = [
+            self.db.create_player(self.tournament_id, name=f"Jogador {index}", rating=2100 - index * 50)
+            for index in range(1, 7)
+        ]
+        schedules = [
+            [(0, 5), (1, 4), (2, 3)],
+            [(5, 3), (4, 2), (0, 1)],
+            [(1, 5), (2, 0), (3, 4)],
+            [(5, 4), (0, 3), (1, 2)],
+            [(2, 5), (3, 1), (4, 0)],
+        ]
+        for round_number, schedule in enumerate(schedules, start=1):
+            round_id = self.db.create_round_with_pairings(
+                self.tournament_id,
+                round_number,
+                [
+                    {
+                        "board_number": board_number,
+                        "white_player_id": player_ids[white],
+                        "black_player_id": player_ids[black],
+                        "result": "1-0",
+                    }
+                    for board_number, (white, black) in enumerate(schedule, start=1)
+                ],
+            )
+            self.db.close_round(round_id)
+
+        payload = self.service.crosstable(self.tournament_id)
+        rows_by_player = {int(row["player_id"]): row for row in payload["rows"]}
+        first = rows_by_player[player_ids[0]]
+
+        self.assertEqual([1, 2, 3, 4, 5], payload["rounds"])
+        self.assertEqual(6, len(payload["rows"]))
+        self.assertEqual("6B 1-0", first["rounds"][1]["label"])
+        self.assertEqual("2B 1-0", first["rounds"][2]["label"])
+        self.assertEqual("3P 1-0", first["rounds"][3]["label"])
+        self.assertAlmostEqual(15.0, sum(float(row["points"]) for row in payload["rows"]))
+
+        for extension in ("csv", "xlsx", "pdf", "html"):
+            output_path = Path(self.temp_dir.name) / f"tabela_cruzada.{extension}"
+            self.export_service.export_crosstable(self.tournament_id, output_path)
+            self.assertTrue(output_path.exists())
+        csv_content = (Path(self.temp_dir.name) / "tabela_cruzada.csv").read_text(encoding="utf-8-sig")
+        html_content = (Path(self.temp_dir.name) / "tabela_cruzada.html").read_text(encoding="utf-8")
+        self.assertIn("R5", csv_content)
+        self.assertIn("6B 1-0", csv_content)
+        self.assertIn("Tabela cruzada", html_content)
+        self.assertIn("B = brancas", html_content)
+
+    def test_individual_crosstable_distinguishes_bye_wo_and_absence(self) -> None:
+        player_ids = [
+            self.db.create_player(self.tournament_id, name=f"Jogador {index}", rating=1800 - index)
+            for index in range(1, 5)
+        ]
+        round_id = self.db.create_round_with_pairings(
+            self.tournament_id,
+            1,
+            [
+                {
+                    "board_number": 1,
+                    "white_player_id": player_ids[0],
+                    "black_player_id": player_ids[1],
+                    "result": "1F-0F",
+                },
+                {
+                    "board_number": 2,
+                    "white_player_id": player_ids[2],
+                    "black_player_id": None,
+                    "result": "H",
+                    "is_bye": 1,
+                },
+            ],
+        )
+        self.db.close_round(round_id)
+
+        payload = self.service.crosstable(self.tournament_id)
+        rows_by_player = {int(row["player_id"]): row for row in payload["rows"]}
+        self.assertEqual("1F-0F", rows_by_player[player_ids[0]]["rounds"][1]["result"])
+        self.assertEqual("bye", rows_by_player[player_ids[2]]["rounds"][1]["kind"])
+        self.assertEqual("BYE H", rows_by_player[player_ids[2]]["rounds"][1]["label"])
+        self.assertEqual("absent", rows_by_player[player_ids[3]]["rounds"][1]["kind"])
+        self.assertEqual("-", rows_by_player[player_ids[3]]["rounds"][1]["label"])
+
+    def test_initial_player_list_pdf_uses_trf_start_rank_and_signature_column(self) -> None:
+        self.db.create_player(
+            self.tournament_id,
+            name="Ana Ausente",
+            rating=1800,
+            international_rating=2200,
+            club="Clube A",
+            category="ABS",
+            player_status="absent",
+        )
+        self.db.create_player(
+            self.tournament_id,
+            name="Bruno Presente",
+            rating=2100,
+            club="Clube B",
+            category="Sub-18",
+        )
+        self.db.create_player(
+            self.tournament_id,
+            name="Carla Presente",
+            rating=1900,
+            club="Clube C",
+            category="FEM",
+        )
+        output_path = Path(self.temp_dir.name) / "lista_chamada.pdf"
+
+        self.export_service.export_initial_player_list(self.tournament_id, output_path)
+
+        from pypdf import PdfReader
+
+        text = "\n".join(page.extract_text() or "" for page in PdfReader(output_path).pages)
+        self.assertEqual(output_path.read_bytes()[:4], b"%PDF")
+        self.assertIn("Inicial", text)
+        self.assertIn("Jogador", text)
+        self.assertIn("Rating", text)
+        self.assertIn("Clube", text)
+        self.assertIn("Categoria", text)
+        self.assertIn("Assinatura", text)
+        self.assertLess(text.index("Ana Ausente"), text.index("Bruno Presente"))
+        self.assertLess(text.index("Bruno Presente"), text.index("Carla Presente"))
+
+    def test_initial_player_list_pdf_exports_801_players_under_five_seconds(self) -> None:
+        for index in range(801):
+            self.db.create_player(
+                self.tournament_id,
+                name=f"Jogador {index + 1:03d}",
+                rating=2600 - index,
+                club="Clube",
+                category="ABS",
+            )
+        output_path = Path(self.temp_dir.name) / "lista_chamada_801.pdf"
+
+        started_at = perf_counter()
+        self.export_service.export_initial_player_list(self.tournament_id, output_path)
+        elapsed = perf_counter() - started_at
+
+        from pypdf import PdfReader
+
+        reader = PdfReader(output_path)
+        self.assertEqual(22, len(reader.pages))
+        self.assertLess(elapsed, 5.0)
 
     def test_existing_database_gets_member_column_on_initialize(self) -> None:
         legacy_path = Path(self.temp_dir.name) / "legacy.db"
@@ -7293,6 +8892,7 @@ class PairingServiceTest(unittest.TestCase):
 
         self.assertIn("member_id", columns)
         self.assertIn("cbx_id", columns)
+        self.assertIn("lbx_id", columns)
         self.assertIn("national_rating", columns)
         self.assertIn("international_rating", columns)
         self.assertIn("player_status", columns)
@@ -7727,6 +9327,43 @@ class PairingServiceTest(unittest.TestCase):
             },
             phase0_tables,
         )
+        self.assertEqual(Database.SCHEMA_VERSION, user_version)
+
+    def test_v32_database_adds_round_closed_at_and_backfills_closed_rounds(self) -> None:
+        legacy_path = Path(self.temp_dir.name) / "legacy_v32_round_clock.db"
+        connection = sqlite3.connect(legacy_path)
+        try:
+            connection.executescript(
+                """
+                CREATE TABLE rounds (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    tournament_id INTEGER NOT NULL,
+                    number INTEGER NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'generated',
+                    pairing_engine_version TEXT NOT NULL DEFAULT 'albericus-swiss-1',
+                    ruleset_version TEXT NOT NULL DEFAULT 'albericus-2026-phase0',
+                    created_at TEXT NOT NULL
+                );
+                INSERT INTO rounds (tournament_id, number, status, created_at)
+                VALUES (1, 1, 'closed', '2026-05-31 09:00:00');
+                PRAGMA user_version = 32;
+                """
+            )
+            connection.commit()
+        finally:
+            connection.close()
+
+        migrated = Database(legacy_path, backup_dir=self.backup_dir)
+        with migrated.connect() as migrated_connection:
+            columns = {
+                row["name"]
+                for row in migrated_connection.execute("PRAGMA table_info(rounds)").fetchall()
+            }
+            round_data = migrated_connection.execute("SELECT * FROM rounds WHERE id = 1").fetchone()
+            user_version = migrated_connection.execute("PRAGMA user_version").fetchone()[0]
+
+        self.assertIn("closed_at", columns)
+        self.assertEqual("2026-05-31 09:00:00", round_data["closed_at"])
         self.assertEqual(Database.SCHEMA_VERSION, user_version)
 
     def test_current_database_repairs_legacy_users_table_before_login(self) -> None:

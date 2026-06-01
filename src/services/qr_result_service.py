@@ -59,6 +59,54 @@ class QRResultService:
         )
         return self._token_payload(token_row, token, base_url)
 
+    def result_urls_for_pairings(
+        self,
+        tournament_id: int,
+        pairings: list[dict[str, Any]],
+        base_url: str = "http://localhost:8765",
+        expires_minutes: int = 480,
+    ) -> dict[int, str]:
+        if not pairings:
+            return {}
+        expires_at = (datetime.now() + timedelta(minutes=max(1, int(expires_minutes or 480)))).strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+        secret = self._secret()
+        tokens = []
+        for pairing in pairings:
+            self._assert_open_pairing_payload(tournament_id, pairing)
+            token = self._new_signed_token(tournament_id, pairing, secret=secret)
+            tokens.append(
+                {
+                    "token": token,
+                    "token_hash": self._token_hash(token),
+                    "tournament_id": int(tournament_id),
+                    "round_id": int(pairing["round_id"]),
+                    "pairing_id": int(pairing["id"]),
+                    "board_number": int(pairing.get("board_number") or 0),
+                    "expires_at": expires_at,
+                    "purpose": self.PURPOSE,
+                }
+            )
+        created = self.db.create_public_tokens_batch(tokens)
+        first = created[0]
+        self.db.create_audit_event(
+            action="public_result_tokens_created",
+            tournament_id=tournament_id,
+            round_id=int(first["round_id"]),
+            entity_type="round",
+            entity_id=int(first["round_id"]),
+            after={
+                "tokens_count": len(created),
+                "board_numbers": [int(token["board_number"]) for token in created],
+                "expires_at": expires_at,
+            },
+        )
+        return {
+            int(token["pairing_id"]): str(self._token_payload(token, str(token["token"]), base_url)["url"])
+            for token in created
+        }
+
     def submit_result(self, token: str, result: str, submitter: str = "") -> dict[str, Any]:
         if result not in FINAL_RESULTS or result == "BYE":
             raise AppError("Resultado invalido para envio por QR.")
@@ -178,10 +226,24 @@ class QRResultService:
             raise AppError("Token nao funciona para rodada fechada.")
         return pairing
 
-    def _new_signed_token(self, tournament_id: int, pairing: dict[str, Any]) -> str:
+    @staticmethod
+    def _assert_open_pairing_payload(tournament_id: int, pairing: dict[str, Any]) -> None:
+        if int(pairing.get("tournament_id") or 0) != int(tournament_id):
+            raise AppError("Mesa nao encontrada para este torneio.")
+        if pairing.get("is_bye"):
+            raise AppError("Mesa com bye nao recebe resultado por QR.")
+        if pairing.get("round_status") == "closed":
+            raise AppError("Token nao funciona para rodada fechada.")
+
+    def _new_signed_token(
+        self,
+        tournament_id: int,
+        pairing: dict[str, Any],
+        secret: bytes | None = None,
+    ) -> str:
         nonce = secrets.token_urlsafe(18)
         payload = f"{int(tournament_id)}:{int(pairing['round_id'])}:{int(pairing['id'])}:{nonce}"
-        signature = hmac.new(self._secret(), payload.encode("utf-8"), sha256).hexdigest()[:32]
+        signature = hmac.new(secret or self._secret(), payload.encode("utf-8"), sha256).hexdigest()[:32]
         return f"{payload}:{signature}"
 
     def _assert_signed_token_shape(self, token: str) -> None:
