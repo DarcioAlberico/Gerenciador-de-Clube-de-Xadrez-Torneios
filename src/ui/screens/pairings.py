@@ -9,9 +9,14 @@ class PairingPagesMixin:
             return
 
         tournament = self.db.get_tournament(self.current_tournament_id)
-        dashboard = self.pairing_service.arbitration_dashboard(self.current_tournament_id)
+        dashboard = self.pairing_service.arbitration_dashboard(
+            self.current_tournament_id,
+            pending_limit=self._arbitration_inline_tables_limit,
+            pending_query=getattr(self, "_arbitration_pending_query", ""),
+        )
         metrics = dashboard["metrics"]
         alerts = dashboard["alerts"]
+        pending_items = dashboard["pending_items"]
 
         self._clear_content()
         self._page_title(
@@ -27,18 +32,24 @@ class PairingPagesMixin:
 
         cards = ctk.CTkFrame(body, fg_color="transparent")
         cards.grid(row=0, column=0, sticky="ew", pady=(0, 12))
-        for column in range(5):
+        for column in range(6):
             cards.grid_columnconfigure(column, weight=1)
 
         card_data = [
-            ("Rodadas", f"{metrics['closed_rounds']}/{metrics['rounds_count']}", f"{metrics['generated_rounds']} gerada(s)"),
-            ("Pendentes", str(metrics["pending_results"]), "resultados sem fechar"),
-            ("Byes", str(metrics["byes"]), "na rodada atual"),
-            ("Ausentes", str(metrics["absent_players"]), "jogadores"),
-            ("Correcoes", str(metrics["corrections"]), "auditadas"),
+            ("Rodadas", f"{metrics['closed_rounds']}/{metrics['rounds_count']}", f"{metrics['generated_rounds']} gerada(s)", self.show_pairings),
+            ("Pendentes", str(metrics["pending_results"]), "resultados sem fechar", self.show_pairings),
+            ("Byes", str(metrics["byes"]), "na rodada atual", self.show_pairings),
+            ("Ausentes", str(metrics["absent_players"]), "jogadores", self.show_players),
+            ("Correcoes", str(metrics["corrections"]), "auditadas", self.show_audit_logs),
+            (
+                "Tempo rodada",
+                metrics["round_duration_label"],
+                f"Inicio {metrics['round_started_label']} | {metrics['round_clock_status'].replace('_', ' ')}",
+                self.show_pairings,
+            ),
         ]
-        for index, (title, value, subtitle) in enumerate(card_data):
-            card = self._kpi_card(cards, title, value, subtitle=subtitle)
+        for index, (title, value, subtitle, command) in enumerate(card_data):
+            card = self._kpi_card(cards, title, value, subtitle=subtitle, command=command)
             card.grid(row=0, column=index, padx=(0 if index == 0 else 8, 0), sticky="ew")
 
         main = ctk.CTkFrame(body, fg_color="transparent")
@@ -46,16 +57,54 @@ class PairingPagesMixin:
         main.grid_columnconfigure(0, weight=2)
         main.grid_columnconfigure(1, weight=1)
         main.grid_rowconfigure(0, weight=1)
+        main.grid_rowconfigure(1, weight=1)
 
         alerts_panel = self._make_panel(main)
         alerts_panel.grid(row=0, column=0, padx=(0, 12), sticky="nsew")
         alerts_panel.grid_columnconfigure(0, weight=1)
+        alerts_panel.grid_columnconfigure(1, weight=0)
         self._section_title(alerts_panel, "Alertas operacionais").grid(
             row=0, column=0, padx=14, pady=(14, 6), sticky="w"
         )
+        if metrics["blocking_issues"] or metrics["submitted_results"]:
+            next_label = "Resolver pendencias bloqueantes"
+            next_command = self.show_arbitration_issues
+        elif metrics["pending_results"]:
+            next_label = f"Lancar {metrics['pending_results']} resultado(s) pendente(s)"
+            next_command = self.show_pairings
+        elif metrics["ready_to_close"]:
+            next_label = f"Fechar rodada {metrics['latest_round_number']}"
+            next_command = self._close_current_round_from_panel
+        elif metrics["can_preview_next_round"]:
+            next_label = "Pre-visualizar proxima rodada"
+            next_command = self._preview_next_round
+        else:
+            next_label = "Abrir chamada inicial"
+            next_command = self.show_pairings
+        ctk.CTkLabel(alerts_panel, text="Proximo passo recomendado", text_color=THEME_TEXT_SUB).grid(
+            row=0, column=1, padx=(8, 14), pady=(14, 2), sticky="e"
+        )
+        ctk.CTkButton(
+            alerts_panel,
+            text=next_label,
+            command=next_command,
+            fg_color=THEME_SUCCESS,
+            hover_color=THEME_SUCCESS_HOVER,
+        ).grid(row=1, column=1, rowspan=max(1, len(alerts)), padx=(8, 14), pady=(0, 12), sticky="ne")
         if alerts:
             for row, alert in enumerate(alerts, start=1):
-                ctk.CTkLabel(alerts_panel, text=f"- {alert}", anchor="w", justify="left").grid(
+                text_color = THEME_TEXT_MAIN
+                if "bloqueante" in alert or "pendente" in alert or "aguardando aprovacao" in alert:
+                    text_color = THEME_DANGER
+                elif "pronta para fechamento" in alert:
+                    text_color = THEME_SUCCESS
+                ctk.CTkLabel(
+                    alerts_panel,
+                    text=f"- {alert}",
+                    anchor="w",
+                    justify="left",
+                    text_color=text_color,
+                ).grid(
                     row=row,
                     column=0,
                     padx=14,
@@ -72,31 +121,255 @@ class PairingPagesMixin:
             )
 
         actions_panel = self._make_panel(main)
-        actions_panel.grid(row=0, column=1, sticky="nsew")
+        actions_panel.grid(row=0, column=1, rowspan=2, sticky="nsew")
         actions_panel.grid_columnconfigure(0, weight=1)
+        actions_panel.grid_columnconfigure(1, weight=1)
         self._section_title(actions_panel, "Acoes rapidas").grid(
-            row=0, column=0, padx=14, pady=(14, 8), sticky="w"
+            row=0, column=0, columnspan=2, padx=14, pady=(14, 8), sticky="w"
         )
-        actions = [
-            ("Central de pendencias", self.show_arbitration_issues),
-            ("Ajustes de pontos (TRF25)", self.show_point_adjustments),
-            ("Proibicoes de pareamento (TRF25)", self.show_prohibited_pairings),
-            ("Byes solicitados (TRF25)", self.show_requested_byes),
-            ("Abrir rodadas", self.show_pairings),
-            ("Pre-visualizar proxima", self._preview_next_round),
-            ("Fechar rodada atual", self._close_current_round_from_panel),
-            ("Validar/exportar", self.show_export),
-            ("Publicar HTML", self._export_site_from_panel),
-            ("Publicar live", self._publish_live_portal_from_panel),
+        action_groups = [
+            ("Rodada", [
+                ("Central de pendencias", self.show_arbitration_issues),
+                ("Abrir rodadas", self.show_pairings),
+                ("Pre-visualizar proxima", self._preview_next_round),
+                ("Fechar rodada atual", self._close_current_round_from_panel),
+            ]),
+            ("Configuracao arbitral", [
+                ("Ajustes de pontos (TRF25)", self.show_point_adjustments),
+                ("Proibicoes (TRF25)", self.show_prohibited_pairings),
+                ("Byes solicitados (TRF25)", self.show_requested_byes),
+            ]),
+            ("Publicacao", [
+                ("Validar/exportar", self.show_export),
+                ("Publicar HTML", self._export_site_from_panel),
+                ("Publicar live", self._publish_live_portal_from_panel),
+            ]),
         ]
-        for row, (label, command) in enumerate(actions, start=1):
-            ctk.CTkButton(actions_panel, text=label, command=command).grid(
-                row=row,
-                column=0,
-                padx=14,
-                pady=(0, 8),
-                sticky="ew",
+        action_row = 1
+        for group_label, actions in action_groups:
+            self._section_title(actions_panel, group_label, subsection=True).grid(
+                row=action_row, column=0, columnspan=2, padx=14, pady=(4, 4), sticky="w"
             )
+            action_row += 1
+            for index, (label, command) in enumerate(actions):
+                ctk.CTkButton(actions_panel, text=label, command=command).grid(
+                    row=action_row + index // 2,
+                    column=index % 2,
+                    padx=(14 if index % 2 == 0 else 4, 14 if index % 2 else 4),
+                    pady=(0, 8),
+                    sticky="ew",
+                )
+            action_row += (len(actions) + 1) // 2
+
+        controls = ctk.CTkFrame(actions_panel, fg_color="transparent")
+        controls.grid(row=action_row, column=0, columnspan=2, padx=14, pady=(4, 12), sticky="ew")
+        auto_refresh = ctk.CTkCheckBox(
+            controls,
+            text="Atualizar automaticamente",
+            command=self._toggle_arbitration_auto_refresh,
+        )
+        auto_refresh.grid(row=0, column=0, columnspan=2, sticky="w")
+        if self._arbitration_auto_refresh_enabled:
+            auto_refresh.select()
+        ctk.CTkButton(controls, text="Atualizar agora", width=120, command=self.show_arbitration_panel).grid(
+            row=0, column=2, padx=(8, 0), sticky="e"
+        )
+        ctk.CTkLabel(controls, text="Intervalo (s)", text_color=THEME_TEXT_SUB).grid(
+            row=1, column=0, pady=(8, 0), sticky="w"
+        )
+        refresh_interval = ctk.CTkOptionMenu(
+            controls,
+            values=["10", "15", "30", "60", "120"],
+            width=72,
+            command=self._set_arbitration_refresh_interval,
+        )
+        refresh_interval.grid(row=1, column=1, padx=(6, 0), pady=(8, 0), sticky="w")
+        refresh_interval.set(str(self._arbitration_refresh_interval_seconds))
+        ctk.CTkLabel(controls, text="Mesas inline", text_color=THEME_TEXT_SUB).grid(
+            row=2, column=0, pady=(8, 0), sticky="w"
+        )
+        inline_limit = ctk.CTkOptionMenu(
+            controls,
+            values=["10", "20", "30", "40", "50"],
+            width=72,
+            command=self._set_arbitration_inline_tables_limit,
+        )
+        inline_limit.grid(row=2, column=1, padx=(6, 0), pady=(8, 0), sticky="w")
+        inline_limit.set(str(self._arbitration_inline_tables_limit))
+
+        pending_panel = self._make_panel(main)
+        pending_panel.grid(row=1, column=0, padx=(0, 12), pady=(12, 0), sticky="nsew")
+        pending_panel.grid_columnconfigure(0, weight=1)
+        header = ctk.CTkFrame(pending_panel, fg_color="transparent")
+        header.grid(row=0, column=0, padx=14, pady=(12, 6), sticky="ew")
+        header.grid_columnconfigure(0, weight=1)
+        self._section_title(header, "Mesas aguardando resultado").grid(row=0, column=0, sticky="w")
+        ctk.CTkLabel(
+            header,
+            text=f"Exibindo {len(pending_items)} de {metrics['pending_results']}",
+            text_color=THEME_TEXT_SUB,
+        ).grid(row=0, column=1, padx=(8, 0), sticky="e")
+        ctk.CTkButton(header, text="Abrir lancamento", width=130, command=self.show_pairings).grid(
+            row=0, column=2, padx=(10, 0), sticky="e"
+        )
+        pending_query_entry = ctk.CTkEntry(
+            header,
+            width=160,
+            placeholder_text="Buscar mesa",
+        )
+        pending_query_entry.grid(row=1, column=0, pady=(8, 0), sticky="w")
+        pending_query_entry.insert(0, getattr(self, "_arbitration_pending_query", ""))
+        self.arbitration_pending_query_entry = pending_query_entry
+
+        def apply_pending_query(_event: Any = None) -> None:
+            self._arbitration_pending_query = pending_query_entry.get().strip()
+            self.show_arbitration_panel()
+
+        def clear_pending_query() -> None:
+            self._arbitration_pending_query = ""
+            self.show_arbitration_panel()
+
+        pending_query_entry.bind("<Return>", apply_pending_query)
+        ctk.CTkButton(header, text="Buscar mesa", width=110, command=apply_pending_query).grid(
+            row=1, column=1, padx=(8, 0), pady=(8, 0), sticky="e"
+        )
+        ctk.CTkButton(header, text="Limpar busca", width=110, command=clear_pending_query).grid(
+            row=1, column=2, padx=(10, 0), pady=(8, 0), sticky="e"
+        )
+        if pending_items:
+            pending_tree = self._make_tree(
+                pending_panel,
+                ["board", "context", "white", "black"],
+                {"board": "Mesa", "context": "Contexto", "white": "Brancas", "black": "Pretas"},
+                {"board": 70, "context": 100, "white": 320, "black": 320},
+                visible_rows=min(6, len(pending_items)),
+            )
+            pending_tree.grid(row=1, column=0, padx=14, pady=(0, 12), sticky="ew")
+            self.arbitration_pending_tree = pending_tree
+            self.arbitration_pending_row_map = {}
+            for item in pending_items:
+                item_id = pending_tree.insert(
+                    "",
+                    "end",
+                    values=(item["board"], item["context"], item["white"], item["black"]),
+                )
+                self.arbitration_pending_row_map[item_id] = int(item["pairing_id"])
+            pending_tree.bind("<Double-1>", lambda _event: self.show_pairings())
+            pending_tree.bind("1", lambda _event: self._save_arbitration_panel_result("1-0"))
+            pending_tree.bind("<KP_1>", lambda _event: self._save_arbitration_panel_result("1-0"))
+            pending_tree.bind("0", lambda _event: self._save_arbitration_panel_result("0-1"))
+            pending_tree.bind("<KP_0>", lambda _event: self._save_arbitration_panel_result("0-1"))
+            pending_tree.bind("-", lambda _event: self._save_arbitration_panel_result("1/2-1/2"))
+            pending_tree.bind("<KP_Subtract>", lambda _event: self._save_arbitration_panel_result("1/2-1/2"))
+            pending_tree.bind("<BackSpace>", lambda _event: self._save_arbitration_panel_result(""))
+            pending_tree.bind("<Delete>", lambda _event: self._save_arbitration_panel_result(""))
+            first_pending = pending_tree.get_children()
+            if first_pending:
+                pending_tree.selection_set(first_pending[0])
+                pending_tree.focus(first_pending[0])
+                pending_tree.see(first_pending[0])
+            inline_actions = ctk.CTkFrame(pending_panel, fg_color="transparent")
+            inline_actions.grid(row=2, column=0, padx=14, pady=(0, 12), sticky="ew")
+            ctk.CTkLabel(inline_actions, text="Lancar resultado:", text_color=THEME_TEXT_SUB).pack(side="left")
+            for label, result in [("1-0", "1-0"), ("1/2", "1/2-1/2"), ("0-1", "0-1"), ("Limpar", "")]:
+                ctk.CTkButton(
+                    inline_actions,
+                    text=label,
+                    width=64,
+                    command=lambda value=result: self._save_arbitration_panel_result(value),
+                ).pack(side="left", padx=(8, 0))
+            ctk.CTkLabel(
+                inline_actions,
+                text="Atalhos: 1, -, 0 e Delete",
+                text_color=THEME_TEXT_SUB,
+            ).pack(side="right")
+            pending_tree.focus_set()
+        else:
+            self.arbitration_pending_row_map = {}
+            ctk.CTkLabel(
+                pending_panel,
+                text="Nenhuma mesa aguardando resultado.",
+                text_color=THEME_TEXT_SUB,
+            ).grid(row=1, column=0, padx=14, pady=(0, 12), sticky="w")
+
+        self._schedule_arbitration_refresh()
+
+    def _save_arbitration_panel_result(self, result: str) -> str:
+        try:
+            tree = getattr(self, "arbitration_pending_tree", None)
+            if tree is None:
+                raise AppError("Nao ha mesas pendentes para lancamento.")
+            selected = tree.selection()
+            if not selected:
+                raise AppError("Selecione uma mesa pendente.")
+            pairing_id = self.arbitration_pending_row_map.get(selected[0])
+            if not pairing_id:
+                raise AppError("Mesa pendente nao encontrada.")
+            self.pairing_service.update_result(int(self.current_tournament_id), int(pairing_id), result)
+            self.show_arbitration_panel()
+        except Exception as exc:
+            self._show_error(exc)
+        return "break"
+
+    def _schedule_arbitration_refresh(self) -> None:
+        self._cancel_arbitration_refresh()
+        if not self._arbitration_auto_refresh_enabled:
+            return
+        self._arbitration_refresh_job = self.after(
+            self._arbitration_refresh_interval_seconds * 1000,
+            self._arbitration_refresh_tick,
+        )
+
+    def _cancel_arbitration_refresh(self) -> None:
+        if self._arbitration_refresh_job is None:
+            return
+        try:
+            self.after_cancel(self._arbitration_refresh_job)
+        except Exception:
+            pass
+        self._arbitration_refresh_job = None
+
+    def _arbitration_refresh_tick(self) -> None:
+        self._arbitration_refresh_job = None
+        if getattr(self, "_current_view_method", "") == "show_arbitration_panel":
+            self.show_arbitration_panel()
+
+    def _toggle_arbitration_auto_refresh(self) -> None:
+        self._arbitration_auto_refresh_enabled = not self._arbitration_auto_refresh_enabled
+        self.db.save_app_settings(
+            {"arbitration_auto_refresh_enabled": "1" if self._arbitration_auto_refresh_enabled else "0"}
+        )
+        if self._arbitration_auto_refresh_enabled:
+            self._schedule_arbitration_refresh()
+        else:
+            self._cancel_arbitration_refresh()
+
+    def _set_arbitration_refresh_interval(self, value: str) -> None:
+        self._arbitration_refresh_interval_seconds = self._bounded_int_setting(
+            {"value": value},
+            "value",
+            default=15,
+            minimum=10,
+            maximum=120,
+        )
+        self.db.save_app_settings(
+            {"arbitration_refresh_interval_seconds": str(self._arbitration_refresh_interval_seconds)}
+        )
+        if self._arbitration_auto_refresh_enabled:
+            self._schedule_arbitration_refresh()
+
+    def _set_arbitration_inline_tables_limit(self, value: str) -> None:
+        self._arbitration_inline_tables_limit = self._bounded_int_setting(
+            {"value": value},
+            "value",
+            default=20,
+            minimum=10,
+            maximum=50,
+        )
+        self.db.save_app_settings(
+            {"arbitration_inline_tables_limit": str(self._arbitration_inline_tables_limit)}
+        )
+        self.show_arbitration_panel()
 
     def show_arbitration_issues(self) -> None:
         if not self._require_tournament():
@@ -105,6 +378,10 @@ class PairingPagesMixin:
         payload = self.pairing_service.arbitration_issues(int(self.current_tournament_id))
         metrics = payload["metrics"]
         issue_cache: dict[str, dict[str, Any]] = {}
+        round_numbers = {
+            int(round_data["id"]): int(round_data["number"])
+            for round_data in self.db.list_rounds(int(self.current_tournament_id))
+        }
 
         self._clear_content()
         self._page_title(
@@ -140,9 +417,33 @@ class PairingPagesMixin:
         panel = self._make_panel(body)
         panel.grid(row=1, column=0, sticky="nsew")
         panel.grid_columnconfigure(0, weight=1)
-        panel.grid_rowconfigure(0, weight=1)
+        panel.grid_rowconfigure(1, weight=1)
+        filters = ctk.CTkFrame(panel, fg_color="transparent")
+        filters.grid(row=0, column=0, padx=12, pady=(12, 6), sticky="ew")
+        filters.grid_columnconfigure(2, weight=1)
+        ctk.CTkLabel(filters, text="Filtro").grid(row=0, column=0, padx=(0, 6), sticky="w")
+        filter_by_label = {
+            "Todas": "all",
+            "Decisao": "decision",
+            "QR": "qr",
+            "Sync": "sync",
+            "Relogio": "clock",
+        }
+        issue_filter_option = ctk.CTkOptionMenu(filters, values=list(filter_by_label), width=125)
+        issue_filter_option.grid(row=0, column=1, padx=(0, 10), sticky="w")
+        issue_search_entry = ctk.CTkEntry(
+            filters,
+            placeholder_text="Buscar mesa, titulo ou detalhe",
+        )
+        issue_search_entry.grid(row=0, column=2, sticky="ew")
+        issue_count_label = ctk.CTkLabel(filters, text="", text_color=THEME_TEXT_SUB)
+        issue_count_label.grid(row=0, column=3, padx=(10, 0), sticky="e")
+        table_panel = ctk.CTkFrame(panel, fg_color="transparent")
+        table_panel.grid(row=1, column=0, padx=12, pady=(0, 12), sticky="nsew")
+        table_panel.grid_columnconfigure(0, weight=1)
+        table_panel.grid_rowconfigure(0, weight=1)
         tree = self._make_tree(
-            panel,
+            table_panel,
             ["severity", "source", "kind", "title", "detail", "round", "created"],
             {
                 "severity": "Nivel",
@@ -156,23 +457,49 @@ class PairingPagesMixin:
             {"severity": 95, "source": 80, "kind": 150, "title": 220, "detail": 360, "round": 80, "created": 150},
             visible_rows=18,
         )
-        for index, issue in enumerate(payload["issues"], start=1):
-            item_id = str(index)
-            issue_cache[item_id] = issue
-            tree.insert(
-                "",
-                "end",
-                iid=item_id,
-                values=(
-                    issue.get("severity") or "",
-                    issue.get("source") or "",
-                    issue.get("kind") or "",
-                    issue.get("title") or "",
-                    issue.get("detail") or "",
-                    issue.get("round_id") or "",
-                    issue.get("created_at") or "",
-                ),
+        self.arbitration_issues_tree = tree
+        self.arbitration_issue_filter_option = issue_filter_option
+        self.arbitration_issue_search_entry = issue_search_entry
+        self.arbitration_issue_count_label = issue_count_label
+        tree.tag_configure("decision", foreground="#991B1B")
+        tree.tag_configure("attention", foreground="#B45309")
+
+        def load_filtered_issues(_event: Any = None) -> None:
+            tree.delete(*tree.get_children())
+            issue_cache.clear()
+            filtered_issues = self.pairing_service.filter_arbitration_issues(
+                payload["issues"],
+                filter_by_label.get(issue_filter_option.get(), "all"),
+                issue_search_entry.get(),
             )
+            issue_count_label.configure(text=f"Exibindo {len(filtered_issues)} de {metrics['total']}")
+            for index, issue in enumerate(filtered_issues, start=1):
+                item_id = str(index)
+                issue_cache[item_id] = issue
+                tree.insert(
+                    "",
+                    "end",
+                    iid=item_id,
+                    values=(
+                        issue.get("severity") or "",
+                        issue.get("source") or "",
+                        issue.get("kind") or "",
+                        issue.get("title") or "",
+                        issue.get("detail") or "",
+                        round_numbers.get(int(issue.get("round_id") or 0), ""),
+                        issue.get("created_at") or "",
+                    ),
+                    tags=(str(issue.get("severity") or ""),),
+                )
+            first_issue = tree.get_children()
+            if first_issue:
+                tree.selection_set(first_issue[0])
+                tree.focus(first_issue[0])
+                tree.see(first_issue[0])
+
+        issue_filter_option.configure(command=load_filtered_issues)
+        issue_search_entry.bind("<KeyRelease>", load_filtered_issues)
+        load_filtered_issues()
 
         def show_issue_detail(_event: Any = None) -> None:
             selected = tree.selection()
@@ -1024,6 +1351,27 @@ class PairingPagesMixin:
                 pady=(8, 0),
                 sticky="ew",
             )
+            ctk.CTkButton(round_actions, text="Exportar sumulas", command=self._export_current_round_scoresheets).grid(
+                row=1,
+                column=3,
+                padx=4,
+                pady=(8, 0),
+                sticky="ew",
+            )
+            ctk.CTkButton(round_actions, text="Imprimir sumulas", command=self._print_current_round_scoresheets).grid(
+                row=1,
+                column=4,
+                padx=4,
+                pady=(8, 0),
+                sticky="ew",
+            )
+            ctk.CTkButton(round_actions, text="Exportar cartoes", command=self._export_table_cards).grid(
+                row=1,
+                column=5,
+                padx=(4, 0),
+                pady=(8, 0),
+                sticky="ew",
+            )
 
         if show_initial_call:
             roster_panel = self._make_panel(body)
@@ -1044,6 +1392,13 @@ class PairingPagesMixin:
                 text_color=THEME_TEXT_SUB,
             )
             self.initial_call_summary_label.grid(row=1, column=0, pady=(2, 0), sticky="w")
+            self.initial_player_search_entry = ctk.CTkEntry(
+                roster_header,
+                width=320,
+                placeholder_text="Buscar jogador, clube ou categoria",
+            )
+            self.initial_player_search_entry.grid(row=2, column=0, pady=(8, 0), sticky="w")
+            self.initial_player_search_entry.bind("<KeyRelease>", lambda _event: self._load_initial_players())
             ctk.CTkButton(
                 roster_header,
                 text="Exportar lista",
@@ -1081,7 +1436,7 @@ class PairingPagesMixin:
                     "category": 130,
                     "status": 95,
                 },
-                visible_rows=5,
+                visible_rows=14,
             )
             self.initial_players_tree.configure(selectmode="extended")
             self.initial_players_tree.bind(
@@ -1199,15 +1554,23 @@ class PairingPagesMixin:
             self.initial_call_summary_label.configure(
                 text=f"Presentes: {present_count} | Ausentes: {absent_count} | Total: {len(players)}"
             )
-        ordered_players = sorted(
-            players,
-            key=lambda player: (
-                0 if player.get("player_status") == "active" else 1,
-                -int(player.get("rating") or 0),
-                player_pairing_name(player).casefold(),
-            ),
+        ordered_players = self.export_service._initial_ranked_players(players)
+        query = (
+            self.initial_player_search_entry.get().strip().casefold()
+            if hasattr(self, "initial_player_search_entry")
+            else ""
         )
         for start_number, player in enumerate(ordered_players, start=1):
+            searchable = " ".join(
+                [
+                    player_full_name(player),
+                    str(player.get("club") or ""),
+                    str(player.get("category") or ""),
+                    str(player.get("rating") or ""),
+                ]
+            ).casefold()
+            if query and query not in searchable:
+                continue
             status = str(player.get("player_status", "active") or "active")
             item_id = self.initial_players_tree.insert(
                 "",
@@ -1376,6 +1739,101 @@ class PairingPagesMixin:
                 lambda _result: self._print_document(path),
                 "Preparando impressao...",
             )
+        except Exception as exc:
+            self._show_error(exc)
+
+    def _current_round_scoresheets_path(self) -> Path:
+        return self._current_round_pairings_path(".pdf").with_name(
+            f"{self._current_round_pairings_path('.pdf').stem}_sumulas.pdf"
+        )
+
+    def _current_round_table_cards_path(self) -> Path:
+        return self._current_round_pairings_path(".pdf").with_name(
+            f"{self._current_round_pairings_path('.pdf').stem}_cartoes.pdf"
+        )
+
+    def _export_current_round_scoresheets(self) -> None:
+        try:
+            round_id = self._require_current_round()
+            default_path = self._current_round_scoresheets_path()
+            file_path = filedialog.asksaveasfilename(
+                title="Exportar sumulas de mesa",
+                initialdir=str(default_path.parent),
+                initialfile=default_path.name,
+                defaultextension=".pdf",
+                filetypes=[("PDF", "*.pdf"), ("Todos os arquivos", "*.*")],
+            )
+            if not file_path:
+                return
+            path = Path(file_path)
+            if path.suffix.lower() != ".pdf":
+                path = path.with_suffix(".pdf")
+            self._run_background(
+                lambda: self.export_service.export_scoresheets(round_id, path),
+                lambda _result: self._show_info(f"Sumulas exportadas:\n{path}"),
+                "Exportando sumulas...",
+            )
+        except Exception as exc:
+            self._show_error(exc)
+
+    def _print_current_round_scoresheets(self) -> None:
+        try:
+            round_id = self._require_current_round()
+            path = self._current_round_scoresheets_path()
+            self._run_background(
+                lambda: self.export_service.export_scoresheets(round_id, path),
+                lambda _result: self._print_document(path),
+                "Preparando sumulas para impressao...",
+            )
+        except Exception as exc:
+            self._show_error(exc)
+
+    def _export_table_cards(self) -> None:
+        try:
+            round_id = self._require_current_round()
+            pairings = self.db.get_pairings_for_round(round_id)
+            suggested_end = max((int(pairing["board_number"]) for pairing in pairings), default=1)
+            value = self._ask_string(
+                "Cartoes de mesa",
+                f"Informe o intervalo de mesas (ex.: 1-{suggested_end}):",
+            )
+            if value is None:
+                return
+            normalized = value.strip().replace(" ", "")
+            parts = normalized.split("-", maxsplit=1)
+            if len(parts) != 2:
+                raise AppError("Informe o intervalo no formato inicio-fim, por exemplo: 1-60.")
+            start_board, end_board = (int(part) for part in parts)
+            include_qr = messagebox.askyesno(
+                "Cartoes de mesa",
+                "Incluir QR de envio de resultado para as mesas da rodada aberta?",
+            )
+            default_path = self._current_round_table_cards_path()
+            file_path = filedialog.asksaveasfilename(
+                title="Exportar cartoes de mesa",
+                initialdir=str(default_path.parent),
+                initialfile=default_path.name,
+                defaultextension=".pdf",
+                filetypes=[("PDF", "*.pdf"), ("Todos os arquivos", "*.*")],
+            )
+            if not file_path:
+                return
+            path = Path(file_path)
+            if path.suffix.lower() != ".pdf":
+                path = path.with_suffix(".pdf")
+            self._run_background(
+                lambda: self.export_service.export_table_cards(
+                    path,
+                    start_board,
+                    end_board,
+                    round_id=round_id,
+                    include_qr=include_qr,
+                ),
+                lambda _result: self._show_info(f"Cartoes de mesa exportados:\n{path}"),
+                "Exportando cartoes de mesa...",
+            )
+        except ValueError:
+            self._show_error("Informe o intervalo no formato inicio-fim, por exemplo: 1-60.")
         except Exception as exc:
             self._show_error(exc)
 
@@ -2221,6 +2679,11 @@ class PairingPagesMixin:
                 padx=12,
                 pady=12,
             )
+            ctk.CTkButton(
+                toolbar,
+                text="Exportar tabela cruzada",
+                command=self._export_crosstable_from_standings,
+            ).pack(side="left", padx=(0, 12), pady=12)
 
             table_panel = self._make_panel(body)
             table_panel.grid(row=1, column=0, sticky="nsew")
@@ -2273,9 +2736,10 @@ class PairingPagesMixin:
                 },
             )
             self.standings_tree = tree
+            row_team_ids: dict[str, int] = {}
 
             for item in self.pairing_service.team_standings(self.current_tournament_id):
-                tree.insert(
+                row_id = tree.insert(
                     "",
                     "end",
                     values=(
@@ -2293,6 +2757,36 @@ class PairingPagesMixin:
                         "Ativa" if item.get("active") else "Inativa",
                     ),
                 )
+                row_team_ids[row_id] = int(item["team_id"])
+
+            def show_team_crosstable_detail() -> None:
+                selected = tree.selection()
+                if not selected:
+                    self._show_info("Selecione uma equipe na classificacao.")
+                    return
+                team_id = row_team_ids.get(selected[0])
+                payload = self.pairing_service.team_crosstable(int(self.current_tournament_id))
+                team_row = next((item for item in payload["rows"] if int(item["team_id"]) == team_id), None)
+                if not team_row:
+                    return
+                lines = [f"Tabela cruzada - {team_row['name']}"]
+                for round_number in payload["rounds"]:
+                    cell = team_row["rounds"][round_number]
+                    lines.append(f"\nRodada {round_number}: {cell['label']}")
+                    for board in cell.get("boards", []):
+                        lines.append(
+                            f"- Tabuleiro {board['board_number']}: "
+                            f"{board.get('white_player_name') or ''} x "
+                            f"{board.get('black_player_name') or ''} "
+                            f"{board.get('result') or ''}"
+                        )
+                self._show_info("\n".join(lines))
+
+            ctk.CTkButton(
+                toolbar,
+                text="Detalhar tabuleiros",
+                command=show_team_crosstable_detail,
+            ).pack(side="left", padx=(0, 12), pady=12)
             return
 
         def apply_internal_rating() -> None:
@@ -2319,6 +2813,11 @@ class PairingPagesMixin:
             toolbar,
             text="Atualizar rating interno",
             command=apply_internal_rating,
+        ).pack(side="left", padx=(0, 12), pady=12)
+        ctk.CTkButton(
+            toolbar,
+            text="Exportar tabela cruzada",
+            command=self._export_crosstable_from_standings,
         ).pack(side="left", padx=(0, 12), pady=12)
         categories = sorted(
             {
@@ -2499,5 +2998,38 @@ class PairingPagesMixin:
 
         category_option.configure(command=lambda _value: load_standings())
         load_standings()
+
+    def _export_crosstable_from_standings(self) -> None:
+        try:
+            if not self.current_tournament_id:
+                raise AppError("Selecione um torneio.")
+            tournament = self.db.get_tournament(int(self.current_tournament_id))
+            safe_name = self._safe_filename(str(tournament.get("name") if tournament else "torneio"), "torneio")
+            default_path = self._default_export_dir() / f"{safe_name}_tabela_cruzada.xlsx"
+            file_path = filedialog.asksaveasfilename(
+                title="Exportar tabela cruzada",
+                initialdir=str(default_path.parent),
+                initialfile=default_path.name,
+                defaultextension=".xlsx",
+                filetypes=[
+                    ("Excel", "*.xlsx"),
+                    ("CSV", "*.csv"),
+                    ("PDF", "*.pdf"),
+                    ("HTML", "*.html"),
+                    ("Todos os arquivos", "*.*"),
+                ],
+            )
+            if not file_path:
+                return
+            path = Path(file_path)
+            if path.suffix.lower() not in {".csv", ".xlsx", ".pdf", ".html"}:
+                path = path.with_suffix(".xlsx")
+            self._run_background(
+                lambda: self.export_service.export_crosstable(int(self.current_tournament_id), path),
+                lambda _result: self._show_info(f"Tabela cruzada exportada:\n{path}"),
+                "Exportando tabela cruzada...",
+            )
+        except Exception as exc:
+            self._show_error(exc)
 
 

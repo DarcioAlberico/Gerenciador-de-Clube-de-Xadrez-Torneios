@@ -363,7 +363,7 @@ LEGACY_LOGS_DIR = BASE_DIR / "logs"
 
 
 class Database:
-    SCHEMA_VERSION = 31
+    SCHEMA_VERSION = 39
 
     def __init__(
         self,
@@ -660,6 +660,7 @@ class Database:
                     time_control TEXT DEFAULT '',
                     bye_points REAL NOT NULL DEFAULT 1.0,
                     status TEXT NOT NULL DEFAULT 'draft',
+                    parent_tournament_id INTEGER,
                     created_at TEXT NOT NULL,
                     FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE SET NULL,
                     FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE SET NULL
@@ -997,6 +998,7 @@ class Database:
                     federation_id TEXT DEFAULT '',
                     fide_id TEXT DEFAULT '',
                     cbx_id TEXT DEFAULT '',
+                    lbx_id TEXT DEFAULT '',
                     rating INTEGER NOT NULL DEFAULT 0,
                     national_rating INTEGER NOT NULL DEFAULT 0,
                     international_rating INTEGER NOT NULL DEFAULT 0,
@@ -1007,6 +1009,7 @@ class Database:
                     birth_date TEXT DEFAULT '',
                     player_status TEXT NOT NULL DEFAULT 'active',
                     starting_points REAL NOT NULL DEFAULT 0.0,
+                    k_factor INTEGER,
                     active INTEGER NOT NULL DEFAULT 1,
                     created_at TEXT NOT NULL,
                     FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
@@ -1021,6 +1024,7 @@ class Database:
                     pairing_engine_version TEXT NOT NULL DEFAULT 'albericus-swiss-1',
                     ruleset_version TEXT NOT NULL DEFAULT 'albericus-2026-phase0',
                     created_at TEXT NOT NULL,
+                    closed_at TEXT DEFAULT '',
                     UNIQUE (tournament_id, number),
                     FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE
                 );
@@ -1184,6 +1188,9 @@ class Database:
                     accelerated_system INTEGER NOT NULL DEFAULT 0,
                     hide_standings INTEGER NOT NULL DEFAULT 0,
                     calculate_performance INTEGER NOT NULL DEFAULT 0,
+                    tiebreak_sequence TEXT NOT NULL DEFAULT '',
+                    prize_policy TEXT NOT NULL DEFAULT 'best_only',
+                    prize_tax_percent REAL NOT NULL DEFAULT 0.0,
                     pairing_method TEXT NOT NULL DEFAULT 'swiss',
                     pairing_system TEXT NOT NULL DEFAULT 'custom_authorized',
                     acceleration_method TEXT NOT NULL DEFAULT 'none',
@@ -1196,11 +1203,15 @@ class Database:
                     team_pairing_method TEXT NOT NULL DEFAULT 'swiss',
                     team_standing_primary TEXT NOT NULL DEFAULT 'match_points',
                     team_standing_secondary TEXT NOT NULL DEFAULT 'game_points',
+                    team_tiebreak_sequence TEXT NOT NULL DEFAULT '',
                     team_fixed_board_order INTEGER NOT NULL DEFAULT 1,
                     team_board_order_policy TEXT NOT NULL DEFAULT 'fixed',
                     team_reserve_policy TEXT NOT NULL DEFAULT 'same_team',
                     team_lineup_deadline TEXT DEFAULT '',
                     team_max_substitutions INTEGER NOT NULL DEFAULT 0,
+                    rating_fee_fide REAL NOT NULL DEFAULT 0.0,
+                    rating_fee_cbx REAL NOT NULL DEFAULT 0.0,
+                    rating_fee_lbx REAL NOT NULL DEFAULT 0.0,
                     archived INTEGER NOT NULL DEFAULT 0,
                     updated_at TEXT NOT NULL,
                     FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE
@@ -1214,6 +1225,7 @@ class Database:
                     federation_id TEXT DEFAULT '',
                     fide_id TEXT DEFAULT '',
                     cbx_id TEXT DEFAULT '',
+                    lbx_id TEXT DEFAULT '',
                     category TEXT DEFAULT '',
                     active INTEGER NOT NULL DEFAULT 1,
                     notes TEXT DEFAULT '',
@@ -1378,6 +1390,50 @@ class Database:
                     FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
                     FOREIGN KEY (round_id) REFERENCES rounds(id) ON DELETE CASCADE,
                     FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE
+                );
+
+                CREATE TABLE IF NOT EXISTS fide_rating_reports (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    tournament_id INTEGER NOT NULL,
+                    player_id INTEGER NOT NULL,
+                    rating_type TEXT NOT NULL DEFAULT 'fide',
+                    ro INTEGER,
+                    k INTEGER,
+                    games_rated INTEGER,
+                    score REAL,
+                    we REAL,
+                    delta REAL,
+                    rc REAL,
+                    rp INTEGER,
+                    n_over_400 INTEGER,
+                    created_at TEXT NOT NULL,
+                    UNIQUE (tournament_id, rating_type, player_id),
+                    FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
+                    FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE
+                );
+
+                CREATE TABLE IF NOT EXISTS tournament_prizes (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    tournament_id INTEGER NOT NULL,
+                    kind TEXT NOT NULL DEFAULT 'overall',
+                    label TEXT NOT NULL DEFAULT '',
+                    category TEXT NOT NULL DEFAULT '',
+                    rank_from INTEGER NOT NULL DEFAULT 1,
+                    rank_to INTEGER NOT NULL DEFAULT 1,
+                    amount REAL NOT NULL DEFAULT 0,
+                    position INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE
+                );
+
+                CREATE TABLE IF NOT EXISTS report_layouts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    tournament_id INTEGER NOT NULL,
+                    report_key TEXT NOT NULL,
+                    columns_json TEXT NOT NULL DEFAULT '',
+                    updated_at TEXT NOT NULL,
+                    UNIQUE (tournament_id, report_key),
+                    FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE
                 );
 
                 CREATE TABLE IF NOT EXISTS public_tokens (
@@ -1671,6 +1727,7 @@ class Database:
                 "age_category",
                 "rating_category",
                 "prize_tags",
+                "k_factor",
             }
             required_club_columns = {"kind", "active"}
             required_member_columns = {
@@ -1681,7 +1738,7 @@ class Database:
                 "learning_level_id",
             }
             required_tournament_columns = {"club_id", "class_id", "competition_type"}
-            required_round_columns = {"pairing_engine_version", "ruleset_version"}
+            required_round_columns = {"pairing_engine_version", "ruleset_version", "closed_at"}
             required_settings_columns = {
                 "tournament_profile",
                 "team_boards_count",
@@ -1696,8 +1753,15 @@ class Database:
                 "team_reserve_policy",
                 "team_lineup_deadline",
                 "team_max_substitutions",
+                "rating_fee_fide",
+                "rating_fee_cbx",
+                "rating_fee_lbx",
                 "pairing_system",
                 "acceleration_method",
+                "tiebreak_sequence",
+                "team_tiebreak_sequence",
+                "prize_policy",
+                "prize_tax_percent",
             }
             settings_table = connection.execute(
                 """
@@ -2216,6 +2280,9 @@ class Database:
             "operator_role": "admin",
             "backup_retention_count": "10",
             "ui_scale_percent": "120",
+            "arbitration_auto_refresh_enabled": "1",
+            "arbitration_refresh_interval_seconds": "15",
+            "arbitration_inline_tables_limit": "20",
         }
         with self.connect() as connection:
             rows = connection.execute(
@@ -2341,6 +2408,9 @@ class Database:
             "smtp_port",
             "smtp_user",
             "smtp_password",
+            "arbitration_auto_refresh_enabled",
+            "arbitration_refresh_interval_seconds",
+            "arbitration_inline_tables_limit",
         }
         now = self.now()
         rows = [
@@ -3064,6 +3134,58 @@ class Database:
                 ),
             )
             return int(cursor.lastrowid)
+
+    def create_public_tokens_batch(
+        self,
+        tokens: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        if not tokens:
+            return []
+        now = self.now()
+        created = []
+        with self.connect() as connection:
+            for token in tokens:
+                previous = connection.execute(
+                    """
+                    SELECT id
+                    FROM public_tokens
+                    WHERE pairing_id = ? AND status = 'active' AND expires_at > ?
+                    ORDER BY id DESC
+                    LIMIT 1
+                    """,
+                    (int(token["pairing_id"]), now),
+                ).fetchone()
+                if previous:
+                    connection.execute(
+                        "UPDATE public_tokens SET status = 'revoked', used_at = '' WHERE id = ?",
+                        (int(previous["id"]),),
+                    )
+                cursor = connection.execute(
+                    """
+                    INSERT INTO public_tokens (
+                        token_hash, tournament_id, round_id, pairing_id, board_number,
+                        purpose, status, expires_at, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?)
+                    """,
+                    (
+                        str(token["token_hash"]),
+                        int(token["tournament_id"]),
+                        int(token["round_id"]),
+                        int(token["pairing_id"]),
+                        int(token["board_number"]),
+                        str(token.get("purpose") or "result_submission"),
+                        str(token["expires_at"]),
+                        now,
+                    ),
+                )
+                created.append(
+                    {
+                        **token,
+                        "id": int(cursor.lastrowid),
+                        "revoked_previous_token_id": int(previous["id"]) if previous else None,
+                    }
+                )
+        return created
 
     def get_public_token_by_hash(self, token_hash: str) -> dict[str, Any] | None:
         with self.connect() as connection:
@@ -6535,6 +6657,9 @@ class Database:
                     team_reserve_policy = src.team_reserve_policy,
                     team_lineup_deadline = src.team_lineup_deadline,
                     team_max_substitutions = src.team_max_substitutions,
+                    rating_fee_fide = src.rating_fee_fide,
+                    rating_fee_cbx = src.rating_fee_cbx,
+                    rating_fee_lbx = src.rating_fee_lbx,
                     archived = src.archived,
                     updated_at = ?
                 FROM tournament_settings AS src
@@ -6643,12 +6768,15 @@ class Database:
                     hide_standings = ?, calculate_performance = ?,
                     pairing_system = ?, acceleration_method = ?,
                     hide_color_names = ?, show_opponents_in_standings = ?,
+                    tiebreak_sequence = ?, team_tiebreak_sequence = ?,
+                    prize_policy = ?, prize_tax_percent = ?,
                     team_boards_count = ?, team_match_win_points = ?,
                     team_match_draw_points = ?, team_match_loss_points = ?,
                     team_pairing_method = ?, team_standing_primary = ?,
                     team_standing_secondary = ?, team_fixed_board_order = ?,
                     team_board_order_policy = ?, team_reserve_policy = ?,
                     team_lineup_deadline = ?, team_max_substitutions = ?,
+                    rating_fee_fide = ?, rating_fee_cbx = ?, rating_fee_lbx = ?,
                     archived = ?, updated_at = ?
                 WHERE tournament_id = ?
                 """,
@@ -6681,6 +6809,10 @@ class Database:
                     str(data.get("acceleration_method", "none")).strip() or "none",
                     int(data.get("hide_color_names", 0) or 0),
                     int(data.get("show_opponents_in_standings", 0) or 0),
+                    str(data.get("tiebreak_sequence", "")),
+                    str(data.get("team_tiebreak_sequence", "")),
+                    str(data.get("prize_policy", "best_only")).strip() or "best_only",
+                    float(data.get("prize_tax_percent", 0.0) or 0.0),
                     int(data.get("team_boards_count", 4) or 4),
                     float(data.get("team_match_win_points", 2.0) or 2.0),
                     float(data.get("team_match_draw_points", 1.0) or 1.0),
@@ -6693,10 +6825,161 @@ class Database:
                     str(data.get("team_reserve_policy", "same_team")).strip() or "same_team",
                     str(data.get("team_lineup_deadline", "")).strip(),
                     int(data.get("team_max_substitutions", 0) or 0),
+                    float(data.get("rating_fee_fide", 0.0) or 0.0),
+                    float(data.get("rating_fee_cbx", 0.0) or 0.0),
+                    float(data.get("rating_fee_lbx", 0.0) or 0.0),
                     int(data.get("archived", 0) or 0),
                     self.now(),
                     tournament_id,
                 ),
+            )
+
+    def save_fide_rating_report(
+        self,
+        tournament_id: int,
+        rating_type: str,
+        rows: list[dict[str, Any]],
+    ) -> None:
+        """Persiste o relatorio de variacao de rating (idempotente por tipo)."""
+        now = self.now()
+        with self.connect() as connection:
+            connection.execute(
+                "DELETE FROM fide_rating_reports WHERE tournament_id = ? AND rating_type = ?",
+                (tournament_id, str(rating_type)),
+            )
+            connection.executemany(
+                """
+                INSERT INTO fide_rating_reports (
+                    tournament_id, player_id, rating_type, ro, k, games_rated,
+                    score, we, delta, rc, rp, n_over_400, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    (
+                        tournament_id,
+                        int(row["player_id"]),
+                        str(rating_type),
+                        row.get("ro"),
+                        row.get("k"),
+                        row.get("games_rated"),
+                        row.get("score"),
+                        row.get("we"),
+                        row.get("delta"),
+                        row.get("rc"),
+                        row.get("rp"),
+                        row.get("n_over_400"),
+                        now,
+                    )
+                    for row in rows
+                ],
+            )
+
+    def get_fide_rating_report(
+        self,
+        tournament_id: int,
+        rating_type: str = "fide",
+    ) -> list[dict[str, Any]]:
+        with self.connect() as connection:
+            report_rows = connection.execute(
+                """
+                SELECT f.*, p.name AS name, p.surname AS surname, p.given_name AS given_name
+                FROM fide_rating_reports f
+                LEFT JOIN players p ON p.id = f.player_id
+                WHERE f.tournament_id = ? AND f.rating_type = ?
+                ORDER BY (f.ro IS NULL), f.ro DESC, p.name COLLATE NOCASE
+                """,
+                (tournament_id, str(rating_type)),
+            ).fetchall()
+            return [dict(row) for row in report_rows]
+
+    def list_tournament_prizes(self, tournament_id: int) -> list[dict[str, Any]]:
+        with self.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT *
+                FROM tournament_prizes
+                WHERE tournament_id = ?
+                ORDER BY position, id
+                """,
+                (tournament_id,),
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    def replace_tournament_prizes(
+        self,
+        tournament_id: int,
+        prizes: list[dict[str, Any]],
+    ) -> None:
+        """Substitui todos os premios do torneio (idempotente)."""
+        now = self.now()
+        with self.connect() as connection:
+            connection.execute(
+                "DELETE FROM tournament_prizes WHERE tournament_id = ?",
+                (tournament_id,),
+            )
+            connection.executemany(
+                """
+                INSERT INTO tournament_prizes (
+                    tournament_id, kind, label, category, rank_from, rank_to,
+                    amount, position, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    (
+                        tournament_id,
+                        str(prize.get("kind") or "overall"),
+                        str(prize.get("label") or ""),
+                        str(prize.get("category") or ""),
+                        int(prize.get("rank_from") or 1),
+                        int(prize.get("rank_to") or prize.get("rank_from") or 1),
+                        float(prize.get("amount") or 0.0),
+                        index,
+                        now,
+                    )
+                    for index, prize in enumerate(prizes)
+                ],
+            )
+
+    def get_report_layout_columns(self, tournament_id: int, report_key: str) -> list[str]:
+        with self.connect() as connection:
+            row = connection.execute(
+                "SELECT columns_json FROM report_layouts WHERE tournament_id = ? AND report_key = ?",
+                (tournament_id, str(report_key)),
+            ).fetchone()
+        if not row or not row["columns_json"]:
+            return []
+        try:
+            data = json.loads(row["columns_json"])
+        except (ValueError, TypeError):
+            return []
+        return [str(item) for item in data] if isinstance(data, list) else []
+
+    def save_report_layout(self, tournament_id: int, report_key: str, columns: list[str]) -> None:
+        payload = json.dumps([str(column) for column in columns], ensure_ascii=False)
+        with self.connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO report_layouts (tournament_id, report_key, columns_json, updated_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(tournament_id, report_key)
+                DO UPDATE SET columns_json = excluded.columns_json, updated_at = excluded.updated_at
+                """,
+                (tournament_id, str(report_key), payload, self.now()),
+            )
+
+    def set_tournament_parent(self, tournament_id: int, parent_tournament_id: int | None) -> None:
+        with self.connect() as connection:
+            connection.execute(
+                "UPDATE tournaments SET parent_tournament_id = ? WHERE id = ?",
+                (parent_tournament_id, tournament_id),
+            )
+
+    def update_pairing_method(self, tournament_id: int, pairing_method: str) -> None:
+        with self.connect() as connection:
+            self._ensure_tournament_settings(connection, tournament_id)
+            connection.execute(
+                "UPDATE tournament_settings SET pairing_method = ?, updated_at = ? WHERE tournament_id = ?",
+                (str(pairing_method), self.now(), tournament_id),
             )
 
     def list_round_schedule(self, tournament_id: int) -> list[dict[str, Any]]:
@@ -6918,6 +7201,7 @@ class Database:
         self,
         fide_id: str = "",
         cbx_id: str = "",
+        lbx_id: str = "",
     ) -> dict[str, Any] | None:
         conditions = []
         params: list[Any] = []
@@ -6927,6 +7211,10 @@ class Database:
         if cbx_id:
             conditions.append("op.cbx_id = ?")
             params.append(cbx_id.strip())
+        if lbx_id:
+            # A lista LBX guarda o ID_No (registro proprio) em external_id.
+            conditions.append("(op.source = 'LBX' AND op.external_id = ?)")
+            params.append(lbx_id.strip())
         if not conditions:
             return None
         with self.connect() as connection:
@@ -7022,7 +7310,7 @@ class Database:
                 """
                 UPDATE players
                 SET name = ?, surname = ?, given_name = ?, title = ?, sex = ?,
-                    club = ?, federation_id = ?, fide_id = ?, cbx_id = ?,
+                    club = ?, federation_id = ?, fide_id = ?, cbx_id = ?, lbx_id = ?,
                     rating = ?, national_rating = ?, international_rating = ?,
                     category = ?, age_category = ?, rating_category = ?,
                     prize_tags = ?, birth_date = ?
@@ -7038,6 +7326,7 @@ class Database:
                     pick("federation_id"),
                     pick("fide_id"),
                     pick("cbx_id"),
+                    pick("lbx_id"),
                     rating,
                     national_rating,
                     international_rating,
@@ -7116,6 +7405,7 @@ class Database:
         title: str = "",
         sex: str = "",
         cbx_id: str = "",
+        lbx_id: str = "",
         national_rating: int = 0,
         international_rating: int = 0,
         player_status: str = "active",
@@ -7141,11 +7431,11 @@ class Database:
                 """
                 INSERT INTO players (
                     tournament_id, member_id, name, surname, given_name, title, sex,
-                    club, federation_id, fide_id, cbx_id, rating, national_rating,
+                    club, federation_id, fide_id, cbx_id, lbx_id, rating, national_rating,
                     international_rating, category, age_category, rating_category,
                     prize_tags, birth_date, player_status, starting_points, active,
                     created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     tournament_id,
@@ -7159,6 +7449,7 @@ class Database:
                     federation_id.strip(),
                     fide_id.strip(),
                     cbx_id.strip(),
+                    lbx_id.strip(),
                     int(rating or 0),
                     int(national_rating or 0),
                     int(international_rating or 0),
@@ -7191,6 +7482,7 @@ class Database:
         title: str = "",
         sex: str = "",
         cbx_id: str = "",
+        lbx_id: str = "",
         national_rating: int = 0,
         international_rating: int = 0,
         player_status: str | None = None,
@@ -7224,7 +7516,7 @@ class Database:
                 """
                 UPDATE players
                 SET name = ?, surname = ?, given_name = ?, title = ?, sex = ?,
-                    club = ?, federation_id = ?, fide_id = ?, cbx_id = ?,
+                    club = ?, federation_id = ?, fide_id = ?, cbx_id = ?, lbx_id = ?,
                     rating = ?, national_rating = ?, international_rating = ?,
                     category = ?, age_category = ?, rating_category = ?,
                     prize_tags = ?, birth_date = ?, player_status = ?,
@@ -7241,6 +7533,7 @@ class Database:
                     federation_id.strip(),
                     fide_id.strip(),
                     cbx_id.strip(),
+                    lbx_id.strip(),
                     int(rating or 0),
                     int(national_rating or 0),
                     int(international_rating or 0),
@@ -7779,10 +8072,18 @@ class Database:
                     white.surname AS white_player_surname,
                     white.given_name AS white_player_given_name,
                     white.rating AS white_player_rating,
+                    white.club AS white_player_club,
+                    white.fide_id AS white_player_fide_id,
+                    white.cbx_id AS white_player_cbx_id,
+                    white.lbx_id AS white_player_lbx_id,
                     black.name AS black_player_name,
                     black.surname AS black_player_surname,
                     black.given_name AS black_player_given_name,
-                    black.rating AS black_player_rating
+                    black.rating AS black_player_rating,
+                    black.club AS black_player_club,
+                    black.fide_id AS black_player_fide_id,
+                    black.cbx_id AS black_player_cbx_id,
+                    black.lbx_id AS black_player_lbx_id
                 FROM team_boards tb
                 LEFT JOIN players white ON white.id = tb.white_player_id
                 LEFT JOIN players black ON black.id = tb.black_player_id
@@ -8552,11 +8853,17 @@ class Database:
                     white.given_name AS white_given_name,
                     white.rating AS white_rating,
                     white.club AS white_club,
+                    white.fide_id AS white_fide_id,
+                    white.cbx_id AS white_cbx_id,
+                    white.lbx_id AS white_lbx_id,
                     black.name AS black_name,
                     black.surname AS black_surname,
                     black.given_name AS black_given_name,
                     black.rating AS black_rating,
-                    black.club AS black_club
+                    black.club AS black_club,
+                    black.fide_id AS black_fide_id,
+                    black.cbx_id AS black_cbx_id,
+                    black.lbx_id AS black_lbx_id
                 FROM pairings p
                 JOIN players white ON white.id = p.white_player_id
                 LEFT JOIN players black ON black.id = p.black_player_id
@@ -8638,8 +8945,13 @@ class Database:
     def close_round(self, round_id: int) -> None:
         with self.connect() as connection:
             connection.execute(
-                "UPDATE rounds SET status = 'closed' WHERE id = ?",
-                (round_id,),
+                """
+                UPDATE rounds
+                SET status = 'closed',
+                    closed_at = CASE WHEN closed_at = '' THEN ? ELSE closed_at END
+                WHERE id = ?
+                """,
+                (self.now(), round_id),
             )
 
     def delete_round(self, round_id: int) -> None:

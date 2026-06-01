@@ -3,6 +3,300 @@ from __future__ import annotations
 from ..support import *
 
 from src.services.pairing.acceleration import acceleration_spec
+from src.services.pairing import (
+    DEFAULT_PLAYER_TIEBREAKS,
+    PLAYER_TIEBREAKS,
+    parse_player_tiebreak_sequence,
+    serialize_tiebreak_sequence,
+)
+from src.services.prizes import PRIZE_POLICIES
+from src.services.list_layouts import DEFAULT_STANDINGS_COLUMNS, STANDINGS_COLUMNS
+
+
+class TiebreakSequenceEditor(ctk.CTkFrame):
+    """Editor ordenável de critérios de desempate (spec E1/E2).
+
+    Mantém uma lista ordenada de códigos de critério; expõe `get_sequence()` no
+    formato persistido. A ordem aqui é aplicada DEPOIS dos pontos (sempre o
+    primário) e ANTES dos critérios técnicos finais (rating/nome).
+    """
+
+    def __init__(
+        self,
+        master: Any,
+        registry: dict[str, Any],
+        default_codes: list[str],
+        initial_codes: list[str] | None = None,
+    ) -> None:
+        super().__init__(master, fg_color="transparent")
+        self._registry = registry
+        self._default_codes = list(default_codes)
+        self._codes = list(initial_codes) if initial_codes else list(default_codes)
+        self.grid_columnconfigure(0, weight=1)
+        self._render()
+
+    def get_sequence(self) -> list[dict[str, Any]]:
+        return [{"code": code, "params": {}} for code in self._codes]
+
+    def _criterion_label(self, code: str) -> str:
+        criterion = self._registry.get(code)
+        return criterion.label if criterion is not None else code
+
+    def _move(self, index: int, delta: int) -> None:
+        target = index + delta
+        if 0 <= target < len(self._codes):
+            self._codes[index], self._codes[target] = self._codes[target], self._codes[index]
+            self._render()
+
+    def _remove(self, index: int) -> None:
+        if len(self._codes) > 1 and 0 <= index < len(self._codes):
+            del self._codes[index]
+            self._render()
+
+    def _add(self, code: str | None) -> None:
+        if code and code in self._registry and code not in self._codes:
+            self._codes.append(code)
+            self._render()
+
+    def _reset(self) -> None:
+        self._codes = list(self._default_codes)
+        self._render()
+
+    def _render(self) -> None:
+        for child in self.winfo_children():
+            child.destroy()
+
+        for index, code in enumerate(self._codes):
+            row = ctk.CTkFrame(self, fg_color="transparent")
+            row.grid(row=index, column=0, sticky="ew", pady=(0, 4))
+            row.grid_columnconfigure(0, weight=1)
+            ctk.CTkLabel(row, text=f"{index + 1}. {self._criterion_label(code)}", anchor="w").grid(
+                row=0, column=0, sticky="ew"
+            )
+            up = ctk.CTkButton(row, text="↑", width=34, command=lambda i=index: self._move(i, -1))
+            up.grid(row=0, column=1, padx=2)
+            down = ctk.CTkButton(row, text="↓", width=34, command=lambda i=index: self._move(i, 1))
+            down.grid(row=0, column=2, padx=2)
+            remove = ctk.CTkButton(
+                row, text="✕", width=34, fg_color="#a3423c", hover_color="#822f2a",
+                command=lambda i=index: self._remove(i),
+            )
+            remove.grid(row=0, column=3, padx=2)
+            if index == 0:
+                up.configure(state="disabled")
+            if index == len(self._codes) - 1:
+                down.configure(state="disabled")
+            if len(self._codes) <= 1:
+                remove.configure(state="disabled")
+
+        footer = ctk.CTkFrame(self, fg_color="transparent")
+        footer.grid(row=len(self._codes), column=0, sticky="ew", pady=(4, 0))
+        footer.grid_columnconfigure(0, weight=1)
+
+        available = [code for code in self._registry if code not in self._codes]
+        if available:
+            label_to_code = {self._criterion_label(code): code for code in available}
+            add_menu = ctk.CTkOptionMenu(footer, values=list(label_to_code.keys()), width=230)
+            add_menu.grid(row=0, column=0, sticky="w")
+            add_menu.set(next(iter(label_to_code)))
+            ctk.CTkButton(
+                footer, text="Adicionar", width=110,
+                command=lambda: self._add(label_to_code.get(add_menu.get())),
+            ).grid(row=0, column=1, padx=(8, 0))
+        ctk.CTkButton(
+            footer, text="Restaurar padrão FIDE", width=180, command=self._reset
+        ).grid(row=0, column=2, padx=(8, 0))
+
+
+class PrizeEditor(ctk.CTkFrame):
+    """Editor de prêmios em linhas dinâmicas (spec E4).
+
+    Cada linha é um prêmio (tipo, rótulo, categoria, faixa de colocação, valor).
+    `get_rows()` devolve os prêmios atuais para o PrizeService persistir.
+    """
+
+    KIND_LABELS = {
+        "overall": "Geral",
+        "category": "Categoria",
+        "special": "Especial",
+        "board": "Tabuleiro",
+    }
+
+    def __init__(self, master: Any, initial_rows: list[dict[str, Any]] | None = None) -> None:
+        super().__init__(master, fg_color="transparent")
+        self._kind_by_label = {label: code for code, label in self.KIND_LABELS.items()}
+        self._data = [self._normalize(prize) for prize in (initial_rows or [])]
+        self._widgets: list[dict[str, Any]] = []
+        self.grid_columnconfigure(0, weight=1)
+        self._render()
+
+    @staticmethod
+    def _normalize(prize: dict[str, Any]) -> dict[str, str]:
+        amount = prize.get("amount")
+        return {
+            "kind": str(prize.get("kind") or "overall"),
+            "label": str(prize.get("label") or ""),
+            "category": str(prize.get("category") or ""),
+            "rank_from": str(prize.get("rank_from") or 1),
+            "rank_to": str(prize.get("rank_to") or prize.get("rank_from") or 1),
+            "amount": "" if amount in (None, "") else str(amount),
+        }
+
+    def _sync(self) -> None:
+        for data, widgets in zip(self._data, self._widgets):
+            data["kind"] = self._kind_by_label.get(widgets["kind"].get(), "overall")
+            data["label"] = widgets["label"].get().strip()
+            data["category"] = widgets["category"].get().strip()
+            data["rank_from"] = widgets["rank_from"].get().strip()
+            data["rank_to"] = widgets["rank_to"].get().strip()
+            data["amount"] = widgets["amount"].get().strip()
+
+    def get_rows(self) -> list[dict[str, Any]]:
+        self._sync()
+        return [dict(data) for data in self._data]
+
+    def _add(self) -> None:
+        self._sync()
+        self._data.append(self._normalize({}))
+        self._render()
+
+    def _remove(self, index: int) -> None:
+        self._sync()
+        if 0 <= index < len(self._data):
+            del self._data[index]
+            self._render()
+
+    def _render(self) -> None:
+        for child in self.winfo_children():
+            child.destroy()
+        self._widgets = []
+
+        header = ctk.CTkFrame(self, fg_color="transparent")
+        header.grid(row=0, column=0, sticky="w", pady=(0, 2))
+        columns = [("Tipo", 110), ("Premio", 170), ("Categoria", 120), ("De", 46), ("Ate", 46), ("Valor", 90), ("", 36)]
+        for index, (text, width) in enumerate(columns):
+            ctk.CTkLabel(header, text=text, width=width, anchor="w").grid(row=0, column=index, padx=2, sticky="w")
+
+        for index, data in enumerate(self._data):
+            row = ctk.CTkFrame(self, fg_color="transparent")
+            row.grid(row=index + 1, column=0, sticky="w", pady=1)
+            kind = ctk.CTkOptionMenu(row, values=list(self.KIND_LABELS.values()), width=110)
+            kind.set(self.KIND_LABELS.get(data["kind"], "Geral"))
+            kind.grid(row=0, column=0, padx=2)
+            label = ctk.CTkEntry(row, width=170)
+            label.insert(0, data["label"])
+            label.grid(row=0, column=1, padx=2)
+            category = ctk.CTkEntry(row, width=120)
+            category.insert(0, data["category"])
+            category.grid(row=0, column=2, padx=2)
+            rank_from = ctk.CTkEntry(row, width=46)
+            rank_from.insert(0, data["rank_from"])
+            rank_from.grid(row=0, column=3, padx=2)
+            rank_to = ctk.CTkEntry(row, width=46)
+            rank_to.insert(0, data["rank_to"])
+            rank_to.grid(row=0, column=4, padx=2)
+            amount = ctk.CTkEntry(row, width=90)
+            amount.insert(0, data["amount"])
+            amount.grid(row=0, column=5, padx=2)
+            ctk.CTkButton(
+                row, text="✕", width=36, fg_color="#a3423c", hover_color="#822f2a",
+                command=lambda i=index: self._remove(i),
+            ).grid(row=0, column=6, padx=2)
+            self._widgets.append(
+                {"kind": kind, "label": label, "category": category,
+                 "rank_from": rank_from, "rank_to": rank_to, "amount": amount}
+            )
+
+        ctk.CTkButton(self, text="Adicionar premio", width=160, command=self._add).grid(
+            row=len(self._data) + 1, column=0, sticky="w", pady=(6, 0)
+        )
+
+
+class ColumnLayoutEditor(ctk.CTkFrame):
+    """Editor de colunas de lista: mostrar/ocultar + ordem (spec E7 / Fase F)."""
+
+    def __init__(
+        self,
+        master: Any,
+        columns: dict[str, str],
+        default_keys: list[str],
+        initial_keys: list[str] | None = None,
+    ) -> None:
+        super().__init__(master, fg_color="transparent")
+        self._columns = dict(columns)
+        self._default = list(default_keys)
+        self._keys = list(initial_keys) if initial_keys else list(default_keys)
+        self.grid_columnconfigure(0, weight=1)
+        self._render()
+
+    def get_columns(self) -> list[str]:
+        return list(self._keys)
+
+    def _label(self, key: str) -> str:
+        return self._columns.get(key, key)
+
+    def _move(self, index: int, delta: int) -> None:
+        target = index + delta
+        if 0 <= target < len(self._keys):
+            self._keys[index], self._keys[target] = self._keys[target], self._keys[index]
+            self._render()
+
+    def _remove(self, index: int) -> None:
+        if len(self._keys) > 1 and 0 <= index < len(self._keys):
+            del self._keys[index]
+            self._render()
+
+    def _add(self, key: str | None) -> None:
+        if key and key in self._columns and key not in self._keys:
+            self._keys.append(key)
+            self._render()
+
+    def _reset(self) -> None:
+        self._keys = list(self._default)
+        self._render()
+
+    def _render(self) -> None:
+        for child in self.winfo_children():
+            child.destroy()
+        for index, key in enumerate(self._keys):
+            row = ctk.CTkFrame(self, fg_color="transparent")
+            row.grid(row=index, column=0, sticky="ew", pady=(0, 3))
+            row.grid_columnconfigure(0, weight=1)
+            ctk.CTkLabel(row, text=f"{index + 1}. {self._label(key)}", anchor="w").grid(
+                row=0, column=0, sticky="ew"
+            )
+            up = ctk.CTkButton(row, text="↑", width=34, command=lambda i=index: self._move(i, -1))
+            up.grid(row=0, column=1, padx=2)
+            down = ctk.CTkButton(row, text="↓", width=34, command=lambda i=index: self._move(i, 1))
+            down.grid(row=0, column=2, padx=2)
+            remove = ctk.CTkButton(
+                row, text="✕", width=34, fg_color="#a3423c", hover_color="#822f2a",
+                command=lambda i=index: self._remove(i),
+            )
+            remove.grid(row=0, column=3, padx=2)
+            if index == 0:
+                up.configure(state="disabled")
+            if index == len(self._keys) - 1:
+                down.configure(state="disabled")
+            if len(self._keys) <= 1:
+                remove.configure(state="disabled")
+
+        footer = ctk.CTkFrame(self, fg_color="transparent")
+        footer.grid(row=len(self._keys), column=0, sticky="ew", pady=(4, 0))
+        footer.grid_columnconfigure(0, weight=1)
+        available = [key for key in self._columns if key not in self._keys]
+        if available:
+            label_to_key = {self._label(key): key for key in available}
+            add_menu = ctk.CTkOptionMenu(footer, values=list(label_to_key.keys()), width=210)
+            add_menu.grid(row=0, column=0, sticky="w")
+            add_menu.set(next(iter(label_to_key)))
+            ctk.CTkButton(
+                footer, text="Adicionar coluna", width=150,
+                command=lambda: self._add(label_to_key.get(add_menu.get())),
+            ).grid(row=0, column=1, padx=(8, 0))
+        ctk.CTkButton(footer, text="Restaurar padrao", width=150, command=self._reset).grid(
+            row=0, column=2, padx=(8, 0)
+        )
 
 
 class TournamentPagesMixin:
@@ -143,8 +437,32 @@ class TournamentPagesMixin:
                 self._show_error(exc)
 
         btn_create = ctk.CTkButton(form, text="Criar torneio", command=create_tournament)
-        btn_create.grid(row=option_row + 8, column=0, padx=16, pady=18, sticky="ew")
+        btn_create.grid(row=option_row + 8, column=0, padx=16, pady=(18, 4), sticky="ew")
         self._disable_if_unauthorized(btn_create, "tournament_write")
+
+        def import_trf_file() -> None:
+            try:
+                file_path = filedialog.askopenfilename(
+                    title="Importar torneio do Swiss-Manager (TRF)",
+                    filetypes=[("Arquivos TRF", "*.trf"), ("Todos os arquivos", "*.*")],
+                )
+                if not file_path:
+                    return
+                result = self.import_service.import_trf(file_path)
+                self._set_current_tournament(result["tournament_id"])
+                self._show_toast(
+                    f"Torneio '{result['name']}' importado com {result['players_imported']} jogadores.",
+                    kind="success",
+                )
+                self.show_players()
+            except Exception as exc:
+                self._show_error(exc)
+
+        btn_import_trf = ctk.CTkButton(
+            form, text="Importar TRF (Swiss-Manager)", command=import_trf_file
+        )
+        btn_import_trf.grid(row=option_row + 9, column=0, padx=16, pady=(0, 14), sticky="ew")
+        self._disable_if_unauthorized(btn_import_trf, "tournament_write")
 
         list_panel = self._make_panel(body)
         list_panel.grid(row=0, column=1, sticky="nsew")
@@ -258,6 +576,22 @@ class TournamentPagesMixin:
             except Exception as exc:
                 self._show_error(exc)
 
+        def split_selected() -> None:
+            try:
+                tournament_id = selected_tournament_id()
+                if not tournament_id:
+                    raise AppError("Selecione um torneio para dividir.")
+                answer = self._ask_string("Dividir torneio", "Em quantos grupos (2 ou mais)?")
+                if answer is None:
+                    return
+                child_ids = self.tournament_service.split_tournament(tournament_id, answer.strip())
+                load_tournaments()
+                self._show_info(
+                    f"Torneio dividido em {len(child_ids)} grupos (A, B, ...) por ranking inicial."
+                )
+            except Exception as exc:
+                self._show_error(exc)
+
         tree.bind("<Double-1>", lambda _event: open_selected())
         ctk.CTkLabel(
             list_panel,
@@ -273,6 +607,9 @@ class TournamentPagesMixin:
         btn_duplicate = ctk.CTkButton(actions, text="Duplicar modelo", command=duplicate_selected, width=140)
         btn_duplicate.pack(side="left", padx=(0, 8))
         self._disable_if_unauthorized(btn_duplicate, "tournament_write")
+        btn_split = ctk.CTkButton(actions, text="Dividir", command=split_selected, width=90)
+        btn_split.pack(side="left", padx=(0, 8))
+        self._disable_if_unauthorized(btn_split, "tournament_write")
         btn_delete = ctk.CTkButton(
             actions,
             text="Excluir",
@@ -564,6 +901,9 @@ class TournamentPagesMixin:
             ("team_match_win_points", "Pontos por vitoria da equipe"),
             ("team_match_draw_points", "Pontos por empate da equipe"),
             ("team_match_loss_points", "Pontos por derrota da equipe"),
+            ("rating_fee_fide", "Taxa rating FIDE por inscrito"),
+            ("rating_fee_cbx", "Taxa rating CBX por inscrito"),
+            ("rating_fee_lbx", "Taxa rating LBX por inscrito"),
         ]
         for index, (key, label) in enumerate(setting_fields, start=1):
             ctk.CTkLabel(settings_panel, text=label).grid(
@@ -796,6 +1136,107 @@ class TournamentPagesMixin:
         acceleration_option.configure(command=lambda _value: refresh_accel_state())
         refresh_accel_state()
 
+        tiebreak_row = accel_row + 3
+        ctk.CTkLabel(settings_panel, text="Desempates (individual)", font=font_section()).grid(
+            row=tiebreak_row, column=0, padx=16, pady=(16, 0), sticky="w"
+        )
+        ctk.CTkLabel(
+            settings_panel,
+            text=(
+                "Ordem aplicada apos os pontos. Pontos e sempre o primeiro criterio;\n"
+                "rating e nome sao os criterios tecnicos finais."
+            ),
+            justify="left",
+            text_color="gray",
+        ).grid(row=tiebreak_row + 1, column=0, padx=16, pady=(0, 2), sticky="w")
+        initial_tiebreak_codes = [
+            item["code"]
+            for item in parse_player_tiebreak_sequence(settings.get("tiebreak_sequence"))
+        ]
+        tiebreak_editor = TiebreakSequenceEditor(
+            settings_panel,
+            PLAYER_TIEBREAKS,
+            DEFAULT_PLAYER_TIEBREAKS,
+            initial_tiebreak_codes,
+        )
+        tiebreak_editor.grid(row=tiebreak_row + 2, column=0, padx=16, pady=(2, 8), sticky="ew")
+
+        prize_row = tiebreak_row + 3
+        ctk.CTkLabel(settings_panel, text="Premiacao", font=font_section()).grid(
+            row=prize_row, column=0, padx=16, pady=(16, 0), sticky="w"
+        )
+        prize_controls = ctk.CTkFrame(settings_panel, fg_color="transparent")
+        prize_controls.grid(row=prize_row + 1, column=0, padx=16, pady=(2, 0), sticky="ew")
+        ctk.CTkLabel(prize_controls, text="Politica").grid(row=0, column=0, padx=(0, 4), sticky="w")
+        prize_policy_by_label = {label: value for value, label in PRIZE_POLICIES.items()}
+        prize_policy_option = ctk.CTkOptionMenu(
+            prize_controls, values=list(prize_policy_by_label.keys()), width=240
+        )
+        prize_policy_option.grid(row=0, column=1, padx=(0, 16))
+        prize_policy_option.set(
+            PRIZE_POLICIES.get(settings.get("prize_policy", "best_only"), PRIZE_POLICIES["best_only"])
+        )
+        ctk.CTkLabel(prize_controls, text="Imposto %").grid(row=0, column=2, padx=(0, 4), sticky="w")
+        prize_tax_entry = ctk.CTkEntry(prize_controls, width=80)
+        prize_tax_entry.grid(row=0, column=3)
+        prize_tax_entry.insert(0, str(settings.get("prize_tax_percent", 0.0) or 0.0))
+
+        ctk.CTkLabel(
+            settings_panel,
+            text=(
+                "Politica e imposto sao salvos com 'Salvar configuracoes'.\n"
+                "Geral/Categoria sao distribuidos automaticamente; Especial/Tabuleiro entram como manuais."
+            ),
+            justify="left",
+            text_color="gray",
+        ).grid(row=prize_row + 2, column=0, padx=16, pady=(2, 2), sticky="w")
+
+        prize_editor = PrizeEditor(
+            settings_panel, self.db.list_tournament_prizes(self.current_tournament_id)
+        )
+        prize_editor.grid(row=prize_row + 3, column=0, padx=16, pady=(2, 4), sticky="ew")
+
+        def save_prizes() -> None:
+            try:
+                self.prize_service.replace_prizes(
+                    self.current_tournament_id, prize_editor.get_rows()
+                )
+                self._show_toast("Premios salvos.", kind="success")
+            except Exception as exc:
+                self._show_error(exc)
+
+        btn_save_prizes = ctk.CTkButton(settings_panel, text="Salvar premios", command=save_prizes)
+        btn_save_prizes.grid(row=prize_row + 4, column=0, padx=16, pady=(0, 10), sticky="w")
+        self._disable_if_unauthorized(btn_save_prizes, "tournament_write")
+
+        columns_row = prize_row + 5
+        ctk.CTkLabel(settings_panel, text="Colunas da classificacao", font=font_section()).grid(
+            row=columns_row, column=0, padx=16, pady=(16, 0), sticky="w"
+        )
+        ctk.CTkLabel(
+            settings_panel,
+            text="Escolha e ordene as colunas do relatorio de classificacao (vazio = padrao).",
+            text_color="gray",
+        ).grid(row=columns_row + 1, column=0, padx=16, pady=(0, 2), sticky="w")
+        standings_layout = self.list_layout_service.get_columns(self.current_tournament_id, "standings")
+        columns_editor = ColumnLayoutEditor(
+            settings_panel, STANDINGS_COLUMNS, DEFAULT_STANDINGS_COLUMNS, standings_layout["selected"]
+        )
+        columns_editor.grid(row=columns_row + 2, column=0, padx=16, pady=(2, 4), sticky="ew")
+
+        def save_columns() -> None:
+            try:
+                self.list_layout_service.save_columns(
+                    self.current_tournament_id, columns_editor.get_columns(), "standings"
+                )
+                self._show_toast("Colunas da classificacao salvas.", kind="success")
+            except Exception as exc:
+                self._show_error(exc)
+
+        btn_save_columns = ctk.CTkButton(settings_panel, text="Salvar colunas", command=save_columns)
+        btn_save_columns.grid(row=columns_row + 3, column=0, padx=16, pady=(0, 10), sticky="w")
+        self._disable_if_unauthorized(btn_save_columns, "tournament_write")
+
         ctk.CTkLabel(
             schedule_panel,
             text="Datas e horarios das rodadas",
@@ -928,6 +1369,11 @@ class TournamentPagesMixin:
             settings_payload["team_pairing_method"] = team_pairing_by_label[team_pairing_option.get()]
             settings_payload["team_standing_primary"] = team_criterion_by_label[team_primary_option.get()]
             settings_payload["team_standing_secondary"] = team_criterion_by_label[team_secondary_option.get()]
+            settings_payload["tiebreak_sequence"] = serialize_tiebreak_sequence(
+                tiebreak_editor.get_sequence()
+            )
+            settings_payload["prize_policy"] = prize_policy_by_label[prize_policy_option.get()]
+            settings_payload["prize_tax_percent"] = prize_tax_entry.get()
             settings_payload["team_fixed_board_order"] = team_fixed_board_order_check.get()
             accel_key = acceleration_by_label[acceleration_option.get()]
             if accel_key == "custom":
@@ -1040,6 +1486,7 @@ class TournamentPagesMixin:
             ("international_rating", "Rating internacional"),
             ("fide_id", "FIDE ID"),
             ("cbx_id", "CBX ID"),
+            ("lbx_id", "LBX ID"),
             ("club", "Clube/Cidade"),
             ("category", "Categoria"),
             ("birth_date", "Nascimento"),
@@ -1057,13 +1504,13 @@ class TournamentPagesMixin:
             entry.grid(row=index * 2 + 1, column=0, padx=16, pady=(4, 2), sticky="ew")
             entries[key] = entry
             
-            if key in ["fide_id", "cbx_id"]:
+            if key in ["fide_id", "cbx_id", "lbx_id"]:
                 def autofill_from_official(event, current_key=key):
                     val = entries[current_key].get().strip()
                     if not val:
                         return
                     
-                    params = {"fide_id": val} if current_key == "fide_id" else {"cbx_id": val}
+                    params = {current_key: val}
                     player = self.db.find_latest_official_player(**params)
                     if not player:
                         return
@@ -1087,7 +1534,8 @@ class TournamentPagesMixin:
                     
                     if current_key == "fide_id":
                         update_if_empty("cbx_id", player.get("cbx_id"))
-                    else:
+                        update_if_empty("lbx_id", player.get("lbx_id"))
+                    elif current_key == "cbx_id":
                         update_if_empty("fide_id", player.get("fide_id"))
                         
                 entry.bind("<FocusOut>", autofill_from_official)
@@ -1149,6 +1597,7 @@ class TournamentPagesMixin:
             "rating",
             "fide",
             "cbx",
+            "lbx",
             "club",
             "class",
             "category",
@@ -1167,6 +1616,7 @@ class TournamentPagesMixin:
                 "rating": "Rating",
                 "fide": "FIDE",
                 "cbx": "CBX",
+                "lbx": "LBX",
                 "club": "Clube",
                 "class": "Turma",
                 "category": "Categoria",
@@ -1182,6 +1632,7 @@ class TournamentPagesMixin:
                 "rating": 80,
                 "fide": 90,
                 "cbx": 90,
+                "lbx": 90,
                 "club": 150,
                 "class": 130,
                 "category": 120,
@@ -1226,6 +1677,7 @@ class TournamentPagesMixin:
                         str(player["rating"] or ""),
                         str(player.get("fide_id") or ""),
                         str(player.get("cbx_id") or ""),
+                        str(player.get("lbx_id") or ""),
                         str(player.get("national_rating") or ""),
                         str(player.get("international_rating") or ""),
                     ]
@@ -1243,6 +1695,7 @@ class TournamentPagesMixin:
                         player["rating"],
                         player.get("fide_id", ""),
                         player.get("cbx_id", ""),
+                        player.get("lbx_id", ""),
                         player["club"],
                         player.get("active_class_name", ""),
                         player["category"],
@@ -1333,6 +1786,7 @@ class TournamentPagesMixin:
                     title=entries["title"].get(),
                     sex=entries["sex"].get(),
                     cbx_id=entries["cbx_id"].get(),
+                    lbx_id=entries["lbx_id"].get(),
                     national_rating=national_rating,
                     international_rating=international_rating,
                     player_status=PLAYER_STATUS_VALUES[player_status_option.get()],
@@ -1397,6 +1851,7 @@ class TournamentPagesMixin:
                     title=entries["title"].get(),
                     sex=entries["sex"].get(),
                     cbx_id=entries["cbx_id"].get(),
+                    lbx_id=entries["lbx_id"].get(),
                     national_rating=int(entries["national_rating"].get() or "0"),
                     international_rating=int(entries["international_rating"].get() or "0"),
                     player_status=PLAYER_STATUS_VALUES[player_status_option.get()],
@@ -1669,21 +2124,197 @@ class TournamentPagesMixin:
             except Exception as exc:
                 self._show_error(exc)
 
-        def update_official_ratings() -> None:
-            try:
+        def show_official_update_preview(result: dict[str, Any]) -> None:
+            dialog = ctk.CTkToplevel(self)
+            dialog.title("Pre-visualizacao da atualizacao oficial")
+            dialog.geometry("1180x700")
+            dialog.minsize(920, 560)
+            dialog.transient(self)
+            dialog.grab_set()
+            dialog.grid_columnconfigure(0, weight=1)
+            dialog.grid_rowconfigure(1, weight=2)
+            dialog.grid_rowconfigure(3, weight=1)
+
+            summary = (
+                f"Inscritos: {result['total']} | Correspondencias: {result['matched']} | "
+                f"Alteracoes: {result['changed']} | Sem mudanca: {result['unchanged']} | "
+                f"Sem correspondencia: {result['unmatched_count']}"
+            )
+            ctk.CTkLabel(
+                dialog,
+                text=summary,
+                font=font_section(),
+                text_color=THEME_TEXT_MAIN,
+            ).grid(row=0, column=0, padx=16, pady=(16, 8), sticky="w")
+
+            comparison_panel = ctk.CTkFrame(dialog, fg_color="transparent")
+            comparison_panel.grid(row=1, column=0, padx=16, pady=(0, 12), sticky="nsew")
+            comparison_panel.grid_columnconfigure(0, weight=1)
+            comparison_panel.grid_rowconfigure(0, weight=1)
+            comparison_tree = self._make_tree(
+                comparison_panel,
+                ["status", "player", "changes", "before", "after"],
+                {
+                    "status": "Status",
+                    "player": "Jogador inscrito",
+                    "changes": "Campos alterados",
+                    "before": "Antes",
+                    "after": "Depois",
+                },
+                {
+                    "status": 90,
+                    "player": 210,
+                    "changes": 210,
+                    "before": 300,
+                    "after": 300,
+                },
+                visible_rows=12,
+            )
+            comparison_tree.configure(selectmode="extended")
+            changed_row_map: dict[str, int] = {}
+
+            def comparison_text(values: dict[str, Any]) -> str:
+                return (
+                    f"{values['name']} | {values['club']} | {values['title']} | "
+                    f"R {values['rating']} / N {values['national_rating']} / I {values['international_rating']}"
+                )
+
+            for row in result["rows"]:
+                row_id = comparison_tree.insert(
+                    "",
+                    "end",
+                    values=(
+                        row["status_label"],
+                        row["name"],
+                        row["changes_label"],
+                        comparison_text(row["before"]),
+                        comparison_text(row["after"]),
+                    ),
+                )
+                if row["status"] == "changed":
+                    changed_row_map[row_id] = int(row["player_id"])
+
+            selected_count_label = ctk.CTkLabel(
+                comparison_panel,
+                text="Selecionadas para aplicar: 0",
+                text_color=THEME_TEXT_SUB,
+            )
+            selected_count_label.grid(row=1, column=0, pady=(8, 0), sticky="w")
+
+            ctk.CTkLabel(
+                dialog,
+                text="Sem correspondencia na base oficial",
+                font=font_section(),
+                text_color=THEME_TEXT_MAIN,
+            ).grid(row=2, column=0, padx=16, pady=(0, 6), sticky="w")
+            unmatched_panel = ctk.CTkFrame(dialog, fg_color="transparent")
+            unmatched_panel.grid(row=3, column=0, padx=16, pady=(0, 12), sticky="nsew")
+            unmatched_panel.grid_columnconfigure(0, weight=1)
+            unmatched_panel.grid_rowconfigure(0, weight=1)
+            unmatched_tree = self._make_tree(
+                unmatched_panel,
+                ["player", "fide", "cbx", "lbx"],
+                {"player": "Jogador", "fide": "FIDE ID", "cbx": "CBX ID", "lbx": "LBX ID"},
+                {"player": 300, "fide": 150, "cbx": 150, "lbx": 150},
+                visible_rows=5,
+            )
+            for row in result["unmatched"]:
+                unmatched_tree.insert(
+                    "",
+                    "end",
+                    values=(row["name"], row["fide_id"], row["cbx_id"], row["lbx_id"]),
+                )
+
+            actions = ctk.CTkFrame(dialog, fg_color="transparent")
+            actions.grid(row=4, column=0, padx=16, pady=(0, 16), sticky="e")
+
+            def apply_updates() -> None:
+                changed_player_ids = [
+                    changed_row_map[row_id]
+                    for row_id in comparison_tree.selection()
+                    if row_id in changed_row_map
+                ]
+                if not changed_player_ids:
+                    return
+                dialog.destroy()
                 tournament_id = int(self.current_tournament_id)
 
-                def show_update_result(result: dict[str, Any]) -> None:
+                def show_update_result(update_result: dict[str, Any]) -> None:
                     load_players()
-                    message = f"{result['updated']} jogadores atualizados pela base oficial."
-                    if result["unmatched"]:
-                        message += "\n\nSem correspondencia:\n" + "\n".join(result["unmatched"][:12])
+                    message = f"{update_result['updated']} jogadores atualizados pela base oficial."
+                    if update_result["unmatched"]:
+                        message += "\n\nSem correspondencia:\n" + "\n".join(update_result["unmatched"][:12])
                     self._show_info(message)
 
                 self._run_background(
-                    lambda: self.official_rating_service.update_tournament_players(tournament_id),
+                    lambda: self.official_rating_service.apply_tournament_player_updates(
+                        tournament_id,
+                        changed_player_ids,
+                    ),
                     show_update_result,
-                    "Atualizando ratings oficiais...",
+                    "Aplicando atualizacoes oficiais...",
+                )
+
+            def update_selected_count(_event: Any = None) -> None:
+                selected = sum(1 for row_id in comparison_tree.selection() if row_id in changed_row_map)
+                selected_count_label.configure(text=f"Selecionadas para aplicar: {selected}")
+                apply_button.configure(state="normal" if selected else "disabled")
+
+            def select_changed_rows() -> None:
+                comparison_tree.selection_set(*changed_row_map)
+                update_selected_count()
+
+            def clear_selected_rows() -> None:
+                comparison_tree.selection_remove(*comparison_tree.selection())
+                update_selected_count()
+
+            ctk.CTkButton(
+                actions,
+                text="Cancelar",
+                fg_color=THEME_NEUTRAL,
+                hover_color=THEME_NEUTRAL_HOVER,
+                command=dialog.destroy,
+            ).pack(side="left", padx=(0, 8))
+            ctk.CTkButton(
+                actions,
+                text="Limpar selecao",
+                fg_color=THEME_NEUTRAL,
+                hover_color=THEME_NEUTRAL_HOVER,
+                command=clear_selected_rows,
+            ).pack(side="left", padx=(0, 8))
+            ctk.CTkButton(
+                actions,
+                text="Selecionar divergencias",
+                command=select_changed_rows,
+            ).pack(side="left", padx=(0, 8))
+            apply_button = ctk.CTkButton(actions, text="Confirmar alteracoes", command=apply_updates)
+            apply_button.pack(side="left")
+            comparison_tree.bind("<<TreeviewSelect>>", update_selected_count)
+            select_changed_rows()
+
+        def update_official_ratings() -> None:
+            try:
+                tournament_id = int(self.current_tournament_id)
+                self._run_background(
+                    lambda: self.official_rating_service.preview_tournament_player_updates(tournament_id),
+                    show_official_update_preview,
+                    "Comparando ratings oficiais...",
+                )
+            except Exception as exc:
+                self._show_error(exc)
+
+        def update_lbx_base() -> None:
+            try:
+                def show_import_result(result: dict[str, Any]) -> None:
+                    message = f"{result['imported']} jogadores importados da LBX pela internet."
+                    if result["errors"]:
+                        message += "\n\nErros:\n" + "\n".join(result["errors"][:10])
+                    self._show_info(message)
+
+                self._run_background(
+                    self.official_rating_service.import_lbx_lists_from_url,
+                    show_import_result,
+                    "Baixando listas LBX...",
                 )
             except Exception as exc:
                 self._show_error(exc)
@@ -1707,7 +2338,9 @@ class TournamentPagesMixin:
             ("Importar link Forms/Sheets", import_online_registrations_url),
             ("Importar FIDE", lambda: import_official_ratings("FIDE")),
             ("Importar CBX", lambda: import_official_ratings("CBX")),
-            ("Atualizar ratings oficiais", update_official_ratings),
+            ("Importar LBX arquivo", lambda: import_official_ratings("LBX")),
+            ("Atualizar base LBX", update_lbx_base),
+            ("Comparar ratings oficiais", update_official_ratings),
         ]
         self._grid_form_buttons(form, button_specs, control_row + 7, required_action="tournament_write")
 

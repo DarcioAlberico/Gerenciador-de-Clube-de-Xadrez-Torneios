@@ -8,10 +8,12 @@ from src.services.export_service import ImportService, CertificateService, Expor
 from src.services.finance_service import FinanceService
 from src.services.inventory_service import InventoryService
 from src.services.member_service import GuardianService, MemberService
+from src.services.list_layout_service import ListLayoutService
 from src.services.pairing_service import PairingService
+from src.services.prize_service import PrizeService
 from src.services.qr_result_service import QRResultService
 from src.services.result_server import LocalResultServer
-from src.services.rating_service import OfficialRatingService, InternalRatingService
+from src.services.rating_service import OfficialRatingService, InternalRatingService, FideRatingService, NormAssistantService
 from src.services.security_service import SecurityService
 from src.services.sync_service import SyncService
 from src.services.tournament_service import RefereeService, TournamentService, TeamService

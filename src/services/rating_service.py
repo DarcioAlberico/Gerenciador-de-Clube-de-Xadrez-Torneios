@@ -1,6 +1,7 @@
 from __future__ import annotations
 import csv
 import html
+import io
 import json
 import logging
 import math
@@ -8,6 +9,8 @@ import secrets
 import shutil
 import sqlite3
 import unicodedata
+import urllib.error
+import urllib.request
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any, Mapping, TYPE_CHECKING
@@ -15,6 +18,8 @@ from typing import Any, Mapping, TYPE_CHECKING
 from src.core.database import BASE_DIR, DEFAULT_CERTIFICATE_TEMPLATES, Database
 from src.services.constants import *
 from src.services.export_service import ImportService
+from src.services.fide_norms import build_norm_report
+from src.services.fide_rating import build_fide_report_rows
 
 if TYPE_CHECKING:
     from src.services.club_service import ClubService
@@ -33,7 +38,12 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 class OfficialRatingService:
-    SOURCES = {"FIDE", "CBX"}
+    SOURCES = {"FIDE", "CBX", "LBX"}
+    LBX_LIST_URLS = {
+        "standard": "https://lbx.org.br/LBXstandard.php",
+        "rapid": "https://lbx.org.br/LBXrapid.php",
+        "blitz": "https://lbx.org.br/LBXblitz.php",
+    }
 
     def __init__(self, db: Database) -> None:
         self.db = db
@@ -46,7 +56,7 @@ class OfficialRatingService:
     ) -> dict[str, Any]:
         source = source.strip().upper()
         if source not in self.SOURCES:
-            raise AppError("Fonte invalida. Use FIDE ou CBX.")
+            raise AppError("Fonte invalida. Use FIDE, CBX ou LBX.")
 
         path = Path(file_path)
         errors: list[str] = []
@@ -87,11 +97,66 @@ class OfficialRatingService:
             "errors": errors,
         }
 
+    def import_lbx_lists_from_url(self) -> dict[str, Any]:
+        players_by_id: dict[str, dict[str, Any]] = {}
+        errors: list[str] = []
+
+        for rating_type, url in self.LBX_LIST_URLS.items():
+            payloads, list_errors = self._download_lbx_list(url)
+            errors.extend(list_errors)
+            for payload in payloads:
+                external_id = str(payload["external_id"])
+                if rating_type == "standard":
+                    payload["standard_rating"] = payload["national_rating"]
+                    players_by_id[external_id] = payload
+                    continue
+                player = players_by_id.setdefault(external_id, payload)
+                player[f"{rating_type}_rating"] = payload["national_rating"]
+
+        payloads = list(players_by_id.values())
+        snapshot_id = None
+        if payloads:
+            snapshot_id = self.db.create_official_rating_snapshot_with_players(
+                source="LBX",
+                list_date=date.today().isoformat(),
+                file_name="LBXstandard.php + LBXrapid.php + LBXblitz.php",
+                players=payloads,
+            )
+
+        logger.info("%s jogadores importados das listas online da LBX", len(payloads))
+        return {
+            "snapshot_id": snapshot_id,
+            "source": "LBX",
+            "imported": len(payloads),
+            "errors": errors,
+        }
+
+    def _download_lbx_list(self, url: str) -> tuple[list[dict[str, Any]], list[str]]:
+        request = urllib.request.Request(url, headers={"User-Agent": "Albericus Chess Club Manager"})
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                content = response.read().decode("utf-8-sig", errors="replace")
+        except (OSError, urllib.error.URLError) as exc:
+            raise AppError(f"Nao foi possivel baixar a lista LBX: {exc}") from exc
+
+        errors: list[str] = []
+        payloads: list[dict[str, Any]] = []
+        reader = csv.DictReader(io.StringIO(content), dialect=ImportService._csv_dialect(content[:4096]))
+        if not reader.fieldnames:
+            raise AppError("Lista LBX sem cabecalho.")
+        for line_number, row in enumerate(reader, start=2):
+            payload = self._official_payload(row, "LBX")
+            if not payload["name"] or not payload["external_id"]:
+                errors.append(f"Linha {line_number}: jogador LBX incompleto.")
+                continue
+            payloads.append(payload)
+        return payloads, errors
+
     def import_official_xml(self, file_path: str | Path, source: str, list_date: str = "") -> dict[str, Any]:
         import xml.etree.ElementTree as ET
         source = source.strip().upper()
         if source not in self.SOURCES:
-            raise AppError("Fonte invalida. Use FIDE ou CBX.")
+            raise AppError("Fonte invalida. Use FIDE, CBX ou LBX.")
             
         path = Path(file_path)
         errors: list[str] = []
@@ -136,7 +201,7 @@ class OfficialRatingService:
     def import_official_excel(self, file_path: str | Path, source: str, list_date: str = "") -> dict[str, Any]:
         source = source.strip().upper()
         if source not in self.SOURCES:
-            raise AppError("Fonte invalida. Use FIDE ou CBX.")
+            raise AppError("Fonte invalida. Use FIDE, CBX ou LBX.")
             
         path = Path(file_path)
         errors: list[str] = []
@@ -306,67 +371,163 @@ class OfficialRatingService:
             "errors": errors,
         }
 
-    def update_tournament_players(self, tournament_id: int) -> dict[str, Any]:
+    def preview_tournament_player_updates(self, tournament_id: int) -> dict[str, Any]:
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
             raise AppError("Selecione um torneio valido.")
         settings = self.db.get_tournament_settings(tournament_id) or {}
 
-        updated = 0
+        rows = []
         unmatched = []
         for player in self.db.list_players(tournament_id, active_only=False):
             official = self._merged_official_player(player)
             if not official:
-                unmatched.append(player["name"])
+                unmatched.append(
+                    {
+                        "player_id": int(player["id"]),
+                        "name": player["name"],
+                        "fide_id": player.get("fide_id", ""),
+                        "cbx_id": player.get("cbx_id", ""),
+                        "lbx_id": player.get("lbx_id", ""),
+                    }
+                )
                 continue
 
-            national_rating = int(official.get("national_rating") or 0) or int(player.get("national_rating") or 0)
-            international_rating = (
-                int(official.get("international_rating") or 0)
-                or int(official.get("standard_rating") or 0)
-                or int(player.get("international_rating") or 0)
-            )
-            rating = self._rating_for_order(
-                settings.get("initial_order", "rating"),
-                current=int(player.get("rating") or 0),
-                national=national_rating,
-                international=international_rating,
-            )
-            self.db.update_player_official_data(
-                int(player["id"]),
+            payload = self._official_update_payload(player, official, settings)
+            before = self._official_comparison_values(player)
+            after = self._official_comparison_values(payload)
+            changed_fields = [
+                field
+                for field in before
+                if before[field] != after[field]
+            ]
+            rows.append(
                 {
-                    "name": official.get("name") or player["name"],
-                    "surname": official.get("surname") or player.get("surname", ""),
-                    "given_name": official.get("given_name") or player.get("given_name", ""),
-                    "title": official.get("title") or player.get("title", ""),
-                    "sex": official.get("sex") or player.get("sex", ""),
-                    "club": official.get("club") or player.get("club", ""),
-                    "federation_id": official.get("federation") or player.get("federation_id", ""),
-                    "fide_id": official.get("fide_id") or player.get("fide_id", ""),
-                    "cbx_id": official.get("cbx_id") or player.get("cbx_id", ""),
-                    "birth_date": official.get("birth_date") or player.get("birth_date", ""),
-                    "national_rating": national_rating,
-                    "international_rating": international_rating,
-                    "rating": rating,
-                },
+                    "player_id": int(player["id"]),
+                    "name": player["name"],
+                    "status": "changed" if changed_fields else "unchanged",
+                    "status_label": "Alterar" if changed_fields else "Sem mudanca",
+                    "changed_fields": changed_fields,
+                    "changes_label": ", ".join(self._comparison_field_label(field) for field in changed_fields),
+                    "before": before,
+                    "after": after,
+                    "_payload": payload,
+                }
+            )
+
+        changed = sum(1 for row in rows if row["status"] == "changed")
+        unchanged = len(rows) - changed
+        return {
+            "total": len(rows) + len(unmatched),
+            "matched": len(rows),
+            "changed": changed,
+            "unchanged": unchanged,
+            "unmatched_count": len(unmatched),
+            "rows": rows,
+            "unmatched": unmatched,
+        }
+
+    def apply_tournament_player_updates(
+        self,
+        tournament_id: int,
+        player_ids: list[int] | None = None,
+    ) -> dict[str, Any]:
+        preview = self.preview_tournament_player_updates(tournament_id)
+        selected_ids = {int(player_id) for player_id in player_ids} if player_ids is not None else None
+        updated = 0
+        skipped = 0
+        for row in preview["rows"]:
+            player_id = int(row["player_id"])
+            if row["status"] != "changed" or (selected_ids is not None and player_id not in selected_ids):
+                skipped += 1
+                continue
+            self.db.update_player_official_data(
+                player_id,
+                row["_payload"],
             )
             updated += 1
 
         logger.info(
-            "%s jogadores atualizados por base oficial no torneio %s; %s sem correspondencia",
+            "%s jogadores atualizados por base oficial no torneio %s; %s sem correspondencia; %s ignorados",
             updated,
             tournament_id,
-            len(unmatched),
+            preview["unmatched_count"],
+            skipped,
         )
-        return {"updated": updated, "unmatched": unmatched}
+        return {
+            "updated": updated,
+            "skipped": skipped,
+            "unmatched": [row["name"] for row in preview["unmatched"]],
+        }
+
+    def update_tournament_players(self, tournament_id: int) -> dict[str, Any]:
+        return self.apply_tournament_player_updates(tournament_id)
+
+    def _official_update_payload(
+        self,
+        player: dict[str, Any],
+        official: dict[str, Any],
+        settings: dict[str, Any],
+    ) -> dict[str, Any]:
+        national_rating = int(official.get("national_rating") or 0) or int(player.get("national_rating") or 0)
+        international_rating = (
+            int(official.get("international_rating") or 0)
+            or int(official.get("standard_rating") or 0)
+            or int(player.get("international_rating") or 0)
+        )
+        rating = self._rating_for_order(
+            settings.get("initial_order", "rating"),
+            current=int(player.get("rating") or 0),
+            national=national_rating,
+            international=international_rating,
+        )
+        return {
+            "name": official.get("name") or player["name"],
+            "surname": official.get("surname") or player.get("surname", ""),
+            "given_name": official.get("given_name") or player.get("given_name", ""),
+            "title": official.get("title") or player.get("title", ""),
+            "sex": official.get("sex") or player.get("sex", ""),
+            "club": official.get("club") or player.get("club", ""),
+            "federation_id": official.get("federation") or player.get("federation_id", ""),
+            "fide_id": official.get("fide_id") or player.get("fide_id", ""),
+            "cbx_id": official.get("cbx_id") or player.get("cbx_id", ""),
+            "lbx_id": official.get("lbx_id") or player.get("lbx_id", ""),
+            "birth_date": official.get("birth_date") or player.get("birth_date", ""),
+            "national_rating": national_rating,
+            "international_rating": international_rating,
+            "rating": rating,
+        }
+
+    @staticmethod
+    def _official_comparison_values(player: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "name": str(player.get("name") or ""),
+            "club": str(player.get("club") or ""),
+            "title": str(player.get("title") or ""),
+            "rating": int(player.get("rating") or 0),
+            "national_rating": int(player.get("national_rating") or 0),
+            "international_rating": int(player.get("international_rating") or 0),
+        }
+
+    @staticmethod
+    def _comparison_field_label(field: str) -> str:
+        return {
+            "name": "nome",
+            "club": "clube",
+            "title": "titulo",
+            "rating": "rating",
+            "national_rating": "rating nacional",
+            "international_rating": "rating internacional",
+        }[field]
 
     def _merged_official_player(self, player: dict[str, Any]) -> dict[str, Any] | None:
         fide = self.db.find_latest_official_player(fide_id=str(player.get("fide_id") or ""))
         cbx = self.db.find_latest_official_player(cbx_id=str(player.get("cbx_id") or ""))
-        if not fide and not cbx:
+        lbx = self.db.find_latest_official_player(lbx_id=str(player.get("lbx_id") or ""))
+        if not fide and not cbx and not lbx:
             return None
         merged: dict[str, Any] = {}
-        for source in [fide, cbx]:
+        for source in [fide, cbx, lbx]:
             if not source:
                 continue
             for key, value in source.items():
@@ -380,15 +541,37 @@ class OfficialRatingService:
             for key in ["club", "national_rating", "cbx_id"]:
                 if cbx.get(key) not in (None, ""):
                     merged[key] = cbx[key]
+        if lbx:
+            # O registro LBX guarda o ID_No em external_id; propaga como lbx_id e
+            # deixa o rating nacional/clube da LBX prevalecer (fonte regional).
+            if lbx.get("external_id") not in (None, ""):
+                merged["lbx_id"] = lbx["external_id"]
+            for key in ["club", "national_rating"]:
+                if lbx.get(key) not in (None, ""):
+                    merged[key] = lbx[key]
         return merged
 
     @staticmethod
     def _official_payload(row: dict[str, Any], source: str) -> dict[str, Any]:
         pick = ImportService._pick
         parse_optional_int = ImportService._parse_optional_int
-        fide_id = pick(row, "fide_id", "fide", "id_fide", "fideid")
+        # "fide_no"/"id_no"/"rtg_nat"/"rtg_int"/"clubname"/"birthday" sao os
+        # cabecalhos do formato Swiss-Manager usado pela lista da LBX (Liga
+        # Brasileira de Xadrez); os demais cobrem CSV/Excel proprios e a FIDE.
+        fide_id = pick(row, "fide_id", "fide", "id_fide", "fideid", "fide_no")
         cbx_id = pick(row, "cbx_id", "cbx", "id_cbx", "cbxid")
-        external_id = fide_id if source == "FIDE" else cbx_id
+        lbx_id = pick(row, "lbx_id", "lbx", "id_lbx", "id_no", "idno")
+
+        if source == "FIDE":
+            external_id = fide_id
+        elif source == "LBX":
+            lbx_id = lbx_id or pick(row, "id", "codigo", "code")
+            external_id = lbx_id
+            # A lista Swiss-Manager da LBX usa Fide_No para transportar o ID LBX.
+            # Ele nao e um FIDE ID e nao pode contaminar exportacoes TRF.
+            fide_id = ""
+        else:  # CBX
+            external_id = cbx_id
         external_id = external_id or pick(row, "id", "codigo", "code")
 
         surname = pick(row, "surname", "sobrenome", "last_name")
@@ -399,19 +582,27 @@ class OfficialRatingService:
 
         standard_rating = parse_optional_int(pick(row, "standard_rating", "standard", "rating_standard", "std"))
         national_rating = parse_optional_int(
-            pick(row, "national_rating", "rating_nacional", "elo_nacional", "cbx_rating")
+            pick(row, "national_rating", "rating_nacional", "elo_nacional", "cbx_rating", "rtg_nat")
         )
         international_rating = parse_optional_int(
-            pick(row, "international_rating", "rating_internacional", "elo_fide", "fide_rating")
+            pick(row, "international_rating", "rating_internacional", "elo_fide", "fide_rating", "rtg_int")
         )
         generic_rating = parse_optional_int(pick(row, "rating", "elo", "rtg"))
         if source == "FIDE":
             international_rating = international_rating or standard_rating or generic_rating
             standard_rating = standard_rating or international_rating
-        else:
+        elif source == "LBX":
+            national_rating = national_rating or generic_rating
+            # Sem FIDE real, o Rtg_Int da lista LBX apenas espelha o Rtg_Nat — nao
+            # e um ELO internacional, entao nao o propagamos como rating FIDE.
+            if not fide_id:
+                international_rating = 0
+        else:  # CBX
             national_rating = national_rating or generic_rating
 
         return {
+            # external_id ja carrega o ID_No da LBX; a busca por lbx_id usa
+            # (source='LBX' AND external_id), entao nao ha coluna lbx_id aqui.
             "external_id": external_id,
             "fide_id": fide_id,
             "cbx_id": cbx_id,
@@ -421,8 +612,8 @@ class OfficialRatingService:
             "title": pick(row, "title", "titulo"),
             "sex": pick(row, "sex", "sexo"),
             "federation": pick(row, "federation", "fed", "federacao", "pais"),
-            "club": pick(row, "club", "clube", "cidade"),
-            "birth_date": pick(row, "birth_date", "nascimento", "data_nascimento", "data_nac", "b-day", "b-year", "ano", "ano_nasc"),
+            "club": pick(row, "club", "clube", "cidade", "clubname"),
+            "birth_date": pick(row, "birth_date", "nascimento", "data_nascimento", "data_nac", "b-day", "b-year", "ano", "ano_nasc", "birthday"),
             "national_rating": national_rating,
             "international_rating": international_rating,
             "standard_rating": standard_rating,
@@ -712,3 +903,99 @@ class InternalRatingService:
         weight = min(0.40, max(0.08, games * 0.08))
         next_rating = current_rating + (performance - current_rating) * weight
         return max(0, int(round(next_rating)))
+
+
+class FideRatingService:
+    """Relatorio de variacao de rating FIDE (Fase B / spec E3).
+
+    Estimativa de apoio ao arbitro (Ro, K, We, ΔElo, Rc, Rp). A homologacao
+    oficial continua sendo da federacao — este relatorio nao substitui o
+    processamento da lista pela FIDE/CBX.
+    """
+
+    RATING_TYPES = {"fide": "FIDE", "cbx": "CBX"}
+
+    def __init__(self, db: Database) -> None:
+        self.db = db
+
+    def compute_report(self, tournament_id: int, rating_type: str = "fide") -> dict[str, Any]:
+        tournament = self.db.get_tournament(tournament_id)
+        if not tournament:
+            raise AppError("Selecione um torneio valido.")
+        if rating_type not in self.RATING_TYPES:
+            raise AppError("Tipo de rating invalido para o relatorio FIDE.")
+        players = self.db.list_players(tournament_id, active_only=False)
+        closed_pairings = self.db.get_pairings_for_tournament(tournament_id, closed_only=True)
+        rows = build_fide_report_rows(
+            players,
+            closed_pairings,
+            rating_type,
+            tournament_year=self._tournament_year(tournament),
+        )
+        return {
+            "tournament": tournament,
+            "rating_type": rating_type,
+            "rows": rows,
+            "summary": self._summary(rows),
+        }
+
+    def save_report(self, tournament_id: int, rating_type: str = "fide") -> dict[str, Any]:
+        report = self.compute_report(tournament_id, rating_type)
+        self.db.save_fide_rating_report(tournament_id, rating_type, report["rows"])
+        return report
+
+    def get_saved_report(self, tournament_id: int, rating_type: str = "fide") -> list[dict[str, Any]]:
+        return self.db.get_fide_rating_report(tournament_id, rating_type)
+
+    @staticmethod
+    def _tournament_year(tournament: Mapping[str, Any]) -> int:
+        raw = str(tournament.get("start_date") or "").strip()
+        if len(raw) >= 4 and raw[:4].isdigit():
+            return int(raw[:4])
+        return date.today().year
+
+    @staticmethod
+    def _summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
+        rated = [row for row in rows if row.get("ro")]
+        deltas = [float(row["delta"]) for row in rated if row.get("delta") is not None]
+        return {
+            "players": len(rows),
+            "rated_players": len(rated),
+            "unrated_players": len(rows) - len(rated),
+            "total_delta": round(sum(deltas), 2),
+            "best_gain": round(max(deltas), 2) if deltas else 0.0,
+            "worst_loss": round(min(deltas), 2) if deltas else 0.0,
+        }
+
+
+class NormAssistantService:
+    """Assistente de normas/títulos FIDE (Fase E / spec E5).
+
+    Estimativa de apoio ao árbitro: indica se um jogador atingiu indicadores
+    compatíveis com uma norma. NÃO concede norma nem título — isso é exclusivo da
+    FIDE e segue o regulamento completo.
+    """
+
+    def __init__(self, db: Database) -> None:
+        self.db = db
+
+    def evaluate_tournament(self, tournament_id: int, rating_type: str = "fide") -> dict[str, Any]:
+        tournament = self.db.get_tournament(tournament_id)
+        if not tournament:
+            raise AppError("Selecione um torneio valido.")
+        if tournament.get("competition_type") == "team":
+            raise AppError("Normas FIDE disponiveis apenas para torneios individuais.")
+        players = self.db.list_players(tournament_id, active_only=False)
+        closed_pairings = self.db.get_pairings_for_tournament(tournament_id, closed_only=True)
+        return {
+            "tournament": tournament,
+            "rating_type": rating_type,
+            "players": build_norm_report(players, closed_pairings, rating_type),
+        }
+
+    def evaluate(self, tournament_id: int, player_id: int, rating_type: str = "fide") -> dict[str, Any] | None:
+        report = self.evaluate_tournament(tournament_id, rating_type)
+        return next(
+            (item for item in report["players"] if int(item["player_id"]) == int(player_id)),
+            None,
+        )

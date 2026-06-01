@@ -3,6 +3,10 @@
 Documento derivado de `sistema_arbitragem_xadrez_v2_revisado.md`, adaptado ao
 estado atual do Albericus.
 
+Para o backlog operacional detalhado do painel, documentos impressos,
+classificacao cruzada e proximas sprints, usar `ESPEC_PAINEL_ARBITRO.md` como
+fonte executiva. Este arquivo permanece como roadmap macro da arbitragem.
+
 ## Estado atual resumido
 
 Ja existe no Albericus:
@@ -20,9 +24,11 @@ Ja existe no Albericus:
 - Site HTML estatico do torneio.
 - Empacotamento Windows por PyInstaller.
 
-Ainda falta transformar o Albericus em um sistema de arbitragem auditavel com
-explicacao completa de pareamentos, resultados submetidos por QR, snapshots,
-portal live e workflow mais forte para equipes.
+As fases 0 a 9 ja possuem implementacao substancial: auditoria, snapshots,
+previa, painel do arbitro, QR local, portal live, equipes, exportadores
+versionados, sincronizacao e eventos de relogio. O backlog prioritario atual
+esta concentrado em documentos operacionais impressos, tabela cruzada e
+refinos de agilidade do painel para torneios com mais de 100 jogadores.
 
 ## Principios de implementacao
 
@@ -243,6 +249,8 @@ Criterios de aceite:
 
 ## Fase 10 - Operacionalizacao e manual de arbitragem
 
+Status: concluido em 2026-05-31.
+
 Objetivo: consolidar o que foi implementado em um fluxo operacional claro para
 uso em torneio real.
 
@@ -257,10 +265,46 @@ Entregas:
 
 Criterios de aceite:
 
-- O operador consegue preparar um torneio usando apenas o README/manual.
-- O manual deixa claro quais recursos sao autoritativos e quais sao apenas
+- [x] O operador consegue preparar um torneio usando apenas o README/manual.
+- [x] O manual deixa claro quais recursos sao autoritativos e quais sao apenas
   auxiliares.
-- A Fase 10 nao altera regras de emparceiramento nem resultados existentes.
+- [x] A Fase 10 nao altera regras de emparceiramento nem resultados existentes.
+
+Implementacao:
+
+- guia de campo em `docs/Manual_Operacional_Arbitragem.md`;
+- PDF imprimivel em `docs/Manual_Operacional_Arbitragem.pdf`;
+- checklist rapido para ate 12 rodadas;
+- tabela para registro manual de incidentes;
+- gerador reproduzivel em `scripts/generate_referee_operations_manual.py`;
+- simulador reproduzivel em `scripts/run_referee_operational_pilot.py`;
+- baseline automatizada em `docs/PILOTO_OPERACIONAL_BASELINE.md` para 121 e
+  801 jogadores;
+- README aponta para o artefato operacional.
+
+Piloto automatizado inicial:
+
+- todos os limiares locais passaram;
+- com 801 jogadores, o painel carregou em 23,0215 ms;
+- lancamento de resultado com recarga do painel ficou em 49,4234 ms medios;
+- tokens QR de documentos passaram a ser persistidos em lote transacional;
+- mural PDF com QR para 400 mesas caiu de 20,3793 s para 3,7016 s;
+- backup final de 4.890.624 bytes foi criado em 19,6087 ms;
+- restauracao em segunda instalacao temporaria validou 1 rodada e 401 mesas em
+  699,9135 ms;
+- continuidade offline foi validada com sockets e acessos HTTP bloqueados:
+  painel, lancamentos, fechamento, classificacao, exportacoes e backup locais
+  completaram em 860,8958 ms;
+- a fila QR recebeu e aprovou 20 envios concorrentes em 2.846,3054 ms;
+- uma inscricao de ultima hora apos rodada fechada atualizou lista,
+  classificacao e previa seguinte em 117,0289 ms, preservando o historico;
+- a conferencia oficial antes da rodada 1 importou 700 registros em
+  146,0958 ms, comparou sem persistir em 882,3479 ms e confirmou seletivamente
+  700 alteracoes em 4.325,6951 ms;
+- a busca direta do painel localizou e lancou a mesa 400, fora das primeiras
+  50 mesas inline, em 73,5168 ms;
+- o piloto presencial continua necessario para avaliar rede, impressora,
+  legibilidade, cliques do operador e restauracao no computador fisico reserva.
 
 ## Backlog priorizado
 
