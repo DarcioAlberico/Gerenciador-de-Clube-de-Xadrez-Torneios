@@ -363,7 +363,7 @@ LEGACY_LOGS_DIR = BASE_DIR / "logs"
 
 
 class Database:
-    SCHEMA_VERSION = 39
+    SCHEMA_VERSION = 40
 
     def __init__(
         self,
@@ -1010,6 +1010,7 @@ class Database:
                     player_status TEXT NOT NULL DEFAULT 'active',
                     starting_points REAL NOT NULL DEFAULT 0.0,
                     k_factor INTEGER,
+                    scheveningen_group TEXT NOT NULL DEFAULT '',
                     active INTEGER NOT NULL DEFAULT 1,
                     created_at TEXT NOT NULL,
                     FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
@@ -1728,6 +1729,7 @@ class Database:
                 "rating_category",
                 "prize_tags",
                 "k_factor",
+                "scheveningen_group",
             }
             required_club_columns = {"kind", "active"}
             required_member_columns = {
@@ -6980,6 +6982,16 @@ class Database:
             connection.execute(
                 "UPDATE tournament_settings SET pairing_method = ?, updated_at = ? WHERE tournament_id = ?",
                 (str(pairing_method), self.now(), tournament_id),
+            )
+
+    def set_player_scheveningen_group(self, player_id: int, group: str) -> None:
+        value = str(group or "").strip().upper()
+        if value not in ("", "A", "B"):
+            value = ""
+        with self.connect() as connection:
+            connection.execute(
+                "UPDATE players SET scheveningen_group = ? WHERE id = ?",
+                (value, player_id),
             )
 
     def list_round_schedule(self, tournament_id: int) -> list[dict[str, Any]]:

@@ -65,11 +65,12 @@ classificação é **ordenada e explicada**, sem tocar no pareamento.
   critério novo, bye/WO no Buchholz, flip de ordem entre sequências,
   persistência/threading ponta a ponta e migração v35. Gate completo
   (compile + ruff + mypy + pytest) verde.
-- **Escopo de equipes:** o cálculo e a persistência (`team_tiebreak_sequence`)
-  já aceitam sequência configurável; a UI de equipes continua usando os menus
-  *critério principal/secundário* (que também alimentam o TRF25 reg.192 e o
-  fallback de ordenação). Um editor ordenável dedicado a equipes fica para um
-  incremento futuro — o comportamento atual de equipes não muda.
+- **Equipes:** o cálculo e a persistência (`team_tiebreak_sequence`) aceitam
+  sequência configurável e agora há **editor ordenável dedicado a equipes** na
+  seção *Desempates por equipes* de `Config. torneio` (reusa o
+  `TiebreakSequenceEditor` com `TEAM_TIEBREAKS`). Os menus *critério
+  principal/secundário* permanecem (alimentam o TRF25 reg.192 e o fallback de
+  ordenação quando a sequência está vazia).
 
 Detalhamento original abaixo.
 
@@ -341,9 +342,11 @@ Detalhamento original abaixo.
 = metades por ranking inicial; exige número par; N rodadas com todos os
 cruzamentos A×B e cores alternadas), integrado em `generate_next_round` quando
 `pairing_method == "scheveningen"`, opção adicionada a `PAIRING_METHODS`
-(selecionável em `Config. torneio`). Teste cobre que todos os cruzamentos A×B
-ocorrem e a rejeição de campo ímpar. **Escopo:** grupos por ranking (não há
-atribuição manual de grupos nesta fase).
+(selecionável em `Config. torneio`). **Grupos manuais** (campo
+`players.scheveningen_group` A/B, migração v40, atribuível na tela de jogadores)
+têm prioridade; sem atribuição, caem nas metades por ranking. Testes cobrem
+todos os cruzamentos A×B, grupos manuais (que não são as metades), exigência de
+grupos do mesmo tamanho e rejeição de campo ímpar.
 
 Detalhamento original abaixo.
 
@@ -364,11 +367,13 @@ Detalhamento original abaixo.
 formato FIDE/Krause TRF16 (cabeçalho + linhas 001 por colunas fixas, o mesmo
 layout do `TRF16Exporter` — garante round-trip e lê TRFs do Swiss-Manager).
 `ImportService.import_trf` cria um **novo torneio + jogadores** (nome, rating,
-federação, FIDE ID, nascimento, título, sexo). Botão `Importar TRF
-(Swiss-Manager)` na tela de torneios. Testes: round-trip export→import e
-rejeição de arquivo sem jogadores. **Escopo:** as células de rodada são
-extraídas pelo parser, mas a **reconstrução de rodadas/resultados** fica como
-evolução futura (importa-se a lista de inscritos e o cabeçalho).
+federação, FIDE ID, nascimento, título, sexo) **e reconstrói as rodadas jogadas**
+(`build_trf_rounds`: mapeia start_rank→player_id, deduplica jogos, decodifica os
+códigos TRF 1/0/=/+/-/U/H/Z, cria as rodadas fechadas com `create_round_with_pairings`
++ `close_round`). Botão `Importar TRF (Swiss-Manager)` na tela de torneios.
+Testes: round-trip de jogadores+cabeçalho, reconstrução de rodada com
+classificação idêntica à original, e rejeição de arquivo sem jogadores. O
+torneio importado fica pronto para classificação/tabela cruzada/exportações.
 
 Detalhamento original abaixo.
 

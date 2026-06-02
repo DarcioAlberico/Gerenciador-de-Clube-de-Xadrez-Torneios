@@ -21,7 +21,7 @@ from src.services.fide_norms import build_norm_report
 from src.services.fide_rating import build_fide_report_rows
 from src.services.list_layouts import STANDINGS_COLUMNS, resolve_columns
 from src.services.prizes import PRIZE_KINDS, PRIZE_POLICIES, allocate_prizes
-from src.services.trf_import import parse_trf
+from src.services.trf_import import build_trf_rounds, parse_trf
 
 if TYPE_CHECKING:
     from src.services.club_service import ClubService
@@ -132,8 +132,9 @@ class ImportService:
             settings["federation"] = parsed["federation"]
             self.db.save_tournament_settings(tournament_id, settings)
 
+        rank_to_id: dict[int, int] = {}
         for player in parsed["players"]:
-            self.db.create_player(
+            player_id = self.db.create_player(
                 tournament_id=tournament_id,
                 name=player["name"],
                 surname=player["surname"],
@@ -146,14 +147,31 @@ class ImportService:
                 fide_id=player["fide_id"],
                 birth_date=player["birth_date"],
             )
+            rank_to_id[int(player["start_rank"])] = player_id
+
+        rounds = build_trf_rounds(parsed["players"], rank_to_id)
+        for round_number, pairings in rounds:
+            round_id = self.db.create_round_with_pairings(
+                tournament_id,
+                round_number,
+                pairings,
+                pairing_engine_version="trf-import",
+                ruleset_version="trf-import",
+            )
+            self.db.close_round(round_id)
 
         logger.info(
-            "TRF importado de %s: torneio %s com %s jogadores", path, tournament_id, len(parsed["players"])
+            "TRF importado de %s: torneio %s com %s jogadores e %s rodadas",
+            path,
+            tournament_id,
+            len(parsed["players"]),
+            len(rounds),
         )
         return {
             "tournament_id": tournament_id,
             "name": name,
             "players_imported": len(parsed["players"]),
+            "rounds_imported": len(rounds),
             "rounds_count": rounds_count,
         }
 
