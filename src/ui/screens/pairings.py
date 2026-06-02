@@ -178,6 +178,7 @@ class PairingPagesMixin:
                 ("Publicar live", self._publish_live_portal_from_panel),
                 ("Pacote da rodada (PDF)", self._export_round_package_from_panel),
                 ("Boletim da rodada (PDF)", self._export_round_bulletin_from_panel),
+                ("Podio (PDF)", self._export_podium_from_panel),
                 ("Ata final (PDF)", self._export_tournament_minutes_from_panel),
             ]),
         ]
@@ -429,6 +430,29 @@ class PairingPagesMixin:
         except Exception as exc:
             self._show_error(exc)
 
+    def _export_podium_from_panel(self) -> None:
+        try:
+            if not self.current_tournament_id:
+                raise AppError("Selecione um torneio.")
+            tournament = self.db.get_tournament(self.current_tournament_id)
+            initial = self._safe_filename(tournament["name"] if tournament else "torneio", "torneio") + "_podio.pdf"
+            file_path = filedialog.asksaveasfilename(
+                title="Poster do podio",
+                initialdir=str(self._default_export_dir()),
+                initialfile=initial,
+                defaultextension=".pdf",
+                filetypes=[("PDF", "*.pdf")],
+            )
+            if not file_path:
+                return
+            self._run_background(
+                lambda: self.export_service.export_podium(int(self.current_tournament_id), file_path),
+                lambda _result: self._show_info(f"Poster do podio gerado:\n{file_path}"),
+                "Gerando poster do podio...",
+            )
+        except Exception as exc:
+            self._show_error(exc)
+
     def _open_closing_checklist_dialog(self) -> None:
         try:
             if not self.current_tournament_id:
@@ -444,6 +468,7 @@ class PairingPagesMixin:
             "qr_pending": self.show_arbitration_issues,
             "ready_to_close": self._close_current_round_from_panel,
             "initial_call": self.show_pairings,
+            "lineups": self.show_teams,
         }
         dialog = ctk.CTkToplevel(self)
         dialog.title("Checklist de fechamento da rodada")

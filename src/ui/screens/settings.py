@@ -720,8 +720,10 @@ class SettingsPagesMixin:
             "Normas FIDE",
             "Formulario de arbitro (IA/FA)",
             "Ata final",
+            "Podio (poster)",
             "Desempates",
             "Rodada especifica",
+            "Boletim da rodada",
             "Todas as rodadas",
             "Jogadores",
             "Site HTML",
@@ -767,7 +769,7 @@ class SettingsPagesMixin:
         )
 
         def update_round_state(_value: str | None = None) -> None:
-            if report_option.get() == "Rodada especifica" and export_round_map:
+            if report_option.get() in ("Rodada especifica", "Boletim da rodada") and export_round_map:
                 round_option.configure(state="normal")
             else:
                 round_option.configure(state="disabled")
@@ -780,7 +782,7 @@ class SettingsPagesMixin:
             format_option.configure(values=formats)
             if format_option.get() not in formats:
                 format_option.set(formats[0])
-            if report_option.get() in ("Site HTML", "JSON publico", "Access (banco)", "Chess-Results (TRF16)", "TRF FIDE", "PGN (Partidas)"):
+            if report_option.get() in ("Site HTML", "JSON publico", "Access (banco)", "Podio (poster)", "Chess-Results (TRF16)", "TRF FIDE", "PGN (Partidas)"):
                 format_option.configure(state="disabled")
             else:
                 format_option.configure(state="normal")
@@ -804,8 +806,10 @@ class SettingsPagesMixin:
                 "Normas FIDE": f"{safe_name}_normas_fide",
                 "Formulario de arbitro (IA/FA)": f"{safe_name}_arbitro_ia_fa",
                 "Ata final": f"{safe_name}_ata_final",
+                "Podio (poster)": f"{safe_name}_podio",
                 "Desempates": f"{safe_name}_desempates",
                 "Rodada especifica": f"{safe_name}_rodada",
+                "Boletim da rodada": f"{safe_name}_boletim",
                 "Todas as rodadas": f"{safe_name}_rodadas",
                 "Jogadores": f"{safe_name}_jogadores",
                 "Equipes": f"{safe_name}_equipes",
@@ -816,9 +820,10 @@ class SettingsPagesMixin:
                 "Pendencias TRF": f"{safe_name}_pendencias_trf",
                 "PGN (Partidas)": f"{safe_name}_partidas",
             }
-            if report == "Rodada especifica" and round_option.get() in export_round_map:
+            if report in ("Rodada especifica", "Boletim da rodada") and round_option.get() in export_round_map:
                 round_number = round_option.get().split(" ", maxsplit=2)[1]
-                names[report] = f"{safe_name}_rodada_{round_number}"
+                suffix = "boletim" if report == "Boletim da rodada" else "rodada"
+                names[report] = f"{safe_name}_{suffix}_{round_number}"
             return f"{names[report]}.{extension}"
 
         trf_warning_label = ctk.CTkLabel(
@@ -857,6 +862,8 @@ class SettingsPagesMixin:
                     extension = "json"
                 elif report == "PGN (Partidas)":
                     extension = "pgn"
+                elif report == "Podio (poster)":
+                    extension = "pdf"
                 tournament_id = int(self.current_tournament_id)
                 if report == "Site HTML":
                     directory = filedialog.askdirectory(
@@ -945,12 +952,18 @@ class SettingsPagesMixin:
                         self.export_service.export_arbiter_norm_report(tournament_id, path)
                     elif report == "Ata final":
                         self.export_service.export_tournament_minutes(tournament_id, path)
+                    elif report == "Podio (poster)":
+                        self.export_service.export_podium(tournament_id, path)
                     elif report == "Desempates":
                         self.export_service.export_tiebreak_report(tournament_id, path)
                     elif report == "Rodada especifica":
                         if not round_id:
                             raise AppError("Selecione uma rodada para exportar.")
                         self.export_service.export_pairings(round_id, path)
+                    elif report == "Boletim da rodada":
+                        if not round_id:
+                            raise AppError("Selecione uma rodada para o boletim.")
+                        self.export_service.export_round_bulletin(round_id, path)
                     elif report == "Todas as rodadas":
                         self.export_service.export_all_rounds(tournament_id, path)
                     elif report == "Jogadores":

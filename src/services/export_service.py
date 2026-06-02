@@ -2593,6 +2593,14 @@ class ExportService:
         """Boletim/press-release da rodada: resultados + classificacao + destaques."""
         self._write_multi_report(Path(file_path), self._round_bulletin_sections(round_id))
 
+    def export_podium(self, tournament_id: int, file_path: str | Path) -> None:
+        """Poster/diploma do podio (PDF A4): top 3 + campeoes por categoria."""
+        path = Path(file_path)
+        if path.suffix.lower() != ".pdf":
+            raise AppError("Poster do podio deve ser exportado em PDF.")
+        self._write_podium_poster_pdf(path, self._podium_data(tournament_id))
+        logger.info("Poster do podio gerado: %s", path)
+
     def export_tiebreak_report(self, tournament_id: int, file_path: str | Path) -> None:
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
@@ -4839,6 +4847,97 @@ footer {
         if best_upset:
             rows.append(["Maior zebra", f"{best_upset[0]} venceu {best_upset[1]} (+{best_upset[2]} de rating)"])
         return ("Destaques", ["Item", "Valor"], rows)
+
+    def _podium_data(self, tournament_id: int) -> dict[str, Any]:
+        """Dados do podio: top 3 (jogadores ou equipes) + campeoes por categoria."""
+        tournament = self.db.get_tournament(tournament_id)
+        if not tournament:
+            raise AppError("Selecione um torneio valido.")
+        is_team = tournament.get("competition_type") == "team"
+        top: list[dict[str, Any]] = []
+        categories: list[dict[str, Any]] = []
+        if is_team:
+            for index, item in enumerate(self.pairing_service.team_standings(tournament_id)[:3], start=1):
+                top.append(
+                    {
+                        "rank": index,
+                        "name": str(item.get("name") or item.get("team_name") or ""),
+                        "points": item.get("match_points", ""),
+                        "detail": f"GP {item.get('game_points', '')}",
+                    }
+                )
+        else:
+            standings = self.pairing_service.standings(tournament_id)
+            for index, item in enumerate(standings[:3], start=1):
+                top.append(
+                    {
+                        "rank": index,
+                        "name": str(item.get("name") or ""),
+                        "points": item.get("points", ""),
+                        "detail": f"perf {item.get('performance', '')}",
+                    }
+                )
+            champions: dict[str, str] = {}
+            for item in standings:
+                category = str(item.get("category") or "").strip()
+                if category and category not in champions:
+                    champions[category] = str(item.get("name") or "")
+            categories = [{"category": cat, "name": name} for cat, name in sorted(champions.items())]
+        return {"tournament": tournament, "top": top, "categories": categories, "is_team": is_team}
+
+    def _write_podium_poster_pdf(self, path: Path, data: dict[str, Any]) -> None:
+        try:
+            from reportlab.lib.pagesizes import A4
+            from reportlab.pdfgen import canvas
+        except ImportError as exc:
+            raise AppError("Instale reportlab para gerar o poster do podio (pip install reportlab).") from exc
+
+        tournament = data["tournament"]
+        width, height = A4
+        center = width / 2
+        document = canvas.Canvas(str(path), pagesize=A4)
+        document.setLineWidth(2)
+        document.rect(30, 30, width - 60, height - 60)
+
+        document.setFont("Helvetica-Bold", 24)
+        document.drawCentredString(center, height - 90, str(tournament.get("name") or "Torneio"))
+        document.setFont("Helvetica", 14)
+        document.drawCentredString(center, height - 116, "Premiacao - Podio")
+        subtitle = " - ".join(
+            part for part in [str(tournament.get("location") or ""), str(tournament.get("start_date") or "")] if part
+        )
+        if subtitle:
+            document.setFont("Helvetica", 11)
+            document.drawCentredString(center, height - 136, subtitle)
+
+        medals = {1: "1o lugar", 2: "2o lugar", 3: "3o lugar"}
+        y = height - 230
+        for entry in data["top"]:
+            rank = int(entry["rank"])
+            document.setFont("Helvetica-Bold", 22 if rank == 1 else 16)
+            document.drawCentredString(center, y, f"{medals.get(rank, f'{rank}o')}: {entry['name']}")
+            document.setFont("Helvetica", 12)
+            document.drawCentredString(center, y - 20, f"{entry['points']} pts  ({entry['detail']})")
+            y -= 70 if rank == 1 else 60
+        if not data["top"]:
+            document.setFont("Helvetica", 12)
+            document.drawCentredString(center, y, "Sem classificacao disponivel.")
+
+        if data["categories"]:
+            y -= 20
+            document.setFont("Helvetica-Bold", 14)
+            document.drawCentredString(center, y, "Campeoes por categoria")
+            y -= 24
+            document.setFont("Helvetica", 12)
+            for champion in data["categories"]:
+                if y < 80:
+                    break
+                document.drawCentredString(center, y, f"{champion['category']}: {champion['name']}")
+                y -= 20
+
+        document.setFont("Helvetica-Oblique", 9)
+        document.drawCentredString(center, 50, "Gerado pelo Albericus")
+        document.save()
 
     def _tournament_minutes_sections(
         self, tournament_id: int

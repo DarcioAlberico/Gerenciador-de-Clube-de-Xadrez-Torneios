@@ -199,6 +199,27 @@ Implementacao:
   (os tabuleiros ficam fora da tabela `pairings`), gerando cartoes corretos;
 - 6 testes novos; gate completo verde (429 passed). Sem mudanca de schema.
 
+### 4.5 Ideias net-new 2026-06-02 (terceira leva)
+
+| ID | Entrega | Status |
+|---|---|---|
+| DOC-10 | **Poster/diploma do podio** (`ExportService.export_podium`): A4 com top 3 (jogadores ou equipes) + campeoes por categoria | Concluido |
+| DOC-11 | **Boletim da rodada pelo hub de Relatorios**, escolhendo a rodada (reusa o seletor de rodada existente) | Concluido |
+| UX-13 | **Checklist de fechamento especifico para equipes**: item de escalacoes/ordem de tabuleiro via `validate_roster_policy` | Concluido |
+
+Implementacao:
+
+- `_podium_data` reune top 3 (`standings`/`team_standings`) + campeoes por
+  categoria; `_write_podium_poster_pdf` desenha o poster A4 com `reportlab`;
+  opcao `Podio (poster)` no hub (PDF) e botao `Podio (PDF)` no painel;
+- o hub ganhou `Boletim da rodada` ligado ao seletor de rodada (alem do botao do
+  painel, que usa a rodada atual);
+- `closing_checklist` detecta equipes e acrescenta o item de escalacoes
+  (`TeamService.validate_roster_policy`, import lazy para evitar ciclo); o
+  dialogo do painel mapeia a acao `lineups` para a tela de Equipes;
+- 3 testes novos (dados do podio, geracao do PDF, checklist de equipes com
+  `lineups`); gate completo verde (432 passed). Sem mudanca de schema.
+
 ## 5. Requisitos Pendentes
 
 ### EPIC A - Documentos operacionais impressos
@@ -700,7 +721,7 @@ Uma entrega so esta pronta quando:
 
 Roadmap atual concluido ate `FED-02`, mais os aprofundamentos de 2026-06-02
 (`UX-10`, `UX-11`, `DOC-05`, `DOC-06` — secao 4.3; `DOC-07`, `DOC-08`, `UX-12`,
-`DOC-09` — secao 4.4).
+`DOC-09` — secao 4.4; `DOC-10`, `DOC-11`, `UX-13` — secao 4.5).
 
 Motivo:
 

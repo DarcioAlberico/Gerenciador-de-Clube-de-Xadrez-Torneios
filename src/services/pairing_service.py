@@ -261,7 +261,7 @@ class PairingService:
             ]
         total = int(metrics.get("total_results") or 0)
         resolved = int(metrics.get("resolved_results") or 0)
-        return [
+        items: list[dict[str, Any]] = [
             {
                 "label": f"Resultados lancados ({resolved}/{total})",
                 "ok": int(metrics.get("pending_results") or 0) == 0,
@@ -277,12 +277,29 @@ class PairingService:
                 "ok": int(metrics.get("blocking_issues") or 0) == 0,
                 "action": "blocking_issues",
             },
+        ]
+        # Especifico de equipes: escalacoes/ordem de tabuleiro sem avisos de policy.
+        if metrics.get("competition_type") == "team":
+            from src.services.tournament_service import TeamService
+
+            rounds = sorted(self.db.list_rounds(tournament_id), key=lambda item: int(item["number"]))
+            latest_round_id = int(rounds[-1]["id"]) if rounds else None
+            roster_issues = TeamService(self.db).validate_roster_policy(tournament_id, round_id=latest_round_id)
+            items.append(
+                {
+                    "label": f"Escalacoes sem pendencias ({len(roster_issues)})",
+                    "ok": not roster_issues,
+                    "action": "lineups",
+                }
+            )
+        items.append(
             {
                 "label": f"Rodada {metrics['latest_round_number']} pronta para fechar",
                 "ok": bool(metrics.get("ready_to_close")),
                 "action": "ready_to_close",
-            },
-        ]
+            }
+        )
+        return items
 
     def _round_clock_metrics(self, latest_round: dict[str, Any] | None) -> dict[str, Any]:
         if not latest_round:
