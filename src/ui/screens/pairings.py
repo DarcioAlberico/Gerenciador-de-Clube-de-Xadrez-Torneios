@@ -16,6 +16,7 @@ class PairingPagesMixin:
         )
         metrics = dashboard["metrics"]
         alerts = dashboard["alerts"]
+        alerts_detailed = dashboard.get("alerts_detailed", [])
         pending_items = dashboard["pending_items"]
 
         self._clear_content()
@@ -51,6 +52,19 @@ class PairingPagesMixin:
         for index, (title, value, subtitle, command) in enumerate(card_data):
             card = self._kpi_card(cards, title, value, subtitle=subtitle, command=command)
             card.grid(row=0, column=index, padx=(0 if index == 0 else 8, 0), sticky="ew")
+
+        progress_total = int(metrics.get("total_results") or 0)
+        if progress_total:
+            resolved_results = int(metrics.get("resolved_results") or 0)
+            progress_percent = int(metrics.get("round_progress_percent") or 0)
+            progress_bar = ctk.CTkProgressBar(cards)
+            progress_bar.set(max(0.0, min(1.0, progress_percent / 100)))
+            progress_bar.grid(row=1, column=0, columnspan=5, padx=(0, 8), pady=(12, 0), sticky="ew")
+            ctk.CTkLabel(
+                cards,
+                text=f"Rodada: {resolved_results}/{progress_total} mesas resolvidas ({progress_percent}%)",
+                text_color=THEME_TEXT_SUB,
+            ).grid(row=1, column=5, padx=(8, 0), pady=(12, 0), sticky="e")
 
         main = ctk.CTkFrame(body, fg_color="transparent")
         main.grid(row=1, column=0, sticky="nsew")
@@ -91,26 +105,44 @@ class PairingPagesMixin:
             fg_color=THEME_SUCCESS,
             hover_color=THEME_SUCCESS_HOVER,
         ).grid(row=1, column=1, rowspan=max(1, len(alerts)), padx=(8, 14), pady=(0, 12), sticky="ne")
-        if alerts:
-            for row, alert in enumerate(alerts, start=1):
-                text_color = THEME_TEXT_MAIN
-                if "bloqueante" in alert or "pendente" in alert or "aguardando aprovacao" in alert:
-                    text_color = THEME_DANGER
-                elif "pronta para fechamento" in alert:
-                    text_color = THEME_SUCCESS
-                ctk.CTkLabel(
-                    alerts_panel,
-                    text=f"- {alert}",
-                    anchor="w",
-                    justify="left",
-                    text_color=text_color,
-                ).grid(
-                    row=row,
-                    column=0,
-                    padx=14,
-                    pady=(0, 6),
-                    sticky="ew",
-                )
+        alert_commands = {
+            "blocking_issues": self.show_arbitration_issues,
+            "pending_results": self.show_pairings,
+            "ready_to_close": self._close_current_round_from_panel,
+            "initial_call": self.show_pairings,
+            "absent_players": self.show_players,
+            "corrections": self.show_audit_logs,
+            "qr_pending": self.show_arbitration_issues,
+            "preview_next": self._preview_next_round,
+        }
+        alert_colors = {
+            "danger": THEME_DANGER,
+            "warning": THEME_DANGER,
+            "success": THEME_SUCCESS,
+            "info": THEME_TEXT_MAIN,
+        }
+        if alerts_detailed:
+            for row, alert in enumerate(alerts_detailed, start=1):
+                color = alert_colors.get(str(alert.get("severity") or "info"), THEME_TEXT_MAIN)
+                command = alert_commands.get(str(alert.get("action") or ""))
+                if command is not None:
+                    ctk.CTkButton(
+                        alerts_panel,
+                        text=f"- {alert['text']}   (resolver)",
+                        anchor="w",
+                        fg_color="transparent",
+                        text_color=color,
+                        hover_color=THEME_PANEL_BG,
+                        command=command,
+                    ).grid(row=row, column=0, padx=10, pady=(0, 4), sticky="ew")
+                else:
+                    ctk.CTkLabel(
+                        alerts_panel,
+                        text=f"- {alert['text']}",
+                        anchor="w",
+                        justify="left",
+                        text_color=color,
+                    ).grid(row=row, column=0, padx=14, pady=(0, 6), sticky="ew")
         else:
             ctk.CTkLabel(alerts_panel, text="Nenhuma pendencia operacional detectada.").grid(
                 row=1,
@@ -143,6 +175,8 @@ class PairingPagesMixin:
                 ("Validar/exportar", self.show_export),
                 ("Publicar HTML", self._export_site_from_panel),
                 ("Publicar live", self._publish_live_portal_from_panel),
+                ("Pacote da rodada (PDF)", self._export_round_package_from_panel),
+                ("Ata final (PDF)", self._export_tournament_minutes_from_panel),
             ]),
         ]
         action_row = 1
@@ -310,6 +344,58 @@ class PairingPagesMixin:
         except Exception as exc:
             self._show_error(exc)
         return "break"
+
+    def _export_round_package_from_panel(self) -> None:
+        try:
+            if not self.current_tournament_id:
+                raise AppError("Selecione um torneio.")
+            rounds = self.db.list_rounds(self.current_tournament_id)
+            if not rounds:
+                raise AppError("Gere uma rodada antes de montar o pacote.")
+            latest = sorted(rounds, key=lambda item: int(item["number"]))[-1]
+            directory = filedialog.askdirectory(
+                title="Pasta do pacote da rodada",
+                initialdir=str(self._default_export_dir()),
+            )
+            if not directory:
+                return
+
+            def show_result(result: dict[str, Any]) -> None:
+                message = f"{result['count']} documento(s) gerado(s) em:\n{directory}"
+                if result["errors"]:
+                    message += "\n\nAvisos:\n" + "\n".join(result["errors"][:6])
+                self._show_info(message)
+
+            self._run_background(
+                lambda: self.export_service.export_round_package(int(latest["id"]), directory),
+                show_result,
+                "Gerando pacote da rodada...",
+            )
+        except Exception as exc:
+            self._show_error(exc)
+
+    def _export_tournament_minutes_from_panel(self) -> None:
+        try:
+            if not self.current_tournament_id:
+                raise AppError("Selecione um torneio.")
+            tournament = self.db.get_tournament(self.current_tournament_id)
+            initial = self._safe_filename(tournament["name"] if tournament else "torneio", "torneio") + "_ata_final.pdf"
+            file_path = filedialog.asksaveasfilename(
+                title="Ata final do torneio",
+                initialdir=str(self._default_export_dir()),
+                initialfile=initial,
+                defaultextension=".pdf",
+                filetypes=[("PDF", "*.pdf"), ("XLSX", "*.xlsx"), ("CSV", "*.csv")],
+            )
+            if not file_path:
+                return
+            self._run_background(
+                lambda: self.export_service.export_tournament_minutes(int(self.current_tournament_id), file_path),
+                lambda _result: self._show_info(f"Ata final gerada:\n{file_path}"),
+                "Gerando ata final...",
+            )
+        except Exception as exc:
+            self._show_error(exc)
 
     def _schedule_arbitration_refresh(self) -> None:
         self._cancel_arbitration_refresh()
