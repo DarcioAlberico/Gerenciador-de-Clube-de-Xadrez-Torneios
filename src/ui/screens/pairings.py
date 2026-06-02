@@ -164,6 +164,7 @@ class PairingPagesMixin:
                 ("Central de pendencias", self.show_arbitration_issues),
                 ("Abrir rodadas", self.show_pairings),
                 ("Pre-visualizar proxima", self._preview_next_round),
+                ("Checklist de fechamento", self._open_closing_checklist_dialog),
                 ("Fechar rodada atual", self._close_current_round_from_panel),
             ]),
             ("Configuracao arbitral", [
@@ -176,6 +177,7 @@ class PairingPagesMixin:
                 ("Publicar HTML", self._export_site_from_panel),
                 ("Publicar live", self._publish_live_portal_from_panel),
                 ("Pacote da rodada (PDF)", self._export_round_package_from_panel),
+                ("Boletim da rodada (PDF)", self._export_round_bulletin_from_panel),
                 ("Ata final (PDF)", self._export_tournament_minutes_from_panel),
             ]),
         ]
@@ -396,6 +398,105 @@ class PairingPagesMixin:
             )
         except Exception as exc:
             self._show_error(exc)
+
+    def _export_round_bulletin_from_panel(self) -> None:
+        try:
+            if not self.current_tournament_id:
+                raise AppError("Selecione um torneio.")
+            rounds = self.db.list_rounds(self.current_tournament_id)
+            if not rounds:
+                raise AppError("Gere uma rodada antes de gerar o boletim.")
+            latest = sorted(rounds, key=lambda item: int(item["number"]))[-1]
+            tournament = self.db.get_tournament(self.current_tournament_id)
+            initial = (
+                self._safe_filename(tournament["name"] if tournament else "torneio", "torneio")
+                + f"_boletim_r{latest['number']}.pdf"
+            )
+            file_path = filedialog.asksaveasfilename(
+                title="Boletim da rodada",
+                initialdir=str(self._default_export_dir()),
+                initialfile=initial,
+                defaultextension=".pdf",
+                filetypes=[("PDF", "*.pdf"), ("XLSX", "*.xlsx"), ("CSV", "*.csv")],
+            )
+            if not file_path:
+                return
+            self._run_background(
+                lambda: self.export_service.export_round_bulletin(int(latest["id"]), file_path),
+                lambda _result: self._show_info(f"Boletim gerado:\n{file_path}"),
+                "Gerando boletim da rodada...",
+            )
+        except Exception as exc:
+            self._show_error(exc)
+
+    def _open_closing_checklist_dialog(self) -> None:
+        try:
+            if not self.current_tournament_id:
+                raise AppError("Selecione um torneio.")
+            items = self.pairing_service.closing_checklist(int(self.current_tournament_id))
+        except Exception as exc:
+            self._show_error(exc)
+            return
+
+        commands = {
+            "blocking_issues": self.show_arbitration_issues,
+            "pending_results": self.show_pairings,
+            "qr_pending": self.show_arbitration_issues,
+            "ready_to_close": self._close_current_round_from_panel,
+            "initial_call": self.show_pairings,
+        }
+        dialog = ctk.CTkToplevel(self)
+        dialog.title("Checklist de fechamento da rodada")
+        dialog.geometry("540x360")
+        dialog.transient(self)
+        dialog.grab_set()
+        dialog.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(dialog, text="Confira antes de fechar a rodada:", anchor="w").grid(
+            row=0, column=0, padx=16, pady=(16, 8), sticky="ew"
+        )
+        all_ok = True
+        for index, item in enumerate(items, start=1):
+            ok = bool(item.get("ok"))
+            all_ok = all_ok and ok
+            row = ctk.CTkFrame(dialog, fg_color="transparent")
+            row.grid(row=index, column=0, padx=16, pady=2, sticky="ew")
+            row.grid_columnconfigure(1, weight=1)
+            ctk.CTkLabel(
+                row,
+                text="OK" if ok else "X",
+                width=28,
+                text_color=THEME_SUCCESS if ok else THEME_DANGER,
+            ).grid(row=0, column=0, padx=(0, 8))
+            ctk.CTkLabel(row, text=item.get("label", ""), anchor="w", justify="left").grid(row=0, column=1, sticky="w")
+            command = commands.get(str(item.get("action") or ""))
+            if not ok and command is not None:
+                ctk.CTkButton(
+                    row,
+                    text="Resolver",
+                    width=90,
+                    command=lambda c=command, d=dialog: (d.destroy(), c()),
+                ).grid(row=0, column=2, padx=(8, 0))
+
+        actions = ctk.CTkFrame(dialog, fg_color="transparent")
+        actions.grid(row=len(items) + 1, column=0, padx=16, pady=(12, 16), sticky="e")
+        ctk.CTkButton(
+            actions,
+            text="Fechar dialogo",
+            fg_color=THEME_NEUTRAL,
+            hover_color=THEME_NEUTRAL_HOVER,
+            command=dialog.destroy,
+        ).pack(side="left", padx=(0, 8))
+        close_round_btn = ctk.CTkButton(
+            actions,
+            text="Fechar rodada",
+            fg_color=THEME_SUCCESS,
+            hover_color=THEME_SUCCESS_HOVER,
+            command=lambda: (dialog.destroy(), self._close_current_round_from_panel()),
+        )
+        close_round_btn.pack(side="left")
+        if not all_ok:
+            close_round_btn.configure(state="disabled")
 
     def _schedule_arbitration_refresh(self) -> None:
         self._cancel_arbitration_refresh()

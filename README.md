@@ -168,10 +168,15 @@ Aplicativo desktop em Python para emparceiramento de torneios de xadrez.
   contexto: pendencias bloqueantes, fechar rodada, aprovar QR, ausentes) e
   **barra de progresso da rodada** (mesas resolvidas / total).
 - Pacote da rodada em um clique: gera mural + sumulas + cartoes numa pasta de
-  uma vez pelo Painel do arbitro.
+  uma vez pelo Painel do arbitro (tambem para torneios por equipes).
+- Boletim/press-release da rodada em PDF: resultados da rodada, classificacao
+  (top 10) e destaques (lider, partidas decididas/empates e maior zebra).
+- Checklist de fechamento da rodada: dialogo com itens OK/pendente e acao por
+  item; o botao Fechar rodada so habilita quando tudo esta resolvido.
 - Ata final do torneio em PDF/XLSX/CSV: documento unico de encerramento com
-  dados do torneio, classificacao final, premiacao, taxas de rating, arbitros e
-  assinaturas (no Painel do arbitro e no hub de Relatorios).
+  dados do torneio, classificacao final, **vencedores por categoria**, premiacao,
+  taxas de rating, arbitros e assinaturas (no Painel do arbitro e no hub de
+  Relatorios).
 - Explicacao/exportacao de desempates com componentes persistidos.
 - QR local opcional para submissao de resultado por mesa, sempre com aprovacao
   do arbitro antes de alterar a partida.

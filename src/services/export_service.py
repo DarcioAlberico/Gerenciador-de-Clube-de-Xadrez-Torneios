@@ -2557,12 +2557,21 @@ class ExportService:
                 errors.append(f"Sumulas: {exc}")
         if cards:
             try:
-                pairings = self.db.get_pairings_for_round(round_id)
-                max_board = max((int(item.get("board_number") or 0) for item in pairings), default=0)
-                if max_board <= 0:
+                if tournament.get("competition_type") == "team":
+                    # Em equipes os tabuleiros ficam em team_boards (nao na tabela pairings):
+                    # o total de cartoes = soma dos tabuleiros dos confrontos sem bye.
+                    total_boards = sum(
+                        len(self.db.list_team_boards(int(match["id"])))
+                        for match in self.db.list_team_matches_for_round(round_id)
+                        if not match.get("is_bye")
+                    )
+                else:
+                    pairings = self.db.get_pairings_for_round(round_id)
+                    total_boards = max((int(item.get("board_number") or 0) for item in pairings), default=0)
+                if total_boards <= 0:
                     raise AppError("Rodada sem mesas para cartoes.")
                 path = directory / f"{base}_cartoes.pdf"
-                self.export_table_cards(path, 1, max_board, round_id, False)
+                self.export_table_cards(path, 1, total_boards, round_id, False)
                 generated.append(str(path))
             except Exception as exc:
                 errors.append(f"Cartoes: {exc}")
@@ -2579,6 +2588,10 @@ class ExportService:
     def export_tournament_minutes(self, tournament_id: int, file_path: str | Path) -> None:
         """Ata final do torneio: documento unico de encerramento (Fase painel)."""
         self._write_multi_report(Path(file_path), self._tournament_minutes_sections(tournament_id))
+
+    def export_round_bulletin(self, round_id: int, file_path: str | Path) -> None:
+        """Boletim/press-release da rodada: resultados + classificacao + destaques."""
+        self._write_multi_report(Path(file_path), self._round_bulletin_sections(round_id))
 
     def export_tiebreak_report(self, tournament_id: int, file_path: str | Path) -> None:
         tournament = self.db.get_tournament(tournament_id)
@@ -4738,10 +4751,99 @@ footer {
             ),
         ]
 
+    def _category_winners_section(
+        self, tournament_id: int, top_n: int = 3
+    ) -> tuple[str, list[str], list[list[Any]]]:
+        """Vencedores por categoria (top N de cada categoria, na ordem da classificacao)."""
+        groups: dict[str, list[dict[str, Any]]] = {}
+        for item in self.pairing_service.standings(tournament_id):
+            category = str(item.get("category") or "").strip()
+            if category:
+                groups.setdefault(category, []).append(item)
+        rows: list[list[Any]] = []
+        for category in sorted(groups):
+            for rank, item in enumerate(groups[category][: max(1, top_n)], start=1):
+                rows.append(
+                    [
+                        category,
+                        rank,
+                        item.get("name", ""),
+                        item.get("points", ""),
+                        item.get("performance", ""),
+                    ]
+                )
+        if not rows:
+            rows = [["", "", "Sem categorias definidas neste torneio.", "", ""]]
+        return ("Vencedores por categoria", ["Categoria", "Pos", "Jogador", "Pts", "Performance"], rows)
+
+    def _round_bulletin_sections(
+        self, round_id: int
+    ) -> list[tuple[str, list[str], list[list[Any]]]]:
+        """Secoes do boletim da rodada: cabecalho + resultados + classificacao + destaques."""
+        round_data = self.db.get_round(round_id)
+        if not round_data:
+            raise AppError("Rodada nao encontrada.")
+        tournament = self.db.get_tournament(int(round_data["tournament_id"]))
+        if not tournament:
+            raise AppError("Torneio nao encontrado.")
+        number = round_data["number"]
+
+        header_rows = [
+            ["Torneio", tournament["name"]],
+            ["Rodada", number],
+            ["Estado", round_data.get("status", "")],
+            ["Local", tournament.get("location", "")],
+            ["Data", round_data.get("scheduled_at", "") or tournament.get("start_date", "")],
+        ]
+        sections: list[tuple[str, list[str], list[list[Any]]]] = [
+            (f"Boletim da rodada {number}", ["Campo", "Valor"], header_rows),
+        ]
+        sections.append(self._pairings_section(round_id))
+        # Classificacao apos a rodada (top 10) reaproveita o layout da classificacao.
+        title, headers, rows = self._standings_section(int(tournament["id"]))
+        sections.append((f"Classificacao apos a rodada {number} (top 10)", headers, rows[:10]))
+        if tournament.get("competition_type") != "team":
+            sections.append(self._bulletin_highlights_section(round_id, int(tournament["id"])))
+        return sections
+
+    def _bulletin_highlights_section(
+        self, round_id: int, tournament_id: int
+    ) -> tuple[str, list[str], list[list[Any]]]:
+        """Destaques da rodada (individual): lider, decisivas/empates e maior zebra."""
+        pairings = [item for item in self.db.get_pairings_for_round(round_id) if not item.get("is_bye")]
+        decisive = sum(1 for item in pairings if item.get("result") in ("1-0", "0-1"))
+        draws = sum(1 for item in pairings if item.get("result") == "1/2-1/2")
+        standings = self.pairing_service.standings(tournament_id)
+
+        best_upset: tuple[str, str, int] | None = None
+        for item in pairings:
+            result = item.get("result")
+            white_rating = int(item.get("white_rating") or 0)
+            black_rating = int(item.get("black_rating") or 0)
+            if not white_rating or not black_rating:
+                continue
+            if result == "1-0" and black_rating > white_rating:
+                diff, winner, loser = black_rating - white_rating, pairing_player_name(item, "white"), pairing_player_name(item, "black")
+            elif result == "0-1" and white_rating > black_rating:
+                diff, winner, loser = white_rating - black_rating, pairing_player_name(item, "black"), pairing_player_name(item, "white")
+            else:
+                continue
+            if best_upset is None or diff > best_upset[2]:
+                best_upset = (winner, loser, diff)
+
+        rows: list[list[Any]] = []
+        if standings:
+            rows.append(["Lider", f"{standings[0].get('name', '')} ({standings[0].get('points', '')} pts)"])
+        rows.append(["Partidas decididas", decisive])
+        rows.append(["Empates", draws])
+        if best_upset:
+            rows.append(["Maior zebra", f"{best_upset[0]} venceu {best_upset[1]} (+{best_upset[2]} de rating)"])
+        return ("Destaques", ["Item", "Valor"], rows)
+
     def _tournament_minutes_sections(
         self, tournament_id: int
     ) -> list[tuple[str, list[str], list[list[Any]]]]:
-        """Secoes da ata final: cabecalho + classificacao + premiacao + taxas + arbitros."""
+        """Secoes da ata final: cabecalho + classificacao + categorias + premiacao + taxas + arbitros."""
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
             raise AppError("Selecione um torneio valido.")
@@ -4793,6 +4895,8 @@ footer {
             ("Ata final do torneio", ["Campo", "Valor"], header_rows),
             self._standings_section(tournament_id),
         ]
+        if tournament.get("competition_type") != "team":
+            sections.append(self._category_winners_section(tournament_id))
         # Premiacao e taxas sao opcionais: AppError quando nao se aplicam.
         try:
             sections.extend(self._prize_sections(tournament_id))

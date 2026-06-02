@@ -176,6 +176,29 @@ Implementacao:
 - 6 testes novos (metricas puras de progresso, alertas estruturados, progresso
   apos lancamento, pacote da rodada e ata); gate completo verde.
 
+### 4.4 Ideias net-new 2026-06-02 (segunda leva)
+
+| ID | Entrega | Status |
+|---|---|---|
+| DOC-07 | **Ata por categoria**: secao "Vencedores por categoria" (top 3 de cada categoria) na ata final | Concluido |
+| DOC-08 | **Boletim/press-release da rodada** (`ExportService.export_round_bulletin`): cabecalho + resultados + classificacao (top 10) + destaques (lider, decisivas/empates, maior zebra) | Concluido |
+| UX-12 | **Checklist de fechamento** (`PairingService.closing_checklist`): itens com OK/X e acao por item; dialogo no painel com `Fechar rodada` habilitado so quando tudo esta OK | Concluido |
+| DOC-09 | **Pacote da rodada para equipes**: `export_round_package` ciente de equipes (mural = confrontos, sumulas por tabuleiro, cartoes pelo total de tabuleiros de `team_boards`) | Concluido |
+
+Implementacao:
+
+- `_category_winners_section` agrupa `pairing_service.standings` por `category`
+  (individual); entra na ata e protege contra torneios sem categorias;
+- `_round_bulletin_sections` reaproveita `_pairings_section` e o layout da
+  classificacao (top 10); `_bulletin_highlights_section` calcula os destaques a
+  partir dos resultados/ratings da rodada;
+- `closing_checklist` deriva do `arbitration_dashboard` e reaproveita o mapa de
+  acoes dos alertas clicaveis; o painel ganhou os botoes `Checklist de
+  fechamento` (grupo Rodada) e `Boletim da rodada (PDF)` (grupo Publicacao);
+- `export_round_package` conta os tabuleiros de equipes por `list_team_boards`
+  (os tabuleiros ficam fora da tabela `pairings`), gerando cartoes corretos;
+- 6 testes novos; gate completo verde (429 passed). Sem mudanca de schema.
+
 ## 5. Requisitos Pendentes
 
 ### EPIC A - Documentos operacionais impressos
@@ -675,8 +698,9 @@ Uma entrega so esta pronta quando:
 
 ## 10. Ordem Recomendada para Inicio
 
-Roadmap atual concluido ate `FED-02`, mais o aprofundamento de 2026-06-02
-(`UX-10`, `UX-11`, `DOC-05`, `DOC-06` — ver secao 4.3).
+Roadmap atual concluido ate `FED-02`, mais os aprofundamentos de 2026-06-02
+(`UX-10`, `UX-11`, `DOC-05`, `DOC-06` — secao 4.3; `DOC-07`, `DOC-08`, `UX-12`,
+`DOC-09` — secao 4.4).
 
 Motivo:
 
