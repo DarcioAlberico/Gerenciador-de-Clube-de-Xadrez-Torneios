@@ -245,6 +245,45 @@ class PairingService:
             "pending_items": pending_items,
         }
 
+    def closing_checklist(self, tournament_id: int) -> list[dict[str, Any]]:
+        """Checklist de fechamento da rodada atual, derivado do painel.
+
+        Cada item: {label, ok, action} — `action` reaproveita o mapa de acoes dos
+        alertas clicaveis do painel.
+        """
+        metrics = self.arbitration_dashboard(tournament_id)["metrics"]
+        status = metrics.get("latest_round_status")
+        if status == "sem_rodadas":
+            return [{"label": "Gerar a primeira rodada", "ok": False, "action": "initial_call"}]
+        if status == "closed":
+            return [
+                {"label": f"Rodada {metrics['latest_round_number']} fechada", "ok": True, "action": ""}
+            ]
+        total = int(metrics.get("total_results") or 0)
+        resolved = int(metrics.get("resolved_results") or 0)
+        return [
+            {
+                "label": f"Resultados lancados ({resolved}/{total})",
+                "ok": int(metrics.get("pending_results") or 0) == 0,
+                "action": "pending_results",
+            },
+            {
+                "label": "Sem resultados QR aguardando aprovacao",
+                "ok": int(metrics.get("submitted_results") or 0) == 0,
+                "action": "qr_pending",
+            },
+            {
+                "label": "Sem pendencias de arbitragem bloqueantes",
+                "ok": int(metrics.get("blocking_issues") or 0) == 0,
+                "action": "blocking_issues",
+            },
+            {
+                "label": f"Rodada {metrics['latest_round_number']} pronta para fechar",
+                "ok": bool(metrics.get("ready_to_close")),
+                "action": "ready_to_close",
+            },
+        ]
+
     def _round_clock_metrics(self, latest_round: dict[str, Any] | None) -> dict[str, Any]:
         if not latest_round:
             return {
