@@ -725,6 +725,7 @@ class SettingsPagesMixin:
             "Jogadores",
             "Site HTML",
             "JSON publico",
+            "Access (banco)",
             "Chess-Results (TRF16)",
             "TRF FIDE",
             "Pendencias TRF",
@@ -778,7 +779,7 @@ class SettingsPagesMixin:
             format_option.configure(values=formats)
             if format_option.get() not in formats:
                 format_option.set(formats[0])
-            if report_option.get() in ("Site HTML", "JSON publico", "Chess-Results (TRF16)", "TRF FIDE", "PGN (Partidas)"):
+            if report_option.get() in ("Site HTML", "JSON publico", "Access (banco)", "Chess-Results (TRF16)", "TRF FIDE", "PGN (Partidas)"):
                 format_option.configure(state="disabled")
             else:
                 format_option.configure(state="normal")
@@ -866,6 +867,36 @@ class SettingsPagesMixin:
                         lambda: self.export_service.export_site(tournament_id, directory),
                         lambda index_path: self._show_info(f"Site exportado:\n{index_path}"),
                         "Exportando site HTML...",
+                    )
+                    return
+
+                if report == "Access (banco)":
+                    directory = filedialog.askdirectory(
+                        title="Pasta para o banco Access",
+                        initialdir=str(self._default_export_dir()),
+                    )
+                    if not directory:
+                        return
+
+                    def show_access(result: dict[str, Any]) -> None:
+                        tables = ", ".join(result.get("tables") or [])
+                        message = (
+                            f"Pacote Access gerado em:\n{directory}\n\n"
+                            f"Tabelas: {tables}.\nCSV + schema.ini (Dados Externos -> Arquivo de Texto no Access)."
+                        )
+                        if result.get("accdb"):
+                            message += f"\n\nBanco .accdb real: {result['accdb']}"
+                        else:
+                            message += (
+                                "\n\n(.accdb real indisponivel: instale o driver Microsoft Access "
+                                "para gerar o banco nativo; o pacote CSV ja e importavel.)"
+                            )
+                        self._show_info(message)
+
+                    self._run_background(
+                        lambda: self.export_service.export_access(tournament_id, directory),
+                        show_access,
+                        "Gerando banco Access...",
                     )
                     return
 
@@ -969,6 +1000,13 @@ class SettingsPagesMixin:
             pady=(0, 12),
             sticky="w",
         )
+        ctk.CTkButton(panel, text="Geracao em lote", command=self._open_batch_export_dialog).grid(
+            row=1,
+            column=5,
+            padx=(0, 16),
+            pady=(0, 12),
+            sticky="w",
+        )
 
         trf_help_panel = self._make_panel(body)
         trf_help_panel.pack(anchor="nw", fill="x", pady=(12, 0))
@@ -1003,6 +1041,115 @@ class SettingsPagesMixin:
             text="Importar/atualizar ratings oficiais",
             command=self.show_players,
         ).grid(row=2, column=2, padx=(0, 16), pady=(0, 16), sticky="w")
+
+    def _open_batch_export_dialog(self) -> None:
+        if not self._require_tournament():
+            return
+        tournament_id = int(self.current_tournament_id)
+        try:
+            reports = self.batch_export_service.available_reports(tournament_id)
+        except Exception as exc:
+            self._show_error(exc)
+            return
+
+        dialog = ctk.CTkToplevel(self)
+        dialog.title("Geracao em lote (multi-destino)")
+        dialog.geometry("560x640")
+        dialog.transient(self)
+        dialog.grab_set()
+        dialog.grid_columnconfigure(0, weight=1)
+        dialog.grid_rowconfigure(1, weight=1)
+
+        ctk.CTkLabel(
+            dialog,
+            text="Selecione os relatorios e formatos para gerar de uma vez na mesma pasta.",
+            text_color=THEME_TEXT_SUB,
+            anchor="w",
+            justify="left",
+            wraplength=520,
+        ).grid(row=0, column=0, padx=16, pady=(16, 8), sticky="ew")
+
+        reports_frame = ctk.CTkScrollableFrame(dialog, label_text="Relatorios")
+        reports_frame.grid(row=1, column=0, padx=16, pady=(0, 8), sticky="nsew")
+        report_checks: dict[str, ctk.CTkCheckBox] = {}
+        for spec in reports:
+            check = ctk.CTkCheckBox(
+                reports_frame,
+                text=f"{spec['label']}  ({'/'.join(spec['formats'])})",
+                onvalue="1",
+                offvalue="0",
+            )
+            check.deselect()
+            check.pack(anchor="w", padx=8, pady=2)
+            report_checks[spec["key"]] = check
+
+        formats_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+        formats_frame.grid(row=2, column=0, padx=16, pady=(0, 8), sticky="ew")
+        ctk.CTkLabel(formats_frame, text="Formatos:").pack(side="left", padx=(0, 8))
+        format_checks: dict[str, ctk.CTkCheckBox] = {}
+        for fmt in ("csv", "xlsx", "pdf", "html"):
+            check = ctk.CTkCheckBox(formats_frame, text=fmt.upper(), onvalue="1", offvalue="0", width=70)
+            if fmt == "pdf":
+                check.select()
+            else:
+                check.deselect()
+            check.pack(side="left", padx=4)
+            format_checks[fmt] = check
+
+        options_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+        options_frame.grid(row=3, column=0, padx=16, pady=(0, 8), sticky="ew")
+        html_switch = ctk.CTkSwitch(options_frame, text="Tambem gerar site HTML", onvalue="1", offvalue="0")
+        html_switch.deselect()
+        html_switch.pack(side="left", padx=(0, 16))
+        printer_switch = ctk.CTkSwitch(options_frame, text="Enviar PDFs para impressora", onvalue="1", offvalue="0")
+        printer_switch.deselect()
+        printer_switch.pack(side="left")
+
+        def run() -> None:
+            keys = [key for key, check in report_checks.items() if check.get() == "1"]
+            fmts = [fmt for fmt, check in format_checks.items() if check.get() == "1"]
+            if not keys:
+                self._show_warning("Selecione ao menos um relatorio.")
+                return
+            if not fmts:
+                self._show_warning("Selecione ao menos um formato.")
+                return
+            directory = filedialog.askdirectory(
+                title="Pasta de destino do lote",
+                initialdir=str(self._default_export_dir()),
+            )
+            if not directory:
+                return
+            also_html = html_switch.get() == "1"
+            printer_cb = self._print_document if printer_switch.get() == "1" else None
+            dialog.destroy()
+
+            def show_result(result: dict[str, Any]) -> None:
+                message = f"{result['count']} arquivos gerados em:\n{directory}"
+                if result.get("skipped"):
+                    message += "\n\nIgnorados:\n" + "\n".join(result["skipped"][:8])
+                if result.get("errors"):
+                    message += "\n\nErros:\n" + "\n".join(result["errors"][:8])
+                self._show_info(message)
+
+            self._run_background(
+                lambda: self.batch_export_service.run_batch(
+                    tournament_id, keys, fmts, directory, also_html=also_html, printer_cb=printer_cb
+                ),
+                show_result,
+                "Gerando lote multi-destino...",
+            )
+
+        buttons = ctk.CTkFrame(dialog, fg_color="transparent")
+        buttons.grid(row=4, column=0, padx=16, pady=(8, 16), sticky="e")
+        ctk.CTkButton(
+            buttons,
+            text="Cancelar",
+            fg_color=THEME_NEUTRAL,
+            hover_color=THEME_NEUTRAL_HOVER,
+            command=dialog.destroy,
+        ).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(buttons, text="Escolher pasta e gerar", command=run).pack(side="left")
 
     def _show_certificates_tournament_only(self) -> None:
         if not self._require_tournament():

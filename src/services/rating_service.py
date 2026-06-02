@@ -20,6 +20,7 @@ from src.services.constants import *
 from src.services.export_service import ImportService
 from src.services.fide_norms import build_norm_report
 from src.services.fide_rating import build_fide_report_rows
+from src.services.foreign_rating_lists import map_row, normalize_federation_code, seed_federations
 
 if TYPE_CHECKING:
     from src.services.club_service import ClubService
@@ -370,6 +371,153 @@ class OfficialRatingService:
             "imported": len(payloads),
             "errors": errors,
         }
+
+    # ------------------------------------------------------------------
+    # Listas de rating estrangeiras (Fase J)
+    # ------------------------------------------------------------------
+    FOREIGN_FEDERATIONS_SETTING = "foreign_rating_federations"
+
+    def list_foreign_federations(self) -> dict[str, dict[str, str]]:
+        """Registro de federações estrangeiras: o semeado + extensões do usuário."""
+        registry = seed_federations()
+        raw = (self.db.get_app_settings() or {}).get(self.FOREIGN_FEDERATIONS_SETTING) or ""
+        if raw:
+            try:
+                extra = json.loads(raw)
+            except (ValueError, TypeError):
+                extra = {}
+            for code, info in (extra.items() if isinstance(extra, dict) else []):
+                normalized = normalize_federation_code(str(code))
+                if normalized and isinstance(info, dict):
+                    registry[normalized] = {
+                        "name": str(info.get("name") or normalized),
+                        "url": str(info.get("url") or ""),
+                        "notes": str(info.get("notes") or ""),
+                    }
+        return registry
+
+    def add_foreign_federation(self, code: str, name: str, url: str = "", notes: str = "") -> str:
+        """Adiciona/atualiza uma federação estrangeira no registro do usuário."""
+        normalized = normalize_federation_code(code)
+        if not normalized:
+            raise AppError("Codigo de federacao invalido (use 2 a 4 letras, ex.: POR).")
+        registry = self.list_foreign_federations()
+        registry[normalized] = {"name": (name or normalized).strip(), "url": (url or "").strip(), "notes": (notes or "").strip()}
+        # Persiste só o que não é semente pura, mas guardar tudo é inofensivo e simples.
+        self.db.save_app_settings({self.FOREIGN_FEDERATIONS_SETTING: json.dumps(registry, ensure_ascii=False)})
+        return normalized
+
+    def import_foreign_list(
+        self,
+        file_path: str | Path,
+        federation: str,
+        mapping: dict[str, str] | None = None,
+        list_date: str = "",
+    ) -> dict[str, Any]:
+        """Importa uma lista de rating de federação estrangeira (CSV/XLS/XLSX)."""
+        fed = normalize_federation_code(federation)
+        if not fed:
+            raise AppError("Selecione uma federacao estrangeira valida (ex.: POR, ESP, ARG).")
+        path = Path(file_path)
+        rows = self._tabular_rows(path)
+        payloads, errors = self._map_foreign_rows(rows, fed, mapping)
+        snapshot_id = None
+        if payloads:
+            snapshot_id = self.db.create_official_rating_snapshot_with_players(
+                source=fed, list_date=list_date, file_name=path.name, players=payloads
+            )
+        logger.info("%s jogadores importados da lista %s (%s)", len(payloads), fed, path.name)
+        return {"snapshot_id": snapshot_id, "source": fed, "imported": len(payloads), "errors": errors}
+
+    def import_foreign_list_from_url(
+        self,
+        federation: str,
+        mapping: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
+        """Baixa e importa a lista da federação quando há URL (CSV/texto) no registro."""
+        fed = normalize_federation_code(federation)
+        if not fed:
+            raise AppError("Selecione uma federacao estrangeira valida.")
+        info = self.list_foreign_federations().get(fed) or {}
+        url = str(info.get("url") or "").strip()
+        if not url:
+            raise AppError(f"A federacao {fed} nao tem URL de lista cadastrada. Importe por arquivo.")
+        request = urllib.request.Request(url, headers={"User-Agent": "Albericus Chess Club Manager"})
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                content = response.read().decode("utf-8-sig", errors="replace")
+        except (OSError, urllib.error.URLError) as exc:
+            raise AppError(f"Nao foi possivel baixar a lista {fed}: {exc}") from exc
+        reader = csv.DictReader(io.StringIO(content), dialect=ImportService._csv_dialect(content[:4096]))
+        rows = [dict(row) for row in reader] if reader.fieldnames else []
+        payloads, errors = self._map_foreign_rows(rows, fed, mapping)
+        snapshot_id = None
+        if payloads:
+            snapshot_id = self.db.create_official_rating_snapshot_with_players(
+                source=fed, list_date=date.today().isoformat(), file_name=url, players=payloads
+            )
+        logger.info("%s jogadores importados da URL da federacao %s", len(payloads), fed)
+        return {"snapshot_id": snapshot_id, "source": fed, "imported": len(payloads), "errors": errors}
+
+    @staticmethod
+    def _map_foreign_rows(
+        rows: list[dict[str, Any]],
+        federation: str,
+        mapping: dict[str, str] | None,
+    ) -> tuple[list[dict[str, Any]], list[str]]:
+        payloads: list[dict[str, Any]] = []
+        errors: list[str] = []
+        for line_number, row in enumerate(rows, start=2):
+            payload = map_row(row, federation, mapping)
+            if payload is None or not payload.get("name"):
+                errors.append(f"Linha {line_number}: jogador sem nome.")
+                continue
+            if not payload.get("external_id"):
+                # Sem ID oficial, usa um identificador estável por nome para evitar colisão.
+                payload["external_id"] = f"{federation}-{line_number}"
+            payloads.append(payload)
+        if not payloads and not errors:
+            errors.append("Nenhum jogador reconhecido no arquivo.")
+        return payloads, errors
+
+    @staticmethod
+    def _tabular_rows(path: Path) -> list[dict[str, Any]]:
+        """Lê CSV/XLS/XLSX em uma lista de dicts (cabeçalhos originais)."""
+        suffix = path.suffix.lower()
+        if suffix == ".csv":
+            with path.open("r", encoding="utf-8-sig", newline="") as handle:
+                sample = handle.read(4096)
+                handle.seek(0)
+                reader = csv.DictReader(handle, dialect=ImportService._csv_dialect(sample))
+                if not reader.fieldnames:
+                    raise AppError("CSV sem cabecalho.")
+                return [dict(row) for row in reader]
+        if suffix == ".xlsx":
+            import openpyxl
+
+            book = openpyxl.load_workbook(path, data_only=True)
+            sheet = book.active
+            data = list(sheet.iter_rows(values_only=True))
+            if not data:
+                raise AppError("Planilha vazia.")
+            headers = [str(cell).strip() if cell is not None else "" for cell in data[0]]
+            return [
+                {headers[i]: ("" if cell is None else cell) for i, cell in enumerate(row) if i < len(headers)}
+                for row in data[1:]
+            ]
+        if suffix == ".xls":
+            import xlrd
+
+            book = xlrd.open_workbook(path)
+            sheet = book.sheet_by_index(0)
+            if sheet.nrows == 0:
+                raise AppError("Planilha vazia.")
+            headers = [str(sheet.cell_value(0, col)).strip() for col in range(sheet.ncols)]
+            return [
+                {headers[col]: sheet.cell_value(r, col) for col in range(sheet.ncols)}
+                for r in range(1, sheet.nrows)
+            ]
+        raise AppError("Formato nao suportado. Use .csv, .xls ou .xlsx.")
 
     def preview_tournament_player_updates(self, tournament_id: int) -> dict[str, Any]:
         tournament = self.db.get_tournament(tournament_id)

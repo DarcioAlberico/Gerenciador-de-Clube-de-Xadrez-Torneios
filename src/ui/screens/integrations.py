@@ -44,7 +44,8 @@ class IntegrationPagesMixin:
         sync_tab = tabs.add("Sincronização")
         devices_tab = tabs.add("Dispositivos")
         clock_tab = tabs.add("Relógio/Ausência")
-        for tab in (sync_tab, devices_tab, clock_tab):
+        album_tab = tabs.add("Álbum/FTP")
+        for tab in (sync_tab, devices_tab, clock_tab, album_tab):
             tab.grid_columnconfigure(0, weight=1)
             tab.grid_rowconfigure(1, weight=1)
 
@@ -53,6 +54,7 @@ class IntegrationPagesMixin:
         )
         devices_tree = self._build_devices_tab(devices_tab)
         clock_tree, pairing_option, event_option, side_option, seconds_entry, note_entry = self._build_clock_tab(clock_tab)
+        self._build_ftp_tab(album_tab)
 
         pairing_option_map: dict[str, int | None] = {"Sem mesa vinculada": None}
         sync_cache: dict[str, dict[str, Any]] = {}
@@ -455,6 +457,110 @@ class IntegrationPagesMixin:
             visible_rows=14,
         )
         return tree, pairing_option, event_option, side_option, seconds_entry, note_entry
+
+    def _build_ftp_tab(self, parent: ctk.CTkFrame) -> None:
+        config = self.photo_album_service.get_config()
+
+        ctk.CTkLabel(
+            parent,
+            text="Publique um album de fotos do torneio em um servidor FTP (passo opcional, offline-first). "
+            "A senha e guardada protegida (DPAPI) e nunca exibida.",
+            text_color=THEME_TEXT_SUB,
+            anchor="w",
+            justify="left",
+            wraplength=900,
+        ).grid(row=0, column=0, sticky="ew", padx=8, pady=(8, 0))
+
+        panel = self._make_panel(parent)
+        panel.grid(row=1, column=0, sticky="nsew", padx=8, pady=8)
+        panel.grid_columnconfigure(1, weight=1)
+
+        host_entry = ctk.CTkEntry(panel, placeholder_text="ftp.exemplo.com")
+        port_entry = ctk.CTkEntry(panel, width=90)
+        user_entry = ctk.CTkEntry(panel)
+        pass_entry = ctk.CTkEntry(panel, show="*")
+        remote_entry = ctk.CTkEntry(panel, placeholder_text="/public_html/fotos")
+        tls_var = tk.StringVar(value="1" if config.get("use_tls") else "0")
+        passive_var = tk.StringVar(value="1" if config.get("passive", True) else "0")
+
+        fields = [
+            ("Host", host_entry, config.get("host", "")),
+            ("Porta", port_entry, str(config.get("port", 21))),
+            ("Usuario", user_entry, config.get("user", "")),
+            ("Senha", pass_entry, config.get("password", "")),
+            ("Pasta remota", remote_entry, config.get("remote_dir", "")),
+        ]
+        for index, (label, entry, value) in enumerate(fields):
+            ctk.CTkLabel(panel, text=label).grid(row=index, column=0, padx=(16, 8), pady=6, sticky="w")
+            entry.grid(row=index, column=1, padx=(0, 16), pady=6, sticky="ew")
+            if value:
+                entry.insert(0, str(value))
+
+        switches = ctk.CTkFrame(panel, fg_color="transparent")
+        switches.grid(row=len(fields), column=1, padx=(0, 16), pady=6, sticky="w")
+        ctk.CTkSwitch(switches, text="FTPS (TLS)", variable=tls_var, onvalue="1", offvalue="0").pack(
+            side="left", padx=(0, 16)
+        )
+        ctk.CTkSwitch(switches, text="Modo passivo", variable=passive_var, onvalue="1", offvalue="0").pack(side="left")
+
+        def current_config() -> dict[str, Any]:
+            return {
+                "host": host_entry.get().strip(),
+                "port": port_entry.get().strip() or "21",
+                "user": user_entry.get(),
+                "password": pass_entry.get(),
+                "remote_dir": remote_entry.get().strip(),
+                "use_tls": tls_var.get() == "1",
+                "passive": passive_var.get() == "1",
+            }
+
+        def save_config() -> None:
+            try:
+                self.photo_album_service.save_config(current_config())
+                self._show_toast("Configuracao FTP salva.", kind="success")
+            except Exception as exc:
+                self._show_error(exc)
+
+        def test_connection() -> None:
+            try:
+                self.photo_album_service.save_config(current_config())
+                self._run_background(
+                    lambda: self.photo_album_service.test_connection(),
+                    lambda _ok: self._show_info("Conexao FTP bem-sucedida."),
+                    "Testando conexao FTP...",
+                )
+            except Exception as exc:
+                self._show_error(exc)
+
+        def publish_album() -> None:
+            try:
+                self.photo_album_service.save_config(current_config())
+                directory = filedialog.askdirectory(
+                    title="Pasta de fotos para publicar",
+                    initialdir=str(self._default_export_dir()),
+                )
+                if not directory:
+                    return
+
+                def show_result(result: dict[str, Any]) -> None:
+                    self._show_info(
+                        f"{result['total']} arquivos publicados"
+                        + (" (com galeria index.html)." if result.get("gallery") else ".")
+                    )
+
+                self._run_background(
+                    lambda: self.photo_album_service.publish_album(directory),
+                    show_result,
+                    "Publicando album por FTP...",
+                )
+            except Exception as exc:
+                self._show_error(exc)
+
+        actions = ctk.CTkFrame(panel, fg_color="transparent")
+        actions.grid(row=len(fields) + 1, column=1, padx=(0, 16), pady=(10, 12), sticky="w")
+        ctk.CTkButton(actions, text="Salvar config", command=save_config, width=130).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(actions, text="Testar conexao", command=test_connection, width=140).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(actions, text="Publicar pasta...", command=publish_album, width=150).pack(side="left")
 
     def _show_json_detail(self, title: str, payload: dict[str, Any]) -> None:
         formatted = self._format_json_detail(payload)

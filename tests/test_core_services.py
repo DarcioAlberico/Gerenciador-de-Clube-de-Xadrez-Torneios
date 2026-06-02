@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import ftplib
 import hashlib
 import json
 import os
@@ -18,7 +19,9 @@ from src.core import database as database_module
 from src.core.database import APP_DATA_DIR_ENV_VAR, Database, resolve_app_data_dir
 from src.core.services import (
     AppError,
+    BatchExportService,
     CertificateService,
+    ChessResultsService,
     ClockIntegrationService,
     ClubService,
     DashboardService,
@@ -36,6 +39,7 @@ from src.core.services import (
     NormAssistantService,
     OfficialRatingService,
     PairingService,
+    PhotoAlbumService,
     PrizeService,
     QRResultService,
     SecurityService,
@@ -9552,6 +9556,314 @@ class PairingServiceTest(unittest.TestCase):
 
         with self.assertRaisesRegex(RuntimeError, "versao mais nova"):
             Database(future_path, backup_dir=self.backup_dir)
+
+
+# ----------------------------------------------------------------------
+# Fase J — integrações externas e publicação
+# ----------------------------------------------------------------------
+
+
+class _RecordingFTP:
+    """Cliente FTP falso (sem rede) para testar ftp_publish/PhotoAlbumService."""
+
+    def __init__(self) -> None:
+        self.stored: dict[str, bytes] = {}
+        self.made: list[str] = []
+        self.cwds: list[str] = []
+        self.quit_called = False
+
+    def cwd(self, path: str) -> None:
+        self.cwds.append(path)
+        if path not in self.made:
+            raise ftplib.error_perm("550 No such directory")
+
+    def mkd(self, path: str) -> None:
+        self.made.append(path)
+
+    def storbinary(self, command: str, handle: Any) -> None:
+        name = command.split(" ", 1)[1]
+        self.stored[name] = handle.read()
+
+    def voidcmd(self, command: str) -> str:
+        return "200 OK"
+
+    def quit(self) -> None:
+        self.quit_called = True
+
+
+class ChessResultsBridgeTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        base = Path(self.temp_dir.name)
+        self.db = Database(base / "albericus.db", backup_dir=base / "backups")
+        self.pairing_service = PairingService(self.db)
+        self.export_service = ExportService(self.db, self.pairing_service)
+        self.service = ChessResultsService(self.db, self.export_service)
+
+    def tearDown(self) -> None:
+        self.temp_dir.cleanup()
+
+    def test_normalize_results_url(self) -> None:
+        from src.services.chess_results import normalize_results_url
+
+        self.assertEqual(
+            "https://chess-results.com/tnr123.aspx",
+            normalize_results_url("chess-results.com/tnr123.aspx"),
+        )
+        self.assertEqual(
+            "https://chess-results.com/tnr1.aspx",
+            normalize_results_url("http://chess-results.com/tnr1.aspx"),
+        )
+        self.assertEqual("", normalize_results_url("https://exemplo.com/tnr1"))
+        self.assertEqual("", normalize_results_url(""))
+
+    def test_parse_entries_csv(self) -> None:
+        from src.services.chess_results import parse_entries_csv
+
+        content = "Name,Rtg,FED,FideID,Sex\nAna Silva,1500,BRA,12345,F\nJoao Souza,1800,POR,999,M\n"
+        payloads, errors = parse_entries_csv(content)
+        self.assertEqual(2, len(payloads))
+        self.assertEqual([], errors)
+        self.assertEqual("Ana Silva", payloads[0]["name"])
+        self.assertEqual(1500, payloads[0]["rating"])
+        self.assertEqual("BRA", payloads[0]["federation_id"])
+        self.assertEqual("12345", payloads[0]["fide_id"])
+        self.assertEqual("F", payloads[0]["sex"])
+
+    def test_parse_entries_csv_reports_empty_name(self) -> None:
+        from src.services.chess_results import parse_entries_csv
+
+        payloads, errors = parse_entries_csv("Name,Rtg\n,1500\nBia,1600\n")
+        self.assertEqual(1, len(payloads))
+        self.assertTrue(any("nome vazio" in err.lower() for err in errors))
+
+    def test_import_entries_creates_players(self) -> None:
+        tournament_id = load_tournament_fixture(
+            "individual_8_players_3_rounds", self.db, self.pairing_service
+        )
+        before = len(self.db.list_players(tournament_id, active_only=False))
+        csv_path = Path(self.temp_dir.name) / "entries.csv"
+        csv_path.write_text(
+            "Name,Rtg,FED,FideID\nNovo Um,1234,BRA,1\nNovo Dois,1300,POR,2\n",
+            encoding="utf-8",
+        )
+        result = self.service.import_entries(tournament_id, csv_path)
+        self.assertEqual(2, result["imported"])
+        after = len(self.db.list_players(tournament_id, active_only=False))
+        self.assertEqual(before + 2, after)
+
+    def test_prepare_upload_and_published_url(self) -> None:
+        tournament_id = load_tournament_fixture(
+            "individual_8_players_3_rounds", self.db, self.pairing_service
+        )
+        result = self.service.prepare_upload(tournament_id, self.temp_dir.name)
+        self.assertTrue(os.path.exists(result["trf_path"]))
+        self.assertTrue(result["steps"])
+        self.assertIn("chess-results.com", result["register_url"])
+
+        saved = self.service.set_published_url(tournament_id, "chess-results.com/tnr9.aspx")
+        self.assertEqual("https://chess-results.com/tnr9.aspx", saved)
+        self.assertEqual(saved, self.service.get_published_url(tournament_id))
+        with self.assertRaises(AppError):
+            self.service.set_published_url(tournament_id, "http://exemplo.com/x")
+
+
+class ForeignRatingListTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        base = Path(self.temp_dir.name)
+        self.db = Database(base / "albericus.db", backup_dir=base / "backups")
+        self.service = OfficialRatingService(self.db)
+
+    def tearDown(self) -> None:
+        self.temp_dir.cleanup()
+
+    def test_map_row_uses_aliases(self) -> None:
+        from src.services.foreign_rating_lists import map_row
+
+        payload = map_row({"Nome": "Maria Lima", "Rating": "1700", "ID": "77", "Sexo": "F"}, "POR")
+        assert payload is not None
+        self.assertEqual("Maria Lima", payload["name"])
+        self.assertEqual(1700, payload["national_rating"])
+        self.assertEqual(1700, payload["standard_rating"])
+        self.assertEqual(0, payload["international_rating"])
+        self.assertEqual("POR", payload["federation"])
+        self.assertEqual("77", payload["external_id"])
+
+    def test_map_row_without_name_returns_none(self) -> None:
+        from src.services.foreign_rating_lists import map_row
+
+        self.assertIsNone(map_row({"Rating": "1500"}, "ESP"))
+
+    def test_import_foreign_list_creates_snapshot(self) -> None:
+        csv_path = Path(self.temp_dir.name) / "por.csv"
+        csv_path.write_text(
+            "Nome,Rating,ID,Titulo\nMaria Lima,1700,77,\nPedro Alves,1650,88,FM\n",
+            encoding="utf-8",
+        )
+        result = self.service.import_foreign_list(csv_path, "POR")
+        self.assertEqual("POR", result["source"])
+        self.assertEqual(2, result["imported"])
+        self.assertIsNotNone(result["snapshot_id"])
+        with self.db.connect() as connection:
+            count = connection.execute(
+                "SELECT COUNT(*) FROM official_players WHERE source = ?", ("POR",)
+            ).fetchone()[0]
+        self.assertEqual(2, count)
+
+    def test_invalid_federation_rejected(self) -> None:
+        csv_path = Path(self.temp_dir.name) / "x.csv"
+        csv_path.write_text("Nome,Rating\nA,1\n", encoding="utf-8")
+        with self.assertRaises(AppError):
+            self.service.import_foreign_list(csv_path, "1")
+
+    def test_add_and_list_foreign_federation(self) -> None:
+        seeded = self.service.list_foreign_federations()
+        self.assertIn("POR", seeded)
+        code = self.service.add_foreign_federation("bol", "Bolivia (FEBODA)")
+        self.assertEqual("BOL", code)
+        self.assertIn("BOL", self.service.list_foreign_federations())
+
+
+class FtpPhotoAlbumTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        base = Path(self.temp_dir.name)
+        self.db = Database(base / "albericus.db", backup_dir=base / "backups")
+        self.service = PhotoAlbumService(self.db)
+        self.photos = base / "fotos"
+        self.photos.mkdir()
+        (self.photos / "a.jpg").write_bytes(b"jpgdata")
+        (self.photos / "b.PNG").write_bytes(b"pngdata")
+        (self.photos / "notas.txt").write_text("ignore", encoding="utf-8")
+
+    def tearDown(self) -> None:
+        self.temp_dir.cleanup()
+
+    def test_list_images_and_gallery(self) -> None:
+        from src.services.ftp_publish import build_gallery_html, list_images
+
+        images = list_images(self.photos)
+        self.assertEqual(["a.jpg", "b.PNG"], [img.name for img in images])
+        html_out = build_gallery_html([img.name for img in images], "Torneio")
+        self.assertIn("a.jpg", html_out)
+        self.assertIn("<title>Torneio</title>", html_out)
+
+    def test_upload_files_creates_remote_dir(self) -> None:
+        from src.services.ftp_publish import list_images, upload_files
+
+        fake = _RecordingFTP()
+        uploaded = upload_files(fake, list_images(self.photos), "public/fotos")
+        self.assertEqual(["a.jpg", "b.PNG"], uploaded)
+        self.assertEqual(["public", "fotos"], fake.made)
+        self.assertIn("a.jpg", fake.stored)
+
+    def test_publish_album_with_fake_client(self) -> None:
+        self.service.save_config(
+            {"host": "ftp.exemplo.com", "port": 21, "user": "u", "password": "secret", "remote_dir": "fotos"}
+        )
+        fake = _RecordingFTP()
+        result = self.service.publish_album(self.photos, client_factory=lambda _cfg: fake)
+        self.assertEqual(3, result["total"])  # 2 imagens + index.html
+        self.assertTrue(result["gallery"])
+        self.assertIn("index.html", fake.stored)
+        self.assertTrue(fake.quit_called)
+
+    def test_password_protected_roundtrip(self) -> None:
+        self.service.save_config({"host": "h", "port": 21, "user": "u", "password": "topsecret"})
+        # get_config desprotege; o valor cru no banco não é o texto puro em Windows.
+        self.assertEqual("topsecret", self.service.get_config()["password"])
+
+
+class AccessExportTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        base = Path(self.temp_dir.name)
+        self.db = Database(base / "albericus.db", backup_dir=base / "backups")
+        self.pairing_service = PairingService(self.db)
+        self.export_service = ExportService(self.db, self.pairing_service)
+
+    def tearDown(self) -> None:
+        self.temp_dir.cleanup()
+
+    def test_write_csv_bundle(self) -> None:
+        from src.services.access_export import write_csv_bundle
+
+        tables = {"Jogadores": (["id", "nome"], [[1, "Ana"], [2, "Joao"]])}
+        bundle = write_csv_bundle(tables, self.temp_dir.name)
+        self.assertTrue(Path(bundle["schema_ini"]).exists())
+        self.assertTrue(any(p.endswith("Jogadores.csv") for p in bundle["csv_paths"]))
+        schema = Path(bundle["schema_ini"]).read_text(encoding="utf-8")
+        self.assertIn("[Jogadores.csv]", schema)
+        self.assertIn("CharacterSet=65001", schema)
+
+    def test_export_access_service(self) -> None:
+        tournament_id = load_tournament_fixture(
+            "individual_8_players_3_rounds", self.db, self.pairing_service
+        )
+        result = self.export_service.export_access(tournament_id, self.temp_dir.name)
+        self.assertIn("Jogadores", result["tables"])
+        self.assertIn("Classificacao", result["tables"])
+        self.assertTrue(result["csv_paths"])
+        self.assertTrue(Path(result["schema_ini"]).exists())
+        # Sem driver ACE no ambiente de teste, o .accdb real não é gerado.
+        self.assertFalse(result["driver_available"])
+        self.assertIsNone(result["accdb"])
+
+
+class BatchExportPhaseJTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        base = Path(self.temp_dir.name)
+        self.db = Database(base / "albericus.db", backup_dir=base / "backups")
+        self.pairing_service = PairingService(self.db)
+        self.export_service = ExportService(self.db, self.pairing_service)
+        self.service = BatchExportService(self.export_service)
+
+    def tearDown(self) -> None:
+        self.temp_dir.cleanup()
+
+    def test_available_report_keys(self) -> None:
+        from src.services.batch_export import available_report_keys
+
+        individual = available_report_keys(False)
+        self.assertIn("classificacao", individual)
+        self.assertNotIn("equipes", individual)
+        self.assertIn("equipes", available_report_keys(True))
+
+    def test_run_batch_generates_files_and_isolates(self) -> None:
+        tournament_id = load_tournament_fixture(
+            "individual_8_players_3_rounds", self.db, self.pairing_service
+        )
+        dest = Path(self.temp_dir.name) / "lote"
+        result = self.service.run_batch(
+            tournament_id,
+            ["classificacao", "jogadores", "equipes"],
+            ["csv", "xlsx"],
+            dest,
+        )
+        # classificacao+jogadores × csv+xlsx = 4 arquivos; equipes é só de equipes -> ignorado.
+        self.assertEqual(4, result["count"])
+        self.assertEqual(4, len(result["generated"]))
+        self.assertTrue(all(os.path.exists(path) for path in result["generated"]))
+        self.assertTrue(any("equipes" in item.lower() for item in result["skipped"]))
+
+    def test_run_batch_skips_incompatible_format(self) -> None:
+        tournament_id = load_tournament_fixture(
+            "individual_8_players_3_rounds", self.db, self.pairing_service
+        )
+        dest = Path(self.temp_dir.name) / "lote2"
+        # 'jogadores' não suporta HTML -> nada gerado, reportado em skipped.
+        result = self.service.run_batch(tournament_id, ["jogadores"], ["html"], dest)
+        self.assertEqual(0, result["count"])
+        self.assertTrue(result["skipped"])
+
+    def test_run_batch_requires_selection(self) -> None:
+        tournament_id = load_tournament_fixture(
+            "individual_8_players_3_rounds", self.db, self.pairing_service
+        )
+        with self.assertRaises(AppError):
+            self.service.run_batch(tournament_id, [], ["csv"], self.temp_dir.name)
 
 
 if __name__ == "__main__":

@@ -111,7 +111,7 @@ O lado Albericus foi conferido **no código** (`src/`), não só pelo README:
 |---|---|---|
 | Tela / Impressora / Arquivo | Define para onde a lista vai | ✅ Exporta CSV/XLSX/PDF/HTML; impressão via PDF |
 | Configuração de impressão | Ajustes por trabalho | 🟡 Via leitor de PDF do sistema |
-| Criar listas diferentes de uma vez | Impressora + texto + HTML simultâneos | 🟡 Exporta cada formato; **não em lote único multi-destino** |
+| Criar listas diferentes de uma vez | Impressora + texto + HTML simultâneos | ✅ **Geração em lote multi-destino** (Fase J): vários relatórios × formatos numa pasta, com site HTML e impressão opcionais |
 
 ### 3.6 Menu `Listas` (motor de relatórios — núcleo do SM)
 
@@ -145,8 +145,8 @@ O lado Albericus foi conferido **no código** (`src/`), não só pelo README:
 | Mudar tipo de torneio (RR ⇄ Suíço) | Converte o sistema | ❌ |
 | Dividir torneio (domínios A/B/C) | Subtorneios num mesmo arquivo | 🟡 Torneios separados/duplicáveis; não "split" num só |
 | Ata/Verificação de mesas em Excel | Saídas Excel específicas | ✅ Exporta XLSX |
-| Regra dos 100 pontos / arquivos de rating nacionais (CAN/GER/CZE/RSA/BEL/RUS) | Utilidades de federações estrangeiras | ⛔ Fora de escopo (Brasil) |
-| Salvar em Access | Banco MDB | ⛔ Fora de escopo |
+| Regra dos 100 pontos / arquivos de rating nacionais (CAN/GER/CZE/RSA/BEL/RUS) | Utilidades de federações estrangeiras | 🟡 **Listas estrangeiras** (Fase J) por importador genérico de colunas + registro extensível |
+| Salvar em Access | Banco MDB | ✅ **Export Access** (Fase J): pacote CSV + `schema.ini` (importável nativo) e `.accdb` real quando há driver ACE |
 | Listagens especiais para Olimpíada | Saídas FIDE de Olimpíada | ❌ (nicho) |
 
 ### 3.8 Menu `Lista de rating`
@@ -155,7 +155,7 @@ O lado Albericus foi conferido **no código** (`src/`), não só pelo README:
 |---|---|---|
 | Importar listas de rating | Carrega lista oficial local | ✅ Importa FIDE/CBX em CSV/XLS/XLSX + snapshots |
 | Atualizar lista FIDE / FIDE-Blitz | Baixa lista FIDE | ✅ `import_fide_list_from_url` |
-| Atualizar listas nacionais (AUT/GER/CZE/POL/POR/RUS/SLO/CRO/RSA/URU...) | Dezenas de federações | ⛔ Albericus mira **FIDE + CBX + LBX** (correto para o Brasil); demais fora de escopo |
+| Atualizar listas nacionais (AUT/GER/CZE/POL/POR/RUS/SLO/CRO/RSA/URU...) | Dezenas de federações | 🟡 **Listas estrangeiras** (Fase J): importador genérico por mapeamento de colunas + registro semeado/extensível, além de FIDE/CBX/LBX |
 | Ordenar/excluir listas de rating | Gerência das listas | 🟡 Snapshots versionados; gerência manual menor |
 | Listas de normas | Tabelas de norma | ❌ |
 | Parâmetros de desempate | **Configura quais desempates e em que ordem** | ❌ **No SM é configurável; no Albericus a ordem é fixa** |
@@ -164,10 +164,10 @@ O lado Albericus foi conferido **no código** (`src/`), não só pelo README:
 
 | Opção | Albericus |
 |---|---|
-| Upload/registro automático no Chess-Results.com | ⛔ Offline-first por decisão; gera TRF16 para upload manual |
-| Importar inscrições online (Chess-Results) | 🟡 Importa Google Forms/Sheets (CSV publicado) |
-| Login / personalizar listas / restringir upload | ⛔ Fora de escopo |
-| Upload de fotos/álbuns via FTP | ❌ (nicho) |
+| Upload/registro automático no Chess-Results.com | 🟡 **Ponte Chess-Results** (Fase J): gera o pacote TRF16 + passos e abre a página de registro (o site não tem API pública de upload — envio manual) |
+| Importar inscrições online (Chess-Results) | ✅ Importa start lists/inscrições publicadas em CSV (Fase J) + Google Forms/Sheets |
+| Login / personalizar listas / restringir upload | ⛔ Fora de escopo (depende da conta do organizador no site) |
+| Upload de fotos/álbuns via FTP | ✅ **Álbum por FTP** (Fase J): publica a pasta de fotos com galeria HTML por FTP/FTPS |
 
 ### 3.10 Menus `Janela` e `?`
 
@@ -231,8 +231,9 @@ Ordenado por valor para arbitragem oficial no Brasil x esforço.
 | 8 | **Sistema Scheveningen** | ❌ | Baixo-Médio | Médio | **P3** |
 | 9 | **Importar XML nativo do Swiss-Manager** (migração de quem usa SM) | 🟡 | Médio | Médio | **P3** |
 | 10 | **Mudar tipo de torneio / dividir torneio** | ❌ | Baixo | Baixo | **P4** |
-| 11 | Listagens de Olimpíada / álbuns de fotos / Access / listas de rating estrangeiras | ❌/⛔ | Baixo | — | **Fora** |
-| 12 | Integração Chess-Results.com (upload/online) | ⛔ | — | — | **Fora** (decisão offline-first) |
+| 11 | Álbuns de fotos (FTP) / Access / listas de rating estrangeiras / lote multi-destino | ✅ | Baixo-Médio | Médio | **Fase J (feito)** |
+| 12 | Integração Chess-Results.com (ponte TRF + importar inscrições) | 🟡 | Médio | Médio | **Fase J (feito)** |
+| 13 | Listagens especiais de Olimpíada | ❌ | Baixo | — | **Fora** (nicho) |
 
 Detalhe de implementação de cada item em
 [`ESPEC_PARIDADE_SWISSMANAGER.md`](../ESPEC_PARIDADE_SWISSMANAGER.md) e a ordem de
@@ -247,6 +248,10 @@ além do SM 2018 em gestão de clube, painel do árbitro, QR, portal e auditoria
 As lacunas reais para **paridade arbitral oficial** se concentram em quatro
 frentes: (1) **desempates configuráveis e completos**, (2) **cálculo oficial de
 variação de Elo FIDE**, (3) **distribuição de prêmios** e (4) **normas/títulos
-FIDE**. As três primeiras têm alto valor e esforço médio — são o foco do
-roadmap. Integração com Chess-Results.com e listas de rating estrangeiras
-permanecem **fora de escopo** por decisão de produto (offline-first, foco Brasil).
+FIDE**. As três primeiras têm alto valor e esforço médio — foram o foco do
+roadmap (Fases A–E). A **Fase J** ainda fechou os itens antes fora de escopo, de
+forma honesta e coerente com o offline-first: ponte para o Chess-Results.com
+(TRF + importar inscrições; o site não tem API pública de upload), listas de
+rating estrangeiras por importador genérico, publicação de álbum de fotos por
+FTP, exportação para Access e geração em lote multi-destino. Resta fora apenas o
+nicho de **listagens de Olimpíada**.

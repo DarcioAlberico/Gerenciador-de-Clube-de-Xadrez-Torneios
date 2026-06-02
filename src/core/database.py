@@ -363,7 +363,7 @@ LEGACY_LOGS_DIR = BASE_DIR / "logs"
 
 
 class Database:
-    SCHEMA_VERSION = 40
+    SCHEMA_VERSION = 41
 
     def __init__(
         self,
@@ -1214,6 +1214,7 @@ class Database:
                     rating_fee_cbx REAL NOT NULL DEFAULT 0.0,
                     rating_fee_lbx REAL NOT NULL DEFAULT 0.0,
                     archived INTEGER NOT NULL DEFAULT 0,
+                    chess_results_url TEXT NOT NULL DEFAULT '',
                     updated_at TEXT NOT NULL,
                     FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE
                 );
@@ -2295,8 +2296,9 @@ class Database:
             ).fetchall()
             settings = defaults.copy()
             settings.update({str(row["key"]): row["value"] for row in rows})
-        if "smtp_password" in settings:
-            settings["smtp_password"] = self._unprotect_secret(str(settings.get("smtp_password") or ""))
+        for secret_key in ("smtp_password", "ftp_password"):
+            if secret_key in settings:
+                settings[secret_key] = self._unprotect_secret(str(settings.get(secret_key) or ""))
         settings = self._normalize_legacy_app_settings(settings)
         if settings.get("backup_dir"):
             self.backup_dir = Path(str(settings["backup_dir"]))
@@ -2410,13 +2412,22 @@ class Database:
             "smtp_port",
             "smtp_user",
             "smtp_password",
+            "ftp_host",
+            "ftp_port",
+            "ftp_user",
+            "ftp_password",
+            "ftp_remote_dir",
+            "ftp_use_tls",
+            "ftp_passive",
+            "foreign_rating_federations",
             "arbitration_auto_refresh_enabled",
             "arbitration_refresh_interval_seconds",
             "arbitration_inline_tables_limit",
         }
+        secret_keys = {"smtp_password", "ftp_password"}
         now = self.now()
         rows = [
-            (key, self._protect_secret(str(value)) if key == "smtp_password" else str(value), now)
+            (key, self._protect_secret(str(value)) if key in secret_keys else str(value), now)
             for key, value in settings.items()
             if key in allowed_keys
         ]
@@ -6749,6 +6760,15 @@ class Database:
                 (tournament_id,),
             ).fetchone()
             return dict(row) if row else None
+
+    def set_chess_results_url(self, tournament_id: int, url: str) -> None:
+        """Guarda o link publicado do torneio no Chess-Results (Fase J)."""
+        with self.connect() as connection:
+            self._ensure_tournament_settings(connection, tournament_id)
+            connection.execute(
+                "UPDATE tournament_settings SET chess_results_url = ?, updated_at = ? WHERE tournament_id = ?",
+                ((url or "").strip(), self.now(), tournament_id),
+            )
 
     def save_tournament_settings(
         self,
