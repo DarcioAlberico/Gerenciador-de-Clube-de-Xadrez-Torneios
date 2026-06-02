@@ -6980,6 +6980,71 @@ class PairingServiceTest(unittest.TestCase):
         # Todos os 9 cruzamentos A×B ocorreram exatamente uma vez.
         self.assertEqual(seen, {(a, b) for a in group_a for b in group_b})
 
+    def test_scheveningen_uses_manual_groups(self) -> None:
+        ids = self._create_players(4)  # ratings 2000,1950,1900,1850
+        # Grupos manuais que NAO sao as metades por ranking: A = mais forte + mais fraco.
+        self.db.set_player_scheveningen_group(ids[0], "A")
+        self.db.set_player_scheveningen_group(ids[3], "A")
+        self.db.set_player_scheveningen_group(ids[1], "B")
+        self.db.set_player_scheveningen_group(ids[2], "B")
+        self._set_individual_pairing_method("scheveningen")
+        group_a, group_b = {ids[0], ids[3]}, {ids[1], ids[2]}
+
+        seen: set[tuple[int, int]] = set()
+        for _round in range(2):
+            round_data = self.service.generate_next_round(self.tournament_id)
+            round_id = int(round_data["id"])
+            for pairing in self.db.get_pairings_for_round(round_id):
+                white, black = int(pairing["white_player_id"]), int(pairing["black_player_id"])
+                self.assertTrue((white in group_a) != (black in group_a))
+                a_player = white if white in group_a else black
+                b_player = black if white in group_a else white
+                seen.add((a_player, b_player))
+                self.service.update_result(self.tournament_id, int(pairing["id"]), "1-0")
+            self.service.close_round(self.tournament_id, round_id)
+
+        self.assertEqual(seen, {(a, b) for a in group_a for b in group_b})
+
+    def test_scheveningen_manual_groups_must_match_size(self) -> None:
+        from src.services.pairing import scheveningen_pairings
+
+        players = [
+            {"id": 1, "name": "A1", "rating": 2000, "scheveningen_group": "A"},
+            {"id": 2, "name": "A2", "rating": 1900, "scheveningen_group": "A"},
+            {"id": 3, "name": "B1", "rating": 1800, "scheveningen_group": "B"},
+        ]
+        with self.assertRaisesRegex(AppError, "mesmo numero"):
+            scheveningen_pairings(players, 1, {})
+
+    def test_v40_database_adds_scheveningen_group_column(self) -> None:
+        legacy_path = Path(self.temp_dir.name) / "legacy_v40_schev.db"
+        connection = sqlite3.connect(legacy_path)
+        try:
+            connection.executescript(
+                """
+                CREATE TABLE players (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    tournament_id INTEGER,
+                    name TEXT NOT NULL
+                );
+                PRAGMA user_version = 39;
+                """
+            )
+            connection.commit()
+        finally:
+            connection.close()
+
+        migrated = Database(legacy_path, backup_dir=self.backup_dir)
+        with migrated.connect() as migrated_connection:
+            columns = {
+                row["name"]
+                for row in migrated_connection.execute("PRAGMA table_info(players)").fetchall()
+            }
+            user_version = migrated_connection.execute("PRAGMA user_version").fetchone()[0]
+
+        self.assertIn("scheveningen_group", columns)
+        self.assertEqual(Database.SCHEMA_VERSION, user_version)
+
     # --- Fase H: importar torneio do Swiss-Manager via TRF (E9) -----------
 
     def test_trf_import_round_trips_players_and_header(self) -> None:
@@ -7019,6 +7084,31 @@ class PairingServiceTest(unittest.TestCase):
         empty_path.write_text("012 Torneio sem jogadores\r\n022 Cidade\r\n", encoding="utf-8")
         with self.assertRaisesRegex(AppError, "sem jogadores"):
             self.import_service.import_trf(empty_path)
+
+    def test_trf_import_reconstructs_rounds_and_results(self) -> None:
+        self._create_players(4)
+        round_data = self.service.generate_next_round(self.tournament_id)
+        round_id = int(round_data["id"])
+        for pairing in self.db.get_pairings_for_round(round_id):
+            self.service.update_result(self.tournament_id, int(pairing["id"]), "1-0")
+        self.service.close_round(self.tournament_id, round_id)
+        original_points = sorted(
+            float(item["points"]) for item in self.service.standings(self.tournament_id)
+        )
+
+        trf_path = Path(self.temp_dir.name) / "jogado.trf"
+        self.export_service.export_chess_results_trf(self.tournament_id, trf_path)
+        result = self.import_service.import_trf(trf_path)
+
+        self.assertEqual(result["rounds_imported"], 1)
+        rounds = self.db.list_rounds(result["tournament_id"])
+        self.assertEqual(len(rounds), 1)
+        self.assertEqual(rounds[0]["status"], "closed")
+        # A classificacao reconstruida bate com a original (2x1.0 e 2x0.0).
+        imported_points = sorted(
+            float(item["points"]) for item in self.service.standings(result["tournament_id"])
+        )
+        self.assertEqual(imported_points, original_points)
 
     # --- Fase I: mudar tipo / dividir torneio (E10) -----------------------
 

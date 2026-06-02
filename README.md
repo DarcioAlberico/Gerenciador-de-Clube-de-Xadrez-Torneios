@@ -125,12 +125,17 @@ Aplicativo desktop em Python para emparceiramento de torneios de xadrez.
 - Editor de colunas da classificacao na tela `Config. torneio`: escolha e ordene
   quais colunas aparecem no relatorio de classificacao (vazio = colunas padrao),
   aplicado a CSV/XLSX/PDF.
-- Sistema Scheveningen: cada jogador de um grupo enfrenta todos do outro (grupos
-  = metades por ranking inicial). Selecione `Scheveningen` no metodo de
-  pareamento em `Config. torneio`.
+- Sistema Scheveningen: cada jogador de um grupo enfrenta todos do outro.
+  Selecione `Scheveningen` no metodo de pareamento em `Config. torneio`. Os
+  grupos podem ser atribuidos manualmente (campo `Grupo Scheveningen` na tela de
+  jogadores) ou, sem atribuicao, caem nas metades por ranking inicial.
 - Importacao de torneio do Swiss-Manager por arquivo TRF (FIDE/Krause): botao
   `Importar TRF (Swiss-Manager)` na tela de torneios cria um novo torneio com o
-  cabecalho e todos os jogadores (nome, rating, federacao, FIDE ID, nascimento).
+  cabecalho, todos os jogadores (nome, rating, federacao, FIDE ID, nascimento) e
+  reconstroi as rodadas jogadas (pareamentos e resultados), deixando o torneio
+  importado pronto para classificacao, tabela cruzada e exportacoes.
+- Desempates por equipes tambem configuraveis na tela `Config. torneio` (mesma
+  edicao ordenavel dos desempates individuais).
 - Mudar metodo de pareamento e dividir torneio: a troca de pareamento fica
   bloqueada apos a primeira rodada; o botao `Dividir` reparte os jogadores em N
   torneios-filho por ranking inicial (A = mais fortes), vinculados ao torneio de

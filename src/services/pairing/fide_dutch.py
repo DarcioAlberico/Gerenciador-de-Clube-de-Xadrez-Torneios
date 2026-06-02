@@ -136,23 +136,34 @@ def scheveningen_pairings(
 ) -> list[dict[str, Any]]:
     """Sistema Scheveningen: cada jogador do grupo A enfrenta todos do grupo B.
 
-    Os grupos são as metades por ranking inicial (top = A, base = B), exige
-    número par de jogadores. Em N rodadas (N = jogadores por grupo) cada par
-    A×B se enfrenta exatamente uma vez; as cores alternam para equilibrar.
+    Os grupos vêm do campo `scheveningen_group` (A/B) quando atribuídos; se não
+    houver atribuição manual, caem nas metades por ranking inicial (top = A,
+    base = B). Em N rodadas (N = jogadores por grupo) cada par A×B se enfrenta
+    exatamente uma vez; as cores alternam para equilibrar.
     """
-    ordered = sorted(
-        players,
-        key=lambda player: (-int(player["rating"] or 0), player["name"].casefold()),
-    )
-    if len(ordered) % 2 == 1:
-        raise AppError("Scheveningen exige numero par de jogadores (dois grupos iguais).")
 
-    per_group = len(ordered) // 2
+    def _by_rank(group: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        return sorted(group, key=lambda player: (-int(player["rating"] or 0), player["name"].casefold()))
+
+    manual_a = [p for p in players if str(p.get("scheveningen_group") or "").strip().upper() == "A"]
+    manual_b = [p for p in players if str(p.get("scheveningen_group") or "").strip().upper() == "B"]
+
+    if manual_a and manual_b:
+        if len(manual_a) != len(manual_b):
+            raise AppError("Scheveningen: os grupos A e B devem ter o mesmo numero de jogadores.")
+        group_a = _by_rank(manual_a)
+        group_b = _by_rank(manual_b)
+    else:
+        ordered = _by_rank(list(players))
+        if len(ordered) % 2 == 1:
+            raise AppError("Scheveningen exige numero par de jogadores (dois grupos iguais).")
+        per_group = len(ordered) // 2
+        group_a = ordered[:per_group]
+        group_b = ordered[per_group:]
+
+    per_group = len(group_a)
     if next_number > per_group:
         raise AppError("O numero maximo de rodadas do Scheveningen ja foi atingido.")
-
-    group_a = ordered[:per_group]
-    group_b = ordered[per_group:]
 
     pairings: list[dict[str, Any]] = []
     for index in range(per_group):

@@ -11,7 +11,7 @@ de rodadas/resultados; aqui ainda não são aplicadas.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Mapping, Sequence
 
 # Offsets fixos da linha 001 (idênticos ao layout escrito pelo TRF16Exporter,
 # que segue o padrão FIDE Krause).
@@ -131,3 +131,102 @@ def parse_trf(content: str) -> dict[str, Any]:
         "rounds_count": rounds_count,
         "players": players,
     }
+
+
+# Códigos de resultado TRF -> resultado Albericus, da perspectiva das BRANCAS.
+_GAME_WHITE = {"1": "1-0", "0": "0-1", "=": "1/2-1/2", "½": "1/2-1/2", "+": "1F-0F", "-": "0F-1F"}
+_GAME_BLACK = {"1": "0-1", "0": "1-0", "=": "1/2-1/2", "½": "1/2-1/2", "+": "0F-1F", "-": "1F-0F"}
+
+
+def _decode_game(color: str, code: str) -> str:
+    """Resultado Albericus (perspectiva das brancas) a partir da célula do jogador."""
+    table = _GAME_BLACK if color.lower() == "b" else _GAME_WHITE
+    return table.get(code, "")
+
+
+def _trf_bye_result(code: str) -> str:
+    """Bye alocado/solicitado -> resultado Albericus. 'Z'/'-'/vazio = não pareado."""
+    upper = (code or "").upper()
+    if upper in ("U", "F"):
+        return "F"
+    if upper == "H":
+        return "H"
+    return ""
+
+
+def build_trf_rounds(
+    players: Sequence[Mapping[str, Any]],
+    rank_to_id: Mapping[int, int],
+) -> list[tuple[int, list[dict[str, Any]]]]:
+    """Reconstrói rodadas (pareamentos + resultados) a partir das células TRF.
+
+    Devolve (numero_da_rodada, pareamentos) apenas para rodadas com ao menos um
+    jogo/bye reconhecido. Cada jogo é criado uma única vez (deduplicado pelos
+    dois jogadores). Códigos 'Z'/'-' (não pareado) não viram pareamento.
+    """
+    by_rank = {int(player["start_rank"]): player for player in players}
+    max_rounds = max((len(player["rounds"]) for player in players), default=0)
+
+    rounds: list[tuple[int, list[dict[str, Any]]]] = []
+    for round_index in range(1, max_rounds + 1):
+        pairings: list[dict[str, Any]] = []
+        processed: set[int] = set()
+        board = 1
+        for rank in sorted(by_rank):
+            if rank in processed:
+                continue
+            player = by_rank[rank]
+            if len(player["rounds"]) < round_index:
+                continue
+            player_id = rank_to_id.get(rank)
+            if not player_id:
+                continue
+            cell = player["rounds"][round_index - 1]
+            opponent_raw = str(cell.get("opponent_rank") or "")
+            opponent_rank = int(opponent_raw) if opponent_raw.isdigit() else 0
+
+            if opponent_rank <= 0:
+                bye_result = _trf_bye_result(cell.get("result", ""))
+                if bye_result:
+                    pairings.append(
+                        {
+                            "board_number": board,
+                            "white_player_id": player_id,
+                            "black_player_id": None,
+                            "result": bye_result,
+                            "is_bye": 1,
+                        }
+                    )
+                    board += 1
+                processed.add(rank)
+                continue
+
+            if opponent_rank in processed:
+                continue
+            opponent_id = rank_to_id.get(opponent_rank)
+            if not opponent_id:
+                processed.add(rank)
+                continue
+
+            color = str(cell.get("color") or "").lower()
+            result = _decode_game(color, str(cell.get("result") or ""))
+            if color == "b":
+                white_id, black_id = opponent_id, player_id
+            else:
+                white_id, black_id = player_id, opponent_id
+            pairings.append(
+                {
+                    "board_number": board,
+                    "white_player_id": white_id,
+                    "black_player_id": black_id,
+                    "result": result,
+                    "is_bye": 0,
+                }
+            )
+            board += 1
+            processed.add(rank)
+            processed.add(opponent_rank)
+
+        if pairings:
+            rounds.append((round_index, pairings))
+    return rounds

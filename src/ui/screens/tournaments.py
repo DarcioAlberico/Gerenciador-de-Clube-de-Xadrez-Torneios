@@ -5,8 +5,11 @@ from ..support import *
 from src.services.pairing.acceleration import acceleration_spec
 from src.services.pairing import (
     DEFAULT_PLAYER_TIEBREAKS,
+    DEFAULT_TEAM_TIEBREAKS,
     PLAYER_TIEBREAKS,
+    TEAM_TIEBREAKS,
     parse_player_tiebreak_sequence,
+    parse_team_tiebreak_sequence,
     serialize_tiebreak_sequence,
 )
 from src.services.prizes import PRIZE_POLICIES
@@ -1161,7 +1164,28 @@ class TournamentPagesMixin:
         )
         tiebreak_editor.grid(row=tiebreak_row + 2, column=0, padx=16, pady=(2, 8), sticky="ew")
 
-        prize_row = tiebreak_row + 3
+        ctk.CTkLabel(settings_panel, text="Desempates por equipes", font=font_section()).grid(
+            row=tiebreak_row + 3, column=0, padx=16, pady=(12, 0), sticky="w"
+        )
+        ctk.CTkLabel(
+            settings_panel,
+            text="Ordem dos criterios para a classificacao por equipes (vazio = match points, game points, Buchholz, vitorias).",
+            justify="left",
+            text_color="gray",
+        ).grid(row=tiebreak_row + 4, column=0, padx=16, pady=(0, 2), sticky="w")
+        initial_team_tiebreak_codes = [
+            item["code"]
+            for item in parse_team_tiebreak_sequence(settings.get("team_tiebreak_sequence"))
+        ]
+        team_tiebreak_editor = TiebreakSequenceEditor(
+            settings_panel,
+            TEAM_TIEBREAKS,
+            DEFAULT_TEAM_TIEBREAKS,
+            initial_team_tiebreak_codes,
+        )
+        team_tiebreak_editor.grid(row=tiebreak_row + 5, column=0, padx=16, pady=(2, 8), sticky="ew")
+
+        prize_row = tiebreak_row + 6
         ctk.CTkLabel(settings_panel, text="Premiacao", font=font_section()).grid(
             row=prize_row, column=0, padx=16, pady=(16, 0), sticky="w"
         )
@@ -1372,6 +1396,9 @@ class TournamentPagesMixin:
             settings_payload["tiebreak_sequence"] = serialize_tiebreak_sequence(
                 tiebreak_editor.get_sequence()
             )
+            settings_payload["team_tiebreak_sequence"] = serialize_tiebreak_sequence(
+                team_tiebreak_editor.get_sequence()
+            )
             settings_payload["prize_policy"] = prize_policy_by_label[prize_policy_option.get()]
             settings_payload["prize_tax_percent"] = prize_tax_entry.get()
             settings_payload["team_fixed_board_order"] = team_fixed_board_order_check.get()
@@ -1573,6 +1600,37 @@ class TournamentPagesMixin:
         player_status_option.grid(row=control_row + 6, column=0, padx=16, pady=(4, 4), sticky="ew")
         player_status_option.set(PLAYER_STATUSES["active"])
 
+        ctk.CTkLabel(form, text="Grupo Scheveningen").grid(
+            row=control_row + 7, column=0, padx=16, pady=(8, 0), sticky="w"
+        )
+        scheveningen_group_labels = {"": "Sem grupo", "A": "Grupo A", "B": "Grupo B"}
+        scheveningen_group_values = {label: code for code, label in scheveningen_group_labels.items()}
+        scheveningen_group_option = ctk.CTkOptionMenu(
+            form, values=list(scheveningen_group_labels.values()), width=240
+        )
+        scheveningen_group_option.grid(row=control_row + 8, column=0, padx=16, pady=(4, 4), sticky="ew")
+        scheveningen_group_option.set("Sem grupo")
+
+        def update_scheveningen_group() -> None:
+            try:
+                player = selected_player()
+                if not player:
+                    raise AppError("Selecione um jogador.")
+                self.db.set_player_scheveningen_group(
+                    int(player["id"]),
+                    scheveningen_group_values.get(scheveningen_group_option.get(), ""),
+                )
+                load_players()
+                self._show_toast("Grupo Scheveningen definido.", kind="success")
+            except Exception as exc:
+                self._show_error(exc)
+
+        btn_scheveningen_group = ctk.CTkButton(
+            form, text="Definir grupo Scheveningen", command=update_scheveningen_group
+        )
+        btn_scheveningen_group.grid(row=control_row + 9, column=0, padx=16, pady=(0, 8), sticky="ew")
+        self._disable_if_unauthorized(btn_scheveningen_group, "tournament_write")
+
         selected_player_id: dict[str, int | None] = {"value": None}
 
         table_panel = self._make_panel(body)
@@ -1752,6 +1810,11 @@ class TournamentPagesMixin:
             selected_player_id["value"] = player["id"]
             player_status_option.set(
                 PLAYER_STATUSES.get(player.get("player_status", "active"), PLAYER_STATUSES["active"])
+            )
+            scheveningen_group_option.set(
+                scheveningen_group_labels.get(
+                    str(player.get("scheveningen_group") or "").strip().upper(), "Sem grupo"
+                )
             )
             clear_values = {
                 key: player.get(key, "")

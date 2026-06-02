@@ -51,6 +51,7 @@ class LegacyMigrations:
             37: self._migrate_to_v37,
             38: self._migrate_to_v38,
             39: self._migrate_to_v39,
+            40: self._migrate_to_v40,
         }
 
     def _run_schema_migrations(self, connection: sqlite3.Connection) -> None:
@@ -147,6 +148,8 @@ class LegacyMigrations:
             self._migrate_to_v38(connection)
         if self.db.SCHEMA_VERSION >= 39:
             self._migrate_to_v39(connection)
+        if self.db.SCHEMA_VERSION >= 40:
+            self._migrate_to_v40(connection)
 
     def _migrate_to_v1(self, connection: sqlite3.Connection) -> None:
         now = self.db.now()
@@ -1748,3 +1751,11 @@ class LegacyMigrations:
         columns = self.db._table_columns(connection, "tournaments")
         if "parent_tournament_id" not in columns:
             connection.execute("ALTER TABLE tournaments ADD COLUMN parent_tournament_id INTEGER")
+
+    def _migrate_to_v40(self, connection: sqlite3.Connection) -> None:
+        """Grupos manuais do Scheveningen (Fase G+): players.scheveningen_group."""
+        columns = self.db._table_columns(connection, "players")
+        if "scheveningen_group" not in columns:
+            connection.execute(
+                "ALTER TABLE players ADD COLUMN scheveningen_group TEXT NOT NULL DEFAULT ''"
+            )
