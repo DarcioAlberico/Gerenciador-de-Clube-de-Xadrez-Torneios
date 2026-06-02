@@ -10109,5 +10109,100 @@ class ArbiterPanelNetNewTest(unittest.TestCase):
         self.assertTrue(any("sumulas" in path for path in result["generated"]))
 
 
+class ArbiterPanelExtrasTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        base = Path(self.temp_dir.name)
+        self.db = Database(base / "albericus.db", backup_dir=base / "backups")
+        self.pairing_service = PairingService(self.db)
+        self.tournament_service = TournamentService(self.db)
+        self.team_service = TeamService(self.db)
+        self.export_service = ExportService(self.db, self.pairing_service)
+
+    def tearDown(self) -> None:
+        self.temp_dir.cleanup()
+
+    def _individual_with_categories(self) -> int:
+        tournament_id = self.db.create_tournament(
+            name="Podio", location="Sala", rounds_count=3, time_control="", start_date="2026-06-02", end_date="2026-06-02"
+        )
+        for index in range(4):
+            self.db.create_player(
+                tournament_id=tournament_id,
+                name=f"Jogador {index}",
+                rating=1600 - index * 10,
+                category="Absoluto" if index % 2 == 0 else "Sub-12",
+            )
+        self.pairing_service.generate_next_round(tournament_id)
+        return tournament_id
+
+    def _team_tournament(self) -> int:
+        tournament_id = self.tournament_service.create_tournament(
+            {"name": "Equipes", "competition_type": "team", "rounds_count": "3", "bye_points": "1"}
+        )
+        self.tournament_service.save_profile(
+            tournament_id,
+            {
+                "name": "Equipes",
+                "competition_type": "team",
+                "scope": "standalone",
+                "rounds_count": "3",
+                "bye_points": "1",
+            },
+            {
+                "team_boards_count": "4",
+                "team_match_win_points": "2",
+                "team_match_draw_points": "1",
+                "team_match_loss_points": "0",
+                "team_pairing_method": "swiss",
+                "team_standing_primary": "match_points",
+                "team_standing_secondary": "game_points",
+            },
+            [],
+        )
+        for team_index in range(4):
+            team_id = self.team_service.create_team(
+                tournament_id,
+                {"name": f"Equipe {team_index + 1}", "club": f"Clube {team_index + 1}", "captain": "Cap"},
+            )
+            for board_number in range(1, 5):
+                player_id = self.db.create_player(
+                    tournament_id,
+                    name=f"E{team_index + 1} J{board_number}",
+                    rating=2200 - team_index * 100 - board_number * 10,
+                )
+                self.team_service.add_player(team_id, player_id, board_number=str(board_number), role="starter")
+        self.pairing_service.generate_next_round(tournament_id)
+        return tournament_id
+
+    # M1 - Poster do podio
+    def test_podium_data(self) -> None:
+        tournament_id = self._individual_with_categories()
+        data = self.export_service._podium_data(tournament_id)
+        self.assertFalse(data["is_team"])
+        self.assertEqual(3, len(data["top"]))
+        self.assertEqual(1, data["top"][0]["rank"])
+        category_labels = {row["category"] for row in data["categories"]}
+        self.assertIn("Absoluto", category_labels)
+        self.assertIn("Sub-12", category_labels)
+
+    def test_export_podium_pdf(self) -> None:
+        tournament_id = self._individual_with_categories()
+        out_path = Path(self.temp_dir.name) / "podio.pdf"
+        self.export_service.export_podium(tournament_id, out_path)
+        self.assertTrue(out_path.exists())
+        self.assertGreater(out_path.stat().st_size, 0)
+        with self.assertRaises(AppError):
+            self.export_service.export_podium(tournament_id, Path(self.temp_dir.name) / "podio.csv")
+
+    # M3 - Checklist especifico para equipes
+    def test_team_closing_checklist_has_lineups(self) -> None:
+        tournament_id = self._team_tournament()
+        checklist = self.pairing_service.closing_checklist(tournament_id)
+        actions = [item["action"] for item in checklist]
+        self.assertIn("lineups", actions)
+        self.assertIn("ready_to_close", actions)
+
+
 if __name__ == "__main__":
     unittest.main()
