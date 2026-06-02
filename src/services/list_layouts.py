@@ -55,11 +55,12 @@ LAYOUT_REGISTRIES = {"standings": STANDINGS_COLUMNS}
 LAYOUT_DEFAULTS = {"standings": DEFAULT_STANDINGS_COLUMNS}
 
 
-def normalize_columns(raw: Any, report_key: str) -> list[str]:
-    """Normaliza uma seleção de colunas (JSON ou lista) para um report_key.
+def normalize_column_specs(raw: Any, report_key: str) -> list[dict[str, Any]]:
+    """Normaliza colunas para [{"key", "width"}], retrocompatível.
 
-    Mantém só códigos conhecidos, remove duplicados e preserva a ordem. Entrada
-    inválida/vazia retorna [] (o chamador então usa o padrão).
+    Aceita itens como string (largura 0 = auto) ou dict {"key","width"}. Mantém
+    só códigos conhecidos, remove duplicados e preserva a ordem. Largura é um
+    inteiro >= 0 (0 = automática).
     """
     registry = LAYOUT_REGISTRIES.get(report_key)
     if registry is None:
@@ -74,20 +75,53 @@ def normalize_columns(raw: Any, report_key: str) -> list[str]:
             return []
     if not isinstance(items, list):
         return []
-    result: list[str] = []
+    result: list[dict[str, Any]] = []
     seen: set[str] = set()
     for entry in items:
-        code = str(entry).strip()
-        if code in registry and code not in seen:
-            seen.add(code)
-            result.append(code)
+        if isinstance(entry, dict):
+            key = str(entry.get("key") or "").strip()
+            try:
+                width = int(entry.get("width") or 0)
+            except (TypeError, ValueError):
+                width = 0
+        else:
+            key, width = str(entry).strip(), 0
+        if key in registry and key not in seen:
+            seen.add(key)
+            result.append({"key": key, "width": max(0, width)})
     return result
 
 
+def normalize_columns(raw: Any, report_key: str) -> list[str]:
+    """Apenas os códigos das colunas (compatibilidade)."""
+    return [spec["key"] for spec in normalize_column_specs(raw, report_key)]
+
+
+def resolve_column_specs(raw: Any, report_key: str) -> list[dict[str, Any]]:
+    """Specs efetivas (com largura): a seleção normalizada ou o padrão (largura 0)."""
+    specs = normalize_column_specs(raw, report_key)
+    if specs:
+        return specs
+    return [{"key": key, "width": 0} for key in LAYOUT_DEFAULTS.get(report_key, [])]
+
+
 def resolve_columns(raw: Any, report_key: str) -> list[str]:
-    """Colunas efetivas: a seleção normalizada ou o padrão quando vazia."""
-    return normalize_columns(raw, report_key) or list(LAYOUT_DEFAULTS.get(report_key, []))
+    """Colunas efetivas (apenas códigos): a seleção ou o padrão."""
+    return [spec["key"] for spec in resolve_column_specs(raw, report_key)]
 
 
-def serialize_columns(columns: list[str]) -> str:
-    return json.dumps(list(columns), ensure_ascii=False)
+def serialize_columns(columns: list[Any]) -> str:
+    """Serializa colunas (lista de códigos ou de {key,width}) como JSON de specs."""
+    specs: list[dict[str, Any]] = []
+    for column in columns:
+        if isinstance(column, dict):
+            key = str(column.get("key") or "").strip()
+            try:
+                width = int(column.get("width") or 0)
+            except (TypeError, ValueError):
+                width = 0
+        else:
+            key, width = str(column).strip(), 0
+        if key:
+            specs.append({"key": key, "width": max(0, width)})
+    return json.dumps(specs, ensure_ascii=False)

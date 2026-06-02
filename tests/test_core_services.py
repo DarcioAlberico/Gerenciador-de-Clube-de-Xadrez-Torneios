@@ -6875,6 +6875,24 @@ class PairingServiceTest(unittest.TestCase):
         with self.assertRaisesRegex(AppError, "individuais"):
             self.norm_assistant_service.evaluate_tournament(team_tournament_id)
 
+    def test_export_arbiter_norm_report_writes_file(self) -> None:
+        self._create_players(2)
+        settings = self.db.get_tournament_settings(self.tournament_id) or {}
+        settings["chief_arbiter"] = "Joao Arbitro"
+        settings["arbiters"] = "Maria Aux, Pedro Aux"
+        settings["federation"] = "BRA"
+        self.db.save_tournament_settings(self.tournament_id, settings)
+
+        path = Path(self.temp_dir.name) / "arbitro.csv"
+        self.export_service.export_arbiter_norm_report(self.tournament_id, path)
+
+        self.assertTrue(path.exists())
+        content = path.read_text(encoding="utf-8-sig")
+        self.assertIn("Dados do torneio (norma de arbitro)", content)
+        self.assertIn("Arbitros designados", content)
+        self.assertIn("Joao Arbitro", content)
+        self.assertIn("Maria Aux", content)
+
     # --- Fase F: editor de colunas da classificacao (E7) ------------------
 
     def test_standings_default_columns_unchanged(self) -> None:
@@ -6905,11 +6923,9 @@ class PairingServiceTest(unittest.TestCase):
         saved = self.list_layout_service.save_columns(
             self.tournament_id, ["position", "xxx", "name", "name"], "standings"
         )
-        self.assertEqual(saved, ["position", "name"])
-        self.assertEqual(
-            self.list_layout_service.get_columns(self.tournament_id, "standings")["selected"],
-            ["position", "name"],
-        )
+        self.assertEqual([spec["key"] for spec in saved], ["position", "name"])
+        selected = self.list_layout_service.get_columns(self.tournament_id, "standings")["selected"]
+        self.assertEqual([spec["key"] for spec in selected], ["position", "name"])
         # Selecao vazia / so codigos invalidos sao rejeitadas.
         with self.assertRaisesRegex(AppError, "ao menos uma coluna"):
             self.list_layout_service.save_columns(self.tournament_id, [], "standings")
@@ -6945,6 +6961,33 @@ class PairingServiceTest(unittest.TestCase):
 
         self.assertIn("report_layouts", tables)
         self.assertEqual(Database.SCHEMA_VERSION, user_version)
+
+    def test_list_layout_persists_column_widths(self) -> None:
+        self._create_players(2)
+        saved = self.list_layout_service.save_columns(
+            self.tournament_id,
+            [{"key": "position", "width": 8}, {"key": "name", "width": 30}],
+            "standings",
+        )
+        self.assertEqual(saved, [{"key": "position", "width": 8}, {"key": "name", "width": 30}])
+        selected = self.list_layout_service.get_columns(self.tournament_id, "standings")["selected"]
+        self.assertEqual({spec["key"]: spec["width"] for spec in selected}, {"position": 8, "name": 30})
+
+    def test_standings_column_widths_applied_in_xlsx(self) -> None:
+        from openpyxl import load_workbook
+
+        self._create_players(4)
+        self.list_layout_service.save_columns(
+            self.tournament_id,
+            [{"key": "position", "width": 7}, {"key": "name", "width": 40}],
+            "standings",
+        )
+        path = Path(self.temp_dir.name) / "classificacao.xlsx"
+        self.export_service.export_standings(self.tournament_id, path)
+
+        worksheet = load_workbook(path).active
+        self.assertEqual(worksheet.column_dimensions["A"].width, 7)
+        self.assertEqual(worksheet.column_dimensions["B"].width, 40)
 
     # --- Fase G: sistema Scheveningen (E8) --------------------------------
 

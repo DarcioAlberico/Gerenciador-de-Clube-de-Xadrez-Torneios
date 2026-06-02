@@ -12,8 +12,8 @@ from src.core.database import Database
 from src.services.constants import AppError
 from src.services.list_layouts import (
     LAYOUT_REGISTRIES,
-    normalize_columns,
-    resolve_columns,
+    normalize_column_specs,
+    resolve_column_specs,
 )
 
 
@@ -31,7 +31,7 @@ class ListLayoutService:
         registry = LAYOUT_REGISTRIES.get(report_key)
         if registry is None:
             raise AppError("Lista sem layout configuravel.")
-        selected = resolve_columns(
+        selected = resolve_column_specs(
             self.db.get_report_layout_columns(tournament_id, report_key), report_key
         )
         return {"selected": selected, "available": list(registry.items())}
@@ -39,14 +39,14 @@ class ListLayoutService:
     def save_columns(
         self,
         tournament_id: int,
-        columns: list[str],
+        columns: list[Any],
         report_key: str = "standings",
-    ) -> list[str]:
+    ) -> list[dict[str, Any]]:
         if report_key not in LAYOUT_REGISTRIES:
             raise AppError("Lista sem layout configuravel.")
         if not self.db.get_tournament(tournament_id):
             raise AppError("Selecione um torneio valido.")
-        cleaned = normalize_columns(columns, report_key)
+        cleaned = normalize_column_specs(columns, report_key)
         if not cleaned:
             raise AppError("Selecione ao menos uma coluna para a lista.")
         self.db.save_report_layout(tournament_id, report_key, cleaned)

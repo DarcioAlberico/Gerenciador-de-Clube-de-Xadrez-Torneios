@@ -19,7 +19,7 @@ from src.core.database import BASE_DIR, DEFAULT_CERTIFICATE_TEMPLATES, Database
 from src.services.constants import *
 from src.services.fide_norms import build_norm_report
 from src.services.fide_rating import build_fide_report_rows
-from src.services.list_layouts import STANDINGS_COLUMNS, resolve_columns
+from src.services.list_layouts import STANDINGS_COLUMNS, resolve_column_specs, resolve_columns
 from src.services.prizes import PRIZE_KINDS, PRIZE_POLICIES, allocate_prizes
 from src.services.trf_import import build_trf_rounds, parse_trf
 
@@ -2349,7 +2349,19 @@ class ExportService:
 
     def export_standings(self, tournament_id: int, file_path: str | Path) -> None:
         title, headers, rows = self._standings_section(tournament_id)
-        self._write_report(file_path, title, headers, rows)
+        self._write_report(
+            file_path, title, headers, rows, widths=self._standings_column_widths(tournament_id)
+        )
+
+    def _standings_column_widths(self, tournament_id: int) -> list[int] | None:
+        tournament = self.db.get_tournament(tournament_id)
+        if tournament and tournament.get("competition_type") == "team":
+            return None
+        specs = resolve_column_specs(
+            self.db.get_report_layout_columns(tournament_id, "standings"), "standings"
+        )
+        widths = [int(spec.get("width") or 0) for spec in specs]
+        return widths if any(width > 0 for width in widths) else None
 
     def export_crosstable(self, tournament_id: int, file_path: str | Path) -> None:
         path = Path(file_path)
@@ -2444,6 +2456,9 @@ class ExportService:
 
     def export_norm_report(self, tournament_id: int, file_path: str | Path) -> None:
         self._write_multi_report(Path(file_path), self._norm_sections(tournament_id))
+
+    def export_arbiter_norm_report(self, tournament_id: int, file_path: str | Path) -> None:
+        self._write_multi_report(Path(file_path), self._arbiter_norm_sections(tournament_id))
 
     def export_tiebreak_report(self, tournament_id: int, file_path: str | Path) -> None:
         tournament = self.db.get_tournament(tournament_id)
@@ -4528,6 +4543,81 @@ footer {
             ("Detalhe por titulo", ["Jogador", "Titulo", "Atende?", "Pendencias"], detail_rows),
         ]
 
+    _ARBITER_ROLE_LABELS = {
+        "chief": "Arbitro principal",
+        "chief_arbiter": "Arbitro principal",
+        "main": "Arbitro principal",
+        "principal": "Arbitro principal",
+        "deputy": "Arbitro adjunto",
+        "sector": "Arbitro de setor",
+        "arbiter": "Arbitro",
+        "assistant": "Assistente",
+    }
+
+    def _arbiter_norm_sections(
+        self, tournament_id: int
+    ) -> list[tuple[str, list[str], list[list[Any]]]]:
+        tournament = self.db.get_tournament(tournament_id)
+        if not tournament:
+            raise AppError("Selecione um torneio valido.")
+        settings = self.db.get_tournament_settings(tournament_id) or {}
+        players = self.db.list_players(tournament_id, active_only=False)
+        rated = sum(1 for player in players if self._trf_rating(player) > 0)
+        referees = self.db.list_tournament_referees(tournament_id)
+        competition = "Equipes" if tournament.get("competition_type") == "team" else "Individual"
+
+        notice_rows = [
+            ["Documento de apoio para a norma de arbitro (IA/FA)."],
+            ["Nao e o formulario oficial da FIDE; use os dados abaixo para preenche-lo."],
+        ]
+        tournament_rows = [
+            ["Torneio", tournament["name"]],
+            ["Local", tournament.get("location", "")],
+            ["Federacao", settings.get("federation", "")],
+            ["FIDE Event-ID", settings.get("fide_event_id", "")],
+            ["Data de inicio", tournament.get("start_date", "")],
+            ["Data de termino", tournament.get("end_date", "")],
+            ["Ritmo de jogo", tournament.get("time_control", "")],
+            ["Rodadas", tournament.get("rounds_count", "")],
+            ["Tipo", competition],
+            ["Jogadores", len(players)],
+            ["Jogadores com rating", rated],
+            ["Organizador", settings.get("organizer", "")],
+            ["Arbitro principal (config.)", settings.get("chief_arbiter", "")],
+        ]
+
+        arbiter_rows: list[list[Any]] = []
+        for referee in referees:
+            role = str(referee.get("role") or "").strip().lower()
+            arbiter_rows.append(
+                [
+                    referee.get("name", ""),
+                    self._ARBITER_ROLE_LABELS.get(role, role.replace("_", " ").title() or "Arbitro"),
+                    referee.get("fide_id", ""),
+                    referee.get("category", ""),
+                    "",
+                    "",
+                ]
+            )
+        if not arbiter_rows:
+            chief = str(settings.get("chief_arbiter") or "").strip()
+            if chief:
+                arbiter_rows.append([chief, "Arbitro principal", "", "", "", ""])
+            for name in str(settings.get("arbiters") or "").replace(";", ",").split(","):
+                cleaned = name.strip()
+                if cleaned:
+                    arbiter_rows.append([cleaned, "Arbitro", "", "", "", ""])
+
+        return [
+            ("Aviso", ["Observacao"], notice_rows),
+            ("Dados do torneio (norma de arbitro)", ["Campo", "Valor"], tournament_rows),
+            (
+                "Arbitros designados",
+                ["Nome", "Funcao", "FIDE ID", "Categoria", "Norma (IA/FA)", "Assinatura"],
+                arbiter_rows,
+            ),
+        ]
+
     @staticmethod
     def _format_currency(value: Any) -> str:
         return f"R$ {float(value or 0):.2f}".replace(".", ",")
@@ -6530,6 +6620,7 @@ footer {
         title: str,
         headers: list[str],
         rows: list[list[Any]],
+        widths: list[int] | None = None,
     ) -> None:
         path = Path(file_path)
         extension = path.suffix.lower()
@@ -6538,7 +6629,7 @@ footer {
             logger.info("Relatorio exportado em CSV: %s", path)
             return
         if extension == ".xlsx":
-            self._write_xlsx(path, title, headers, rows)
+            self._write_xlsx(path, title, headers, rows, widths)
             logger.info("Relatorio exportado em XLSX: %s", path)
             return
         if extension == ".pdf":
@@ -6590,10 +6681,17 @@ footer {
                 writer.writerows(rows)
 
     @staticmethod
-    def _write_xlsx(path: Path, title: str, headers: list[str], rows: list[list[Any]]) -> None:
+    def _write_xlsx(
+        path: Path,
+        title: str,
+        headers: list[str],
+        rows: list[list[Any]],
+        widths: list[int] | None = None,
+    ) -> None:
         try:
             from openpyxl import Workbook
             from openpyxl.styles import Font
+            from openpyxl.utils import get_column_letter
         except ImportError as exc:
             raise AppError("Instale openpyxl para exportar Excel.") from exc
 
@@ -6608,6 +6706,11 @@ footer {
         for column_cells in sheet.columns:
             length = max(len(str(cell.value or "")) for cell in column_cells)
             sheet.column_dimensions[column_cells[0].column_letter].width = min(max(length + 2, 10), 40)
+        # Larguras explicitas do layout sobrescrevem o auto-dimensionamento.
+        if widths:
+            for index, width in enumerate(widths):
+                if width and width > 0:
+                    sheet.column_dimensions[get_column_letter(index + 1)].width = int(width)
         workbook.save(path)
 
     @staticmethod

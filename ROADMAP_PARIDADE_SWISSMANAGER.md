@@ -278,8 +278,12 @@ Detalhamento original abaixo.
 - Restrito a individual. Testes: veredito atende/não atende, candidato a GM
   ponta a ponta, serviço+export e bloqueio para equipes. Gate verde.
 - **Escopo:** é **assistente informativo**, não homologação (texto explícito).
-  Os formulários IA/FA (Excel do SM) ficam como incremento futuro; aqui o foco é
-  a norma do jogador.
+- **Formulário de árbitro (IA/FA):** `export_arbiter_norm_report` reúne os dados
+  do torneio (local, datas, ritmo, federação, FIDE Event-ID, jogadores/rated) e
+  os árbitros designados (`list_tournament_referees`, com fallback para
+  `chief_arbiter`/`arbiters` da configuração), com colunas de função, FIDE ID,
+  norma e assinatura, como base para o formulário oficial FIDE. Opção
+  `Formulario de arbitro (IA/FA)` no hub de `Relatorios`; teste de geração.
 
 Detalhamento original abaixo.
 
@@ -318,10 +322,13 @@ estimativa.
   próprio "Salvar colunas".
 - Testes: colunas padrão inalteradas (regressão), layout altera as colunas,
   normalização/validação, reset e migração v38. Gate verde.
+- **Larguras de coluna:** o layout guarda largura por coluna (JSON
+  `{key, width}`, retrocompatível); o `ColumnLayoutEditor` tem campo de largura
+  por coluna e o export XLSX aplica as larguras explícitas (vazio = automático).
+  Testes cobrem persistência das larguras e aplicação no XLSX.
 - **Escopo:** cobre a **classificação** (lista mais usada); o registro é
-  extensível a outras listas. Larguras de coluna e geração em lote
-  multi-destino ficam como incremento futuro (exportações tabulares
-  auto-dimensionam).
+  extensível a outras listas. A geração em lote multi-destino fica como
+  incremento futuro.
 
 Detalhamento original abaixo.
 

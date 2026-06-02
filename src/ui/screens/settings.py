@@ -718,6 +718,7 @@ class SettingsPagesMixin:
             "Estatistica de partidas",
             "Fichas individuais",
             "Normas FIDE",
+            "Formulario de arbitro (IA/FA)",
             "Desempates",
             "Rodada especifica",
             "Todas as rodadas",
@@ -799,6 +800,7 @@ class SettingsPagesMixin:
                 "Estatistica de partidas": f"{safe_name}_estatistica_partidas",
                 "Fichas individuais": f"{safe_name}_fichas",
                 "Normas FIDE": f"{safe_name}_normas_fide",
+                "Formulario de arbitro (IA/FA)": f"{safe_name}_arbitro_ia_fa",
                 "Desempates": f"{safe_name}_desempates",
                 "Rodada especifica": f"{safe_name}_rodada",
                 "Todas as rodadas": f"{safe_name}_rodadas",
@@ -906,6 +908,8 @@ class SettingsPagesMixin:
                         self.export_service.export_player_cards(tournament_id, path)
                     elif report == "Normas FIDE":
                         self.export_service.export_norm_report(tournament_id, path)
+                    elif report == "Formulario de arbitro (IA/FA)":
+                        self.export_service.export_arbiter_norm_report(tournament_id, path)
                     elif report == "Desempates":
                         self.export_service.export_tiebreak_report(tournament_id, path)
                     elif report == "Rodada especifica":
