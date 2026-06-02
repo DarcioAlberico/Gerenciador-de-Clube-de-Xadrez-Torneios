@@ -5,6 +5,7 @@ import io
 import json
 import logging
 import math
+import re
 import secrets
 import shutil
 import sqlite3
@@ -16,6 +17,7 @@ from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 from urllib.request import Request, urlopen
 
 from src.core.database import BASE_DIR, DEFAULT_CERTIFICATE_TEMPLATES, Database
+from src.services.access_export import access_driver_available, write_accdb, write_csv_bundle
 from src.services.constants import *
 from src.services.fide_norms import build_norm_report
 from src.services.fide_rating import build_fide_report_rows
@@ -2459,6 +2461,58 @@ class ExportService:
 
     def export_arbiter_norm_report(self, tournament_id: int, file_path: str | Path) -> None:
         self._write_multi_report(Path(file_path), self._arbiter_norm_sections(tournament_id))
+
+    def export_access(self, tournament_id: int, dest_dir: str | Path) -> dict[str, Any]:
+        """Exporta o torneio para Access (Fase J).
+
+        Gera sempre um pacote importável (CSV por tabela + ``schema.ini``) e, quando
+        o driver ACE estiver instalado, também um ``.accdb`` real. Reaproveita os
+        construtores de seção (jogadores, classificação, emparceiramentos).
+        """
+        tournament = self.db.get_tournament(tournament_id)
+        if not tournament:
+            raise AppError("Selecione um torneio valido.")
+        directory = Path(dest_dir)
+
+        tables: dict[str, tuple[list[str], list[list[Any]]]] = {}
+        _, player_headers, player_rows = self._players_section(tournament_id)
+        tables["Jogadores"] = (player_headers, [list(row) for row in player_rows])
+        _, standings_headers, standings_rows = self._standings_section(tournament_id)
+        tables["Classificacao"] = (standings_headers, [list(row) for row in standings_rows])
+
+        pairing_headers: list[str] | None = None
+        pairing_rows: list[list[Any]] = []
+        for round_data in sorted(self.db.list_rounds(tournament_id), key=lambda item: item["number"]):
+            try:
+                _, headers, rows = self._pairings_section(round_data["id"])
+            except Exception:
+                continue
+            if pairing_headers is None:
+                pairing_headers = ["Rodada", *headers]
+            for row in rows:
+                pairing_rows.append([round_data["number"], *list(row)])
+        if pairing_headers is not None:
+            tables["Emparceiramentos"] = (pairing_headers, pairing_rows)
+
+        bundle = write_csv_bundle(tables, directory)
+
+        slug = re.sub(r"[^A-Za-z0-9._-]+", "_", str(tournament.get("name") or "torneio").strip()).strip("_") or "torneio"
+        accdb_path = directory / f"{slug}_access.accdb"
+        accdb = str(accdb_path) if write_accdb(tables, accdb_path) else None
+
+        logger.info(
+            "Exportacao Access do torneio %s: %s tabelas, accdb=%s",
+            tournament_id,
+            len(tables),
+            bool(accdb),
+        )
+        return {
+            "csv_paths": bundle["csv_paths"],
+            "schema_ini": bundle["schema_ini"],
+            "accdb": accdb,
+            "driver_available": access_driver_available(),
+            "tables": list(tables.keys()),
+        }
 
     def export_tiebreak_report(self, tournament_id: int, file_path: str | Path) -> None:
         tournament = self.db.get_tournament(tournament_id)

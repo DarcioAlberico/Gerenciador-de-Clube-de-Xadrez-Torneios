@@ -52,6 +52,7 @@ class LegacyMigrations:
             38: self._migrate_to_v38,
             39: self._migrate_to_v39,
             40: self._migrate_to_v40,
+            41: self._migrate_to_v41,
         }
 
     def _run_schema_migrations(self, connection: sqlite3.Connection) -> None:
@@ -150,6 +151,8 @@ class LegacyMigrations:
             self._migrate_to_v39(connection)
         if self.db.SCHEMA_VERSION >= 40:
             self._migrate_to_v40(connection)
+        if self.db.SCHEMA_VERSION >= 41:
+            self._migrate_to_v41(connection)
 
     def _migrate_to_v1(self, connection: sqlite3.Connection) -> None:
         now = self.db.now()
@@ -1758,4 +1761,12 @@ class LegacyMigrations:
         if "scheveningen_group" not in columns:
             connection.execute(
                 "ALTER TABLE players ADD COLUMN scheveningen_group TEXT NOT NULL DEFAULT ''"
+            )
+
+    def _migrate_to_v41(self, connection: sqlite3.Connection) -> None:
+        """Ponte Chess-Results (Fase J): tournament_settings.chess_results_url."""
+        columns = self.db._table_columns(connection, "tournament_settings")
+        if "chess_results_url" not in columns:
+            connection.execute(
+                "ALTER TABLE tournament_settings ADD COLUMN chess_results_url TEXT NOT NULL DEFAULT ''"
             )

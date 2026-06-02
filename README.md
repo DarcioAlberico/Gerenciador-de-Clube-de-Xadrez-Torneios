@@ -143,6 +143,22 @@ Aplicativo desktop em Python para emparceiramento de torneios de xadrez.
   bloqueada apos a primeira rodada; o botao `Dividir` reparte os jogadores em N
   torneios-filho por ranking inicial (A = mais fortes), vinculados ao torneio de
   origem.
+- Ponte com o Chess-Results.com (o site nao tem API publica de upload): na tela
+  de Jogadores, `Publicar no Chess-Results` gera o pacote TRF16 + passos e abre a
+  pagina de registro para envio manual, e `Importar inscricoes Chess-Results` le
+  start lists/inscricoes publicadas em CSV. O link publicado e guardado por torneio.
+- Listas de rating estrangeiras: `Importar lista estrangeira` (tela de Jogadores)
+  importa federacoes alem de FIDE/CBX/LBX por mapeamento generico de colunas, com
+  registro de federacoes semeado e extensivel pela propria interface.
+- Album de fotos por FTP: aba `Album/FTP` em Integracoes publica uma pasta de
+  fotos (com galeria `index.html`) em servidor FTP/FTPS; a senha fica protegida
+  (DPAPI) e nunca e exibida.
+- Exportacao para Access: opcao `Access (banco)` no hub de Relatorios gera um
+  pacote importavel (CSV por tabela + `schema.ini`) e, quando ha driver ACE
+  instalado, tambem um `.accdb` real.
+- Geracao em lote multi-destino: botao `Geracao em lote` no hub de Relatorios
+  gera varios relatorios x formatos numa pasta de uma vez, com site HTML e
+  impressao opcionais.
 - Pre-visualizacao da atualizacao oficial dos inscritos com comparacao
   antes/depois, lista separada de jogadores sem correspondencia e confirmacao
   explicita das divergencias selecionadas.

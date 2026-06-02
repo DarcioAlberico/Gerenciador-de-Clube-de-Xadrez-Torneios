@@ -14,6 +14,7 @@ from src.services.pairing import (
 )
 from src.services.prizes import PRIZE_POLICIES
 from src.services.list_layouts import DEFAULT_STANDINGS_COLUMNS, STANDINGS_COLUMNS
+from src.services.chess_results import normalize_results_url
 
 
 class TiebreakSequenceEditor(ctk.CTkFrame):
@@ -2419,6 +2420,205 @@ class TournamentPagesMixin:
             except Exception as exc:
                 self._show_error(exc)
 
+        def import_foreign_rating_list() -> None:
+            try:
+                federations = self.official_rating_service.list_foreign_federations()
+            except Exception as exc:
+                self._show_error(exc)
+                return
+            options = [f"{code} - {info.get('name', code)}" for code, info in sorted(federations.items())]
+
+            dialog = ctk.CTkToplevel(self)
+            dialog.title("Importar lista de rating estrangeira")
+            dialog.geometry("480x300")
+            dialog.transient(self)
+            dialog.grab_set()
+            dialog.grid_columnconfigure(0, weight=1)
+
+            ctk.CTkLabel(dialog, text="Federacao", font=font_subsection()).grid(
+                row=0, column=0, padx=16, pady=(16, 4), sticky="w"
+            )
+            fed_option = ctk.CTkOptionMenu(dialog, values=options or ["(sem federacoes)"])
+            fed_option.grid(row=1, column=0, padx=16, pady=(0, 12), sticky="ew")
+
+            ctk.CTkLabel(
+                dialog,
+                text="Adicionar federacao (codigo + nome) - opcional",
+                text_color=THEME_TEXT_SUB,
+            ).grid(row=2, column=0, padx=16, pady=(0, 2), sticky="w")
+            add_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+            add_frame.grid(row=3, column=0, padx=16, pady=(0, 12), sticky="ew")
+            add_frame.grid_columnconfigure(1, weight=1)
+            code_entry = ctk.CTkEntry(add_frame, width=80, placeholder_text="POR")
+            code_entry.grid(row=0, column=0, padx=(0, 8))
+            name_entry = ctk.CTkEntry(add_frame, placeholder_text="Nome da federacao")
+            name_entry.grid(row=0, column=1, sticky="ew", padx=(0, 8))
+
+            def add_fed() -> None:
+                try:
+                    code = self.official_rating_service.add_foreign_federation(
+                        code_entry.get(), name_entry.get()
+                    )
+                    self._show_toast(f"Federacao {code} adicionada.", kind="success")
+                    dialog.destroy()
+                    import_foreign_rating_list()
+                except Exception as exc:
+                    self._show_error(exc)
+
+            ctk.CTkButton(add_frame, text="Adicionar", width=100, command=add_fed).grid(row=0, column=2)
+
+            def do_import() -> None:
+                selection = fed_option.get()
+                code = selection.split(" - ", maxsplit=1)[0].strip()
+                if not code or code == "(sem federacoes)":
+                    self._show_warning("Selecione ou adicione uma federacao.")
+                    return
+                file_path = filedialog.askopenfilename(
+                    title=f"Lista de rating {code}",
+                    filetypes=[("Planilhas e CSV", "*.csv;*.xls;*.xlsx"), ("Todos os arquivos", "*.*")],
+                )
+                if not file_path:
+                    return
+                dialog.destroy()
+
+                def show_result(result: dict[str, Any]) -> None:
+                    message = f"{result['imported']} jogadores importados para a base {result['source']}."
+                    if result["errors"]:
+                        message += "\n\nAvisos:\n" + "\n".join(result["errors"][:10])
+                    self._show_info(message)
+
+                self._run_background(
+                    lambda: self.official_rating_service.import_foreign_list(file_path, code),
+                    show_result,
+                    f"Importando lista {code}...",
+                )
+
+            buttons = ctk.CTkFrame(dialog, fg_color="transparent")
+            buttons.grid(row=4, column=0, padx=16, pady=(8, 16), sticky="e")
+            ctk.CTkButton(
+                buttons,
+                text="Cancelar",
+                fg_color=THEME_NEUTRAL,
+                hover_color=THEME_NEUTRAL_HOVER,
+                command=dialog.destroy,
+            ).pack(side="left", padx=(0, 8))
+            ctk.CTkButton(buttons, text="Importar arquivo", command=do_import).pack(side="left")
+
+        def import_chess_results_entries() -> None:
+            try:
+                if not self.current_tournament_id:
+                    raise AppError("Selecione um torneio.")
+                file_path = filedialog.askopenfilename(
+                    title="Importar inscricoes do Chess-Results (CSV)",
+                    filetypes=[("CSV", "*.csv"), ("Todos os arquivos", "*.*")],
+                )
+                if not file_path:
+                    return
+                tournament_id = int(self.current_tournament_id)
+
+                def show_result(result: dict[str, Any]) -> None:
+                    load_players()
+                    message = f"{result['imported']} inscricoes importadas do Chess-Results."
+                    if result["errors"]:
+                        message += "\n\nAvisos:\n" + "\n".join(result["errors"][:10])
+                    self._show_info(message)
+
+                self._run_background(
+                    lambda: self.chess_results_service.import_entries(tournament_id, file_path),
+                    show_result,
+                    "Importando inscricoes do Chess-Results...",
+                )
+            except Exception as exc:
+                self._show_error(exc)
+
+        def show_chess_results_package(result: dict[str, Any]) -> None:
+            tournament_id = int(self.current_tournament_id)
+            dialog = ctk.CTkToplevel(self)
+            dialog.title("Publicar no Chess-Results.com")
+            dialog.geometry("700x540")
+            dialog.transient(self)
+            dialog.grab_set()
+            dialog.grid_columnconfigure(0, weight=1)
+
+            ctk.CTkLabel(
+                dialog, text="Ponte Chess-Results (envio manual)", font=font_section()
+            ).grid(row=0, column=0, padx=16, pady=(16, 4), sticky="w")
+            ctk.CTkLabel(
+                dialog,
+                text=f"TRF16 gerado:\n{result['trf_path']}",
+                justify="left",
+                anchor="w",
+                wraplength=640,
+                text_color=THEME_TEXT_SUB,
+            ).grid(row=1, column=0, padx=16, pady=(0, 8), sticky="w")
+
+            steps_box = ctk.CTkTextbox(dialog, height=180, wrap="word")
+            steps_box.grid(row=2, column=0, padx=16, pady=(0, 8), sticky="ew")
+            steps_box.insert("1.0", "\n".join(result["steps"]))
+            if result.get("warnings"):
+                steps_box.insert("end", "\n\nAvisos do TRF:\n" + "\n".join(f"- {w}" for w in result["warnings"]))
+            steps_box.configure(state="disabled")
+
+            link_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+            link_frame.grid(row=3, column=0, padx=16, pady=(0, 8), sticky="ew")
+            link_frame.grid_columnconfigure(0, weight=1)
+            link_entry = ctk.CTkEntry(link_frame, placeholder_text="https://chess-results.com/tnr....aspx")
+            link_entry.grid(row=0, column=0, sticky="ew", padx=(0, 8))
+            if result.get("published_url"):
+                link_entry.insert(0, result["published_url"])
+
+            def save_link() -> None:
+                try:
+                    saved = self.chess_results_service.set_published_url(tournament_id, link_entry.get())
+                    self._show_toast("Link salvo." if saved else "Link removido.", kind="success")
+                except Exception as exc:
+                    self._show_error(exc)
+
+            ctk.CTkButton(link_frame, text="Salvar link", command=save_link, width=110).grid(row=0, column=1)
+
+            actions = ctk.CTkFrame(dialog, fg_color="transparent")
+            actions.grid(row=4, column=0, padx=16, pady=(4, 16), sticky="e")
+            ctk.CTkButton(
+                actions,
+                text="Abrir pagina de registro",
+                command=lambda: webbrowser.open(result["register_url"]),
+            ).pack(side="left", padx=(0, 8))
+
+            def open_published() -> None:
+                normalized = normalize_results_url(link_entry.get())
+                if normalized:
+                    webbrowser.open(normalized)
+                else:
+                    self._show_warning("Salve um link valido do Chess-Results primeiro.")
+
+            ctk.CTkButton(actions, text="Abrir torneio publicado", command=open_published).pack(side="left", padx=(0, 8))
+            ctk.CTkButton(
+                actions,
+                text="Fechar",
+                fg_color=THEME_NEUTRAL,
+                hover_color=THEME_NEUTRAL_HOVER,
+                command=dialog.destroy,
+            ).pack(side="left")
+
+        def prepare_chess_results() -> None:
+            try:
+                if not self.current_tournament_id:
+                    raise AppError("Selecione um torneio.")
+                directory = filedialog.askdirectory(
+                    title="Pasta para o pacote Chess-Results (TRF16)",
+                    initialdir=str(self._default_export_dir()),
+                )
+                if not directory:
+                    return
+                tournament_id = int(self.current_tournament_id)
+                self._run_background(
+                    lambda: self.chess_results_service.prepare_upload(tournament_id, directory),
+                    show_chess_results_package,
+                    "Preparando pacote Chess-Results...",
+                )
+            except Exception as exc:
+                self._show_error(exc)
+
         tree.bind("<<TreeviewSelect>>", on_select)
         search_entry.bind("<KeyRelease>", lambda _event: load_players())
         include_out_of_scope_check.configure(command=load_member_options)
@@ -2439,8 +2639,11 @@ class TournamentPagesMixin:
             ("Importar FIDE", lambda: import_official_ratings("FIDE")),
             ("Importar CBX", lambda: import_official_ratings("CBX")),
             ("Importar LBX arquivo", lambda: import_official_ratings("LBX")),
+            ("Importar lista estrangeira", import_foreign_rating_list),
             ("Atualizar base LBX", update_lbx_base),
             ("Comparar ratings oficiais", update_official_ratings),
+            ("Importar inscricoes Chess-Results", import_chess_results_entries),
+            ("Publicar no Chess-Results", prepare_chess_results),
         ]
         self._grid_form_buttons(form, button_specs, control_row + 7, required_action="tournament_write")
 

@@ -33,10 +33,13 @@ Uma fase só está pronta quando:
 | G | Scheveningen ✅ | E8 | P3 (feito) |
 | H | Importação de Swiss-Manager ✅ | E9 | P3 (feito) |
 | I | Mudar tipo / dividir torneio ✅ | E10 | P4 (feito) |
+| J | Integrações externas e publicação ✅ | #11, #12 | (feito) |
 
-Status: **todas as fases A–I implementadas.** A–C entregaram o maior valor
+Status: **todas as fases A–J implementadas.** A–C entregaram o maior valor
 arbitral; D–E consolidaram o perfil FIDE; F–I foram os refinamentos e
-conveniências.
+conveniências; **J reverteu os itens antes "fora de escopo"** (Chess-Results,
+listas estrangeiras, FTP/Access, lote multi-destino), de forma honesta e
+coerente com o offline-first.
 
 ---
 
@@ -418,16 +421,41 @@ Detalhamento original abaixo.
 
 ---
 
-## Itens fora do roadmap (registro)
+## Fase J — Integrações externas e publicação (#11, #12)
 
-Mantidos fora por decisão de produto, com justificativa em
-[`ESPEC_PARIDADE_SWISSMANAGER.md`](ESPEC_PARIDADE_SWISSMANAGER.md):
+**Status: implementada (schema v41).** Reverte, de forma honesta e coerente com
+o offline-first, os itens antes "fora de escopo". Quatro frentes:
 
-- Integração **Chess-Results.com** (upload/online/registro) — offline-first;
-  ponte é o TRF16.
-- **Listas de rating estrangeiras** — foco FIDE/CBX/LBX (Brasil).
-- **Álbuns de fotos (FTP)**, **salvar em Access**, **listagens de Olimpíada** —
-  nicho.
+1. **Chess-Results.com (ponte):** o site **não tem API pública de upload** (o
+   envio é exclusivo do binário Swiss-Manager). A integração é uma ponte:
+   `chess_results.py` (puro) + `ChessResultsService` geram o pacote TRF16 e os
+   passos de envio manual (abrir a página de registro no navegador) e **importam
+   inscrições/start lists publicadas** (CSV). Link publicado guardado por torneio
+   (`tournament_settings.chess_results_url`, migração v41). UI na tela de
+   Jogadores do torneio.
+2. **Listas de rating estrangeiras:** `foreign_rating_lists.py` (registro semeado
+   + `map_row` por aliases/mapeamento) + `OfficialRatingService.import_foreign_list`
+   / `import_foreign_list_from_url` / registro extensível em `app_settings`. O
+   snapshot aceita qualquer `source` (federação). UI: "Importar lista estrangeira".
+3. **Álbum de fotos (FTP) + Access:** `ftp_publish.py` + `PhotoAlbumService`
+   publicam uma pasta de imagens (com galeria `index.html`) por FTP/FTPS (senha
+   protegida por DPAPI); `access_export.py` + `ExportService.export_access` geram
+   um **pacote importável** (CSV por tabela + `schema.ini`) e, quando o driver ACE
+   existe, também um `.accdb` real. UI: aba "Álbum/FTP" em Integrações e opção
+   "Access (banco)" no hub de Relatórios.
+4. **Geração em lote multi-destino:** `batch_export.py` (registro) +
+   `BatchExportService.run_batch` geram vários relatórios × formatos numa pasta de
+   uma vez, com site HTML e impressão opcionais, isolando erros. UI: diálogo
+   "Geração em lote" no hub de Relatórios.
+
+Testes: 20 casos novos em `tests/test_core_services.py`; gate completo verde.
+
+## Itens ainda fora do roadmap (registro)
+
+Mantidos fora por serem **nicho** sem demanda no Brasil:
+
+- **Listagens especiais de Olimpíada** (saídas FIDE de Olimpíada) — nicho.
+- Detalhes em [`ESPEC_PARIDADE_SWISSMANAGER.md`](ESPEC_PARIDADE_SWISSMANAGER.md).
 
 ## Sequência recomendada de entrega
 
