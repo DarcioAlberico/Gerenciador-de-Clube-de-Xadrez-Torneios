@@ -9866,5 +9866,110 @@ class BatchExportPhaseJTest(unittest.TestCase):
             self.service.run_batch(tournament_id, [], ["csv"], self.temp_dir.name)
 
 
+# ----------------------------------------------------------------------
+# Aprofundamento do Painel do Arbitro (UX + docs)
+# ----------------------------------------------------------------------
+
+
+class ArbiterPanelMetricsProgressTest(unittest.TestCase):
+    FINAL = {"1-0", "0-1", "1/2-1/2"}
+
+    def test_individual_progress(self) -> None:
+        from src.services.pairing.arbitration import individual_round_dashboard_metrics
+
+        pairings = [{"result": "1-0"}, {"result": ""}, {"is_bye": True, "result": ""}]
+        metrics = individual_round_dashboard_metrics(pairings, self.FINAL)
+        self.assertEqual(2, metrics["total_results"])  # exclui o bye
+        self.assertEqual(1, metrics["resolved_results"])
+        self.assertEqual(1, metrics["byes"])
+
+    def test_team_progress(self) -> None:
+        from src.services.pairing.arbitration import team_round_dashboard_metrics
+
+        matches = [{"id": 1, "is_bye": False}, {"id": 2, "is_bye": True}]
+        boards = {1: [{"result": "1-0"}, {"result": ""}]}
+        metrics = team_round_dashboard_metrics(matches, boards, self.FINAL)
+        self.assertEqual(2, metrics["total_results"])
+        self.assertEqual(1, metrics["resolved_results"])
+        self.assertEqual(1, metrics["pending_results"])
+        self.assertEqual(1, metrics["byes"])
+
+
+class ArbiterPanelDeepeningTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        base = Path(self.temp_dir.name)
+        self.db = Database(base / "albericus.db", backup_dir=base / "backups")
+        self.pairing_service = PairingService(self.db)
+        self.export_service = ExportService(self.db, self.pairing_service)
+
+    def tearDown(self) -> None:
+        self.temp_dir.cleanup()
+
+    def _open_round_tournament(self) -> int:
+        tournament_id = self.db.create_tournament(
+            name="Aberto",
+            location="Sala",
+            rounds_count=3,
+            time_control="90+30",
+            start_date="2026-06-02",
+            end_date="2026-06-02",
+        )
+        for index in range(4):
+            self.db.create_player(tournament_id=tournament_id, name=f"Jogador {index}", rating=1500 - index)
+        self.pairing_service.generate_next_round(tournament_id)
+        return tournament_id
+
+    def test_dashboard_structured_alerts_and_progress(self) -> None:
+        tournament_id = self._open_round_tournament()
+        dashboard = self.pairing_service.arbitration_dashboard(tournament_id)
+        metrics = dashboard["metrics"]
+        self.assertEqual(2, metrics["total_results"])
+        self.assertEqual(0, metrics["resolved_results"])
+        self.assertEqual(0, metrics["round_progress_percent"])
+        detailed = dashboard["alerts_detailed"]
+        self.assertTrue(detailed)
+        for alert in detailed:
+            self.assertIn("text", alert)
+            self.assertIn("severity", alert)
+            self.assertIn("action", alert)
+        self.assertTrue(any(alert["action"] == "pending_results" for alert in detailed))
+        # `alerts` (strings) continua em sincronia.
+        self.assertEqual([alert["text"] for alert in detailed], dashboard["alerts"])
+
+    def test_progress_updates_after_result(self) -> None:
+        tournament_id = self._open_round_tournament()
+        rounds = self.db.list_rounds(tournament_id)
+        pairings = self.db.get_pairings_for_round(int(rounds[-1]["id"]))
+        self.pairing_service.update_result(tournament_id, int(pairings[0]["id"]), "1-0")
+        metrics = self.pairing_service.arbitration_dashboard(tournament_id)["metrics"]
+        self.assertEqual(1, metrics["resolved_results"])
+        self.assertEqual(50, metrics["round_progress_percent"])
+
+    def test_export_round_package(self) -> None:
+        tournament_id = load_tournament_fixture(
+            "individual_8_players_3_rounds", self.db, self.pairing_service
+        )
+        latest_round = sorted(self.db.list_rounds(tournament_id), key=lambda item: int(item["number"]))[-1]
+        dest = Path(self.temp_dir.name) / "pacote"
+        result = self.export_service.export_round_package(int(latest_round["id"]), dest)
+        self.assertEqual([], result["errors"])
+        self.assertEqual(3, result["count"])  # mural + sumulas + cartoes
+        self.assertTrue(all(os.path.exists(path) for path in result["generated"]))
+
+    def test_export_tournament_minutes(self) -> None:
+        tournament_id = load_tournament_fixture(
+            "individual_8_players_3_rounds", self.db, self.pairing_service
+        )
+        sections = self.export_service._tournament_minutes_sections(tournament_id)
+        titles = [title for title, _headers, _rows in sections]
+        self.assertEqual("Ata final do torneio", titles[0])
+        self.assertTrue(any("assinatura" in title.lower() for title in titles))
+        out_path = Path(self.temp_dir.name) / "ata.xlsx"
+        self.export_service.export_tournament_minutes(tournament_id, out_path)
+        self.assertTrue(out_path.exists())
+        self.assertGreater(out_path.stat().st_size, 0)
+
+
 if __name__ == "__main__":
     unittest.main()

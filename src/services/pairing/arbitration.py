@@ -139,10 +139,15 @@ def individual_round_dashboard_metrics(
         if not item.get("result") or item.get("result") not in final_results
     ]
     byes = [item for item in pairings if item.get("is_bye")]
+    # Progresso = mesas (sem bye) que precisam de resultado x quantas ja tem.
+    games = [item for item in pairings if not item.get("is_bye")]
+    resolved = [item for item in games if item.get("result") in final_results]
     return {
         "pending_results": len(pending),
         "byes": len(byes),
         "ready_to_close": bool(pairings) and not pending,
+        "total_results": len(games),
+        "resolved_results": len(resolved),
     }
 
 
@@ -153,18 +158,23 @@ def team_round_dashboard_metrics(
 ) -> dict[str, Any]:
     pending = 0
     byes = 0
+    total = 0
+    resolved = 0
     for match in matches:
         if match.get("is_bye"):
             byes += 1
             continue
         boards = boards_by_match_id.get(int(match["id"]), [])
-        pending += sum(
-            1
-            for board in boards
-            if not board.get("result") or board.get("result") not in final_results
-        )
+        total += len(boards)
+        for board in boards:
+            if not board.get("result") or board.get("result") not in final_results:
+                pending += 1
+            else:
+                resolved += 1
     return {
         "pending_results": pending,
         "byes": byes,
         "ready_to_close": bool(matches) and pending == 0,
+        "total_results": total,
+        "resolved_results": resolved,
     }

@@ -2514,6 +2514,72 @@ class ExportService:
             "tables": list(tables.keys()),
         }
 
+    def export_round_package(
+        self,
+        round_id: int,
+        dest_dir: str | Path,
+        *,
+        wall: bool = True,
+        scoresheets: bool = True,
+        cards: bool = True,
+    ) -> dict[str, Any]:
+        """Pacote da rodada em um passo: mural + sumulas + cartoes numa pasta (PDF).
+
+        Reaproveita os geradores existentes e isola erros (um documento que falha
+        nao impede os demais). Pensado para o arbitro afixar/distribuir de uma vez.
+        """
+        round_data = self.db.get_round(round_id)
+        if not round_data:
+            raise AppError("Rodada nao encontrada.")
+        tournament = self.db.get_tournament(int(round_data["tournament_id"]))
+        if not tournament:
+            raise AppError("Torneio nao encontrado.")
+        directory = Path(dest_dir)
+        directory.mkdir(parents=True, exist_ok=True)
+        slug = re.sub(r"[^A-Za-z0-9._-]+", "_", str(tournament.get("name") or "torneio").strip()).strip("_") or "torneio"
+        base = f"{slug}_rodada_{round_data['number']}"
+
+        generated: list[str] = []
+        errors: list[str] = []
+        if wall:
+            try:
+                path = directory / f"{base}_mural.pdf"
+                self.export_pairings(round_id, path)
+                generated.append(str(path))
+            except Exception as exc:
+                errors.append(f"Mural: {exc}")
+        if scoresheets:
+            try:
+                path = directory / f"{base}_sumulas.pdf"
+                self.export_scoresheets(round_id, path)
+                generated.append(str(path))
+            except Exception as exc:
+                errors.append(f"Sumulas: {exc}")
+        if cards:
+            try:
+                pairings = self.db.get_pairings_for_round(round_id)
+                max_board = max((int(item.get("board_number") or 0) for item in pairings), default=0)
+                if max_board <= 0:
+                    raise AppError("Rodada sem mesas para cartoes.")
+                path = directory / f"{base}_cartoes.pdf"
+                self.export_table_cards(path, 1, max_board, round_id, False)
+                generated.append(str(path))
+            except Exception as exc:
+                errors.append(f"Cartoes: {exc}")
+
+        logger.info(
+            "Pacote da rodada %s do torneio %s: %s documentos, %s erros",
+            round_data["number"],
+            tournament["id"],
+            len(generated),
+            len(errors),
+        )
+        return {"generated": generated, "errors": errors, "count": len(generated)}
+
+    def export_tournament_minutes(self, tournament_id: int, file_path: str | Path) -> None:
+        """Ata final do torneio: documento unico de encerramento (Fase painel)."""
+        self._write_multi_report(Path(file_path), self._tournament_minutes_sections(tournament_id))
+
     def export_tiebreak_report(self, tournament_id: int, file_path: str | Path) -> None:
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
@@ -4671,6 +4737,75 @@ footer {
                 arbiter_rows,
             ),
         ]
+
+    def _tournament_minutes_sections(
+        self, tournament_id: int
+    ) -> list[tuple[str, list[str], list[list[Any]]]]:
+        """Secoes da ata final: cabecalho + classificacao + premiacao + taxas + arbitros."""
+        tournament = self.db.get_tournament(tournament_id)
+        if not tournament:
+            raise AppError("Selecione um torneio valido.")
+        settings = self.db.get_tournament_settings(tournament_id) or {}
+        players = self.db.list_players(tournament_id, active_only=False)
+        rated = sum(1 for player in players if self._trf_rating(player) > 0)
+        competition = "Equipes" if tournament.get("competition_type") == "team" else "Individual"
+
+        header_rows = [
+            ["Torneio", tournament["name"]],
+            ["Local", tournament.get("location", "")],
+            ["Federacao", settings.get("federation", "")],
+            ["FIDE Event-ID", settings.get("fide_event_id", "")],
+            ["Data de inicio", tournament.get("start_date", "")],
+            ["Data de termino", tournament.get("end_date", "")],
+            ["Ritmo de jogo", tournament.get("time_control", "")],
+            ["Rodadas", tournament.get("rounds_count", "")],
+            ["Tipo", competition],
+            ["Jogadores", len(players)],
+            ["Jogadores com rating", rated],
+            ["Organizador", settings.get("organizer", "")],
+            ["Diretor", settings.get("director", "")],
+            ["Arbitro principal", settings.get("chief_arbiter", "")],
+        ]
+
+        referees = self.db.list_tournament_referees(tournament_id)
+        arbiter_rows: list[list[Any]] = []
+        for referee in referees:
+            role = str(referee.get("role") or "").strip().lower()
+            arbiter_rows.append(
+                [
+                    referee.get("name", ""),
+                    self._ARBITER_ROLE_LABELS.get(role, role.replace("_", " ").title() or "Arbitro"),
+                    referee.get("fide_id", ""),
+                    referee.get("category", ""),
+                    "",
+                ]
+            )
+        if not arbiter_rows:
+            chief = str(settings.get("chief_arbiter") or "").strip()
+            if chief:
+                arbiter_rows.append([chief, "Arbitro principal", "", "", ""])
+            for name in str(settings.get("arbiters") or "").replace(";", ",").split(","):
+                cleaned = name.strip()
+                if cleaned:
+                    arbiter_rows.append([cleaned, "Arbitro", "", "", ""])
+
+        sections: list[tuple[str, list[str], list[list[Any]]]] = [
+            ("Ata final do torneio", ["Campo", "Valor"], header_rows),
+            self._standings_section(tournament_id),
+        ]
+        # Premiacao e taxas sao opcionais: AppError quando nao se aplicam.
+        try:
+            sections.extend(self._prize_sections(tournament_id))
+        except AppError:
+            pass
+        try:
+            sections.extend(self._rating_fee_sections(tournament_id))
+        except AppError:
+            pass
+        sections.append(
+            ("Arbitros e assinaturas", ["Nome", "Funcao", "FIDE ID", "Categoria", "Assinatura"], arbiter_rows)
+        )
+        return sections
 
     @staticmethod
     def _format_currency(value: Any) -> str:

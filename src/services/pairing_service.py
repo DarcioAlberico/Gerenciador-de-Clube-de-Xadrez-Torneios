@@ -154,10 +154,20 @@ class PairingService:
             "ready_to_close": False,
             "can_preview_next_round": False,
             "preview_alerts": 0,
+            "total_results": 0,
+            "resolved_results": 0,
+            "round_progress_percent": 0,
             "result_states": self.result_states_summary(tournament_id),
             **self._round_clock_metrics(latest_round),
         }
         alerts: list[str] = []
+        alerts_detailed: list[dict[str, Any]] = []
+
+        def add_alert(text: str, severity: str, action: str = "") -> None:
+            # Mantem `alerts` (strings, retrocompatibilidade) em sincronia com a
+            # versao estruturada usada pelos alertas clicaveis do painel.
+            alerts.append(text)
+            alerts_detailed.append({"text": text, "severity": severity, "action": action})
         if latest_round:
             if tournament.get("competition_type") == "team":
                 metrics.update(self._team_round_dashboard_metrics(int(latest_round["id"])))
@@ -165,25 +175,43 @@ class PairingService:
                 metrics.update(self._individual_round_dashboard_metrics(int(latest_round["id"])))
             if latest_round.get("status") != "closed":
                 if metrics["pending_results"]:
-                    alerts.append(f"Rodada {latest_round['number']} tem {metrics['pending_results']} resultado(s) pendente(s).")
+                    add_alert(
+                        f"Rodada {latest_round['number']} tem {metrics['pending_results']} resultado(s) pendente(s).",
+                        "danger",
+                        "pending_results",
+                    )
                 else:
                     blocking_issues = self._blocking_arbitration_issues_for_round(tournament_id, int(latest_round["id"]))
                     metrics["blocking_issues"] = len(blocking_issues)
                     if blocking_issues:
                         metrics["ready_to_close"] = False
-                        alerts.append(
-                            f"Rodada {latest_round['number']} tem {len(blocking_issues)} pendencia(s) de arbitragem bloqueante(s)."
+                        add_alert(
+                            f"Rodada {latest_round['number']} tem {len(blocking_issues)} pendencia(s) de arbitragem bloqueante(s).",
+                            "danger",
+                            "blocking_issues",
                         )
                     else:
-                        alerts.append(f"Rodada {latest_round['number']} esta pronta para fechamento.")
+                        add_alert(
+                            f"Rodada {latest_round['number']} esta pronta para fechamento.",
+                            "success",
+                            "ready_to_close",
+                        )
         else:
-            alerts.append("Nenhuma rodada gerada. Use a chamada inicial antes da primeira rodada.")
+            add_alert(
+                "Nenhuma rodada gerada. Use a chamada inicial antes da primeira rodada.",
+                "info",
+                "initial_call",
+            )
         if absent_players:
-            alerts.append(f"{len(absent_players)} jogador(es) marcado(s) como ausente(s).")
+            add_alert(f"{len(absent_players)} jogador(es) marcado(s) como ausente(s).", "info", "absent_players")
         if correction_count:
-            alerts.append(f"{correction_count} correcao(oes) auditada(s) no torneio.")
+            add_alert(f"{correction_count} correcao(oes) auditada(s) no torneio.", "info", "corrections")
         if submitted_results:
-            alerts.append(f"{submitted_results} resultado(s) enviado(s) por QR aguardando aprovacao.")
+            add_alert(
+                f"{submitted_results} resultado(s) enviado(s) por QR aguardando aprovacao.",
+                "danger",
+                "qr_pending",
+            )
 
         if not latest_round or latest_round.get("status") == "closed":
             try:
@@ -191,9 +219,18 @@ class PairingService:
                 metrics["can_preview_next_round"] = True
                 metrics["preview_alerts"] = int(preview.get("alerts_count") or 0)
                 if metrics["preview_alerts"]:
-                    alerts.append(f"Previa da proxima rodada tem {metrics['preview_alerts']} alerta(s).")
+                    add_alert(
+                        f"Previa da proxima rodada tem {metrics['preview_alerts']} alerta(s).",
+                        "info",
+                        "preview_next",
+                    )
             except AppError as exc:
-                alerts.append(str(exc))
+                add_alert(str(exc), "info", "")
+
+        # Progresso da rodada atual (mesas resolvidas / total que precisa de resultado).
+        total_results = int(metrics.get("total_results") or 0)
+        resolved_results = int(metrics.get("resolved_results") or 0)
+        metrics["round_progress_percent"] = round(100 * resolved_results / total_results) if total_results else 0
 
         pending_items = self._pending_round_items(
             latest_round,
@@ -201,7 +238,12 @@ class PairingService:
             pending_limit,
             pending_query,
         )
-        return {"metrics": metrics, "alerts": alerts, "pending_items": pending_items}
+        return {
+            "metrics": metrics,
+            "alerts": alerts,
+            "alerts_detailed": alerts_detailed,
+            "pending_items": pending_items,
+        }
 
     def _round_clock_metrics(self, latest_round: dict[str, Any] | None) -> dict[str, Any]:
         if not latest_round:

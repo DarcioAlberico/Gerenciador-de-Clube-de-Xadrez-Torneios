@@ -164,6 +164,14 @@ Aplicativo desktop em Python para emparceiramento de torneios de xadrez.
   explicita das divergencias selecionadas.
 - Central de pendencias com filtros por decisao, QR, sincronizacao e relogio,
   busca por mesa ou detalhe e contador atualizado.
+- Painel do arbitro com **alertas clicaveis** (cada alerta leva direto ao
+  contexto: pendencias bloqueantes, fechar rodada, aprovar QR, ausentes) e
+  **barra de progresso da rodada** (mesas resolvidas / total).
+- Pacote da rodada em um clique: gera mural + sumulas + cartoes numa pasta de
+  uma vez pelo Painel do arbitro.
+- Ata final do torneio em PDF/XLSX/CSV: documento unico de encerramento com
+  dados do torneio, classificacao final, premiacao, taxas de rating, arbitros e
+  assinaturas (no Painel do arbitro e no hub de Relatorios).
 - Explicacao/exportacao de desempates com componentes persistidos.
 - QR local opcional para submissao de resultado por mesa, sempre com aprovacao
   do arbitro antes de alterar a partida.

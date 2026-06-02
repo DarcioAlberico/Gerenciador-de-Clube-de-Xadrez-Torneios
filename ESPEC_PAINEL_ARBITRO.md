@@ -148,6 +148,34 @@ Durante a rodada:
 5. Resolver QR, sync e relogio na `Central de pendencias`.
 6. Fechar somente quando o painel indicar que a rodada esta pronta.
 
+### 4.3 Aprofundamento 2026-06-02 (UX + docs)
+
+Iteracao net-new sobre o painel ja completo, partindo do gancho da secao 10
+(novo requisito operacional). Quatro entregas:
+
+| ID | Entrega | Status |
+|---|---|---|
+| UX-10 | Alertas operacionais **clicaveis**: cada alerta pula ao contexto exato (pendencias bloqueantes, fechar rodada, aprovar QR, ausentes, correcoes, previa) | Concluido |
+| UX-11 | **Barra de progresso da rodada** no topo do painel (`X/N mesas resolvidas (Y%)`), atualizada com o auto-refresh | Concluido |
+| DOC-05 | **Pacote da rodada** em um clique: mural + sumulas + cartoes numa pasta (`ExportService.export_round_package`), isolando erros | Concluido |
+| DOC-06 | **Ata final do torneio** (`ExportService.export_tournament_minutes`): documento unico de encerramento (dados, classificacao final, premiacao, taxas, arbitros e assinaturas) | Concluido |
+
+Implementacao:
+
+- `individual_round_dashboard_metrics`/`team_round_dashboard_metrics` passam a
+  expor `total_results`/`resolved_results`; `arbitration_dashboard` calcula
+  `round_progress_percent` e devolve `alerts_detailed` (texto + severidade +
+  acao), mantendo `alerts` (strings) em sincronia para retrocompatibilidade;
+- o painel (`pairings.py`) renderiza alertas como botoes-link que disparam a
+  acao certa e desenha a barra de progresso; novos botoes `Pacote da rodada
+  (PDF)` e `Ata final (PDF)` no grupo Publicacao;
+- `export_round_package` reaproveita mural/sumulas/cartoes existentes;
+  `export_tournament_minutes` compoe as secoes ja existentes (classificacao,
+  premiacao, taxas) com cabecalho e arbitros;
+- `Ata final` tambem disponivel no hub de Relatorios (CSV/XLSX/PDF);
+- 6 testes novos (metricas puras de progresso, alertas estruturados, progresso
+  apos lancamento, pacote da rodada e ata); gate completo verde.
+
 ## 5. Requisitos Pendentes
 
 ### EPIC A - Documentos operacionais impressos
@@ -647,7 +675,8 @@ Uma entrega so esta pronta quando:
 
 ## 10. Ordem Recomendada para Inicio
 
-Roadmap atual concluido ate `FED-02`.
+Roadmap atual concluido ate `FED-02`, mais o aprofundamento de 2026-06-02
+(`UX-10`, `UX-11`, `DOC-05`, `DOC-06` — ver secao 4.3).
 
 Motivo:
 
