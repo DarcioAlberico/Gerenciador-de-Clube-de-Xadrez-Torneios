@@ -6942,7 +6942,7 @@ class Database:
                 ],
             )
 
-    def get_report_layout_columns(self, tournament_id: int, report_key: str) -> list[str]:
+    def get_report_layout_columns(self, tournament_id: int, report_key: str) -> list[Any]:
         with self.connect() as connection:
             row = connection.execute(
                 "SELECT columns_json FROM report_layouts WHERE tournament_id = ? AND report_key = ?",
@@ -6954,10 +6954,10 @@ class Database:
             data = json.loads(row["columns_json"])
         except (ValueError, TypeError):
             return []
-        return [str(item) for item in data] if isinstance(data, list) else []
+        return list(data) if isinstance(data, list) else []
 
-    def save_report_layout(self, tournament_id: int, report_key: str, columns: list[str]) -> None:
-        payload = json.dumps([str(column) for column in columns], ensure_ascii=False)
+    def save_report_layout(self, tournament_id: int, report_key: str, columns: list[Any]) -> None:
+        payload = json.dumps(list(columns), ensure_ascii=False)
         with self.connect() as connection:
             connection.execute(
                 """

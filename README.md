@@ -122,9 +122,12 @@ Aplicativo desktop em Python para emparceiramento de torneios de xadrez.
   federacoes e de titulados enfrentados, e o veredito por titulo (GM/IM e, para
   jogadoras, WGM/WIM) com o que falta para atingir. Nao concede norma nem titulo
   (isso e exclusivo da FIDE).
-- Editor de colunas da classificacao na tela `Config. torneio`: escolha e ordene
-  quais colunas aparecem no relatorio de classificacao (vazio = colunas padrao),
-  aplicado a CSV/XLSX/PDF.
+- Formulario de norma de arbitro (IA/FA), na tela `Relatorios`: reune os dados do
+  torneio e os arbitros designados (nome, funcao, FIDE ID, categoria) como base
+  para preencher o formulario oficial FIDE. Documento de apoio, nao oficial.
+- Editor de colunas da classificacao na tela `Config. torneio`: escolha, ordene e
+  ajuste a largura das colunas do relatorio de classificacao (vazio = colunas
+  padrao; largura vazia = automatica), aplicado a CSV/XLSX/PDF.
 - Sistema Scheveningen: cada jogador de um grupo enfrenta todos do outro.
   Selecione `Scheveningen` no metodo de pareamento em `Config. torneio`. Os
   grupos podem ser atribuidos manualmente (campo `Grupo Scheveningen` na tela de

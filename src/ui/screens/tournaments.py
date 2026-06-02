@@ -216,51 +216,82 @@ class PrizeEditor(ctk.CTkFrame):
 
 
 class ColumnLayoutEditor(ctk.CTkFrame):
-    """Editor de colunas de lista: mostrar/ocultar + ordem (spec E7 / Fase F)."""
+    """Editor de colunas de lista: mostrar/ocultar + ordem + largura (spec E7 / Fase F).
+
+    Aceita `initial` como lista de códigos ou de {"key","width"}. `get_columns()`
+    devolve specs [{"key","width"}] (largura 0 = automática).
+    """
 
     def __init__(
         self,
         master: Any,
         columns: dict[str, str],
         default_keys: list[str],
-        initial_keys: list[str] | None = None,
+        initial: list[Any] | None = None,
     ) -> None:
         super().__init__(master, fg_color="transparent")
         self._columns = dict(columns)
         self._default = list(default_keys)
-        self._keys = list(initial_keys) if initial_keys else list(default_keys)
+        self._keys: list[str] = []
+        self._widths: dict[str, int] = {}
+        for entry in initial or []:
+            if isinstance(entry, dict):
+                key = str(entry.get("key") or "").strip()
+                width = int(entry.get("width") or 0)
+            else:
+                key, width = str(entry).strip(), 0
+            if key in self._columns and key not in self._keys:
+                self._keys.append(key)
+                self._widths[key] = max(0, width)
+        if not self._keys:
+            self._keys = list(default_keys)
+        self._width_widgets: list[Any] = []
         self.grid_columnconfigure(0, weight=1)
         self._render()
 
-    def get_columns(self) -> list[str]:
-        return list(self._keys)
+    def get_columns(self) -> list[dict[str, Any]]:
+        self._sync()
+        return [{"key": key, "width": self._widths.get(key, 0)} for key in self._keys]
 
     def _label(self, key: str) -> str:
         return self._columns.get(key, key)
 
+    def _sync(self) -> None:
+        for key, widget in zip(self._keys, self._width_widgets):
+            raw = widget.get().strip()
+            try:
+                self._widths[key] = max(0, int(raw)) if raw else 0
+            except ValueError:
+                self._widths[key] = 0
+
     def _move(self, index: int, delta: int) -> None:
+        self._sync()
         target = index + delta
         if 0 <= target < len(self._keys):
             self._keys[index], self._keys[target] = self._keys[target], self._keys[index]
             self._render()
 
     def _remove(self, index: int) -> None:
+        self._sync()
         if len(self._keys) > 1 and 0 <= index < len(self._keys):
             del self._keys[index]
             self._render()
 
     def _add(self, key: str | None) -> None:
+        self._sync()
         if key and key in self._columns and key not in self._keys:
             self._keys.append(key)
             self._render()
 
     def _reset(self) -> None:
         self._keys = list(self._default)
+        self._widths = {}
         self._render()
 
     def _render(self) -> None:
         for child in self.winfo_children():
             child.destroy()
+        self._width_widgets = []
         for index, key in enumerate(self._keys):
             row = ctk.CTkFrame(self, fg_color="transparent")
             row.grid(row=index, column=0, sticky="ew", pady=(0, 3))
@@ -268,15 +299,21 @@ class ColumnLayoutEditor(ctk.CTkFrame):
             ctk.CTkLabel(row, text=f"{index + 1}. {self._label(key)}", anchor="w").grid(
                 row=0, column=0, sticky="ew"
             )
+            width_entry = ctk.CTkEntry(row, width=64, placeholder_text="auto")
+            current_width = self._widths.get(key, 0)
+            if current_width:
+                width_entry.insert(0, str(current_width))
+            width_entry.grid(row=0, column=1, padx=2)
+            self._width_widgets.append(width_entry)
             up = ctk.CTkButton(row, text="↑", width=34, command=lambda i=index: self._move(i, -1))
-            up.grid(row=0, column=1, padx=2)
+            up.grid(row=0, column=2, padx=2)
             down = ctk.CTkButton(row, text="↓", width=34, command=lambda i=index: self._move(i, 1))
-            down.grid(row=0, column=2, padx=2)
+            down.grid(row=0, column=3, padx=2)
             remove = ctk.CTkButton(
                 row, text="✕", width=34, fg_color="#a3423c", hover_color="#822f2a",
                 command=lambda i=index: self._remove(i),
             )
-            remove.grid(row=0, column=3, padx=2)
+            remove.grid(row=0, column=4, padx=2)
             if index == 0:
                 up.configure(state="disabled")
             if index == len(self._keys) - 1:
@@ -1239,7 +1276,7 @@ class TournamentPagesMixin:
         )
         ctk.CTkLabel(
             settings_panel,
-            text="Escolha e ordene as colunas do relatorio de classificacao (vazio = padrao).",
+            text="Escolha, ordene e ajuste a largura das colunas da classificacao (largura vazia = automatica; vazio = padrao).",
             text_color="gray",
         ).grid(row=columns_row + 1, column=0, padx=16, pady=(0, 2), sticky="w")
         standings_layout = self.list_layout_service.get_columns(self.current_tournament_id, "standings")
