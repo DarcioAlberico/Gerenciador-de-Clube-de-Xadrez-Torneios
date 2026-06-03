@@ -121,3 +121,57 @@ trata os dados.
 | Embarcar `assets/google_client_secret.json` | Desenvolvedor | Antes de buildar (opcao 2) |
 | Verificar o app no Google | Desenvolvedor | Uma vez (em paralelo) |
 | Entrar com a propria conta Google | Cada usuario | No 1o uso do modo ao vivo |
+
+## Politica de privacidade pronta
+
+Ja existe uma pagina pronta em `docs/politica_privacidade.html` (preenchida com
+o responsavel, o contato e a descricao correta do uso do escopo). Confira o
+nome/contato e publique-a numa URL publica.
+
+Publicar de graca via GitHub Pages (sugestao):
+
+1. No repositorio, **Settings > Pages**.
+2. Em **Build and deployment**, fonte **Deploy from a branch**.
+3. Branch `main`, pasta `/docs` > **Save**.
+4. A pagina ficara em
+   `https://darcioalberico.github.io/Gerenciador-de-Clube-de-Xadrez-Torneios/politica_privacidade.html`.
+5. Use essa URL como **Politica de privacidade** na verificacao, e a pagina do
+   repositorio como **Pagina inicial (homepage)**.
+
+## Justificativa do escopo OAuth (para o formulario de verificacao)
+
+O Google pede que voce explique, em ingles, por que o app usa o escopo. Cole o
+texto abaixo (ajuste se quiser):
+
+> **EN —** Albericus is an offline-first desktop application for managing chess
+> tournaments, used by arbiters and clubs. It uses the Google Forms API scope
+> `https://www.googleapis.com/auth/forms.body` solely to let the arbiter create,
+> in their **own** Google account and with a single click, a standardized
+> tournament registration form, and to read back that form's responder URL so it
+> can be shared with players. The application does not read the user's other
+> forms and does not access Drive, Gmail, Calendar, Contacts or any other data.
+> We request `forms.body` because creating the form's questions requires the
+> `forms.batchUpdate` write operation, and no narrower scope exists for creating
+> form items. The app has **no backend server**: no user data is sent to us; the
+> OAuth token is stored only on the user's local machine, and all forms and
+> responses remain in the user's own Google account. Usage complies with the
+> Google API Services User Data Policy, including Limited Use.
+
+> **PT (referencia) —** O Albericus e um aplicativo desktop offline-first de
+> gestao de torneios de xadrez. Usa o escopo `forms.body` apenas para o arbitro
+> criar, na propria conta e com um clique, um formulario de inscricao
+> padronizado, e ler o link de resposta para compartilhar com os jogadores. Nao
+> le outros formularios nem acessa Drive/Gmail/Agenda/Contatos. O escopo
+> `forms.body` e necessario porque criar as perguntas exige a escrita via
+> `batchUpdate`. O app nao tem servidor: nenhum dado e enviado ao desenvolvedor;
+> o token fica so na maquina do usuario e os dados ficam na conta Google dele.
+
+### Dicas para a revisao
+- Publique a politica de privacidade e a homepage **antes** de enviar.
+- Garanta que o e-mail de suporte e o e-mail do desenvolvedor estao corretos na
+  tela de consentimento.
+- Se pedirem **video de demonstracao**, grave a tela mostrando: abrir o
+  Albericus, clicar em "Gerar formulario (Google Forms)", o login "Entrar com o
+  Google", a tela de consentimento com o escopo, e o formulario criado.
+- Como o escopo e **sensivel** (nao restrito), nao e exigida a auditoria de
+  seguranca independente (CASA).
