@@ -2028,7 +2028,9 @@ class TournamentPagesMixin:
             except Exception as exc:
                 self._show_error(exc)
 
-        def show_online_registration_preview(result: dict[str, Any], file_path: str) -> None:
+        def show_online_registration_preview(
+            result: dict[str, Any], importer: Callable[[], dict[str, Any]]
+        ) -> None:
             dialog = ctk.CTkToplevel(self)
             dialog.title("Inscricoes online")
             dialog.geometry("980x560")
@@ -2099,7 +2101,6 @@ class TournamentPagesMixin:
 
             def run_import() -> None:
                 dialog.destroy()
-                tournament_id = int(self.current_tournament_id)
 
                 def show_result(import_result: dict[str, Any]) -> None:
                     load_players()
@@ -2113,7 +2114,7 @@ class TournamentPagesMixin:
                     self._show_info(message)
 
                 self._run_background(
-                    lambda: self.import_service.import_online_registrations(tournament_id, file_path),
+                    importer,
                     show_result,
                     "Importando inscricoes online...",
                 )
@@ -2143,7 +2144,10 @@ class TournamentPagesMixin:
                 tournament_id = int(self.current_tournament_id)
                 self._run_background(
                     lambda: self.import_service.preview_online_registrations(tournament_id, file_path),
-                    lambda result: show_online_registration_preview(result, file_path),
+                    lambda result: show_online_registration_preview(
+                        result,
+                        lambda: self.import_service.import_online_registrations(tournament_id, file_path),
+                    ),
                     "Lendo inscricoes online...",
                 )
             except Exception as exc:
@@ -2161,7 +2165,10 @@ class TournamentPagesMixin:
                 source_url = source_url.strip()
                 self._run_background(
                     lambda: self.import_service.preview_online_registrations(tournament_id, source_url),
-                    lambda result: show_online_registration_preview(result, source_url),
+                    lambda result: show_online_registration_preview(
+                        result,
+                        lambda: self.import_service.import_online_registrations(tournament_id, source_url),
+                    ),
                     "Lendo inscricoes online...",
                 )
             except Exception as exc:
@@ -2199,6 +2206,449 @@ class TournamentPagesMixin:
                     lambda: exporter(path),
                     lambda _result: self._show_info(f"Modelo salvo:\n{path}"),
                     "Gerando modelo...",
+                )
+            except Exception as exc:
+                self._show_error(exc)
+
+        def show_form_link_dialog(result: dict[str, str]) -> None:
+            responder_url = result.get("responder_url", "")
+            edit_url = result.get("edit_url", "")
+            dialog = ctk.CTkToplevel(self)
+            dialog.title("Formulario criado no Google Forms")
+            dialog.geometry("640x300")
+            dialog.transient(self)
+            dialog.grab_set()
+            dialog.grid_columnconfigure(0, weight=1)
+
+            ctk.CTkLabel(
+                dialog,
+                text="Formulario criado! Envie o link de resposta aos jogadores:",
+                font=font_section(),
+                text_color=THEME_TEXT_MAIN,
+                wraplength=600,
+                justify="left",
+            ).grid(row=0, column=0, padx=16, pady=(16, 8), sticky="w")
+
+            link_box = ctk.CTkTextbox(dialog, height=70, wrap="word")
+            link_box.grid(row=1, column=0, padx=16, pady=(0, 8), sticky="ew")
+            link_box.insert("1.0", f"Link para jogadores:\n{responder_url}\n\nEdicao (arbitro):\n{edit_url}")
+            link_box.configure(state="disabled")
+
+            ctk.CTkLabel(
+                dialog,
+                text=(
+                    "No Google Forms, abra Respostas > vincular a uma planilha. Depois "
+                    "baixe a planilha como CSV e importe em 'Importar link Forms/Sheets'."
+                ),
+                text_color=THEME_TEXT_SUB,
+                wraplength=600,
+                justify="left",
+            ).grid(row=2, column=0, padx=16, pady=(0, 8), sticky="w")
+
+            actions = ctk.CTkFrame(dialog, fg_color="transparent")
+            actions.grid(row=3, column=0, padx=16, pady=(0, 16), sticky="e")
+
+            def copy_link() -> None:
+                self.clipboard_clear()
+                self.clipboard_append(responder_url)
+
+            def open_link() -> None:
+                if responder_url:
+                    webbrowser.open(responder_url)
+
+            ctk.CTkButton(actions, text="Copiar link", command=copy_link).pack(side="left", padx=(0, 8))
+            ctk.CTkButton(actions, text="Abrir formulario", command=open_link).pack(side="left", padx=(0, 8))
+            ctk.CTkButton(
+                actions, text="Fechar", fg_color=THEME_NEUTRAL,
+                hover_color=THEME_NEUTRAL_HOVER, command=dialog.destroy,
+            ).pack(side="left")
+
+        def generate_form_script(tournament_id: int, info_prefix: str = "") -> None:
+            file_path = filedialog.asksaveasfilename(
+                title="Gerar script do formulario (Google Apps Script)",
+                initialdir=str(self._default_export_dir()),
+                initialfile="formulario_inscricao.gs",
+                defaultextension=".gs",
+                filetypes=[("Google Apps Script", "*.gs"), ("Todos os arquivos", "*.*")],
+            )
+            if not file_path:
+                return
+
+            def show_result(result: dict[str, Any]) -> None:
+                self._show_info(
+                    info_prefix
+                    + "Script do formulario gerado.\n\n"
+                    f"Script (cole em script.google.com):\n{result['script_path']}\n\n"
+                    f"Definicao dos campos:\n{result['definition_path']}\n\n"
+                    "Abra o script, execute a funcao criarFormularioInscricao e siga o "
+                    "passo a passo no cabecalho."
+                )
+
+            self._run_background(
+                lambda: self.export_service.export_registration_form(file_path, tournament_id),
+                show_result,
+                "Gerando script do formulario...",
+            )
+
+        def generate_registration_form() -> None:
+            try:
+                tournament_id = int(self.current_tournament_id)
+                tournament = self.db.get_tournament(tournament_id)
+                title = (
+                    f"Inscricao - {tournament['name']}"
+                    if tournament and tournament.get("name")
+                    else "Inscricao no torneio"
+                )
+
+                if not self.google_forms_service.is_configured():
+                    reason = self.google_forms_service.unavailable_reason()
+                    if not messagebox.askyesno(
+                        "Criar formulario online",
+                        "A criacao automatica no Google Forms ainda nao esta configurada.\n\n"
+                        f"{reason}\n\n"
+                        "Deseja gerar o script para criar o formulario manualmente "
+                        "(cole 1x em script.google.com)?",
+                        parent=self,
+                    ):
+                        return
+                    generate_form_script(tournament_id)
+                    return
+
+                def work() -> dict[str, Any]:
+                    try:
+                        created = self.google_forms_service.create_registration_form(title)
+                        return {"mode": "live", **created}
+                    except Exception as exc:  # rede/credencial/autorizacao
+                        return {"mode": "error", "reason": str(exc)}
+
+                def show_result(result: dict[str, Any]) -> None:
+                    if result.get("mode") == "live":
+                        show_form_link_dialog(result)
+                        return
+                    if messagebox.askyesno(
+                        "Criar formulario online",
+                        "Nao foi possivel criar o formulario no Google Forms agora.\n\n"
+                        f"{result.get('reason', '')}\n\n"
+                        "Deseja gerar o script para criar manualmente?",
+                        parent=self,
+                    ):
+                        generate_form_script(tournament_id)
+
+                self._run_background(work, show_result, "Criando formulario no Google Forms...")
+            except Exception as exc:
+                self._show_error(exc)
+
+        def show_share_link_dialog(url: str) -> None:
+            dialog = ctk.CTkToplevel(self)
+            dialog.title("Link de inscricao")
+            dialog.geometry("640x260")
+            dialog.transient(self)
+            dialog.grab_set()
+            dialog.grid_columnconfigure(0, weight=1)
+
+            ctk.CTkLabel(
+                dialog,
+                text="Link de inscricao (nome do torneio ja preenchido). Envie aos jogadores:",
+                font=font_section(),
+                text_color=THEME_TEXT_MAIN,
+                wraplength=600,
+                justify="left",
+            ).grid(row=0, column=0, padx=16, pady=(16, 8), sticky="w")
+
+            link_box = ctk.CTkTextbox(dialog, height=80, wrap="word")
+            link_box.grid(row=1, column=0, padx=16, pady=(0, 8), sticky="ew")
+            link_box.insert("1.0", url)
+            link_box.configure(state="disabled")
+
+            actions = ctk.CTkFrame(dialog, fg_color="transparent")
+            actions.grid(row=2, column=0, padx=16, pady=(0, 16), sticky="e")
+
+            def copy_link() -> None:
+                self.clipboard_clear()
+                self.clipboard_append(url)
+
+            ctk.CTkButton(actions, text="Copiar link", command=copy_link).pack(side="left", padx=(0, 8))
+            ctk.CTkButton(actions, text="Abrir no navegador", command=lambda: webbrowser.open(url)).pack(
+                side="left", padx=(0, 8)
+            )
+            ctk.CTkButton(
+                actions, text="Fechar", fg_color=THEME_NEUTRAL,
+                hover_color=THEME_NEUTRAL_HOVER, command=dialog.destroy,
+            ).pack(side="left")
+
+        def configure_registration_form() -> None:
+            dialog = ctk.CTkToplevel(self)
+            dialog.title("Configurar formulario de inscricao (link)")
+            dialog.geometry("700x440")
+            dialog.transient(self)
+            dialog.grab_set()
+            dialog.grid_columnconfigure(0, weight=1)
+
+            ctk.CTkLabel(
+                dialog,
+                text=(
+                    "Como obter o link (uma vez):\n"
+                    "1) Abra seu formulario no Google Forms.\n"
+                    "2) Menu (tres pontos) > 'Receber link preenchido automaticamente'.\n"
+                    "3) Preencha SO o campo do torneio com um exemplo e clique em obter link.\n"
+                    "4) Cole o link gerado abaixo e clique em Analisar."
+                ),
+                justify="left",
+                wraplength=660,
+                text_color=THEME_TEXT_SUB,
+            ).grid(row=0, column=0, padx=16, pady=(16, 6), sticky="w")
+
+            current = self.export_service.registration_form_config()
+            status = "Atual: nao configurado" if not current["base_url"] else f"Atual: {current['base_url']}"
+            ctk.CTkLabel(dialog, text=status, text_color=THEME_TEXT_SUB, wraplength=660, justify="left").grid(
+                row=1, column=0, padx=16, pady=(0, 6), sticky="w"
+            )
+
+            link_box = ctk.CTkTextbox(dialog, height=90, wrap="word")
+            link_box.grid(row=2, column=0, padx=16, pady=(0, 8), sticky="ew")
+
+            entry_var = ctk.StringVar(value="")
+            entry_menu = ctk.CTkOptionMenu(
+                dialog, values=["(analise o link primeiro)"], variable=entry_var, width=620
+            )
+            entry_menu.grid(row=3, column=0, padx=16, pady=(0, 8), sticky="ew")
+            label_to_entry: dict[str, str] = {}
+
+            def analyze() -> None:
+                try:
+                    parsed = self.export_service.parse_prefill_link(link_box.get("1.0", "end").strip())
+                    labels = []
+                    label_to_entry.clear()
+                    for eid, value in parsed["entries"]:
+                        label = f"{eid} = {value}" if value else eid
+                        labels.append(label)
+                        label_to_entry[label] = eid
+                    entry_menu.configure(values=labels)
+                    entry_var.set(labels[0])
+                except Exception as exc:
+                    self._show_error(exc)
+
+            def save() -> None:
+                try:
+                    eid = label_to_entry.get(entry_var.get(), "")
+                    if not eid:
+                        self._show_error(AppError("Analise o link e selecione o campo do torneio."))
+                        return
+                    self.export_service.save_registration_form_config(
+                        link_box.get("1.0", "end").strip(), eid
+                    )
+                    dialog.destroy()
+                    self._show_info("Formulario de inscricao configurado.")
+                except Exception as exc:
+                    self._show_error(exc)
+
+            actions = ctk.CTkFrame(dialog, fg_color="transparent")
+            actions.grid(row=4, column=0, padx=16, pady=(0, 16), sticky="e")
+            ctk.CTkButton(actions, text="Analisar", command=analyze).pack(side="left", padx=(0, 8))
+            ctk.CTkButton(actions, text="Salvar", command=save).pack(side="left", padx=(0, 8))
+            ctk.CTkButton(
+                actions, text="Cancelar", fg_color=THEME_NEUTRAL,
+                hover_color=THEME_NEUTRAL_HOVER, command=dialog.destroy,
+            ).pack(side="left")
+
+        def share_registration_form() -> None:
+            try:
+                tournament_id = int(self.current_tournament_id)
+                try:
+                    url = self.export_service.registration_prefill_url(tournament_id)
+                except AppError as exc:
+                    if messagebox.askyesno(
+                        "Formulario de inscricao",
+                        f"{exc}\n\nDeseja configurar agora?",
+                        parent=self,
+                    ):
+                        configure_registration_form()
+                    return
+                show_share_link_dialog(url)
+            except Exception as exc:
+                self._show_error(exc)
+
+        def show_mapping_dialog(inspection: dict[str, Any], source: str) -> None:
+            headers = list(inspection["headers"])
+            fields = list(inspection["fields"])
+            ignore_label = "(ignorar)"
+            options = [ignore_label, *headers]
+
+            dialog = ctk.CTkToplevel(self)
+            dialog.title("Importar com mapeamento de colunas")
+            dialog.geometry("760x640")
+            dialog.minsize(640, 520)
+            dialog.transient(self)
+            dialog.grab_set()
+            dialog.grid_columnconfigure(0, weight=1)
+            dialog.grid_rowconfigure(3, weight=1)
+
+            sample = inspection["sample_rows"][0] if inspection["sample_rows"] else {}
+            reference = "Colunas detectadas: " + ", ".join(headers)
+            if sample:
+                reference += "\n\n1a linha: " + " | ".join(
+                    f"{header}={str(sample.get(header, '')).strip()}" for header in headers
+                )
+            ctk.CTkLabel(
+                dialog,
+                text=(
+                    f"Origem: {source}\n{inspection['total_rows']} linha(s). "
+                    "Associe cada campo do Albericus a uma coluna. 'Idade' vira ano de "
+                    "nascimento; 'Sobrenome, Nome' e dividido automaticamente."
+                ),
+                font=font_section(),
+                text_color=THEME_TEXT_MAIN,
+                justify="left",
+                wraplength=720,
+            ).grid(row=0, column=0, padx=16, pady=(16, 6), sticky="w")
+            ctk.CTkLabel(
+                dialog,
+                text=reference,
+                text_color=THEME_TEXT_SUB,
+                justify="left",
+                wraplength=720,
+            ).grid(row=1, column=0, padx=16, pady=(0, 8), sticky="w")
+
+            field_vars: dict[str, ctk.StringVar] = {}
+
+            def apply_mapping_to_vars(mapping: dict[str, str]) -> None:
+                for field in fields:
+                    chosen = mapping.get(field["key"], "")
+                    field_vars[field["key"]].set(chosen if chosen in headers else ignore_label)
+
+            def current_mapping() -> dict[str, str]:
+                mapping: dict[str, str] = {}
+                for field in fields:
+                    value = field_vars[field["key"]].get()
+                    if value and value != ignore_label:
+                        mapping[field["key"]] = value
+                return mapping
+
+            # --- perfis de mapeamento -------------------------------------
+            profiles_row = ctk.CTkFrame(dialog, fg_color="transparent")
+            profiles_row.grid(row=2, column=0, padx=16, pady=(0, 6), sticky="ew")
+            profiles = self.import_service.list_mapping_profiles()
+            profile_var = ctk.StringVar(
+                value=next(iter(profiles), "") if profiles else ""
+            )
+            ctk.CTkLabel(profiles_row, text="Perfil:").pack(side="left", padx=(0, 6))
+            profile_menu = ctk.CTkOptionMenu(
+                profiles_row,
+                values=list(profiles) or ["(nenhum)"],
+                variable=profile_var,
+                width=200,
+            )
+            profile_menu.pack(side="left", padx=(0, 6))
+
+            def apply_profile() -> None:
+                saved = self.import_service.list_mapping_profiles().get(profile_var.get())
+                if saved:
+                    apply_mapping_to_vars(saved)
+
+            def save_profile() -> None:
+                name = self._ask_string("Perfil de mapeamento", "Nome do perfil:")
+                if not name:
+                    return
+                try:
+                    self.import_service.save_mapping_profile(name, current_mapping())
+                    refreshed = list(self.import_service.list_mapping_profiles()) or ["(nenhum)"]
+                    profile_menu.configure(values=refreshed)
+                    profile_var.set(name)
+                    self._show_info(f"Perfil '{name}' salvo.")
+                except Exception as exc:
+                    self._show_error(exc)
+
+            def delete_profile() -> None:
+                name = profile_var.get()
+                if not name or name == "(nenhum)":
+                    return
+                self.import_service.delete_mapping_profile(name)
+                refreshed = list(self.import_service.list_mapping_profiles()) or ["(nenhum)"]
+                profile_menu.configure(values=refreshed)
+                profile_var.set(refreshed[0])
+
+            ctk.CTkButton(profiles_row, text="Aplicar", width=80, command=apply_profile).pack(side="left", padx=4)
+            ctk.CTkButton(profiles_row, text="Salvar", width=80, command=save_profile).pack(side="left", padx=4)
+            ctk.CTkButton(
+                profiles_row, text="Excluir", width=80,
+                fg_color=THEME_NEUTRAL, hover_color=THEME_NEUTRAL_HOVER, command=delete_profile,
+            ).pack(side="left", padx=4)
+
+            # --- seletores por campo --------------------------------------
+            selectors = ctk.CTkScrollableFrame(dialog, fg_color="transparent")
+            selectors.grid(row=3, column=0, padx=16, pady=(0, 8), sticky="nsew")
+            selectors.grid_columnconfigure(1, weight=1)
+            for index, field in enumerate(fields):
+                label = field["label"] + (" *" if field["required"] else "")
+                ctk.CTkLabel(selectors, text=label).grid(
+                    row=index, column=0, padx=(0, 10), pady=4, sticky="w"
+                )
+                var = ctk.StringVar(value=ignore_label)
+                field_vars[field["key"]] = var
+                ctk.CTkOptionMenu(selectors, values=options, variable=var, width=320).grid(
+                    row=index, column=1, pady=4, sticky="ew"
+                )
+            apply_mapping_to_vars(inspection["suggested_mapping"])
+
+            actions = ctk.CTkFrame(dialog, fg_color="transparent")
+            actions.grid(row=4, column=0, padx=16, pady=(0, 16), sticky="e")
+
+            def preview_and_continue() -> None:
+                mapping = current_mapping()
+                if not mapping.get("name"):
+                    self._show_error(AppError("Mapeie a coluna do nome do jogador."))
+                    return
+                tournament_id = int(self.current_tournament_id)
+                dialog.destroy()
+                self._run_background(
+                    lambda: self.import_service.preview_mapped_registrations(tournament_id, source, mapping),
+                    lambda result: show_online_registration_preview(
+                        result,
+                        lambda: self.import_service.import_mapped_registrations(tournament_id, source, mapping),
+                    ),
+                    "Conferindo dados mapeados...",
+                )
+
+            ctk.CTkButton(
+                actions, text="Cancelar", fg_color=THEME_NEUTRAL,
+                hover_color=THEME_NEUTRAL_HOVER, command=dialog.destroy,
+            ).pack(side="left", padx=(0, 8))
+            ctk.CTkButton(actions, text="Pre-visualizar e importar", command=preview_and_continue).pack(side="left")
+
+        def import_with_mapping() -> None:
+            try:
+                file_path = filedialog.askopenfilename(
+                    title="Importar com mapeamento (planilha nao padronizada)",
+                    filetypes=[
+                        ("Planilhas e CSV", "*.csv;*.xls;*.xlsx"),
+                        ("CSV", "*.csv"),
+                        ("Excel", "*.xls;*.xlsx"),
+                        ("Todos os arquivos", "*.*"),
+                    ],
+                )
+                if not file_path:
+                    return
+                self._run_background(
+                    lambda: self.import_service.inspect_source(file_path),
+                    lambda inspection: show_mapping_dialog(inspection, file_path),
+                    "Lendo planilha...",
+                )
+            except Exception as exc:
+                self._show_error(exc)
+
+        def import_with_mapping_url() -> None:
+            try:
+                source_url = self._ask_string(
+                    "Importar com mapeamento",
+                    "Cole o link CSV publicado do Google Sheets/Forms:",
+                )
+                if not source_url:
+                    return
+                source_url = source_url.strip()
+                self._run_background(
+                    lambda: self.import_service.inspect_source(source_url),
+                    lambda inspection: show_mapping_dialog(inspection, source_url),
+                    "Lendo planilha...",
                 )
             except Exception as exc:
                 self._show_error(exc)
@@ -2634,8 +3084,13 @@ class TournamentPagesMixin:
             ("Modelo jogadores", lambda: export_import_template("players")),
             ("Importar CSV/Excel", import_players),
             ("Modelo inscricoes", lambda: export_import_template("online")),
+            ("Compartilhar inscricao (link)", share_registration_form),
+            ("Configurar formulario (link)", configure_registration_form),
+            ("Gerar formulario (Google Forms)", generate_registration_form),
             ("Importar inscricoes online", import_online_registrations),
             ("Importar link Forms/Sheets", import_online_registrations_url),
+            ("Importar com mapeamento", import_with_mapping),
+            ("Importar link com mapeamento", import_with_mapping_url),
             ("Importar FIDE", lambda: import_official_ratings("FIDE")),
             ("Importar CBX", lambda: import_official_ratings("CBX")),
             ("Importar LBX arquivo", lambda: import_official_ratings("LBX")),

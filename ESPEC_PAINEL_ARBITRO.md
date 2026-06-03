@@ -624,6 +624,167 @@ Implementacao:
   correspondencia: pre-visualizacao em 877,1279 ms medios e confirmacao em
   4.249,0223 ms.
 
+### EPIC E - Inscricoes e importacao flexivel
+
+Prioridade: alta.
+
+Contexto: hoje a importacao depende de colunas padronizadas
+(`ImportService.import_players`, `import_online_registrations`,
+`preview_online_registrations` por arquivo ou URL CSV do Google Sheets/Forms) e
+de modelos fixos gerados em XLSX (`ExportService.export_player_import_template`
+e `export_online_registration_template`). Na pratica o arbitro recebe planilhas
+antigas e formularios fora do padrao, com colunas em qualquer ordem, nomes
+diferentes (`Nome completo`, `Atleta`, `Jogador`), datas em formatos variados e
+campos faltando. Falta (a) um formulario de coleta ja padronizado para
+distribuir e (b) uma tela que importe planilhas nao padronizadas mapeando cada
+coluna para o campo correto.
+
+#### REG-01 - Gerador de formulario de inscricao padronizado (Google Forms)
+
+Status: concluido em 2026-06-03.
+
+Problema:
+
+- o sistema gera apenas modelo XLSX/CSV; o arbitro monta o Google Forms na mao,
+  com perguntas e ordem divergentes, gerando colunas que nao batem com o
+  importador.
+
+Escopo:
+
+- gerar a definicao de um Google Forms padronizado a partir dos campos canonicos
+  do Albericus (nome de emparceiramento, nome completo, data de nascimento,
+  sexo, federacao, clube/cidade, categoria, IDs oficiais FIDE/CBX/LBX, ratings,
+  e-mail e telefone), respeitando obrigatoriedade e tipo de cada campo;
+- criar o formulario **ao vivo** na conta do arbitro via API do Google Forms
+  (OAuth de app desktop), devolvendo o link de resposta pronto para enviar aos
+  jogadores que se inscrevem sozinhos;
+- manter um **fallback offline** quando faltarem credencial/bibliotecas/internet:
+  gerar um script Apps Script colavel mais a definicao reutilizavel
+  (`.json`) e um passo a passo de publicacao;
+- oferecer ainda a opcao mais simples (sem OAuth): **link pre-preenchido** a
+  partir de um formulario ja existente — o arbitro configura uma vez o link
+  pre-preenchido (de onde se extrai a URL base e o `entry.*` do campo do
+  torneio) e o sistema monta/compartilha o link com o nome do torneio ja
+  preenchido, abrindo no navegador para enviar aos jogadores;
+- garantir que o CSV de respostas do formulario gerado seja importavel
+  diretamente pelo fluxo `import_online_registrations` existente (colunas ja no
+  padrao);
+- incluir o link/QR do formulario no material de divulgacao do torneio.
+
+Criterios de aceite:
+
+- [x] clicar no botao cria o formulario na conta do arbitro e devolve o link de
+  resposta (quando a credencial OAuth esta configurada);
+- [x] o formulario cobre todos os campos padronizados com tipo e obrigatoriedade
+  corretos;
+- [x] o CSV de respostas do formulario gerado importa sem mapeamento manual;
+- [x] ha fallback (script Apps Script) quando faltam credencial/bibliotecas/
+  internet, sem quebrar o fluxo;
+- [x] alternativa sem OAuth: configurar um formulario existente e
+  gerar/compartilhar o link pre-preenchido com o nome do torneio;
+- [x] teste valida que os cabecalhos do formulario casam com o importador
+  padronizado.
+
+Implementacao:
+
+- criacao **ao vivo** como caminho principal: `GoogleFormsService`
+  (`src/services/google_forms_service.py`) cria o formulario na conta do arbitro
+  via API do Google Forms (OAuth de app desktop, token cacheado em
+  `config/google_forms_token.json`) e devolve o link de resposta para enviar aos
+  jogadores; `build_form_requests` (funcao pura) monta o `batchUpdate`
+  (descricao + uma pergunta por campo, com tipo data/escolha/texto e
+  obrigatoriedade);
+- **fallback automatico** para o script Apps Script
+  (`ExportService.export_registration_form`) quando faltam bibliotecas Google,
+  credencial OAuth ou internet/autorizacao: gera `.gs` (com passo a passo e a
+  funcao `criarFormularioInscricao`) e `.json` (definicao reutilizavel);
+- as perguntas vem de `REGISTRATION_FORM_QUESTIONS`, com titulos identicos aos
+  cabecalhos aceitos por `_online_registration_payload`, garantindo importacao
+  sem mapeamento tanto no modo ao vivo quanto no script; `Sexo` vira multipla
+  escolha `M`/`F`;
+- dependencias Google sao **opcionais e importadas lazy** (o modulo importa sem
+  elas); adicionadas ao `requirements.txt` como opcionais;
+- link pre-preenchido (sem OAuth): `ExportService.parse_prefill_link`,
+  `build_registration_prefill_url`, `registration_form_config`,
+  `save_registration_form_config` e `registration_prefill_url`; a config (URL
+  base + `entry.*` do torneio) fica em `app_settings`, sem migracao de schema;
+- UI: botao `Gerar formulario (Google Forms)` tenta a API e, se
+  indisponivel/falhar, oferece gerar o script; `Configurar formulario (link)`
+  analisa o link pre-preenchido e escolhe o campo do torneio; `Compartilhar
+  inscricao (link)` monta e exibe o link (copiar/abrir) com o torneio
+  preenchido; dialogos com link de resposta/edicao no modo ao vivo;
+- guia de configuracao (OAuth e link pre-preenchido) em
+  `docs/GUIA_GOOGLE_FORMS.md`;
+- 15 testes (payload puro e orquestracao da API mockada, disponibilidade/
+  credencial, compatibilidade dos titulos com o importador, e parse/montagem/
+  config do link pre-preenchido).
+
+#### REG-02 - Assistente de importacao com mapeamento de colunas
+
+Status: concluido em 2026-06-03.
+
+Problema:
+
+- planilhas antigas (CSV/XLS/XLSX) e respostas de formularios nao padronizados
+  nao importam porque as colunas nao correspondem ao modelo fixo; hoje so resta
+  editar a planilha na mao antes de importar.
+
+Escopo:
+
+- criar `ImportService.inspect_source(file_path_or_url)` que le o arquivo
+  (CSV/XLS/XLSX e URL CSV publicada) e devolve cabecalhos detectados, as
+  primeiras N linhas de amostra e um palpite de mapeamento por heuristica
+  (sinonimos por campo: `nome|atleta|jogador`, `nascimento|idade|data nasc`,
+  `id fide|fide id`, `rating|elo`, etc.);
+- criar tela/dialogo de mapeamento: para cada campo canonico do Albericus, um
+  seletor da coluna de origem (ou "ignorar"), com pre-visualizacao das primeiras
+  linhas atualizando ao trocar o mapeamento;
+- suportar transformacoes minimas por campo: idade -> ano de nascimento
+  aproximado, normalizacao de data, divisao de "Sobrenome, Nome", trim e
+  vazio -> nulo;
+- reaproveitar o preview de status existente
+  (`pronta`/`duplicada`/`erro` por linha) apos o mapeamento, sem persistir antes
+  da confirmacao;
+- salvar o mapeamento como perfil reutilizavel (`import_mappings`) por
+  origem/nome, para reimportar o mesmo formato sem refazer o de-para;
+- aceitar apenas formatos tabulares (CSV/XLS/XLSX e URL CSV publicada);
+  PDF/imagem digitalizada de formulario nao e suportado.
+
+Criterios de aceite:
+
+- [x] planilha com colunas fora de ordem e nomes divergentes importa apos o
+  mapeamento, sem editar o arquivo de origem;
+- [x] heuristica acerta o mapeamento obvio (nome, rating, ID) na maioria das
+  colunas reconheciveis;
+- [x] nenhuma linha e persistida antes da confirmacao no preview;
+- [x] perfil de mapeamento salvo reaplica corretamente o de-para numa segunda
+  importacao do mesmo formato;
+- [x] `inspect_source` e a normalizacao sao servico puro com testes
+  (cabecalhos, amostra, palpite, idade->nascimento, "Sobrenome, Nome").
+
+Implementacao:
+
+- `ImportService.inspect_source(source, sample_size=5)` le CSV/XLS/XLSX e URL
+  CSV publicada (helpers `_read_tabular`/`_tabular_from_*` extraidos dos leitores
+  existentes) e devolve cabecalhos, amostra das primeiras linhas, definicao dos
+  campos canonicos (`REGISTRATION_IMPORT_FIELDS`) e palpite por heuristica
+  (`_suggest_mapping`, casamento exato e por substring sem reutilizar coluna);
+- `_apply_mapping` renomeia cada coluna para a chave canonica (reconhecida por
+  `_pick`), converte idade em ano de nascimento (`_birth_year_from_age`) e divide
+  "Sobrenome, Nome"; `preview_mapped_registrations`/`import_mapped_registrations`
+  reaproveitam `_build_registration_rows` e `_persist_ready_rows`, mantendo o
+  preview de status (`pronto`/`duplicado`/`erro`) sem persistir antes da
+  confirmacao;
+- perfis reutilizaveis em `app_settings` (`import_mapping_profiles`, sem migracao
+  de schema): `list_mapping_profiles`, `save_mapping_profile`,
+  `delete_mapping_profile`;
+- UI: botoes `Importar com mapeamento` e `Importar link com mapeamento` na tela
+  `Jogadores`; dialogo com seletor de coluna por campo, perfis (aplicar/salvar/
+  excluir) e botao `Pre-visualizar e importar` que reusa o preview de inscricoes
+  online (agora parametrizado por um importador);
+- 9 testes novos (inspecao, heuristica, idade->nascimento, split de nome,
+  preview/import com mapeamento, nome nao mapeado, perfis).
+
 ## 6. Fora de Escopo
 
 Nao iniciar sem requisito externo concreto:
@@ -633,7 +794,9 @@ Nao iniciar sem requisito externo concreto:
 - decisao automatica de WO ou queda de seta;
 - plugin de hardware sem equipamento alvo;
 - PGN com lances sem captura de lances;
-- app Android/iOS nativo.
+- app Android/iOS nativo;
+- importacao de formularios em PDF/imagem digitalizada (REG-02 trata apenas
+  formatos tabulares; OCR nao sera implementado).
 
 ## 7. Roadmap Priorizado
 
@@ -689,6 +852,17 @@ Entregas:
 3. [x] `FED-01` Relatorio de taxas.
 4. [x] `FED-02` Pre-visualizacao de atualizacao oficial.
 
+### Sprint 6 - Inscricoes e importacao flexivel
+
+Objetivo: reduzir o trabalho manual de receber inscricoes em formatos diversos e
+padronizar a coleta na origem.
+
+Entregas:
+
+1. [x] `REG-01` Gerador de formulario de inscricao padronizado (Google Forms).
+2. [x] `REG-02` Assistente de importacao com mapeamento de colunas.
+3. [x] Perfis de mapeamento reutilizaveis e testes do servico puro.
+
 ## 8. Definicao de Pronto
 
 Uma entrega so esta pronta quando:
@@ -733,3 +907,9 @@ Motivo:
   `docs/PILOTO_OPERACIONAL_BASELINE.md`;
 - a proxima entrega deve partir de um teste piloto presencial e de um novo
   requisito operacional priorizado.
+
+`EPIC E - Inscricoes e importacao flexivel` (`REG-01` formulario padronizado
+Google Forms e `REG-02` assistente de importacao com mapeamento de colunas) foi
+concluido em 2026-06-03 (secao 5, Sprint 6 da secao 7). A proxima entrega deve
+partir de um teste piloto presencial e de um novo requisito operacional
+priorizado.

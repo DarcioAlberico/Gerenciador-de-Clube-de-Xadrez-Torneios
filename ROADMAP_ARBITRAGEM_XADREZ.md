@@ -306,6 +306,44 @@ Piloto automatizado inicial:
 - o piloto presencial continua necessario para avaliar rede, impressora,
   legibilidade, cliques do operador e restauracao no computador fisico reserva.
 
+## Fase 11 - Inscricoes e importacao flexivel
+
+Status: concluido em 2026-06-03.
+
+Objetivo: padronizar a coleta de inscricoes na origem e aceitar planilhas e
+formularios antigos sem edicao manual previa. Detalhamento executivo em
+`ESPEC_PAINEL_ARBITRO.md` (EPIC E, itens `REG-01` e `REG-02`, Sprint 6).
+
+Entregas:
+
+- Gerador de formulario de inscricao padronizado (Google Forms), com tres
+  caminhos: (1) criacao **ao vivo** na conta do arbitro via API do Google Forms
+  (OAuth de app desktop), devolvendo o link para os jogadores se inscreverem
+  sozinhos; (2) **script Apps Script** + definicao `.json` (cria o formulario 1x
+  sem digitar perguntas); (3) **link pre-preenchido** (sem OAuth) a partir de um
+  formulario existente, com o nome do torneio ja preenchido para compartilhar.
+  Respostas importam direto pelo fluxo de inscricoes online. Guia em
+  `docs/GUIA_GOOGLE_FORMS.md`.
+- Assistente de importacao com mapeamento de colunas: `inspect_source` le
+  CSV/XLS/XLSX e URL CSV publicada, devolve cabecalhos, amostra das primeiras
+  linhas e palpite por heuristica; tela de de-para por campo canonico com
+  pre-visualizacao; transformacoes minimas (idade->nascimento, normalizacao de
+  data, "Sobrenome, Nome"); reuso do preview de status sem persistir antes da
+  confirmacao.
+- Perfis de mapeamento reutilizaveis (`import_mappings`) por origem/formato.
+
+Criterios de aceite:
+
+- Respostas do formulario gerado importam sem mapeamento manual.
+- Planilha com colunas fora de ordem e nomes divergentes importa apos o
+  mapeamento, sem editar o arquivo de origem.
+- Nenhuma linha e persistida antes da confirmacao no preview.
+- Servico puro de inspecao/normalizacao coberto por testes.
+
+Fora de escopo: importacao de formularios em PDF/imagem digitalizada (somente
+formatos tabulares: CSV/XLS/XLSX e URL CSV publicada). OCR nao sera
+implementado.
+
 ## Backlog priorizado
 
 ### Muito alto impacto / baixa complexidade
@@ -325,6 +363,9 @@ Piloto automatizado inicial:
 - QR Code de resultado com fila de aprovacao.
 - API local FastAPI.
 - Portal local responsivo.
+- Formulario de inscricao padronizado (Google Forms) gerado pelo sistema.
+- Assistente de importacao com mapeamento de colunas para planilhas/formularios
+  nao padronizados.
 
 ### Alto impacto / alta complexidade
 
