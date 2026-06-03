@@ -12,6 +12,13 @@ preferir:
 Para a maioria dos arbitros, **link pre-preenchido** ja resolve. As duas
 primeiras opcoes nao exigem Google Cloud nem bibliotecas extras.
 
+> **Vai distribuir o Albericus para a comunidade?** O usuario final **nunca**
+> precisa criar projeto/credencial no Google Cloud. Para oferecer o "Entrar com
+> o Google" (criar ao vivo) a todos, veja
+> `docs/DISTRIBUICAO_E_VERIFICACAO_GOOGLE.md` (credencial embarcada + verificacao
+> do app). Sem isso, a comunidade ja usa link pre-preenchido e script sem
+> nenhuma configuracao.
+
 ---
 
 ## Opcao mais simples: link pre-preenchido (sem Google Cloud)

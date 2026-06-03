@@ -16,3 +16,6 @@ exports/*
 !exports/.gitkeep
 FIDE/
 Manual/media__*.png
+# Credenciais Google (NUNCA versionar) - colocadas manualmente ao distribuir/configurar
+**/google_client_secret.json
+**/google_forms_token.json
