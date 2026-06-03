@@ -76,6 +76,7 @@ class AlbericusApp(
         self.pairing_service = PairingService(self.db)
         self.qr_result_service = QRResultService(self.db, self.pairing_service)
         self.import_service = ImportService(self.db)
+        self.google_forms_service = GoogleFormsService(self.db)
         self.official_rating_service = OfficialRatingService(self.db)
         self.internal_rating_service = InternalRatingService(self.db)
         self.fide_rating_service = FideRatingService(self.db)

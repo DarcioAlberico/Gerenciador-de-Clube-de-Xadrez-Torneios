@@ -8,7 +8,7 @@ import subprocess
 import webbrowser
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
-from typing import Any
+from typing import Any, Callable
 
 import customtkinter as ctk
 from tkcalendar import DateEntry
@@ -63,6 +63,7 @@ from src.core.services import (
     ExportService,
     FideRatingService,
     FinanceService,
+    GoogleFormsService,
     GuardianService,
     ImportService,
     InternalRatingService,

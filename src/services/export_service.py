@@ -41,6 +41,67 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Campos canonicos de inscricao usados pelo assistente de importacao com
+# mapeamento de colunas (REG-02) e pelo gerador de formulario padronizado
+# (REG-01). Os sinonimos espelham os aceitos por ``_online_registration_payload``;
+# a primeira chave de cada campo coincide com a chave canonica usada no payload,
+# de modo que mapear uma coluna para ``key`` a torna reconhecivel por ``_pick``.
+REGISTRATION_IMPORT_FIELDS: list[dict[str, Any]] = [
+    {"key": "name", "label": "Nome completo", "required": True, "type": "text",
+     "synonyms": ["name", "nome", "jogador", "nome completo", "nome completo do jogador",
+                  "nome do jogador", "nome do atleta", "atleta", "participante", "full name"]},
+    {"key": "surname", "label": "Sobrenome", "required": False, "type": "text",
+     "synonyms": ["surname", "sobrenome", "last name"]},
+    {"key": "given_name", "label": "Nome proprio", "required": False, "type": "text",
+     "synonyms": ["given_name", "nome proprio", "nome_proprio", "first name", "primeiro nome"]},
+    {"key": "birth_date", "label": "Data de nascimento", "required": False, "type": "date",
+     "synonyms": ["birth_date", "nascimento", "data nascimento", "data de nascimento",
+                  "data nasc", "dt nascimento", "data de nasc"]},
+    {"key": "age", "label": "Idade", "required": False, "type": "integer",
+     "synonyms": ["age", "idade", "anos"]},
+    {"key": "sex", "label": "Sexo", "required": False, "type": "choice", "choices": ["M", "F"],
+     "synonyms": ["sex", "sexo", "genero", "gênero", "genero do jogador"]},
+    {"key": "club", "label": "Clube/Cidade", "required": False, "type": "text",
+     "synonyms": ["club", "clube", "cidade", "clube cidade", "clube / cidade", "clube/cidade", "municipio"]},
+    {"key": "category", "label": "Categoria", "required": False, "type": "text",
+     "synonyms": ["category", "categoria", "categoria pretendida"]},
+    {"key": "rating", "label": "Rating", "required": False, "type": "integer",
+     "synonyms": ["rating", "rating principal", "elo", "rtg"]},
+    {"key": "national_rating", "label": "Rating nacional (CBX)", "required": False, "type": "integer",
+     "synonyms": ["national_rating", "rating nacional", "rating_nacional", "elo nacional",
+                  "elo_nacional", "cbx_rating", "rating cbx"]},
+    {"key": "international_rating", "label": "Rating internacional (FIDE)", "required": False, "type": "integer",
+     "synonyms": ["international_rating", "rating internacional", "rating_internacional",
+                  "elo fide", "elo_fide", "fide_rating", "rating fide"]},
+    {"key": "fide_id", "label": "ID FIDE", "required": False, "type": "text",
+     "synonyms": ["fide_id", "fide", "id fide", "id_fide", "fide id"]},
+    {"key": "cbx_id", "label": "ID CBX", "required": False, "type": "text",
+     "synonyms": ["cbx_id", "cbx", "id cbx", "id_cbx", "cbx id"]},
+    {"key": "lbx_id", "label": "ID LBX", "required": False, "type": "text",
+     "synonyms": ["lbx_id", "lbx", "id lbx", "id_lbx", "lbx id"]},
+    {"key": "federation_id", "label": "ID federacao", "required": False, "type": "text",
+     "synonyms": ["federation_id", "id federacao", "id_federacao", "federacao"]},
+    {"key": "title", "label": "Titulo FIDE", "required": False, "type": "text",
+     "synonyms": ["title", "titulo", "titulo fide"]},
+]
+
+# Perguntas do formulario de inscricao padronizado (REG-01). Os titulos sao
+# escolhidos para que o CSV de respostas seja reconhecido por
+# ``_online_registration_payload`` sem mapeamento manual.
+REGISTRATION_FORM_QUESTIONS: list[dict[str, Any]] = [
+    {"title": "Nome completo do jogador", "type": "text", "required": True},
+    {"title": "Data de nascimento", "type": "date", "required": False},
+    {"title": "Sexo", "type": "choice", "required": False, "choices": ["M", "F"]},
+    {"title": "Clube/Cidade", "type": "text", "required": False},
+    {"title": "Categoria", "type": "text", "required": False},
+    {"title": "Rating", "type": "integer", "required": False},
+    {"title": "FIDE ID", "type": "text", "required": False},
+    {"title": "CBX ID", "type": "text", "required": False},
+    {"title": "LBX ID", "type": "text", "required": False},
+    {"title": "E-mail", "type": "text", "required": False},
+    {"title": "Telefone/WhatsApp", "type": "text", "required": False},
+]
+
 class ImportService:
     def __init__(self, db: Database) -> None:
         self.db = db
@@ -67,10 +128,21 @@ class ImportService:
 
     def import_online_registrations(self, tournament_id: int, file_path: str | Path) -> dict[str, Any]:
         preview = self.preview_online_registrations(tournament_id, file_path)
+        result = self._persist_ready_rows(tournament_id, preview)
+        logger.info(
+            "%s inscricoes online importadas de %s para o torneio %s; %s ignoradas",
+            result["imported"],
+            file_path,
+            tournament_id,
+            result["skipped"],
+        )
+        return result
+
+    def _persist_ready_rows(self, tournament_id: int, preview: dict[str, Any]) -> dict[str, Any]:
         imported = 0
         skipped = 0
-        imported_player_ids = []
-        errors = []
+        imported_player_ids: list[int] = []
+        errors: list[str] = []
         for row in preview["rows"]:
             if row["status"] != "ready":
                 skipped += 1
@@ -80,14 +152,6 @@ class ImportService:
             payload = row["payload"]
             imported_player_ids.append(self.db.create_player(tournament_id=tournament_id, **payload))
             imported += 1
-
-        logger.info(
-            "%s inscricoes online importadas de %s para o torneio %s; %s ignoradas",
-            imported,
-            file_path,
-            tournament_id,
-            skipped,
-        )
         return {
             **preview,
             "imported": imported,
@@ -95,6 +159,163 @@ class ImportService:
             "errors": errors,
             "player_ids": imported_player_ids,
         }
+
+    # --- REG-02: importacao com mapeamento de colunas ---------------------
+
+    def inspect_source(self, source: str | Path, sample_size: int = 5) -> dict[str, Any]:
+        """Le um arquivo/URL tabular e devolve cabecalhos, amostra e palpite de
+        mapeamento por heuristica para o assistente de importacao."""
+        tabular = self._read_tabular(source)
+        headers = tabular["headers"]
+        sample_rows = [dict(row) for _, row in tabular["rows"][: max(0, int(sample_size))]]
+        fields = [
+            {
+                "key": field["key"],
+                "label": field["label"],
+                "required": field["required"],
+                "type": field["type"],
+                "choices": list(field.get("choices", [])),
+            }
+            for field in REGISTRATION_IMPORT_FIELDS
+        ]
+        return {
+            "headers": headers,
+            "sample_rows": sample_rows,
+            "fields": fields,
+            "suggested_mapping": self._suggest_mapping(headers),
+            "total_rows": len(tabular["rows"]),
+        }
+
+    def _suggest_mapping(self, headers: list[str]) -> dict[str, str]:
+        normalized_headers = [(header, self._normalize_key(header)) for header in headers]
+        used: set[str] = set()
+        mapping: dict[str, str] = {}
+        for field in REGISTRATION_IMPORT_FIELDS:
+            synonyms = [self._normalize_key(value) for value in field["synonyms"] if value]
+            chosen = ""
+            for header, normalized in normalized_headers:
+                if header in used:
+                    continue
+                if normalized in synonyms:
+                    chosen = header
+                    break
+            if not chosen:
+                for header, normalized in normalized_headers:
+                    if header in used or not normalized:
+                        continue
+                    if any(len(synonym) >= 3 and synonym in normalized for synonym in synonyms):
+                        chosen = header
+                        break
+            mapping[field["key"]] = chosen
+            if chosen:
+                used.add(chosen)
+        return mapping
+
+    def _apply_mapping(self, row: dict[str, Any], mapping: Mapping[str, str]) -> dict[str, Any]:
+        mapped: dict[str, Any] = {}
+        for field_key, header in mapping.items():
+            if not header or header not in row:
+                continue
+            mapped[field_key] = row.get(header, "")
+
+        age_value = str(mapped.pop("age", "") or "").strip()
+        if age_value and not str(mapped.get("birth_date") or "").strip():
+            birth_year = self._birth_year_from_age(age_value)
+            if birth_year:
+                mapped["birth_date"] = birth_year
+
+        name = str(mapped.get("name") or "").strip()
+        if name and "," in name and not str(mapped.get("surname") or "").strip():
+            surname, _, given = name.partition(",")
+            surname = surname.strip()
+            given = given.strip()
+            if surname and given:
+                mapped["surname"] = surname
+                if not str(mapped.get("given_name") or "").strip():
+                    mapped["given_name"] = given
+                mapped["name"] = f"{given} {surname}"
+        return mapped
+
+    @staticmethod
+    def _birth_year_from_age(value: str) -> str:
+        try:
+            age = int(float(str(value).strip()))
+        except (ValueError, TypeError):
+            return ""
+        if age <= 0 or age > 120:
+            return ""
+        return str(date.today().year - age)
+
+    def preview_mapped_registrations(
+        self, tournament_id: int, source: str | Path, mapping: Mapping[str, str]
+    ) -> dict[str, Any]:
+        tournament = self.db.get_tournament(tournament_id)
+        if not tournament:
+            raise AppError("Selecione um torneio valido.")
+        name_header = mapping.get("name", "")
+        if not name_header:
+            raise AppError("Mapeie a coluna do nome do jogador antes de importar.")
+
+        tabular = self._read_tabular(source)
+        source_rows = [(line, self._apply_mapping(row, mapping)) for line, row in tabular["rows"]]
+        rows = self._build_registration_rows(tournament_id, source_rows)
+        summary = {
+            "total": len(rows),
+            "ready": sum(1 for row in rows if row["status"] == "ready"),
+            "duplicate": sum(1 for row in rows if row["status"] == "duplicate"),
+            "error": sum(1 for row in rows if row["status"] == "error"),
+        }
+        return {"rows": rows, **summary}
+
+    def import_mapped_registrations(
+        self, tournament_id: int, source: str | Path, mapping: Mapping[str, str]
+    ) -> dict[str, Any]:
+        preview = self.preview_mapped_registrations(tournament_id, source, mapping)
+        result = self._persist_ready_rows(tournament_id, preview)
+        logger.info(
+            "%s inscricoes importadas com mapeamento de %s para o torneio %s; %s ignoradas",
+            result["imported"],
+            source,
+            tournament_id,
+            result["skipped"],
+        )
+        return result
+
+    # --- REG-02: perfis de mapeamento reutilizaveis -----------------------
+
+    def list_mapping_profiles(self) -> dict[str, dict[str, str]]:
+        raw = str(self.db.get_app_settings().get("import_mapping_profiles") or "").strip()
+        if not raw:
+            return {}
+        try:
+            data = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            return {}
+        if not isinstance(data, dict):
+            return {}
+        profiles: dict[str, dict[str, str]] = {}
+        for name, mapping in data.items():
+            if isinstance(mapping, dict):
+                profiles[str(name)] = {str(k): str(v) for k, v in mapping.items() if v}
+        return profiles
+
+    def save_mapping_profile(self, name: str, mapping: Mapping[str, str]) -> None:
+        name = str(name or "").strip()
+        if not name:
+            raise AppError("Informe um nome para o perfil de mapeamento.")
+        profiles = self.list_mapping_profiles()
+        profiles[name] = {str(k): str(v) for k, v in mapping.items() if v}
+        self.db.save_app_settings(
+            {"import_mapping_profiles": json.dumps(profiles, ensure_ascii=False)}
+        )
+
+    def delete_mapping_profile(self, name: str) -> None:
+        profiles = self.list_mapping_profiles()
+        if str(name) in profiles:
+            del profiles[str(name)]
+            self.db.save_app_settings(
+                {"import_mapping_profiles": json.dumps(profiles, ensure_ascii=False)}
+            )
 
     def import_players_csv(self, tournament_id: int, file_path: str | Path) -> dict[str, Any]:
         path = Path(file_path)
@@ -431,7 +652,10 @@ class ImportService:
         errors: list[str] = []
 
         for line_number, row in rows:
-            name = self._pick(row, "name", "nome", "jogador")
+            name = self._pick(
+                row, "name", "nome", "jogador", "nome completo", "nome do jogador",
+                "nome do atleta", "atleta", "participante", "full name",
+            )
             if not name:
                 errors.append(f"Linha {line_number}: nome vazio.")
                 continue
@@ -474,16 +698,40 @@ class ImportService:
 
         return {"imported": imported, "errors": errors}
 
-    def _player_rows_from_csv(self, path: Path) -> list[tuple[int, dict[str, Any]]]:
-        with path.open("r", encoding="utf-8-sig", newline="") as file:
-            sample = file.read(4096)
-            file.seek(0)
-            reader = csv.DictReader(file, dialect=self._csv_dialect(sample))
-            if not reader.fieldnames:
-                raise AppError("CSV sem cabecalho.")
-            return [(line_number, dict(row)) for line_number, row in enumerate(reader, start=2)]
+    def _read_tabular(self, source: str | Path) -> dict[str, Any]:
+        """Le CSV/XLS/XLSX (arquivo ou URL CSV publicada) e devolve
+        ``{"headers": [...], "rows": [(linha, {coluna: valor})]}``."""
+        source_text = str(source).strip()
+        if self._is_url(source_text):
+            return self._tabular_from_url(source_text)
+        path = Path(source)
+        extension = path.suffix.lower()
+        if extension == ".csv":
+            return self._tabular_from_csv_text(path.read_text(encoding="utf-8-sig"))
+        if extension in {".xls", ".xlsx"}:
+            return self._tabular_from_spreadsheet(path)
+        raise AppError("Formato nao suportado. Use .csv, .xls, .xlsx ou link CSV do Google Sheets.")
 
-    def _player_rows_from_spreadsheet(self, path: Path) -> list[tuple[int, dict[str, Any]]]:
+    def _tabular_from_csv_text(self, content: str) -> dict[str, Any]:
+        sample = content[:4096]
+        reader = csv.DictReader(io.StringIO(content), dialect=self._csv_dialect(sample))
+        if not reader.fieldnames:
+            raise AppError("CSV sem cabecalho.")
+        headers = [str(name) for name in reader.fieldnames]
+        rows = [(line_number, dict(row)) for line_number, row in enumerate(reader, start=2)]
+        return {"headers": headers, "rows": rows}
+
+    def _tabular_from_url(self, url: str) -> dict[str, Any]:
+        csv_url = self._google_sheets_csv_url(url)
+        request = Request(csv_url, headers={"User-Agent": "Albericus"})
+        try:
+            with urlopen(request, timeout=20) as response:
+                content = response.read().decode("utf-8-sig")
+        except Exception as exc:
+            raise AppError(f"Nao foi possivel baixar a planilha: {exc}") from exc
+        return self._tabular_from_csv_text(content)
+
+    def _tabular_from_spreadsheet(self, path: Path) -> dict[str, Any]:
         try:
             import pandas as pd
         except ImportError as exc:
@@ -497,11 +745,18 @@ class ImportService:
         if dataframe.columns.empty:
             raise AppError("Planilha sem cabecalho.")
 
+        headers = [str(column) for column in dataframe.columns]
         rows: list[tuple[int, dict[str, Any]]] = []
         for index, row in dataframe.iterrows():
             parsed = {str(column): self._clean_spreadsheet_cell(value) for column, value in row.items()}
             rows.append((int(index) + 2, parsed))
-        return rows
+        return {"headers": headers, "rows": rows}
+
+    def _player_rows_from_csv(self, path: Path) -> list[tuple[int, dict[str, Any]]]:
+        return self._tabular_from_csv_text(path.read_text(encoding="utf-8-sig"))["rows"]
+
+    def _player_rows_from_spreadsheet(self, path: Path) -> list[tuple[int, dict[str, Any]]]:
+        return self._tabular_from_spreadsheet(path)["rows"]
 
     @staticmethod
     def _clean_spreadsheet_cell(value: Any) -> Any:
@@ -581,7 +836,11 @@ class ImportService:
 
     def _online_registration_rows(self, tournament_id: int, file_path: str | Path) -> list[dict[str, Any]]:
         source_rows = self._online_registration_source_rows(file_path)
+        return self._build_registration_rows(tournament_id, source_rows)
 
+    def _build_registration_rows(
+        self, tournament_id: int, source_rows: list[tuple[int, dict[str, Any]]]
+    ) -> list[dict[str, Any]]:
         existing_players = self.db.list_players(tournament_id, active_only=False)
         rows = []
         seen_keys: set[tuple[str, str]] = set()
@@ -647,22 +906,7 @@ class ImportService:
         return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
 
     def _player_rows_from_csv_url(self, url: str) -> list[tuple[int, dict[str, Any]]]:
-        csv_url = self._google_sheets_csv_url(url)
-        request = Request(csv_url, headers={"User-Agent": "Albericus"})
-        try:
-            with urlopen(request, timeout=20) as response:
-                content = response.read().decode("utf-8-sig")
-        except Exception as exc:
-            raise AppError(f"Nao foi possivel baixar a planilha: {exc}") from exc
-        return self._player_rows_from_csv_text(content)
-
-    def _player_rows_from_csv_text(self, content: str) -> list[tuple[int, dict[str, Any]]]:
-        sample = content[:4096]
-        file = io.StringIO(content)
-        reader = csv.DictReader(file, dialect=self._csv_dialect(sample))
-        if not reader.fieldnames:
-            raise AppError("CSV sem cabecalho.")
-        return [(line_number, dict(row)) for line_number, row in enumerate(reader, start=2)]
+        return self._tabular_from_url(url)["rows"]
 
     @staticmethod
     def _google_sheets_csv_url(url: str) -> str:
@@ -2238,6 +2482,176 @@ class ExportService:
                 "Sexo",
             ],
             [["Ana Silva", "1500", "Clube A", "ABS", "2012-05-10", "", "", "", "F"]],
+        )
+
+    def export_registration_form(
+        self, file_path: str | Path, tournament_id: int | None = None
+    ) -> dict[str, str]:
+        """Gera o formulario de inscricao padronizado (REG-01).
+
+        Produz dois artefatos com o mesmo nome base:
+        - ``.gs``: script Google Apps Script colavel em script.google.com que
+          cria o formulario com as perguntas padronizadas;
+        - ``.json``: definicao reutilizavel dos campos.
+
+        Os titulos das perguntas sao escolhidos para que o CSV de respostas
+        importe direto pelo fluxo de inscricoes online, sem mapeamento manual.
+        """
+        title = "Inscricao no torneio"
+        if tournament_id is not None:
+            tournament = self.db.get_tournament(int(tournament_id))
+            if tournament and tournament.get("name"):
+                title = f"Inscricao - {tournament['name']}"
+
+        path = Path(file_path)
+        if path.suffix.lower() not in {".gs", ".js"}:
+            path = path.with_suffix(".gs")
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        path.write_text(self._registration_form_script(title), encoding="utf-8")
+        definition_path = path.with_suffix(".json")
+        definition_path.write_text(
+            json.dumps(
+                {"title": title, "questions": REGISTRATION_FORM_QUESTIONS},
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        logger.info("Formulario de inscricao padronizado gerado em %s e %s", path, definition_path)
+        return {"script_path": str(path), "definition_path": str(definition_path)}
+
+    @staticmethod
+    def _registration_form_script(title: str) -> str:
+        def js_text(value: str) -> str:
+            return value.replace("\\", "\\\\").replace("'", "\\'")
+
+        lines: list[str] = [
+            "/**",
+            " * Albericus - Formulario de inscricao padronizado (REG-01).",
+            " *",
+            " * Passo a passo:",
+            " *  1. Acesse https://script.google.com e crie um novo projeto.",
+            " *  2. Cole todo este codigo e salve.",
+            " *  3. Execute a funcao criarFormularioInscricao e autorize o acesso.",
+            " *  4. O link do formulario aparece no registro de execucao (Ver > Registros).",
+            " *  5. No formulario, vincule as respostas a uma planilha.",
+            " *  6. Baixe a planilha como CSV (ou publique como CSV) e importe em",
+            " *     Jogadores > Importar inscricoes online / Importar link Forms/Sheets.",
+            " *",
+            " * Os titulos das perguntas ja seguem o padrao do importador; nao os",
+            " * renomeie para manter a importacao automatica sem mapeamento.",
+            " */",
+            "function criarFormularioInscricao() {",
+            f"  var form = FormApp.create('{js_text(title)}');",
+            "  form.setDescription('Inscricao gerada pelo Albericus. Preencha os dados do jogador.');",
+            "  form.setCollectEmail(false);",
+            "",
+        ]
+        for index, question in enumerate(REGISTRATION_FORM_QUESTIONS):
+            title_js = js_text(str(question["title"]))
+            required = "true" if question.get("required") else "false"
+            qtype = question.get("type")
+            if qtype == "date":
+                lines.append(
+                    f"  form.addDateItem().setTitle('{title_js}').setRequired({required});"
+                )
+            elif qtype == "choice":
+                choices = ", ".join(f"'{js_text(str(choice))}'" for choice in question.get("choices", []))
+                lines.append(
+                    f"  form.addMultipleChoiceItem().setTitle('{title_js}')"
+                    f".setChoiceValues([{choices}]).setRequired({required});"
+                )
+            elif qtype == "integer":
+                var = f"q{index}"
+                lines.append(
+                    f"  var {var} = form.addTextItem().setTitle('{title_js}').setRequired({required});"
+                )
+                lines.append(
+                    f"  {var}.setValidation(FormApp.createTextValidation()"
+                    ".setHelpText('Informe um numero.').requireNumber().build());"
+                )
+            else:
+                lines.append(
+                    f"  form.addTextItem().setTitle('{title_js}').setRequired({required});"
+                )
+        lines.append("")
+        lines.append("  Logger.log('Formulario criado: ' + form.getPublishedUrl());")
+        lines.append("  Logger.log('Edicao: ' + form.getEditUrl());")
+        lines.append("}")
+        lines.append("")
+        return "\n".join(lines)
+
+    # --- REG-01: link pre-preenchido do Google Forms ----------------------
+
+    @staticmethod
+    def parse_prefill_link(link: str) -> dict[str, Any]:
+        """Extrai a URL base e os campos ``entry.*`` de um link pre-preenchido
+        do Google Forms (obtido em 'Receber link preenchido automaticamente')."""
+        text = (link or "").strip()
+        parsed = urlparse(text)
+        if parsed.scheme not in {"http", "https"} or "docs.google.com" not in parsed.netloc:
+            raise AppError("Cole um link valido do Google Forms (pre-preenchido).")
+        base_url = urlunparse((parsed.scheme, parsed.netloc, parsed.path, "", "", ""))
+        query = parse_qs(parsed.query, keep_blank_values=True)
+        entries = [
+            (key, values[0] if values else "")
+            for key, values in query.items()
+            if key.startswith("entry.")
+        ]
+        if not entries:
+            raise AppError(
+                "Nenhum campo encontrado no link. Use 'Receber link preenchido "
+                "automaticamente', preencha o campo do torneio e cole o link gerado."
+            )
+        return {"base_url": base_url, "entries": entries}
+
+    @staticmethod
+    def build_registration_prefill_url(
+        base_url: str, tournament_entry: str, tournament_name: str
+    ) -> str:
+        """Monta o link de inscricao com o nome do torneio ja preenchido e os
+        campos do jogador em branco."""
+        base = (base_url or "").strip()
+        if not base:
+            raise AppError("Formulario de inscricao nao configurado.")
+        params = {"usp": "pp_url"}
+        entry = (tournament_entry or "").strip()
+        name = (tournament_name or "").strip()
+        if entry and name:
+            params[entry] = name
+        separator = "&" if urlparse(base).query else "?"
+        return base + separator + urlencode(params)
+
+    def registration_form_config(self) -> dict[str, str]:
+        settings = self.db.get_app_settings()
+        return {
+            "base_url": str(settings.get("registration_form_prefill_base") or ""),
+            "tournament_entry": str(settings.get("registration_form_tournament_entry") or ""),
+        }
+
+    def save_registration_form_config(self, prefill_link: str, tournament_entry: str) -> dict[str, str]:
+        parsed = self.parse_prefill_link(prefill_link)
+        entry = (tournament_entry or "").strip()
+        self.db.save_app_settings(
+            {
+                "registration_form_prefill_base": parsed["base_url"],
+                "registration_form_tournament_entry": entry,
+            }
+        )
+        return {"base_url": parsed["base_url"], "tournament_entry": entry}
+
+    def registration_prefill_url(self, tournament_id: int) -> str:
+        config = self.registration_form_config()
+        if not config["base_url"]:
+            raise AppError(
+                "Formulario de inscricao nao configurado. Use 'Configurar formulario "
+                "(link)' e cole o link pre-preenchido do Google Forms."
+            )
+        tournament = self.db.get_tournament(int(tournament_id))
+        name = str(tournament.get("name") or "") if tournament else ""
+        return self.build_registration_prefill_url(
+            config["base_url"], config["tournament_entry"], name
         )
 
     def export_member_import_template(self, file_path: str | Path) -> None:

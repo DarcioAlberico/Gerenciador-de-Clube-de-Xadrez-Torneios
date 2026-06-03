@@ -5,6 +5,7 @@ from src.services.dashboard_service import DashboardService, CommunicationServic
 from src.services.education_service import TrainingService, ExerciseService, LearningLevelService, LibraryService
 from src.services.event_service import EventService, CalendarService
 from src.services.export_service import ImportService, CertificateService, ExportService
+from src.services.google_forms_service import GoogleFormsService
 from src.services.batch_export_service import BatchExportService
 from src.services.chess_results_service import ChessResultsService
 from src.services.photo_album_service import PhotoAlbumService
