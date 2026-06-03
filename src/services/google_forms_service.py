@@ -10,10 +10,11 @@ importa sem essas bibliotecas instaladas.
 from __future__ import annotations
 
 import logging
+import sys
 from pathlib import Path
 from typing import Any, TYPE_CHECKING
 
-from src.core.database import app_data_dir
+from src.core.database import BASE_DIR, app_data_dir
 from src.services.constants import AppError
 from src.services.export_service import REGISTRATION_FORM_QUESTIONS
 
@@ -40,12 +41,33 @@ class GoogleFormsService:
         return path
 
     def client_secret_path(self) -> Path:
+        """Resolve a credencial OAuth por ordem de precedencia:
+        1) caminho explicito em app_settings; 2) credencial do proprio usuario
+        em config/; 3) credencial embarcada na distribuicao (assets/). Se nada
+        existir, devolve o caminho padrao do usuario (para mensagens de erro)."""
         configured = str(
             self.db.get_app_settings().get("google_oauth_client_secret_path") or ""
         ).strip()
         if configured:
             return Path(configured).expanduser()
-        return self._config_dir() / "google_client_secret.json"
+        user_path = self._config_dir() / "google_client_secret.json"
+        if user_path.exists():
+            return user_path
+        bundled = self._bundled_client_secret_path()
+        if bundled.exists():
+            return bundled
+        return user_path
+
+    @staticmethod
+    def _bundled_client_secret_path() -> Path:
+        """Credencial OAuth opcional embarcada na distribuicao (em ``assets/``),
+        usada quando o usuario nao tem uma credencial propria. Permite o app
+        verificado oferecer 'Entrar com o Google' a toda a comunidade sem
+        configuracao por usuario. Resolve tanto no executavel PyInstaller quanto
+        em desenvolvimento."""
+        if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+            return Path(sys._MEIPASS) / "assets" / "google_client_secret.json"
+        return BASE_DIR / "assets" / "google_client_secret.json"
 
     def _token_path(self) -> Path:
         return self._config_dir() / "google_forms_token.json"

@@ -800,6 +800,34 @@ class GoogleFormsAvailabilityTest(unittest.TestCase):
                 self.assertTrue(service.is_configured())
                 self.assertEqual(service.unavailable_reason(), "")
 
+    def test_client_secret_precedence(self) -> None:
+        from src.services.google_forms_service import GoogleFormsService
+
+        db = _FakeImportDB()
+        service = GoogleFormsService(db)  # type: ignore[arg-type]
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            user_dir = root / "config"
+            user_dir.mkdir()
+            bundled = root / "assets" / "google_client_secret.json"
+            bundled.parent.mkdir()
+            bundled.write_text("{}", encoding="utf-8")
+
+            with mock.patch.object(GoogleFormsService, "_config_dir", return_value=user_dir), \
+                 mock.patch.object(GoogleFormsService, "_bundled_client_secret_path", return_value=bundled):
+                # sem credencial do usuario -> usa a embarcada (distribuicao)
+                self.assertEqual(service.client_secret_path(), bundled)
+
+                # credencial do proprio usuario vence a embarcada
+                user_secret = user_dir / "google_client_secret.json"
+                user_secret.write_text("{}", encoding="utf-8")
+                self.assertEqual(service.client_secret_path(), user_secret)
+
+                # caminho explicito em app_settings vence tudo
+                custom = root / "custom.json"
+                db.settings["google_oauth_client_secret_path"] = str(custom)
+                self.assertEqual(service.client_secret_path(), custom)
+
 
 if __name__ == "__main__":
     unittest.main()

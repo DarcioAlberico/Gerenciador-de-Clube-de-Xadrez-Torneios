@@ -715,9 +715,15 @@ Implementacao:
   preenchido; dialogos com link de resposta/edicao no modo ao vivo;
 - guia de configuracao (OAuth e link pre-preenchido) em
   `docs/GUIA_GOOGLE_FORMS.md`;
-- 15 testes (payload puro e orquestracao da API mockada, disponibilidade/
-  credencial, compatibilidade dos titulos com o importador, e parse/montagem/
-  config do link pre-preenchido).
+- distribuicao para a comunidade: padrao sem OAuth (link pre-preenchido +
+  script, sem teto de usuarios); para "Entrar com o Google" a todos,
+  `client_secret_path` aceita credencial **embarcada** em
+  `assets/google_client_secret.json` (precedencia: app_settings > config do
+  usuario > embarcada), gitignored; checklist de empacotamento e verificacao do
+  app (escopo sensivel, sem CASA) em `docs/DISTRIBUICAO_E_VERIFICACAO_GOOGLE.md`;
+- 16 testes (payload puro e orquestracao da API mockada, disponibilidade/
+  credencial, precedencia da credencial embarcada, compatibilidade dos titulos
+  com o importador, e parse/montagem/config do link pre-preenchido).
 
 #### REG-02 - Assistente de importacao com mapeamento de colunas
 
