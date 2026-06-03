@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Albericus — Gestão de torneios de xadrez</title>
+  <meta name="description" content="Albericus é um aplicativo de computador, offline-first, para gestão de torneios e clubes de xadrez: pareamento suíço, ratings, importação/exportação e inscrição online." />
+  <style>
+    :root { --ink: #1b1b1b; --muted: #666; --link: #1558d6; --line: #eee; }
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+           max-width: 760px; margin: 0 auto; padding: 0 18px; line-height: 1.6;
+           color: var(--ink); }
+    header.hero { margin: 48px 0 8px; }
+    .logo { font-size: 2.1rem; font-weight: 700; letter-spacing: -.5px; }
+    .logo .piece { color: var(--link); }
+    .tagline { color: var(--muted); font-size: 1.1rem; margin-top: 2px; }
+    h2 { font-size: 1.15rem; margin-top: 2rem; }
+    p { margin: .7rem 0; }
+    ul { padding-left: 1.2rem; }
+    li { margin: .35rem 0; }
+    code { background: #f2f2f2; padding: 1px 5px; border-radius: 4px; }
+    a { color: var(--link); }
+    .links { margin-top: 1.4rem; display: flex; flex-wrap: wrap; gap: 10px; }
+    .links a { display: inline-block; padding: 9px 14px; border: 1px solid #d6e0f5;
+               border-radius: 8px; text-decoration: none; background: #f6f9ff; }
+    footer { margin-top: 3rem; color: var(--muted); font-size: .9rem;
+             border-top: 1px solid var(--line); padding-top: 1rem; }
+  </style>
+</head>
+<body>
+  <header class="hero">
+    <div class="logo"><span class="piece">&#9819;</span> Albericus</div>
+    <div class="tagline">Gestão de torneios e clubes de xadrez</div>
+  </header>
+
+  <p>O <strong>Albericus</strong> é um aplicativo de computador (desktop),
+  <strong>offline-first</strong>, para a gestão de torneios e clubes de xadrez.
+  É voltado a <strong>árbitros e organizadores</strong> e funciona sem depender de
+  internet: os dados ficam em um banco local no computador do usuário.</p>
+
+  <h2>Principais recursos</h2>
+  <ul>
+    <li>Pareamento por <strong>sistema suíço</strong> e controle de rodadas,
+    resultados e classificação.</li>
+    <li>Gestão de jogadores, clubes e <strong>ratings</strong> (listas nacionais
+    e estrangeiras).</li>
+    <li><strong>Importação e exportação</strong> de dados em formatos padrão do
+    xadrez (ex.: TRF) e relatórios.</li>
+    <li>Geração de <strong>formulários de inscrição online</strong> integrados ao
+    Google Forms (recurso opcional).</li>
+    <li>Acompanhamento de resultados e ferramentas de apoio à arbitragem.</li>
+  </ul>
+
+  <h2>Integração com o Google Forms</h2>
+  <p>De forma <strong>opcional</strong>, o Albericus permite que o árbitro crie,
+  com um clique, um formulário de inscrição padronizado <strong>na própria conta
+  Google</strong>. Para isso, o aplicativo solicita a permissão
+  <code>https://www.googleapis.com/auth/forms.body</code> via "Entrar com o
+  Google", usada <strong>exclusivamente</strong> para criar o formulário e ler o
+  link de resposta a ser compartilhado com os jogadores.</p>
+  <p>O Albericus <strong>não possui servidores</strong> e <strong>não coleta</strong>
+  os seus dados: o formulário e as respostas ficam na conta Google do próprio
+  usuário, e o token de acesso fica somente no computador dele. Detalhes na
+  <a href="politica_privacidade.html">Política de Privacidade</a>.</p>
+
+  <div class="links">
+    <a href="politica_privacidade.html">Política de Privacidade</a>
+    <a href="https://github.com/DarcioAlberico/Gerenciador-de-Clube-de-Xadrez-Torneios">Código no GitHub</a>
+    <a href="mailto:darcioalberico54@gmail.com">Contato</a>
+  </div>
+
+  <h2>Contato</h2>
+  <p>Responsável: Darcio Alberico —
+  <a href="mailto:darcioalberico54@gmail.com">darcioalberico54@gmail.com</a>.</p>
+
+  <footer>Albericus — aplicativo de gestão de torneios de xadrez.</footer>
+</body>
+</html>
