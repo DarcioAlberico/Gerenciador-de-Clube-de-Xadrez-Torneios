@@ -11,12 +11,16 @@ from __future__ import annotations
 
 import sqlite3
 from contextlib import AbstractContextManager
-from typing import TYPE_CHECKING, Any, Mapping
+from typing import TYPE_CHECKING, Any, Iterable, Mapping
 
 
 class _DatabaseInfra:
     if TYPE_CHECKING:
-        def connect(self) -> AbstractContextManager[sqlite3.Connection]: ...
+        # connect() real e um @contextmanager sem anotacao de retorno; o mypy o
+        # trata de forma permissiva (connection ~ Any). Declaramos com Any aqui
+        # para os mixins enxergarem o mesmo que enxergavam dentro de Database —
+        # mantendo a extracao neutra (sem forcar mudancas no codigo movido).
+        def connect(self) -> AbstractContextManager[Any]: ...
 
         def _insert(self, table: str, values: Mapping[str, Any]) -> int: ...
 
@@ -26,3 +30,6 @@ class _DatabaseInfra:
 
         @staticmethod
         def now() -> str: ...
+
+        @staticmethod
+        def rows_to_dicts(rows: Iterable[sqlite3.Row]) -> list[dict[str, Any]]: ...
