@@ -4775,7 +4775,7 @@ class PairingServiceTest(unittest.TestCase):
             return FakeResponse()
 
         source_url = "https://docs.google.com/spreadsheets/d/abc123/edit#gid=987"
-        with mock.patch("src.services.export_service.urlopen", side_effect=fake_urlopen):
+        with mock.patch("src.services.import_service.urlopen", side_effect=fake_urlopen):
             preview = self.import_service.preview_online_registrations(self.tournament_id, source_url)
             result = self.import_service.import_online_registrations(self.tournament_id, source_url)
 
