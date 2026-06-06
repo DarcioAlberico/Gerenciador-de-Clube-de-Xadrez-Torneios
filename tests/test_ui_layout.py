@@ -293,7 +293,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self._set_entry_after_label("Taxa rating FIDE por inscrito", "2,50")
         self._set_entry_after_label("Taxa rating CBX por inscrito", "3")
         self._set_entry_after_label("Taxa rating LBX por inscrito", "1,25")
-        self._click_button("Salvar configuracoes")
+        self._click_button("Salvar")
         self.app.update()
 
         settings = self.db.get_tournament_settings(team_tournament_id)
