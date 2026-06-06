@@ -46,3 +46,31 @@ class _DatabaseInfra:
         def get_app_settings(self) -> dict[str, Any]: ...
 
         def save_app_settings(self, settings: dict[str, Any]) -> None: ...
+
+        def _get_connection(self) -> AbstractContextManager[Any]: ...
+
+        # Metodos de outros mixins chamados cross-dominio (fornecidos pela fachada):
+        def get_club(self, club_id: int = 1) -> dict[str, Any] | None: ...
+
+        def create_player(
+            self,
+            tournament_id: int,
+            name: str,
+            club: str = "",
+            rating: int = 0,
+            category: str = "",
+            federation_id: str = "",
+            fide_id: str = "",
+            birth_date: str = "",
+            member_id: int | None = None,
+            surname: str = "",
+            given_name: str = "",
+            title: str = "",
+            sex: str = "",
+            cbx_id: str = "",
+            lbx_id: str = "",
+            national_rating: int = 0,
+            international_rating: int = 0,
+            player_status: str = "active",
+            starting_points: float | None = None,
+        ) -> int: ...
