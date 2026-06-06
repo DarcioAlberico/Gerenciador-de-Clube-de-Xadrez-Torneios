@@ -19,6 +19,53 @@ from .tournament_widgets import ColumnLayoutEditor, PrizeEditor, TiebreakSequenc
 
 
 class TournamentSettingsMixin:
+    @staticmethod
+    def _settings_tab(tabview: ctk.CTkTabview, name: str) -> ctk.CTkScrollableFrame:
+        """Cria uma aba rolavel no tabview e devolve o painel de conteudo.
+
+        O painel guarda um contador interno (`_stack_row`) usado por
+        `_settings_stack` para empilhar campos sem calcular linhas a mao.
+        """
+        tab = tabview.add(name)
+        tab.grid_columnconfigure(0, weight=1)
+        tab.grid_rowconfigure(0, weight=1)
+        panel = ctk.CTkScrollableFrame(tab, fg_color="transparent")
+        panel.grid(row=0, column=0, sticky="nsew")
+        panel.grid_columnconfigure(0, weight=1)
+        panel._stack_row = 0  # type: ignore[attr-defined]
+        return panel
+
+    @staticmethod
+    def _settings_stack(
+        panel: ctk.CTkScrollableFrame,
+        widget: Any,
+        *,
+        label: str = "",
+        section: bool = False,
+        help_text: str = "",
+    ) -> Any:
+        """Empilha (rotulo + texto de ajuda opcional + widget) numa coluna.
+
+        Usa/avanca `panel._stack_row`, evitando os calculos de linha frageis
+        que existiam quando tudo morava num unico painel.
+        """
+        row = getattr(panel, "_stack_row", 0)
+        if label:
+            if section:
+                lbl = ctk.CTkLabel(panel, text=label, font=font_section())
+            else:
+                lbl = ctk.CTkLabel(panel, text=label)
+            lbl.grid(row=row, column=0, padx=16, pady=((16 if row == 0 else 12) if section else (8 if row else 16), 0), sticky="w")
+            row += 1
+        if help_text:
+            ctk.CTkLabel(panel, text=help_text, justify="left", text_color="gray").grid(
+                row=row, column=0, padx=16, pady=(0, 2), sticky="w"
+            )
+            row += 1
+        widget.grid(row=row, column=0, padx=16, pady=(2, 4), sticky="ew")
+        panel._stack_row = row + 1  # type: ignore[attr-defined]
+        return widget
+
     def show_tournament_settings(self) -> None:
         if not self._require_tournament():
             return
@@ -36,31 +83,24 @@ class TournamentSettingsMixin:
         )
         self._build_tournament_nav("settings")
 
-        body = ctk.CTkScrollableFrame(self.content, fg_color="transparent")
-        body.grid(row=1, column=0, padx=22, pady=(0, 22), sticky="nsew")
-        body.grid_columnconfigure(0, weight=1)
-        body.grid_columnconfigure(1, weight=1)
+        container = ctk.CTkFrame(self.content, fg_color="transparent")
+        container.grid(row=1, column=0, padx=22, pady=(0, 22), sticky="nsew")
+        container.grid_columnconfigure(0, weight=1)
+        container.grid_rowconfigure(0, weight=1)
 
-        basic_panel = self._make_panel(body)
-        basic_panel.grid(row=0, column=0, padx=(0, 8), pady=(0, 12), sticky="nsew")
-        settings_panel = self._make_panel(body)
-        settings_panel.grid(row=0, column=1, padx=(8, 0), pady=(0, 12), sticky="nsew")
-        schedule_panel = self._make_panel(body)
-        schedule_panel.grid(row=1, column=0, columnspan=2, pady=(0, 12), sticky="ew")
-        schedule_panel.grid_columnconfigure(1, weight=1)
-        schedule_panel.grid_columnconfigure(2, weight=1)
+        tabview = ctk.CTkTabview(container)
+        tabview.grid(row=0, column=0, sticky="nsew")
+        tab_general = self._settings_tab(tabview, "Dados gerais")
+        tab_official = self._settings_tab(tabview, "Dados oficiais")
+        tab_rules = self._settings_tab(tabview, "Regras e desempates")
+        tab_prizes = self._settings_tab(tabview, "Premiacao")
+        tab_reports = self._settings_tab(tabview, "Classificacao e agenda")
 
-        ctk.CTkLabel(
-            basic_panel,
-            text="Dados gerais",
-            font=font_section(),
-        ).grid(row=0, column=0, padx=16, pady=(16, 6), sticky="w")
-        ctk.CTkLabel(
-            settings_panel,
-            text="Dados oficiais e regras",
-            font=font_section(),
-        ).grid(row=0, column=0, padx=16, pady=(16, 6), sticky="w")
+        stack = self._settings_stack
 
+        # ------------------------------------------------------------------ #
+        # Aba 1 - Dados gerais
+        # ------------------------------------------------------------------ #
         tournament_entries: dict[str, ctk.CTkEntry] = {}
         tournament_fields = [
             ("name", "Nome do torneio"),
@@ -71,50 +111,24 @@ class TournamentSettingsMixin:
             ("time_control", "Ritmo"),
             ("bye_points", "Pontos do bye"),
         ]
-        for index, (key, label) in enumerate(tournament_fields, start=1):
-            ctk.CTkLabel(basic_panel, text=label).grid(
-                row=index * 2 - 1,
-                column=0,
-                padx=16,
-                pady=(8, 0),
-                sticky="w",
-            )
+        for key, label in tournament_fields:
             if key in ("start_date", "end_date"):
-                entry = self._make_date_entry(basic_panel, width=40)
+                entry = self._make_date_entry(tab_general, width=40)
             elif key == "time_control":
-                entry = self._make_time_control_menu(basic_panel, width=330)
+                entry = self._make_time_control_menu(tab_general, width=330)
             else:
-                entry = ctk.CTkEntry(basic_panel, width=330)
-            entry.grid(row=index * 2, column=0, padx=16, pady=(2, 0), sticky="ew")
+                entry = ctk.CTkEntry(tab_general, width=330)
+            stack(tab_general, entry, label=label)
             entry.insert(0, str(tournament.get(key) or ""))
             tournament_entries[key] = entry
 
-        scope_row = len(tournament_fields) * 2 + 1
-        ctk.CTkLabel(basic_panel, text="Escopo").grid(
-            row=scope_row,
-            column=0,
-            padx=16,
-            pady=(8, 0),
-            sticky="w",
-        )
-        scope_option = ctk.CTkOptionMenu(basic_panel, values=list(TOURNAMENT_SCOPE_VALUES.keys()), width=330)
-        scope_option.grid(row=scope_row + 1, column=0, padx=16, pady=(2, 0), sticky="ew")
+        scope_option = ctk.CTkOptionMenu(tab_general, values=list(TOURNAMENT_SCOPE_VALUES.keys()), width=330)
+        stack(tab_general, scope_option, label="Escopo")
         scope_option.set(TOURNAMENT_SCOPES[self._tournament_scope_key(tournament)])
 
         competition_by_label = {label: value for value, label in COMPETITION_TYPES.items()}
-        ctk.CTkLabel(basic_panel, text="Formato").grid(
-            row=scope_row + 2,
-            column=0,
-            padx=16,
-            pady=(8, 0),
-            sticky="w",
-        )
-        competition_option = ctk.CTkOptionMenu(
-            basic_panel,
-            values=list(competition_by_label.keys()),
-            width=330,
-        )
-        competition_option.grid(row=scope_row + 3, column=0, padx=16, pady=(2, 0), sticky="ew")
+        competition_option = ctk.CTkOptionMenu(tab_general, values=list(competition_by_label.keys()), width=330)
+        stack(tab_general, competition_option, label="Formato")
         competition_option.set(
             COMPETITION_TYPES.get(tournament.get("competition_type", "individual"), COMPETITION_TYPES["individual"])
         )
@@ -129,15 +143,8 @@ class TournamentSettingsMixin:
         if not tournament_club_values:
             tournament_club_values = ["1 - Clube padrao (Clube)"]
             tournament_club_map[tournament_club_values[0]] = 1
-        ctk.CTkLabel(basic_panel, text="Clube/Escola").grid(
-            row=scope_row + 4,
-            column=0,
-            padx=16,
-            pady=(8, 0),
-            sticky="w",
-        )
-        tournament_club_option = ctk.CTkOptionMenu(basic_panel, values=tournament_club_values, width=330)
-        tournament_club_option.grid(row=scope_row + 5, column=0, padx=16, pady=(2, 0), sticky="ew")
+        tournament_club_option = ctk.CTkOptionMenu(tab_general, values=tournament_club_values, width=330)
+        stack(tab_general, tournament_club_option, label="Clube/Escola")
         selected_tournament_club = next(
             (
                 label
@@ -148,16 +155,9 @@ class TournamentSettingsMixin:
         )
         tournament_club_option.set(selected_tournament_club)
 
-        ctk.CTkLabel(basic_panel, text="Turma").grid(
-            row=scope_row + 6,
-            column=0,
-            padx=16,
-            pady=(8, 0),
-            sticky="w",
-        )
         tournament_class_map: dict[str, int | None] = {"Sem turma": None}
-        tournament_class_option = ctk.CTkOptionMenu(basic_panel, values=["Sem turma"], width=330)
-        tournament_class_option.grid(row=scope_row + 7, column=0, padx=16, pady=(2, 0), sticky="ew")
+        tournament_class_option = ctk.CTkOptionMenu(tab_general, values=["Sem turma"], width=330)
+        stack(tab_general, tournament_class_option, label="Turma")
 
         def load_tournament_class_options(club_id: int | None, selected_id: int | None = None) -> None:
             tournament_class_map.clear()
@@ -193,6 +193,9 @@ class TournamentSettingsMixin:
         )
         refresh_tournament_scope_state()
 
+        # ------------------------------------------------------------------ #
+        # Aba 2 - Dados oficiais (campos para exportacao/identificacao + taxas)
+        # ------------------------------------------------------------------ #
         setting_entries: dict[str, ctk.CTkEntry] = {}
         setting_fields = [
             ("fide_event_id", "FIDE Event-ID"),
@@ -207,30 +210,21 @@ class TournamentSettingsMixin:
             ("categories", "Categorias"),
             ("cutoff_date", "Data de corte"),
             ("comments", "Comentarios"),
-            ("prizes", "Premiacao"),
             ("late_entry_points", "Pontos por adesao tardia"),
-            ("team_boards_count", "Tabuleiros por equipe"),
-            ("team_match_win_points", "Pontos por vitoria da equipe"),
-            ("team_match_draw_points", "Pontos por empate da equipe"),
-            ("team_match_loss_points", "Pontos por derrota da equipe"),
             ("rating_fee_fide", "Taxa rating FIDE por inscrito"),
             ("rating_fee_cbx", "Taxa rating CBX por inscrito"),
             ("rating_fee_lbx", "Taxa rating LBX por inscrito"),
         ]
-        for index, (key, label) in enumerate(setting_fields, start=1):
-            ctk.CTkLabel(settings_panel, text=label).grid(
-                row=index * 2 - 1,
-                column=0,
-                padx=16,
-                pady=(8, 0),
-                sticky="w",
-            )
-            entry = ctk.CTkEntry(settings_panel, width=350)
-            entry.grid(row=index * 2, column=0, padx=16, pady=(2, 0), sticky="ew")
+        for key, label in setting_fields:
+            entry = ctk.CTkEntry(tab_official, width=350)
+            stack(tab_official, entry, label=label)
             value = settings.get(key)
             entry.insert(0, "" if value is None else str(value))
             setting_entries[key] = entry
 
+        # ------------------------------------------------------------------ #
+        # Aba 3 - Regras e desempates
+        # ------------------------------------------------------------------ #
         initial_order_by_label = {label: value for value, label in INITIAL_ORDER_OPTIONS.items()}
         profile_by_label = {label: value for value, label in TOURNAMENT_PROFILES.items()}
         type_by_label = {label: value for value, label in TOURNAMENT_TYPES.items()}
@@ -238,105 +232,51 @@ class TournamentSettingsMixin:
         team_pairing_by_label = {label: value for value, label in TEAM_PAIRING_METHODS.items()}
         team_criterion_by_label = {label: value for value, label in TEAM_STANDING_CRITERIA.items()}
         acceleration_by_label = {label: value for value, label in ACCELERATION_METHODS.items()}
-        option_start_row = len(setting_fields) * 2 + 1
-        ctk.CTkLabel(settings_panel, text="Ordem inicial").grid(
-            row=option_start_row,
-            column=0,
-            padx=16,
-            pady=(12, 0),
-            sticky="w",
-        )
-        initial_order_option = ctk.CTkOptionMenu(
-            settings_panel,
-            values=list(initial_order_by_label.keys()),
-            width=350,
-        )
-        initial_order_option.grid(row=option_start_row + 1, column=0, padx=16, pady=(2, 0), sticky="ew")
+
+        initial_order_option = ctk.CTkOptionMenu(tab_rules, values=list(initial_order_by_label.keys()), width=350)
+        stack(tab_rules, initial_order_option, label="Ordem inicial")
         initial_order_option.set(
             INITIAL_ORDER_OPTIONS.get(settings.get("initial_order", "rating"), INITIAL_ORDER_OPTIONS["rating"])
         )
 
-        ctk.CTkLabel(settings_panel, text="Perfil do torneio").grid(
-            row=option_start_row + 2,
-            column=0,
-            padx=16,
-            pady=(12, 0),
-            sticky="w",
-        )
-        tournament_profile_option = ctk.CTkOptionMenu(
-            settings_panel,
-            values=list(profile_by_label.keys()),
-            width=350,
-        )
-        tournament_profile_option.grid(row=option_start_row + 3, column=0, padx=16, pady=(2, 0), sticky="ew")
+        tournament_profile_option = ctk.CTkOptionMenu(tab_rules, values=list(profile_by_label.keys()), width=350)
+        stack(tab_rules, tournament_profile_option, label="Perfil do torneio")
         tournament_profile_option.set(
             TOURNAMENT_PROFILES.get(settings.get("tournament_profile", "free"), TOURNAMENT_PROFILES["free"])
         )
 
-        ctk.CTkLabel(settings_panel, text="Tipo de torneio").grid(
-            row=option_start_row + 4,
-            column=0,
-            padx=16,
-            pady=(12, 0),
-            sticky="w",
-        )
-        tournament_type_option = ctk.CTkOptionMenu(
-            settings_panel,
-            values=list(type_by_label.keys()),
-            width=350,
-        )
-        tournament_type_option.grid(row=option_start_row + 5, column=0, padx=16, pady=(2, 0), sticky="ew")
+        tournament_type_option = ctk.CTkOptionMenu(tab_rules, values=list(type_by_label.keys()), width=350)
+        stack(tab_rules, tournament_type_option, label="Tipo de torneio")
         tournament_type_option.set(
             TOURNAMENT_TYPES.get(settings.get("tournament_type", "real"), TOURNAMENT_TYPES["real"])
         )
 
-        ctk.CTkLabel(settings_panel, text="Sistema de emparceiramento").grid(
-            row=option_start_row + 6,
-            column=0,
-            padx=16,
-            pady=(12, 0),
-            sticky="w",
-        )
-        pairing_option = ctk.CTkOptionMenu(
-            settings_panel,
-            values=list(pairing_by_label.keys()),
-            width=350,
-        )
-        pairing_option.grid(row=option_start_row + 7, column=0, padx=16, pady=(2, 0), sticky="ew")
-        pairing_option.set(
-            PAIRING_METHODS.get(settings.get("pairing_method", "swiss"), PAIRING_METHODS["swiss"])
-        )
+        pairing_option = ctk.CTkOptionMenu(tab_rules, values=list(pairing_by_label.keys()), width=350)
+        stack(tab_rules, pairing_option, label="Sistema de emparceiramento")
+        pairing_option.set(PAIRING_METHODS.get(settings.get("pairing_method", "swiss"), PAIRING_METHODS["swiss"]))
 
-        ctk.CTkLabel(settings_panel, text="Metodo por equipes").grid(
-            row=option_start_row + 8,
-            column=0,
-            padx=16,
-            pady=(12, 0),
-            sticky="w",
-        )
-        team_pairing_option = ctk.CTkOptionMenu(
-            settings_panel,
-            values=list(team_pairing_by_label.keys()),
-            width=350,
-        )
-        team_pairing_option.grid(row=option_start_row + 9, column=0, padx=16, pady=(2, 0), sticky="ew")
+        # Pontuacao/criterios por equipes (campos textuais + menus)
+        team_setting_fields = [
+            ("team_boards_count", "Tabuleiros por equipe"),
+            ("team_match_win_points", "Pontos por vitoria da equipe"),
+            ("team_match_draw_points", "Pontos por empate da equipe"),
+            ("team_match_loss_points", "Pontos por derrota da equipe"),
+        ]
+        for key, label in team_setting_fields:
+            entry = ctk.CTkEntry(tab_rules, width=350)
+            stack(tab_rules, entry, label=label)
+            value = settings.get(key)
+            entry.insert(0, "" if value is None else str(value))
+            setting_entries[key] = entry
+
+        team_pairing_option = ctk.CTkOptionMenu(tab_rules, values=list(team_pairing_by_label.keys()), width=350)
+        stack(tab_rules, team_pairing_option, label="Metodo por equipes")
         team_pairing_option.set(
             TEAM_PAIRING_METHODS.get(settings.get("team_pairing_method", "swiss"), TEAM_PAIRING_METHODS["swiss"])
         )
 
-        ctk.CTkLabel(settings_panel, text="Criterio principal por equipes").grid(
-            row=option_start_row + 10,
-            column=0,
-            padx=16,
-            pady=(12, 0),
-            sticky="w",
-        )
-        team_primary_option = ctk.CTkOptionMenu(
-            settings_panel,
-            values=list(team_criterion_by_label.keys()),
-            width=350,
-        )
-        team_primary_option.grid(row=option_start_row + 11, column=0, padx=16, pady=(2, 0), sticky="ew")
+        team_primary_option = ctk.CTkOptionMenu(tab_rules, values=list(team_criterion_by_label.keys()), width=350)
+        stack(tab_rules, team_primary_option, label="Criterio principal por equipes")
         team_primary_option.set(
             TEAM_STANDING_CRITERIA.get(
                 settings.get("team_standing_primary", "match_points"),
@@ -344,19 +284,8 @@ class TournamentSettingsMixin:
             )
         )
 
-        ctk.CTkLabel(settings_panel, text="Criterio secundario por equipes").grid(
-            row=option_start_row + 12,
-            column=0,
-            padx=16,
-            pady=(12, 0),
-            sticky="w",
-        )
-        team_secondary_option = ctk.CTkOptionMenu(
-            settings_panel,
-            values=list(team_criterion_by_label.keys()),
-            width=350,
-        )
-        team_secondary_option.grid(row=option_start_row + 13, column=0, padx=16, pady=(2, 0), sticky="ew")
+        team_secondary_option = ctk.CTkOptionMenu(tab_rules, values=list(team_criterion_by_label.keys()), width=350)
+        stack(tab_rules, team_secondary_option, label="Criterio secundario por equipes")
         team_secondary_option.set(
             TEAM_STANDING_CRITERIA.get(
                 settings.get("team_standing_secondary", "game_points"),
@@ -364,14 +293,8 @@ class TournamentSettingsMixin:
             )
         )
 
-        team_fixed_board_order_check = ctk.CTkCheckBox(settings_panel, text="Manter ordem fixa dos tabuleiros")
-        team_fixed_board_order_check.grid(
-            row=option_start_row + 14,
-            column=0,
-            padx=16,
-            pady=(10, 0),
-            sticky="w",
-        )
+        team_fixed_board_order_check = ctk.CTkCheckBox(tab_rules, text="Manter ordem fixa dos tabuleiros")
+        stack(tab_rules, team_fixed_board_order_check)
         if settings.get("team_fixed_board_order", 1):
             team_fixed_board_order_check.select()
 
@@ -388,37 +311,23 @@ class TournamentSettingsMixin:
             "archived": "Arquivado",
         }
         flag_checks: dict[str, ctk.CTkCheckBox] = {}
-        for offset, key in enumerate(sorted(TOURNAMENT_FLAG_FIELDS)):
-            checkbox = ctk.CTkCheckBox(settings_panel, text=flag_labels.get(key, key))
-            checkbox.grid(
-                row=option_start_row + 15 + offset,
-                column=0,
-                padx=16,
-                pady=(8 if offset == 0 else 4, 0),
-                sticky="w",
-            )
+        for key in sorted(TOURNAMENT_FLAG_FIELDS):
+            checkbox = ctk.CTkCheckBox(tab_rules, text=flag_labels.get(key, key))
+            stack(tab_rules, checkbox)
             if settings.get(key):
                 checkbox.select()
             flag_checks[key] = checkbox
 
-        accel_row = option_start_row + 15 + len(TOURNAMENT_FLAG_FIELDS)
         current_spec = acceleration_spec(settings.get("acceleration_method", "none"))
         scheme_to_key = {"none": "none", "classic": "accelerated", "custom": "custom", "baku": "baku"}
         current_accel_key = scheme_to_key.get(current_spec.get("scheme", "none"), "none")
 
-        ctk.CTkLabel(settings_panel, text="Aceleracao (TRF25 reg. 250)").grid(
-            row=accel_row, column=0, padx=16, pady=(12, 0), sticky="w"
-        )
-        acceleration_option = ctk.CTkOptionMenu(
-            settings_panel,
-            values=list(acceleration_by_label.keys()),
-            width=350,
-        )
-        acceleration_option.grid(row=accel_row + 1, column=0, padx=16, pady=(2, 0), sticky="ew")
+        acceleration_option = ctk.CTkOptionMenu(tab_rules, values=list(acceleration_by_label.keys()), width=350)
+        stack(tab_rules, acceleration_option, label="Aceleracao (TRF25 reg. 250)")
         acceleration_option.set(ACCELERATION_METHODS.get(current_accel_key, ACCELERATION_METHODS["none"]))
 
-        custom_frame = ctk.CTkFrame(settings_panel, fg_color="transparent")
-        custom_frame.grid(row=accel_row + 2, column=0, padx=16, pady=(2, 0), sticky="ew")
+        custom_frame = ctk.CTkFrame(tab_rules, fg_color="transparent")
+        stack(tab_rules, custom_frame)
         accel_custom_entries: dict[str, ctk.CTkEntry] = {}
         custom_defaults = {
             "rounds": str(int(current_spec.get("round_count", 2) or 2)),
@@ -448,63 +357,50 @@ class TournamentSettingsMixin:
         acceleration_option.configure(command=lambda _value: refresh_accel_state())
         refresh_accel_state()
 
-        tiebreak_row = accel_row + 3
-        ctk.CTkLabel(settings_panel, text="Desempates (individual)", font=font_section()).grid(
-            row=tiebreak_row, column=0, padx=16, pady=(16, 0), sticky="w"
+        initial_tiebreak_codes = [
+            item["code"] for item in parse_player_tiebreak_sequence(settings.get("tiebreak_sequence"))
+        ]
+        tiebreak_editor = TiebreakSequenceEditor(
+            tab_rules, PLAYER_TIEBREAKS, DEFAULT_PLAYER_TIEBREAKS, initial_tiebreak_codes
         )
-        ctk.CTkLabel(
-            settings_panel,
-            text=(
+        stack(
+            tab_rules,
+            tiebreak_editor,
+            label="Desempates (individual)",
+            section=True,
+            help_text=(
                 "Ordem aplicada apos os pontos. Pontos e sempre o primeiro criterio;\n"
                 "rating e nome sao os criterios tecnicos finais."
             ),
-            justify="left",
-            text_color="gray",
-        ).grid(row=tiebreak_row + 1, column=0, padx=16, pady=(0, 2), sticky="w")
-        initial_tiebreak_codes = [
-            item["code"]
-            for item in parse_player_tiebreak_sequence(settings.get("tiebreak_sequence"))
-        ]
-        tiebreak_editor = TiebreakSequenceEditor(
-            settings_panel,
-            PLAYER_TIEBREAKS,
-            DEFAULT_PLAYER_TIEBREAKS,
-            initial_tiebreak_codes,
         )
-        tiebreak_editor.grid(row=tiebreak_row + 2, column=0, padx=16, pady=(2, 8), sticky="ew")
 
-        ctk.CTkLabel(settings_panel, text="Desempates por equipes", font=font_section()).grid(
-            row=tiebreak_row + 3, column=0, padx=16, pady=(12, 0), sticky="w"
-        )
-        ctk.CTkLabel(
-            settings_panel,
-            text="Ordem dos criterios para a classificacao por equipes (vazio = match points, game points, Buchholz, vitorias).",
-            justify="left",
-            text_color="gray",
-        ).grid(row=tiebreak_row + 4, column=0, padx=16, pady=(0, 2), sticky="w")
         initial_team_tiebreak_codes = [
-            item["code"]
-            for item in parse_team_tiebreak_sequence(settings.get("team_tiebreak_sequence"))
+            item["code"] for item in parse_team_tiebreak_sequence(settings.get("team_tiebreak_sequence"))
         ]
         team_tiebreak_editor = TiebreakSequenceEditor(
-            settings_panel,
-            TEAM_TIEBREAKS,
-            DEFAULT_TEAM_TIEBREAKS,
-            initial_team_tiebreak_codes,
+            tab_rules, TEAM_TIEBREAKS, DEFAULT_TEAM_TIEBREAKS, initial_team_tiebreak_codes
         )
-        team_tiebreak_editor.grid(row=tiebreak_row + 5, column=0, padx=16, pady=(2, 8), sticky="ew")
+        stack(
+            tab_rules,
+            team_tiebreak_editor,
+            label="Desempates por equipes",
+            section=True,
+            help_text="Ordem dos criterios para a classificacao por equipes (vazio = match points, game points, Buchholz, vitorias).",
+        )
 
-        prize_row = tiebreak_row + 6
-        ctk.CTkLabel(settings_panel, text="Premiacao", font=font_section()).grid(
-            row=prize_row, column=0, padx=16, pady=(16, 0), sticky="w"
-        )
-        prize_controls = ctk.CTkFrame(settings_panel, fg_color="transparent")
-        prize_controls.grid(row=prize_row + 1, column=0, padx=16, pady=(2, 0), sticky="ew")
-        ctk.CTkLabel(prize_controls, text="Politica").grid(row=0, column=0, padx=(0, 4), sticky="w")
+        # ------------------------------------------------------------------ #
+        # Aba 4 - Premiacao
+        # ------------------------------------------------------------------ #
+        prize_text_entry = ctk.CTkEntry(tab_prizes, width=350)
+        stack(tab_prizes, prize_text_entry, label="Premiacao (texto livre)")
+        prize_text_value = settings.get("prizes")
+        prize_text_entry.insert(0, "" if prize_text_value is None else str(prize_text_value))
+        setting_entries["prizes"] = prize_text_entry
+
+        prize_controls = ctk.CTkFrame(tab_prizes, fg_color="transparent")
         prize_policy_by_label = {label: value for value, label in PRIZE_POLICIES.items()}
-        prize_policy_option = ctk.CTkOptionMenu(
-            prize_controls, values=list(prize_policy_by_label.keys()), width=240
-        )
+        ctk.CTkLabel(prize_controls, text="Politica").grid(row=0, column=0, padx=(0, 4), sticky="w")
+        prize_policy_option = ctk.CTkOptionMenu(prize_controls, values=list(prize_policy_by_label.keys()), width=240)
         prize_policy_option.grid(row=0, column=1, padx=(0, 16))
         prize_policy_option.set(
             PRIZE_POLICIES.get(settings.get("prize_policy", "best_only"), PRIZE_POLICIES["best_only"])
@@ -513,74 +409,43 @@ class TournamentSettingsMixin:
         prize_tax_entry = ctk.CTkEntry(prize_controls, width=80)
         prize_tax_entry.grid(row=0, column=3)
         prize_tax_entry.insert(0, str(settings.get("prize_tax_percent", 0.0) or 0.0))
+        stack(tab_prizes, prize_controls, label="Distribuicao de premios", section=True)
 
-        ctk.CTkLabel(
-            settings_panel,
-            text=(
-                "Politica e imposto sao salvos com 'Salvar configuracoes'.\n"
+        prize_editor = PrizeEditor(tab_prizes, self.db.list_tournament_prizes(self.current_tournament_id))
+        stack(
+            tab_prizes,
+            prize_editor,
+            help_text=(
+                "Politica e imposto sao salvos junto com 'Salvar'.\n"
                 "Geral/Categoria sao distribuidos automaticamente; Especial/Tabuleiro entram como manuais."
             ),
-            justify="left",
-            text_color="gray",
-        ).grid(row=prize_row + 2, column=0, padx=16, pady=(2, 2), sticky="w")
-
-        prize_editor = PrizeEditor(
-            settings_panel, self.db.list_tournament_prizes(self.current_tournament_id)
         )
-        prize_editor.grid(row=prize_row + 3, column=0, padx=16, pady=(2, 4), sticky="ew")
 
-        def save_prizes() -> None:
-            try:
-                self.prize_service.replace_prizes(
-                    self.current_tournament_id, prize_editor.get_rows()
-                )
-                self._show_toast("Premios salvos.", kind="success")
-            except Exception as exc:
-                self._show_error(exc)
-
-        btn_save_prizes = ctk.CTkButton(settings_panel, text="Salvar premios", command=save_prizes)
-        btn_save_prizes.grid(row=prize_row + 4, column=0, padx=16, pady=(0, 10), sticky="w")
-        self._disable_if_unauthorized(btn_save_prizes, "tournament_write")
-
-        columns_row = prize_row + 5
-        ctk.CTkLabel(settings_panel, text="Colunas da classificacao", font=font_section()).grid(
-            row=columns_row, column=0, padx=16, pady=(16, 0), sticky="w"
-        )
-        ctk.CTkLabel(
-            settings_panel,
-            text="Escolha, ordene e ajuste a largura das colunas da classificacao (largura vazia = automatica; vazio = padrao).",
-            text_color="gray",
-        ).grid(row=columns_row + 1, column=0, padx=16, pady=(0, 2), sticky="w")
+        # ------------------------------------------------------------------ #
+        # Aba 5 - Classificacao e agenda
+        # ------------------------------------------------------------------ #
         standings_layout = self.list_layout_service.get_columns(self.current_tournament_id, "standings")
         columns_editor = ColumnLayoutEditor(
-            settings_panel, STANDINGS_COLUMNS, DEFAULT_STANDINGS_COLUMNS, standings_layout["selected"]
+            tab_reports, STANDINGS_COLUMNS, DEFAULT_STANDINGS_COLUMNS, standings_layout["selected"]
         )
-        columns_editor.grid(row=columns_row + 2, column=0, padx=16, pady=(2, 4), sticky="ew")
+        stack(
+            tab_reports,
+            columns_editor,
+            label="Colunas da classificacao",
+            section=True,
+            help_text="Escolha, ordene e ajuste a largura das colunas da classificacao (largura vazia = automatica; vazio = padrao).",
+        )
 
-        def save_columns() -> None:
-            try:
-                self.list_layout_service.save_columns(
-                    self.current_tournament_id, columns_editor.get_columns(), "standings"
-                )
-                self._show_toast("Colunas da classificacao salvas.", kind="success")
-            except Exception as exc:
-                self._show_error(exc)
-
-        btn_save_columns = ctk.CTkButton(settings_panel, text="Salvar colunas", command=save_columns)
-        btn_save_columns.grid(row=columns_row + 3, column=0, padx=16, pady=(0, 10), sticky="w")
-        self._disable_if_unauthorized(btn_save_columns, "tournament_write")
-
-        ctk.CTkLabel(
-            schedule_panel,
-            text="Datas e horarios das rodadas",
-            font=font_section(),
-        ).grid(row=0, column=0, columnspan=3, padx=16, pady=(16, 8), sticky="w")
+        schedule_panel = ctk.CTkFrame(tab_reports, fg_color="transparent")
+        schedule_panel.grid_columnconfigure(1, weight=1)
+        schedule_panel.grid_columnconfigure(2, weight=1)
+        stack(tab_reports, schedule_panel, label="Datas e horarios das rodadas", section=True)
 
         existing_schedule = self.db.list_round_schedule(self.current_tournament_id)
         first_schedule_date = next((str(item.get("date") or "") for item in existing_schedule if item.get("date")), "")
         first_schedule_time = next((str(item.get("time") or "") for item in existing_schedule if item.get("time")), "")
         generator_frame = ctk.CTkFrame(schedule_panel, fg_color="transparent")
-        generator_frame.grid(row=1, column=0, columnspan=3, padx=16, pady=(0, 8), sticky="ew")
+        generator_frame.grid(row=0, column=0, columnspan=3, padx=0, pady=(0, 8), sticky="ew")
         for column in range(5):
             generator_frame.grid_columnconfigure(column, weight=1)
 
@@ -594,23 +459,13 @@ class TournamentSettingsMixin:
         auto_entries: dict[str, ctk.CTkEntry] = {}
         for column, (key, label, value, width) in enumerate(auto_fields):
             ctk.CTkLabel(generator_frame, text=label).grid(
-                row=0,
-                column=column,
-                padx=(0 if column == 0 else 8, 0),
-                pady=(0, 2),
-                sticky="w",
+                row=0, column=column, padx=(0 if column == 0 else 8, 0), pady=(0, 2), sticky="w"
             )
             if key == "start_date":
                 entry = self._make_date_entry(generator_frame, width=15)
             else:
                 entry = ctk.CTkEntry(generator_frame, width=width)
-            entry.grid(
-                row=1,
-                column=column,
-                padx=(0 if column == 0 else 8, 0),
-                pady=(0, 6),
-                sticky="ew",
-            )
+            entry.grid(row=1, column=column, padx=(0 if column == 0 else 8, 0), pady=(0, 6), sticky="ew")
             entry.insert(0, value)
             auto_entries[key] = entry
 
@@ -624,25 +479,21 @@ class TournamentSettingsMixin:
         all_same_day_check.configure(command=refresh_auto_rounds_state)
         refresh_auto_rounds_state()
 
-        ctk.CTkLabel(schedule_panel, text="Rodada").grid(row=3, column=0, padx=16, sticky="w")
-        ctk.CTkLabel(schedule_panel, text="Data").grid(row=3, column=1, padx=8, sticky="w")
-        ctk.CTkLabel(schedule_panel, text="Hora").grid(row=3, column=2, padx=8, sticky="w")
+        ctk.CTkLabel(schedule_panel, text="Rodada").grid(row=1, column=0, padx=0, sticky="w")
+        ctk.CTkLabel(schedule_panel, text="Data").grid(row=1, column=1, padx=8, sticky="w")
+        ctk.CTkLabel(schedule_panel, text="Hora").grid(row=1, column=2, padx=8, sticky="w")
 
         schedule_entries: dict[int, tuple[ctk.CTkEntry, ctk.CTkEntry]] = {}
-        for row_index, item in enumerate(existing_schedule, start=4):
+        for row_index, item in enumerate(existing_schedule, start=2):
             round_number = int(item["round_number"])
             ctk.CTkLabel(schedule_panel, text=str(round_number)).grid(
-                row=row_index,
-                column=0,
-                padx=16,
-                pady=(4, 0),
-                sticky="w",
+                row=row_index, column=0, padx=0, pady=(4, 0), sticky="w"
             )
             date_entry = self._make_date_entry(schedule_panel, width=20)
             date_entry.grid(row=row_index, column=1, padx=8, pady=(4, 0), sticky="ew")
             date_entry.insert(0, str(item.get("date") or ""))
             time_entry = ctk.CTkEntry(schedule_panel, width=140)
-            time_entry.grid(row=row_index, column=2, padx=(8, 16), pady=(4, 0), sticky="ew")
+            time_entry.grid(row=row_index, column=2, padx=(8, 0), pady=(4, 0), sticky="ew")
             time_entry.insert(0, str(item.get("time") or ""))
             schedule_entries[round_number] = (date_entry, time_entry)
 
@@ -673,15 +524,12 @@ class TournamentSettingsMixin:
         btn_auto.grid(row=2, column=4, padx=(8, 0), pady=(2, 0), sticky="e")
         self._disable_if_unauthorized(btn_auto, "tournament_write")
 
+        # ------------------------------------------------------------------ #
+        # Coleta dos campos e persistencia
+        # ------------------------------------------------------------------ #
         def profile_payloads() -> tuple[dict[str, Any], dict[str, Any], list[dict[str, Any]]]:
-            tournament_payload = {
-                key: entry.get()
-                for key, entry in tournament_entries.items()
-            }
-            settings_payload = {
-                key: entry.get()
-                for key, entry in setting_entries.items()
-            }
+            tournament_payload = {key: entry.get() for key, entry in tournament_entries.items()}
+            settings_payload = {key: entry.get() for key, entry in setting_entries.items()}
             scope = TOURNAMENT_SCOPE_VALUES[scope_option.get()]
             tournament_payload["scope"] = scope
             tournament_payload["competition_type"] = competition_by_label[competition_option.get()]
@@ -702,12 +550,8 @@ class TournamentSettingsMixin:
             settings_payload["team_pairing_method"] = team_pairing_by_label[team_pairing_option.get()]
             settings_payload["team_standing_primary"] = team_criterion_by_label[team_primary_option.get()]
             settings_payload["team_standing_secondary"] = team_criterion_by_label[team_secondary_option.get()]
-            settings_payload["tiebreak_sequence"] = serialize_tiebreak_sequence(
-                tiebreak_editor.get_sequence()
-            )
-            settings_payload["team_tiebreak_sequence"] = serialize_tiebreak_sequence(
-                team_tiebreak_editor.get_sequence()
-            )
+            settings_payload["tiebreak_sequence"] = serialize_tiebreak_sequence(tiebreak_editor.get_sequence())
+            settings_payload["team_tiebreak_sequence"] = serialize_tiebreak_sequence(team_tiebreak_editor.get_sequence())
             settings_payload["prize_policy"] = prize_policy_by_label[prize_policy_option.get()]
             settings_payload["prize_tax_percent"] = prize_tax_entry.get()
             settings_payload["team_fixed_board_order"] = team_fixed_board_order_check.get()
@@ -731,11 +575,7 @@ class TournamentSettingsMixin:
             for key, checkbox in flag_checks.items():
                 settings_payload[key] = checkbox.get()
             schedule_payload = [
-                {
-                    "round_number": round_number,
-                    "date": entries[0].get(),
-                    "time": entries[1].get(),
-                }
+                {"round_number": round_number, "date": entries[0].get(), "time": entries[1].get()}
                 for round_number, entries in schedule_entries.items()
             ]
             return tournament_payload, settings_payload, schedule_payload
@@ -748,6 +588,11 @@ class TournamentSettingsMixin:
                     tournament_payload,
                     settings_payload,
                     schedule_payload,
+                )
+                # Salvamento unificado: premios e colunas vao junto com as configuracoes.
+                self.prize_service.replace_prizes(self.current_tournament_id, prize_editor.get_rows())
+                self.list_layout_service.save_columns(
+                    self.current_tournament_id, columns_editor.get_columns(), "standings"
                 )
                 self._set_current_tournament(self.current_tournament_id)
                 if show_message:
@@ -778,14 +623,17 @@ class TournamentSettingsMixin:
             except Exception as exc:
                 self._show_error(exc)
 
-        actions = ctk.CTkFrame(body, fg_color="transparent")
-        actions.grid(row=2, column=0, columnspan=2, sticky="e")
-        btn_save_config = ctk.CTkButton(actions, text="Salvar configuracoes", command=save_settings)
-        btn_save_config.pack(side="right", padx=(8, 0), pady=(0, 12))
+        # ------------------------------------------------------------------ #
+        # Rodape fixo de acoes (visivel em todas as abas)
+        # ------------------------------------------------------------------ #
+        actions = ctk.CTkFrame(container, fg_color="transparent")
+        actions.grid(row=1, column=0, pady=(10, 0), sticky="e")
+        btn_save_config = ctk.CTkButton(actions, text="Salvar", command=save_settings)
+        btn_save_config.pack(side="right", padx=(8, 0))
         self._disable_if_unauthorized(btn_save_config, "tournament_write")
         btn_save_as = ctk.CTkButton(actions, text="Salvar como novo", command=save_as_new_tournament)
-        btn_save_as.pack(side="right", padx=(8, 0), pady=(0, 12))
+        btn_save_as.pack(side="right", padx=(8, 0))
         self._disable_if_unauthorized(btn_save_as, "tournament_write")
         btn_refs = ctk.CTkButton(actions, text="Equipe de Arbitragem", command=self.show_tournament_referees_dialog)
-        btn_refs.pack(side="right", padx=(8, 0), pady=(0, 12))
+        btn_refs.pack(side="right", padx=(8, 0))
         self._disable_if_unauthorized(btn_refs, "tournament_write")
