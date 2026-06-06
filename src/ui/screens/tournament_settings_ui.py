@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from ..support import *
 
 from src.services.pairing.acceleration import acceleration_spec
@@ -388,6 +390,31 @@ class TournamentSettingsMixin:
             help_text="Ordem dos criterios para a classificacao por equipes (vazio = match points, game points, Buchholz, vitorias).",
         )
 
+        # Campos especificos de equipes ficam habilitados apenas quando o
+        # Formato (aba "Dados gerais") e "Equipes".
+        team_only_widgets = [
+            setting_entries["team_boards_count"],
+            setting_entries["team_match_win_points"],
+            setting_entries["team_match_draw_points"],
+            setting_entries["team_match_loss_points"],
+            team_pairing_option,
+            team_primary_option,
+            team_secondary_option,
+            team_fixed_board_order_check,
+        ]
+
+        def refresh_team_fields_state(_value: str | None = None) -> None:
+            is_team = competition_by_label.get(competition_option.get()) == "team"
+            state = "normal" if is_team else "disabled"
+            for widget in team_only_widgets:
+                try:
+                    widget.configure(state=state)
+                except Exception:
+                    pass
+
+        competition_option.configure(command=refresh_team_fields_state)
+        refresh_team_fields_state()
+
         # ------------------------------------------------------------------ #
         # Aba 4 - Premiacao
         # ------------------------------------------------------------------ #
@@ -530,6 +557,65 @@ class TournamentSettingsMixin:
         def profile_payloads() -> tuple[dict[str, Any], dict[str, Any], list[dict[str, Any]]]:
             tournament_payload = {key: entry.get() for key, entry in tournament_entries.items()}
             settings_payload = {key: entry.get() for key, entry in setting_entries.items()}
+
+            # Validacao client-side: destaca o campo invalido antes de persistir.
+            try:
+                default_border = ctk.ThemeManager.theme["CTkEntry"]["border_color"]
+            except Exception:
+                default_border = None
+
+            def _reset_border(entry: Any) -> None:
+                if default_border is None:
+                    return
+                try:
+                    entry.configure(border_color=default_border)
+                except Exception:
+                    pass
+
+            def _flag_invalid(entry: Any, message: str) -> None:
+                try:
+                    entry.configure(border_color="#d9534f")
+                except Exception:
+                    pass
+                raise AppError(message)
+
+            def _parse_date(value: str) -> datetime | None:
+                value = (value or "").strip()
+                for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"):
+                    try:
+                        return datetime.strptime(value, fmt)
+                    except ValueError:
+                        continue
+                return None
+
+            for _vkey in ("rounds_count", "start_date", "end_date", "bye_points"):
+                _reset_border(tournament_entries[_vkey])
+
+            rounds_raw = str(tournament_payload.get("rounds_count", "")).strip()
+            if not rounds_raw.isdigit() or int(rounds_raw) < 1:
+                _flag_invalid(
+                    tournament_entries["rounds_count"],
+                    "Informe um numero de rodadas inteiro maior ou igual a 1.",
+                )
+
+            bye_raw = str(tournament_payload.get("bye_points", "")).strip().replace(",", ".")
+            if bye_raw:
+                try:
+                    if float(bye_raw) < 0:
+                        raise ValueError
+                except ValueError:
+                    _flag_invalid(
+                        tournament_entries["bye_points"],
+                        "Pontos do bye deve ser um numero maior ou igual a zero.",
+                    )
+
+            start_date = _parse_date(tournament_payload.get("start_date", ""))
+            end_date = _parse_date(tournament_payload.get("end_date", ""))
+            if start_date and end_date and start_date > end_date:
+                _flag_invalid(
+                    tournament_entries["end_date"],
+                    "A data final nao pode ser anterior a data inicial.",
+                )
             scope = TOURNAMENT_SCOPE_VALUES[scope_option.get()]
             tournament_payload["scope"] = scope
             tournament_payload["competition_type"] = competition_by_label[competition_option.get()]
