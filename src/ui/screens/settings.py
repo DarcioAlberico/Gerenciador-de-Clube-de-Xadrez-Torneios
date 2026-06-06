@@ -36,64 +36,34 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
         body.grid_columnconfigure(1, weight=1)
         body.grid_rowconfigure(0, weight=1)
 
-        settings_panel = self._make_scrollable_panel(body, width=340)
-        settings_panel.grid(row=0, column=0, padx=(0, 16), sticky="ns")
+        settings_tabs = ctk.CTkTabview(body)
+        settings_tabs.grid(row=0, column=0, padx=(0, 16), sticky="nsew")
+        tab_appearance = self._settings_tab(settings_tabs, "Aparencia")
+        tab_folders = self._settings_tab(settings_tabs, "Pastas e backup")
+        tab_tools = self._settings_tab(settings_tabs, "Seguranca e dados")
+        stack = self._settings_stack
 
+        # --- Aba: Aparencia ---
         appearance_labels = {"System": "Sistema", "Light": "Claro", "Dark": "Escuro"}
         appearance_values = {label: value for value, label in appearance_labels.items()}
-        ctk.CTkLabel(settings_panel, text="Aparencia").grid(
-            row=0,
-            column=0,
-            padx=16,
-            pady=(16, 4),
-            sticky="w",
-        )
-        appearance_option = ctk.CTkOptionMenu(
-            settings_panel,
-            values=list(appearance_values.keys()),
-            width=250,
-        )
-        appearance_option.grid(row=1, column=0, padx=16, pady=(0, 12), sticky="ew")
+        appearance_option = ctk.CTkOptionMenu(tab_appearance, values=list(appearance_values.keys()), width=250)
+        stack(tab_appearance, appearance_option, label="Aparencia")
         appearance_option.set(appearance_labels.get(settings.get("appearance_mode", "System"), "Sistema"))
 
         color_theme_labels = {"blue": "Azul (Padrao)", "green": "Verde", "dark-blue": "Azul Escuro"}
         color_theme_values = {label: value for value, label in color_theme_labels.items()}
-        ctk.CTkLabel(settings_panel, text="Cor de destaque").grid(
-            row=2,
-            column=0,
-            padx=16,
-            pady=(8, 4),
-            sticky="w",
-        )
-        color_theme_option = ctk.CTkOptionMenu(
-            settings_panel,
-            values=list(color_theme_values.keys()),
-            width=250,
-        )
-        color_theme_option.grid(row=3, column=0, padx=16, pady=(0, 12), sticky="ew")
+        color_theme_option = ctk.CTkOptionMenu(tab_appearance, values=list(color_theme_values.keys()), width=250)
+        stack(tab_appearance, color_theme_option, label="Cor de destaque")
         color_theme_option.set(color_theme_labels.get(settings.get("color_theme", "blue"), "Azul (Padrao)"))
 
-        ctk.CTkLabel(settings_panel, text="Pasta de exportacao").grid(
-            row=4,
-            column=0,
-            padx=16,
-            pady=(8, 4),
-            sticky="w",
-        )
-        export_dir_entry = ctk.CTkEntry(settings_panel, width=320)
-        export_dir_entry.grid(row=5, column=0, padx=16, pady=(0, 8), sticky="ew")
-        export_dir_entry.insert(0, str(settings.get("default_export_dir") or default_export_dir()))
+        ui_scale_entry = ctk.CTkEntry(tab_appearance, width=120)
+        stack(tab_appearance, ui_scale_entry, label="Tamanho da fonte/interface (%)")
+        ui_scale_entry.insert(0, str(settings.get("ui_scale_percent") or "120"))
 
-        ctk.CTkLabel(settings_panel, text="Pasta de backups").grid(
-            row=6,
-            column=0,
-            padx=16,
-            pady=(8, 4),
-            sticky="w",
-        )
-        backup_dir_entry = ctk.CTkEntry(settings_panel, width=320)
-        backup_dir_entry.grid(row=7, column=0, padx=16, pady=(0, 8), sticky="ew")
-        backup_dir_entry.insert(0, str(settings.get("backup_dir") or self.db.backup_dir))
+        # --- Aba: Pastas e backup ---
+        export_dir_entry = ctk.CTkEntry(tab_folders, width=320)
+        stack(tab_folders, export_dir_entry, label="Pasta de exportacao")
+        export_dir_entry.insert(0, str(settings.get("default_export_dir") or default_export_dir()))
 
         def choose_export_dir() -> None:
             directory = filedialog.askdirectory(
@@ -104,6 +74,12 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
                 export_dir_entry.delete(0, "end")
                 export_dir_entry.insert(0, directory)
 
+        stack(tab_folders, ctk.CTkButton(tab_folders, text="Escolher exportacao", command=choose_export_dir))
+
+        backup_dir_entry = ctk.CTkEntry(tab_folders, width=320)
+        stack(tab_folders, backup_dir_entry, label="Pasta de backups")
+        backup_dir_entry.insert(0, str(settings.get("backup_dir") or self.db.backup_dir))
+
         def choose_backup_dir() -> None:
             directory = filedialog.askdirectory(
                 title="Escolha a pasta de backups",
@@ -113,31 +89,10 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
                 backup_dir_entry.delete(0, "end")
                 backup_dir_entry.insert(0, directory)
 
-        ctk.CTkButton(settings_panel, text="Escolher exportacao", command=choose_export_dir).grid(
-            row=8,
-            column=0,
-            padx=16,
-            pady=(0, 8),
-            sticky="ew",
-        )
-        ctk.CTkButton(settings_panel, text="Escolher backups", command=choose_backup_dir).grid(
-            row=11,
-            column=0,
-            padx=16,
-            pady=(0, 14),
-            sticky="ew",
-        )
+        stack(tab_folders, ctk.CTkButton(tab_folders, text="Escolher backups", command=choose_backup_dir))
 
-
-        ctk.CTkLabel(settings_panel, text="Pasta de Nuvem (Google Drive/Dropbox)").grid(
-            row=12,
-            column=0,
-            padx=16,
-            pady=(8, 4),
-            sticky="w",
-        )
-        cloud_dir_entry = ctk.CTkEntry(settings_panel, width=320)
-        cloud_dir_entry.grid(row=13, column=0, padx=16, pady=(0, 8), sticky="ew")
+        cloud_dir_entry = ctk.CTkEntry(tab_folders, width=320)
+        stack(tab_folders, cloud_dir_entry, label="Pasta de Nuvem (Google Drive/Dropbox)")
         cloud_dir_entry.insert(0, str(settings.get("cloud_sync_dir", "")))
 
         def choose_cloud_dir() -> None:
@@ -149,56 +104,27 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
                 cloud_dir_entry.delete(0, "end")
                 cloud_dir_entry.insert(0, directory)
 
-        ctk.CTkButton(settings_panel, text="Escolher nuvem", command=choose_cloud_dir).grid(
-            row=14,
-            column=0,
-            padx=16,
-            pady=(0, 14),
-            sticky="ew",
-        )
+        stack(tab_folders, ctk.CTkButton(tab_folders, text="Escolher nuvem", command=choose_cloud_dir))
 
-        self._section_title(settings_panel, "Seguranca operacional").grid(
-            row=15, column=0, padx=16, pady=(6, 4), sticky="w"
-        )
+        retention_entry = ctk.CTkEntry(tab_folders, width=120)
+        stack(tab_folders, retention_entry, label="Manter ultimos backups")
+        retention_entry.insert(0, str(settings.get("backup_retention_count") or "10"))
+
+        # --- Aba: Seguranca e dados ---
         def open_users_manager() -> None:
             self._show_users_manager()
 
-        ctk.CTkButton(
-            settings_panel,
-            text="Gerenciar Usuarios do Sistema",
-            command=open_users_manager,
-        ).grid(row=16, column=0, padx=16, pady=(10, 8), sticky="ew")
-
-        ctk.CTkLabel(settings_panel, text="Manter ultimos backups").grid(
-            row=17,
-            column=0,
-            padx=16,
-            pady=(6, 4),
-            sticky="w",
-        )
-        retention_entry = ctk.CTkEntry(settings_panel, width=120)
-        retention_entry.grid(row=18, column=0, padx=16, pady=(0, 14), sticky="w")
-        retention_entry.insert(0, str(settings.get("backup_retention_count") or "10"))
-
-        ctk.CTkLabel(settings_panel, text="Tamanho da fonte/interface (%)").grid(
-            row=19,
-            column=0,
-            padx=16,
-            pady=(6, 4),
-            sticky="w",
-        )
-        ui_scale_entry = ctk.CTkEntry(settings_panel, width=120)
-        ui_scale_entry.grid(row=20, column=0, padx=16, pady=(0, 14), sticky="w")
-        ui_scale_entry.insert(0, str(settings.get("ui_scale_percent") or "120"))
-
-        self._section_title(settings_panel, "Sincronizacao de Ratings").grid(
-            row=21, column=0, padx=16, pady=(16, 4), sticky="w"
+        stack(
+            tab_tools,
+            ctk.CTkButton(tab_tools, text="Gerenciar Usuarios do Sistema", command=open_users_manager),
+            label="Seguranca operacional",
+            section=True,
         )
 
         def download_fide() -> None:
             import threading
             from tkinter import messagebox
-            
+
             def worker():
                 try:
                     res = self.official_rating_service.import_fide_list_from_url()
@@ -207,17 +133,22 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
                 except Exception as exc:
                     err_msg = str(exc)
                     self.after(0, lambda m=err_msg: messagebox.showerror("Erro", m))
-            
+
             threading.Thread(target=worker, daemon=True).start()
             messagebox.showinfo("Aviso", "Download da FIDE iniciado em segundo plano (pode levar alguns minutos).")
 
-        ctk.CTkButton(
-            settings_panel,
-            text="Baixar e Sincronizar FIDE",
-            command=download_fide,
-            fg_color=THEME_SUCCESS,
-            hover_color=THEME_SUCCESS_HOVER,
-        ).grid(row=22, column=0, padx=16, pady=(10, 8), sticky="ew")
+        stack(
+            tab_tools,
+            ctk.CTkButton(
+                tab_tools,
+                text="Baixar e Sincronizar FIDE",
+                command=download_fide,
+                fg_color=THEME_SUCCESS,
+                hover_color=THEME_SUCCESS_HOVER,
+            ),
+            label="Sincronizacao de Ratings",
+            section=True,
+        )
 
         def import_cbx() -> None:
             from tkinter import filedialog, messagebox
@@ -236,11 +167,7 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
             except Exception as exc:
                 messagebox.showerror("Erro", str(exc))
 
-        ctk.CTkButton(
-            settings_panel,
-            text="Importar Lista CBX (Excel / CSV / XML)",
-            command=import_cbx,
-        ).grid(row=23, column=0, padx=16, pady=(0, 14), sticky="ew")
+        stack(tab_tools, ctk.CTkButton(tab_tools, text="Importar Lista CBX (Excel / CSV / XML)", command=import_cbx))
 
         backup_panel = self._make_panel(body)
         backup_panel.grid(row=0, column=1, sticky="nsew")
@@ -331,14 +258,36 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
                 )
 
         def persist_settings() -> None:
+            try:
+                _default_border = ctk.ThemeManager.theme["CTkEntry"]["border_color"]
+            except Exception:
+                _default_border = None
+
+            def _flag_field(entry: Any, message: str) -> None:
+                try:
+                    entry.configure(border_color="#d9534f")
+                except Exception:
+                    pass
+                raise AppError(message)
+
+            for _entry in (ui_scale_entry, retention_entry):
+                if _default_border is not None:
+                    try:
+                        _entry.configure(border_color=_default_border)
+                    except Exception:
+                        pass
+
             export_dir = Path(export_dir_entry.get().strip() or default_export_dir())
             backup_dir = Path(backup_dir_entry.get().strip() or default_backup_dir())
             try:
                 ui_scale_percent = int(ui_scale_entry.get().strip() or "120")
-            except ValueError as exc:
-                raise AppError("Tamanho da fonte/interface deve ser um numero entre 80 e 160.") from exc
+            except ValueError:
+                _flag_field(ui_scale_entry, "Tamanho da fonte/interface deve ser um numero entre 80 e 160.")
             if ui_scale_percent < 80 or ui_scale_percent > 160:
-                raise AppError("Tamanho da fonte/interface deve ficar entre 80 e 160.")
+                _flag_field(ui_scale_entry, "Tamanho da fonte/interface deve ficar entre 80 e 160.")
+            retention_raw = retention_entry.get().strip()
+            if not retention_raw.isdigit() or int(retention_raw) < 1:
+                _flag_field(retention_entry, "Manter ultimos backups: informe um inteiro maior ou igual a 1.")
             export_dir.mkdir(parents=True, exist_ok=True)
             backup_dir.mkdir(parents=True, exist_ok=True)
             self.db.save_app_settings(
@@ -432,8 +381,8 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
             except Exception as exc:
                 self._show_error(exc)
 
-        actions = ctk.CTkFrame(settings_panel, fg_color="transparent")
-        actions.grid(row=24, column=0, padx=16, pady=(0, 16), sticky="ew")
+        actions = ctk.CTkFrame(body, fg_color="transparent")
+        actions.grid(row=1, column=0, padx=(0, 16), pady=(10, 0), sticky="ew")
         actions.grid_columnconfigure(0, weight=1)
         btn_save = ctk.CTkButton(actions, text="Salvar configuracoes", command=lambda: save_settings())
         btn_save.grid(row=0, column=0, pady=(0, 8), sticky="ew")
