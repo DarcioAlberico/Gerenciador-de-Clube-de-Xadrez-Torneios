@@ -41,6 +41,7 @@ from src.services.export_federation import FederationReportsMixin
 from src.services.export_club import ClubReportsMixin
 from src.services.export_web import WebExportMixin
 from src.services.export_sections import ReportSectionsMixin
+from src.services.export_sections_club import ClubSectionsMixin
 from src.services.export_renderers import ReportRenderersMixin
 from src.services.export_writers import ReportWritersMixin
 
@@ -67,6 +68,7 @@ class ExportService(
     ClubReportsMixin,
     WebExportMixin,
     ReportSectionsMixin,
+    ClubSectionsMixin,
     ReportRenderersMixin,
     ReportWritersMixin,
 ):
