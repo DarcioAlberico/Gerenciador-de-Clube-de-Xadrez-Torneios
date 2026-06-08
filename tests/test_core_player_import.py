@@ -494,5 +494,42 @@ class PlayerImportTest(CoreServiceTestCase):
 
         self.assertEqual(player["rating"], 1750)
 
+    def test_official_rating_update_default_order_uses_best_rating(self) -> None:
+        # initial_order "rating" (padrao): a importacao oficial adota o melhor
+        # rating disponivel como rating de trabalho (national/international/atual).
+        self.tournament_service.save_profile(
+            self.tournament_id,
+            {
+                "name": "Torneio teste",
+                "location": "",
+                "rounds_count": "5",
+                "time_control": "",
+                "start_date": "",
+                "end_date": "",
+                "bye_points": "1",
+            },
+            {"initial_order": "rating", "tournament_type": "real"},
+            [],
+        )
+        player_id = self.db.create_player(
+            self.tournament_id,
+            name="Carla Dias",
+            rating=1200,
+            fide_id="777",
+            cbx_id="888",
+        )
+        official_csv = Path(self.temp_dir.name) / "official.csv"
+        official_csv.write_text(
+            "name,fide,cbx,rating_nacional,rating_internacional\n"
+            "Carla Dias,777,888,1900,1750\n",
+            encoding="utf-8",
+        )
+
+        self.official_rating_service.import_official_csv(official_csv, "FIDE")
+        self.official_rating_service.update_tournament_players(self.tournament_id)
+        player = self.db.get_player(player_id)
+
+        self.assertEqual(player["rating"], 1900)  # max(1900, 1750, 1200)
+
 if __name__ == "__main__":
     unittest.main()

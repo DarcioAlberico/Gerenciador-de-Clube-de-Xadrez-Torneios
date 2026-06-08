@@ -245,6 +245,52 @@ class TournamentSetupTest(CoreServiceTestCase):
         )
         self.assertEqual([item["time"] for item in generated], ["08:30", "09:10", "08:30", "09:10", "08:30"])
 
+    def test_save_profile_can_reduce_rounds_with_existing_schedule_rows(self) -> None:
+        self.tournament_service.save_profile(
+            self.tournament_id,
+            {
+                "name": "Torneio reduzido",
+                "scope": "standalone",
+                "competition_type": "individual",
+                "rounds_count": "3",
+                "bye_points": "1",
+            },
+            {},
+            [
+                {"round_number": 1, "date": "2026-06-01", "time": "09:00"},
+                {"round_number": 2, "date": "2026-06-01", "time": "14:00"},
+                {"round_number": 3, "date": "2026-06-02", "time": "09:00"},
+                {"round_number": 4, "date": "2026-06-02", "time": "14:00"},
+                {"round_number": 5, "date": "2026-06-03", "time": "09:00"},
+            ],
+        )
+
+        tournament = self.db.get_tournament(self.tournament_id)
+        schedule = self.db.list_round_schedule(self.tournament_id)
+        self.assertEqual(tournament["rounds_count"], 3)
+        self.assertEqual([item["round_number"] for item in schedule], [1, 2, 3])
+
+    def test_save_profile_cannot_reduce_rounds_below_generated_rounds(self) -> None:
+        self._create_players(4)
+        first_round = self.service.generate_next_round(self.tournament_id)
+        self._fill_decisive_results(first_round["id"])
+        self.service.close_round(self.tournament_id, first_round["id"])
+        self.service.generate_next_round(self.tournament_id)
+
+        with self.assertRaisesRegex(AppError, "rodadas geradas"):
+            self.tournament_service.save_profile(
+                self.tournament_id,
+                {
+                    "name": "Torneio reduzido",
+                    "scope": "standalone",
+                    "competition_type": "individual",
+                    "rounds_count": "1",
+                    "bye_points": "1",
+                },
+                {},
+                [],
+            )
+
     def test_tournament_profile_saves_standalone_and_class_scope(self) -> None:
         school_id = self.club_service.save_profile(
             {
@@ -323,6 +369,156 @@ class TournamentSetupTest(CoreServiceTestCase):
         with self.assertRaisesRegex(AppError, "primeira rodada"):
             self.tournament_service.change_tournament_type(self.tournament_id, "swiss")
 
+    def test_save_profile_persists_pairing_method_before_first_round(self) -> None:
+        self.tournament_service.save_profile(
+            self.tournament_id,
+            {
+                "name": "Torneio teste",
+                "scope": "standalone",
+                "competition_type": "individual",
+                "rounds_count": "5",
+                "bye_points": "1",
+            },
+            {"pairing_method": "round_robin"},
+            [],
+        )
+
+        settings = self.db.get_tournament_settings(self.tournament_id)
+        self.assertEqual(settings["pairing_method"], "round_robin")
+
+    def test_save_profile_accepts_custom_acceleration_settings(self) -> None:
+        self.tournament_service.save_profile(
+            self.tournament_id,
+            {
+                "name": "Torneio teste",
+                "scope": "standalone",
+                "competition_type": "individual",
+                "rounds_count": "5",
+                "bye_points": "1",
+            },
+            {"acceleration_method": "custom:rounds=3;bonus=2.0;upper=0.25"},
+            [],
+        )
+
+        settings = self.db.get_tournament_settings(self.tournament_id)
+        self.assertEqual(settings["acceleration_method"], "custom:rounds=3;bonus=2.0;upper=0.25")
+
+    def test_duplicate_tournament_copies_tiebreak_and_prize_settings(self) -> None:
+        self.db.save_tournament_settings(
+            self.tournament_id,
+            {
+                "tiebreak_sequence": '[{"code":"buchholz","params":{}}]',
+                "team_tiebreak_sequence": '[{"code":"game_points","params":{}}]',
+                "prize_policy": "cumulative",
+                "prize_tax_percent": 12.5,
+            },
+        )
+
+        duplicate_id = self.tournament_service.duplicate_tournament(
+            self.tournament_id,
+            "Copia configurada",
+        )
+
+        settings = self.db.get_tournament_settings(duplicate_id)
+        self.assertEqual(settings["tiebreak_sequence"], '[{"code":"buchholz","params":{}}]')
+        self.assertEqual(settings["team_tiebreak_sequence"], '[{"code":"game_points","params":{}}]')
+        self.assertEqual(settings["prize_policy"], "cumulative")
+        self.assertEqual(settings["prize_tax_percent"], 12.5)
+
+    def test_duplicate_tournament_copies_prize_rows_and_report_layouts(self) -> None:
+        self.db.replace_tournament_prizes(
+            self.tournament_id,
+            [
+                {
+                    "kind": "overall",
+                    "label": "Campeao",
+                    "category": "",
+                    "rank_from": 1,
+                    "rank_to": 1,
+                    "amount": 250.0,
+                },
+                {
+                    "kind": "category",
+                    "label": "Sub-12",
+                    "category": "Sub-12",
+                    "rank_from": 1,
+                    "rank_to": 2,
+                    "amount": 50.0,
+                },
+            ],
+        )
+        layout = [{"key": "name", "width": 220}, {"key": "points", "width": 60}]
+        self.db.save_report_layout(self.tournament_id, "standings", layout)
+
+        duplicate_id = self.tournament_service.duplicate_tournament(
+            self.tournament_id,
+            "Copia com modelo",
+        )
+
+        prizes = self.db.list_tournament_prizes(duplicate_id)
+        self.assertEqual([prize["label"] for prize in prizes], ["Campeao", "Sub-12"])
+        self.assertEqual(prizes[0]["amount"], 250.0)
+        self.assertEqual(prizes[1]["category"], "Sub-12")
+        self.assertEqual(self.db.get_report_layout_columns(duplicate_id, "standings"), layout)
+
+    def test_partial_settings_update_preserves_existing_values(self) -> None:
+        self.db.save_tournament_settings(
+            self.tournament_id,
+            {
+                "tiebreak_sequence": '[{"code":"buchholz","params":{}}]',
+                "team_tiebreak_sequence": '[{"code":"game_points","params":{}}]',
+                "prize_policy": "cumulative",
+                "prize_tax_percent": 12.5,
+                "allow_public_registration": 1,
+                "rating_fee_fide": 2.5,
+            },
+        )
+
+        self.db.save_tournament_settings(self.tournament_id, {"acceleration_method": "accelerated"})
+
+        settings = self.db.get_tournament_settings(self.tournament_id)
+        self.assertEqual(settings["acceleration_method"], "accelerated")
+        self.assertEqual(settings["tiebreak_sequence"], '[{"code":"buchholz","params":{}}]')
+        self.assertEqual(settings["team_tiebreak_sequence"], '[{"code":"game_points","params":{}}]')
+        self.assertEqual(settings["prize_policy"], "cumulative")
+        self.assertEqual(settings["prize_tax_percent"], 12.5)
+        self.assertEqual(settings["allow_public_registration"], 1)
+        self.assertEqual(settings["rating_fee_fide"], 2.5)
+
+    def test_save_profile_partial_settings_preserves_existing_values(self) -> None:
+        self.db.save_tournament_settings(
+            self.tournament_id,
+            {
+                "tiebreak_sequence": '[{"code":"buchholz","params":{}}]',
+                "team_tiebreak_sequence": '[{"code":"game_points","params":{}}]',
+                "prize_policy": "cumulative",
+                "prize_tax_percent": 12.5,
+                "allow_public_registration": 1,
+                "rating_fee_fide": 2.5,
+            },
+        )
+
+        self.tournament_service.save_profile(
+            self.tournament_id,
+            {
+                "name": "Torneio renomeado",
+                "scope": "standalone",
+                "competition_type": "individual",
+                "rounds_count": "5",
+                "bye_points": "1",
+            },
+            {},
+            [],
+        )
+
+        settings = self.db.get_tournament_settings(self.tournament_id)
+        self.assertEqual(settings["tiebreak_sequence"], '[{"code": "buchholz", "params": {}}]')
+        self.assertEqual(settings["team_tiebreak_sequence"], '[{"code": "game_points", "params": {}}]')
+        self.assertEqual(settings["prize_policy"], "cumulative")
+        self.assertEqual(settings["prize_tax_percent"], 12.5)
+        self.assertEqual(settings["allow_public_registration"], 1)
+        self.assertEqual(settings["rating_fee_fide"], 2.5)
+
     def test_split_tournament_partitions_by_ranking(self) -> None:
         self._create_players(6)  # ratings 2000..1750 decrescentes
         children = self.tournament_service.split_tournament(self.tournament_id, 2)
@@ -340,6 +536,133 @@ class TournamentSetupTest(CoreServiceTestCase):
             min(int(player["rating"]) for player in group_a),
             max(int(player["rating"]) for player in group_b),
         )
+
+    def test_split_tournament_respects_initial_order_rating_source(self) -> None:
+        self.db.save_tournament_settings(self.tournament_id, {"initial_order": "national_rating"})
+        self.db.create_player(
+            self.tournament_id,
+            name="FIDE alto",
+            rating=1000,
+            national_rating=1000,
+            international_rating=2500,
+        )
+        self.db.create_player(
+            self.tournament_id,
+            name="Nacional 1",
+            rating=1000,
+            national_rating=2400,
+            international_rating=0,
+        )
+        self.db.create_player(
+            self.tournament_id,
+            name="Nacional 2",
+            rating=1000,
+            national_rating=2300,
+            international_rating=0,
+        )
+        self.db.create_player(
+            self.tournament_id,
+            name="Nacional baixo",
+            rating=1000,
+            national_rating=900,
+            international_rating=0,
+        )
+
+        children = self.tournament_service.split_tournament(self.tournament_id, 2)
+
+        group_a_names = {
+            player["name"]
+            for player in self.db.list_players(children[0], active_only=False)
+        }
+        self.assertEqual(group_a_names, {"Nacional 1", "Nacional 2"})
+
+    def test_split_tournament_copies_settings_and_schedule(self) -> None:
+        self.tournament_service.save_profile(
+            self.tournament_id,
+            {
+                "name": "Torneio teste",
+                "scope": "standalone",
+                "competition_type": "individual",
+                "rounds_count": "3",
+                "bye_points": "1",
+            },
+            {
+                "pairing_method": "round_robin",
+                "tiebreak_sequence": '[{"code":"buchholz","params":{}}]',
+                "prize_policy": "cumulative",
+                "prize_tax_percent": 10,
+            },
+            [
+                {"round_number": 1, "date": "2026-07-01", "time": "09:00"},
+                {"round_number": 2, "date": "2026-07-01", "time": "14:00"},
+                {"round_number": 3, "date": "2026-07-02", "time": "09:00"},
+            ],
+        )
+        self._create_players(4)
+
+        children = self.tournament_service.split_tournament(self.tournament_id, 2)
+
+        for child_id in children:
+            settings = self.db.get_tournament_settings(child_id)
+            schedule = self.db.list_round_schedule(child_id)
+            self.assertEqual(settings["pairing_method"], "round_robin")
+            self.assertEqual(settings["tiebreak_sequence"], '[{"code": "buchholz", "params": {}}]')
+            self.assertEqual(settings["prize_policy"], "cumulative")
+            self.assertEqual(settings["prize_tax_percent"], 10.0)
+            self.assertEqual(schedule[0]["date"], "2026-07-01")
+            self.assertEqual(schedule[1]["time"], "14:00")
+
+    def test_split_tournament_copies_prize_rows_and_report_layouts(self) -> None:
+        self.db.replace_tournament_prizes(
+            self.tournament_id,
+            [
+                {
+                    "kind": "overall",
+                    "label": "Campeao",
+                    "category": "",
+                    "rank_from": 1,
+                    "rank_to": 1,
+                    "amount": 250.0,
+                },
+            ],
+        )
+        layout = [{"key": "name", "width": 220}, {"key": "points", "width": 60}]
+        self.db.save_report_layout(self.tournament_id, "standings", layout)
+        self._create_players(4)
+
+        children = self.tournament_service.split_tournament(self.tournament_id, 2)
+
+        for child_id in children:
+            prizes = self.db.list_tournament_prizes(child_id)
+            self.assertEqual([prize["label"] for prize in prizes], ["Campeao"])
+            self.assertEqual(prizes[0]["amount"], 250.0)
+            self.assertEqual(self.db.get_report_layout_columns(child_id, "standings"), layout)
+
+    def test_split_tournament_preserves_player_status_and_starting_points(self) -> None:
+        self._create_players(3)
+        withdrawn_id = self.db.create_player(
+            self.tournament_id,
+            name="Jogador desistente",
+            rating=1500,
+            club="Clube",
+            category="Absoluto",
+            player_status="withdrawn",
+            starting_points=0.5,
+        )
+        self.assertEqual(self.db.get_player(withdrawn_id)["active"], 0)
+
+        children = self.tournament_service.split_tournament(self.tournament_id, 2)
+
+        copied_players = [
+            player
+            for child_id in children
+            for player in self.db.list_players(child_id, active_only=False)
+            if player["name"] == "Jogador desistente"
+        ]
+        self.assertEqual(len(copied_players), 1)
+        self.assertEqual(copied_players[0]["player_status"], "withdrawn")
+        self.assertEqual(copied_players[0]["active"], 0)
+        self.assertEqual(copied_players[0]["starting_points"], 0.5)
 
     def test_split_tournament_requires_clean_state(self) -> None:
         self._create_players(4)

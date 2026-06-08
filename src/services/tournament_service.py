@@ -15,10 +15,12 @@ from typing import Any, Mapping, TYPE_CHECKING
 from src.core.database import BASE_DIR, DEFAULT_CERTIFICATE_TEMPLATES, Database
 from src.services.constants import *
 from src.services.pairing import (
+    acceleration_spec,
     parse_player_tiebreak_sequence,
     parse_team_tiebreak_sequence,
     serialize_tiebreak_sequence,
 )
+from src.services.pairing.constraints import rating_for_initial_order
 from src.services.prizes import PRIZE_POLICIES
 
 if TYPE_CHECKING:
@@ -126,12 +128,26 @@ class TournamentService:
             raise AppError("Selecione um torneio valido.")
 
         tournament_payload = self._validated_tournament_payload(tournament_data, tournament)
-        settings_payload = self._validated_settings(settings_data)
+        generated_rounds = self.db.list_rounds(tournament_id)
+        highest_generated_round = max((int(item["number"]) for item in generated_rounds), default=0)
+        if int(tournament_payload["rounds_count"]) < highest_generated_round:
+            raise AppError(
+                f"O torneio ja possui rodadas geradas ate a rodada {highest_generated_round}. "
+                "Exclua as rodadas geradas antes de reduzir o total."
+            )
+        self._validate_competition_type_change(
+            tournament_id,
+            tournament,
+            tournament_payload,
+            generated_rounds,
+        )
+        current_settings = self.db.get_tournament_settings(tournament_id) or {}
+        settings_for_validation = {**current_settings, **settings_data}
+        settings_payload = self._validated_settings(settings_for_validation)
         schedule_payload = self._validated_schedule(schedule, tournament_payload["rounds_count"])
         self._validate_team_settings_compatibility(tournament_id, tournament_payload, settings_payload)
 
-        current_settings = self.db.get_tournament_settings(tournament_id) or {}
-        requested_method = str(settings_data.get("pairing_method") or "").strip()
+        requested_method = str(settings_payload.get("pairing_method") or "").strip()
         if (
             requested_method
             and requested_method != str(current_settings.get("pairing_method", "swiss"))
@@ -184,13 +200,18 @@ class TournamentService:
         if len(players) < groups:
             raise AppError("Jogadores insuficientes para a quantidade de grupos.")
 
+        source_settings = self.db.get_tournament_settings(tournament_id) or {}
+        initial_order = str(source_settings.get("initial_order") or "rating")
         ordered = sorted(
             players,
             key=lambda player: (
-                -int(player.get("international_rating") or player.get("rating") or 0),
+                -rating_for_initial_order(player, initial_order),
                 str(player.get("name") or "").casefold(),
             ),
         )
+        source_schedule = self.db.list_round_schedule(tournament_id)
+        source_prizes = self.db.list_tournament_prizes(tournament_id)
+        source_standings_layout = self.db.get_report_layout_columns(tournament_id, "standings")
         base_size, remainder = divmod(len(ordered), groups)
 
         child_ids: list[int] = []
@@ -213,6 +234,12 @@ class TournamentService:
                 competition_type="individual",
             )
             self.db.set_tournament_parent(child_id, tournament_id)
+            self.db.save_tournament_settings(child_id, source_settings)
+            self.db.save_round_schedule(child_id, source_schedule)
+            if source_prizes:
+                self.db.replace_tournament_prizes(child_id, source_prizes)
+            if source_standings_layout:
+                self.db.save_report_layout(child_id, "standings", source_standings_layout)
             for player in chunk:
                 self.db.create_player(
                     tournament_id=child_id,
@@ -232,11 +259,29 @@ class TournamentService:
                     lbx_id=str(player.get("lbx_id") or ""),
                     birth_date=str(player.get("birth_date") or ""),
                     member_id=player.get("member_id"),
+                    player_status=str(player.get("player_status") or "active"),
+                    starting_points=float(player.get("starting_points") or 0.0),
                 )
             child_ids.append(child_id)
 
         logger.info("Torneio %s dividido em %s grupos: %s", tournament_id, groups, child_ids)
         return child_ids
+
+    def _validate_competition_type_change(
+        self,
+        tournament_id: int,
+        tournament: dict[str, Any],
+        tournament_payload: dict[str, Any],
+        generated_rounds: list[dict[str, Any]],
+    ) -> None:
+        current_type = str(tournament.get("competition_type") or "individual")
+        requested_type = str(tournament_payload.get("competition_type") or current_type)
+        if requested_type == current_type:
+            return
+        if generated_rounds:
+            raise AppError("Nao e possivel mudar o formato do torneio depois de gerar rodadas.")
+        if current_type == "team" and self.db.list_teams(tournament_id, active_only=False):
+            raise AppError("Nao e possivel mudar o formato do torneio enquanto houver equipes cadastradas.")
 
     def _validate_team_settings_compatibility(
         self,
@@ -375,9 +420,26 @@ class TournamentService:
         pairing_system = str(data.get("pairing_system", "custom_authorized")).strip() or "custom_authorized"
         if pairing_system not in PAIRING_SYSTEMS:
             raise AppError("Sistema de emparceiramento normativo invalido.")
+
+        pairing_method = None
+        if "pairing_method" in data:
+            pairing_method = str(data.get("pairing_method") or "swiss").strip() or "swiss"
+            if pairing_method not in PAIRING_METHODS:
+                raise AppError("Metodo de pareamento invalido.")
+
         acceleration_method = str(data.get("acceleration_method", "none")).strip() or "none"
-        if acceleration_method not in ACCELERATION_METHODS:
+        acceleration_head = acceleration_method.partition(":")[0]
+        if acceleration_head not in ACCELERATION_METHODS:
             raise AppError("Metodo de aceleracao invalido.")
+        if acceleration_head == "custom":
+            spec = acceleration_spec(acceleration_method)
+            if (
+                spec.get("scheme") != "custom"
+                or int(spec.get("round_count") or 0) < 1
+                or float(spec.get("bonus") or 0.0) <= 0.0
+                or not 0.0 < float(spec.get("upper_fraction") or 0.0) <= 1.0
+            ):
+                raise AppError("Metodo de aceleracao invalido.")
 
         try:
             late_entry_points = float(str(data.get("late_entry_points") or "0").replace(",", "."))
@@ -389,6 +451,20 @@ class TournamentService:
             raise AppError("Quantidade de tabuleiros por equipe invalida.") from exc
         if team_boards_count < 1:
             raise AppError("Use pelo menos um tabuleiro por equipe.")
+
+        try:
+            team_rating_tolerance = int(data.get("team_rating_tolerance") or 0)
+        except ValueError as exc:
+            raise AppError("Tolerancia de rating por equipe invalida.") from exc
+        if team_rating_tolerance < 0:
+            raise AppError("Tolerancia de rating por equipe nao pode ser negativa.")
+
+        try:
+            team_max_substitutions = int(data.get("team_max_substitutions") or 0)
+        except ValueError as exc:
+            raise AppError("Limite de substituicoes por equipe invalido.") from exc
+        if team_max_substitutions < 0:
+            team_max_substitutions = 0
 
         team_point_fields = {
             "team_match_win_points": "Pontos por vitoria da equipe invalidos.",
@@ -491,9 +567,12 @@ class TournamentService:
             "team_board_order_policy": str(data.get("team_board_order_policy", "fixed")).strip() or "fixed",
             "team_reserve_policy": str(data.get("team_reserve_policy", "same_team")).strip() or "same_team",
             "team_lineup_deadline": str(data.get("team_lineup_deadline", "")).strip(),
-            "team_max_substitutions": max(0, int(data.get("team_max_substitutions", 0) or 0)),
+            "team_rating_tolerance": team_rating_tolerance,
+            "team_max_substitutions": team_max_substitutions,
             **rating_fees,
         }
+        if pairing_method is not None:
+            payload["pairing_method"] = pairing_method
         for field in TOURNAMENT_FLAG_FIELDS:
             payload[field] = 1 if data.get(field) else 0
         return payload
@@ -541,8 +620,10 @@ class TournamentService:
                 round_number = int(item.get("round_number") or 0)
             except ValueError as exc:
                 raise AppError("Numero de rodada invalido na agenda.") from exc
-            if round_number < 1 or round_number > rounds_count:
+            if round_number < 1:
                 raise AppError("Agenda contem rodada fora do total configurado.")
+            if round_number > rounds_count:
+                continue
             if round_number in seen:
                 raise AppError("Agenda contem rodada repetida.")
             round_date = str(item.get("date", "")).strip()

@@ -119,9 +119,10 @@ STARTING_RANK_METHODS = frozenset(
 def record_172(federation: str, method: str = "FIDE") -> str:
     """Registro 172 — Encoded Starting Rank Method (§1.2). Obrigatório quando há
     registros NRS de rating nacional: liga a federação desses registros (cols
-    5-7) ao método de construção do ranking inicial (cols 9-13). O projeto sempre
-    monta o ranking pela ordem do rating FIDE, então o método é `FIDE`. Códigos
-    desconhecidos caem em `OTHER` para nunca afirmar um método que não se aplica."""
+    5-7) ao método de construção do ranking inicial (cols 9-13). O método vem do
+    chamador; o exportador atual sempre monta o starting-rank do TRF pela ordem do
+    rating FIDE (independente do `initial_order` do torneio), então passa `FIDE`.
+    Códigos desconhecidos caem em `OTHER` para nunca afirmar um método inexistente."""
     code = trf_ascii(method).upper().strip() or "FIDE"
     if code not in STARTING_RANK_METHODS:
         code = "OTHER"

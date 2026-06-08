@@ -572,6 +572,7 @@ CREATE TABLE IF NOT EXISTS tournament_settings (
     team_board_order_policy TEXT NOT NULL DEFAULT 'fixed',
     team_reserve_policy TEXT NOT NULL DEFAULT 'same_team',
     team_lineup_deadline TEXT DEFAULT '',
+    team_rating_tolerance INTEGER NOT NULL DEFAULT 0,
     team_max_substitutions INTEGER NOT NULL DEFAULT 0,
     rating_fee_fide REAL NOT NULL DEFAULT 0.0,
     rating_fee_cbx REAL NOT NULL DEFAULT 0.0,

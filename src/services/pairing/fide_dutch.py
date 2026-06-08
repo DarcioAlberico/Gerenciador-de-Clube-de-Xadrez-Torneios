@@ -13,20 +13,35 @@ from src.services.pairing.constraints import (
     optimal_player_pairs,
     pairing_order_key,
     rank_by_player_id,
+    rating_for_initial_order,
 )
 
 
-def first_round_pairings(players: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _initial_order_key(player: dict[str, Any], settings: dict[str, Any] | None) -> tuple[int, str]:
+    initial_order = str((settings or {}).get("initial_order") or "rating")
+    return (
+        -rating_for_initial_order(player, initial_order),
+        str(player.get("name") or "").casefold(),
+    )
+
+
+def first_round_pairings(
+    players: list[dict[str, Any]],
+    settings: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
     ordered = sorted(
         players,
-        key=lambda player: (-int(player["rating"] or 0), player["name"].casefold()),
+        key=lambda player: _initial_order_key(player, settings),
     )
     pairable = ordered[:]
     bye_player = None
     if len(pairable) % 2 == 1:
         bye_player = min(
             pairable,
-            key=lambda player: (int(player["rating"] or 0), player["name"].casefold()),
+            key=lambda player: (
+                -_initial_order_key(player, settings)[0],
+                str(player.get("name") or "").casefold(),
+            ),
         )
         pairable.remove(bye_player)
 
@@ -75,7 +90,7 @@ def round_robin_pairings(
 ) -> list[dict[str, Any]]:
     ordered = sorted(
         players,
-        key=lambda player: (-int(player["rating"] or 0), player["name"].casefold()),
+        key=lambda player: _initial_order_key(player, settings),
     )
     if len(ordered) % 2 == 1:
         ordered.append({"id": -1, "name": "BYE", "is_dummy": True})
@@ -143,7 +158,7 @@ def scheveningen_pairings(
     """
 
     def _by_rank(group: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        return sorted(group, key=lambda player: (-int(player["rating"] or 0), player["name"].casefold()))
+        return sorted(group, key=lambda player: _initial_order_key(player, settings))
 
     manual_a = [p for p in players if str(p.get("scheveningen_group") or "").strip().upper() == "A"]
     manual_b = [p for p in players if str(p.get("scheveningen_group") or "").strip().upper() == "B"]
@@ -193,7 +208,7 @@ def knockout_pairings(
 ) -> list[dict[str, Any]]:
     ordered = sorted(
         players,
-        key=lambda player: (-int(player["rating"] or 0), player["name"].casefold()),
+        key=lambda player: _initial_order_key(player, settings),
     )
 
     if next_number == 1:

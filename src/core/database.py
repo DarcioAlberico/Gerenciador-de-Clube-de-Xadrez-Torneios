@@ -544,6 +544,7 @@ class Database(
                 "team_board_order_policy",
                 "team_reserve_policy",
                 "team_lineup_deadline",
+                "team_rating_tolerance",
                 "team_max_substitutions",
                 "rating_fee_fide",
                 "rating_fee_cbx",

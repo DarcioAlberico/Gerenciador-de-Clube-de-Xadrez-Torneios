@@ -44,7 +44,7 @@ class ReportEngine:
             
         # Transações de Caixa
         for tx in transactions:
-            cat = tx.get("category", "Geral").strip() or "Geral"
+            cat = (tx.get("category") or "Geral").strip() or "Geral"
             amount = float(tx.get("amount") or 0.0)
             if tx.get("type") == "income":
                 income_by_cat[cat] = income_by_cat.get(cat, 0.0) + amount

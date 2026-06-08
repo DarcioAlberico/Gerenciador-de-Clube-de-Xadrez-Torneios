@@ -70,7 +70,7 @@ class ReportPagesMixin:
             ["category", "amount"],
             {"category": "Receitas (Categorias)", "amount": "Valor"},
             {"category": 200, "amount": 100},
-            height=6
+            visible_rows=6,
         )
 
         expense_tree_holder = self._make_panel(trees_frame)
@@ -82,7 +82,7 @@ class ReportPagesMixin:
             ["category", "amount"],
             {"category": "Despesas (Categorias)", "amount": "Valor"},
             {"category": 200, "amount": 100},
-            height=6
+            visible_rows=6,
         )
 
         def load_dre() -> None:

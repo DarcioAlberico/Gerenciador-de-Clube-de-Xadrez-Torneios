@@ -21,6 +21,7 @@ from src.services.export_service import ImportService
 from src.services.fide_norms import build_norm_report
 from src.services.fide_rating import build_fide_report_rows
 from src.services.foreign_rating_lists import map_row, normalize_federation_code, seed_federations
+from src.services.pairing.constraints import select_rating_for_order
 
 if TYPE_CHECKING:
     from src.services.club_service import ClubService
@@ -776,15 +777,15 @@ class OfficialRatingService:
         national: int,
         international: int,
     ) -> int:
-        if initial_order == "national_rating":
-            return national or current
-        if initial_order == "international_rating":
-            return international or current
-        if initial_order == "international_then_national":
-            return international or national or current
-        if initial_order == "max_rating":
-            return max(national, international, current)
-        return max(national, international, current)
+        # Importacao oficial: nas ordens sem regra especifica ("rating"/"manual")
+        # adota o melhor rating disponivel como rating de trabalho.
+        return select_rating_for_order(
+            initial_order,
+            rating=current,
+            national=national,
+            international=international,
+            default=max(national, international, current),
+        )
 
 class InternalRatingService:
     HISTORY_REASON = "tournament_performance"
