@@ -165,6 +165,25 @@ class TeamTournamentsTest(CoreServiceTestCase):
         self.assertIsNotNone(self.db.get_team(team_ids[0]))
         self.assertGreater(self.db.count_team_matches(team_ids[0]), 0)
 
+    def test_team_tournament_format_change_is_blocked_when_teams_exist(self) -> None:
+        tournament_id, _team_ids = self._create_team_tournament(teams_count=2, boards_count=2)
+
+        with self.assertRaisesRegex(AppError, "equipes cadastradas"):
+            self.tournament_service.save_profile(
+                tournament_id,
+                {
+                    "name": "Interclubes convertido",
+                    "competition_type": "individual",
+                    "scope": "standalone",
+                    "rounds_count": "5",
+                    "bye_points": "1",
+                },
+                {},
+                [],
+            )
+
+        self.assertEqual(self.db.get_tournament(tournament_id)["competition_type"], "team")
+
     def test_team_tournament_settings_are_saved_and_validate_board_limit(self) -> None:
         tournament_id = self.tournament_service.create_tournament(
             {
@@ -223,6 +242,70 @@ class TeamTournamentsTest(CoreServiceTestCase):
                     "team_match_win_points": "3",
                     "team_match_draw_points": "1",
                     "team_match_loss_points": "0",
+                    "team_pairing_method": "swiss",
+                    "team_standing_primary": "match_points",
+                    "team_standing_secondary": "game_points",
+                },
+                [],
+            )
+
+    def test_team_tournament_settings_save_rating_tolerance(self) -> None:
+        tournament_id = self.tournament_service.create_tournament(
+            {
+                "name": "Equipes tolerancia",
+                "competition_type": "team",
+                "rounds_count": "3",
+                "bye_points": "1",
+            }
+        )
+
+        self.tournament_service.save_profile(
+            tournament_id,
+            {
+                "name": "Equipes tolerancia",
+                "competition_type": "team",
+                "scope": "standalone",
+                "rounds_count": "3",
+                "bye_points": "1",
+            },
+            {
+                "team_boards_count": "2",
+                "team_rating_tolerance": "75",
+                "team_match_win_points": "3",
+                "team_match_draw_points": "1",
+                "team_match_loss_points": "0",
+                "team_pairing_method": "swiss",
+                "team_standing_primary": "match_points",
+                "team_standing_secondary": "game_points",
+            },
+            [],
+        )
+
+        settings = self.db.get_tournament_settings(tournament_id)
+        self.assertEqual(settings["team_rating_tolerance"], 75)
+
+    def test_team_max_substitutions_rejects_invalid_value(self) -> None:
+        tournament_id = self.tournament_service.create_tournament(
+            {
+                "name": "Equipes substituicoes",
+                "competition_type": "team",
+                "rounds_count": "3",
+                "bye_points": "1",
+            }
+        )
+
+        with self.assertRaisesRegex(AppError, "substituicoes"):
+            self.tournament_service.save_profile(
+                tournament_id,
+                {
+                    "name": "Equipes substituicoes",
+                    "competition_type": "team",
+                    "scope": "standalone",
+                    "rounds_count": "3",
+                    "bye_points": "1",
+                },
+                {
+                    "team_max_substitutions": "abc",
                     "team_pairing_method": "swiss",
                     "team_standing_primary": "match_points",
                     "team_standing_secondary": "game_points",

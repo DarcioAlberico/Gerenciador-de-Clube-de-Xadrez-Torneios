@@ -532,6 +532,24 @@ class FederationExportTest(CoreServiceTestCase):
         self.assertEqual(line[22:26].strip(), "1")  # primeiro jogador (rank 1)
         self.assertEqual(line[27:31].strip(), "4")  # último jogador (N//2 = 4)
 
+    def test_trf25_warns_when_initial_order_not_fide(self) -> None:
+        from src.services.federation_exporters import TRF25Exporter
+
+        self._create_players(4)
+        exporter = TRF25Exporter(self.export_service)
+        output_path = Path(self.temp_dir.name) / "order.trf"
+
+        def has_sno_warning(messages: list[str]) -> bool:
+            return any("numero de ordem (SNo)" in message for message in messages)
+
+        # Ordem inicial = rating principal (FIDE-compativel): sem aviso de SNo.
+        self.db.save_tournament_settings(self.tournament_id, {"initial_order": "rating"})
+        self.assertFalse(has_sno_warning(exporter.export(self.tournament_id, output_path)))
+
+        # Ordem inicial nacional: avisa que o SNo do TRF pode divergir do seeding.
+        self.db.save_tournament_settings(self.tournament_id, {"initial_order": "national_rating"})
+        self.assertTrue(has_sno_warning(exporter.export(self.tournament_id, output_path)))
+
     def test_trf25_802_marks_full_match_forfeit(self) -> None:
         from src.services.federation_exporters import TRF25Exporter
 

@@ -30,6 +30,42 @@ def rank_by_player_id(standings: dict[int, dict[str, Any]]) -> dict[int, int]:
     }
 
 
+def select_rating_for_order(
+    initial_order: str,
+    *,
+    rating: int,
+    national: int,
+    international: int,
+    default: int | None = None,
+) -> int:
+    """Rating correspondente a uma ordem inicial (``initial_order``).
+
+    Fonte unica da regra, compartilhada pelo seeding de pareamento e pela
+    importacao de ratings oficiais. ``default`` cobre as ordens sem regra
+    especifica ("rating"/"manual"/desconhecida): o seeding usa o proprio
+    ``rating`` do jogador (``default=None``); a importacao oficial passa o
+    melhor rating disponivel. Os demais ramos sao identicos para ambos.
+    """
+    if initial_order == "national_rating":
+        return national or rating
+    if initial_order == "international_rating":
+        return international or rating
+    if initial_order == "international_then_national":
+        return international or national or rating
+    if initial_order == "max_rating":
+        return max(national, international, rating)
+    return rating if default is None else default
+
+
+def rating_for_initial_order(player: dict[str, Any], initial_order: str) -> int:
+    return select_rating_for_order(
+        initial_order,
+        rating=int(player.get("rating") or 0),
+        national=int(player.get("national_rating") or 0),
+        international=int(player.get("international_rating") or 0),
+    )
+
+
 def pairing_order_key(
     player: dict[str, Any],
     standings: dict[int, dict[str, Any]],

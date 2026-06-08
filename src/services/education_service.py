@@ -927,14 +927,6 @@ class LibraryService:
             # Se não achou táticas específicas marcadas com !, e tinha FEN inicial, salva o início
             if tactics_found == 0 and initial_fen:
                 # O PGN é provávelmente um único problema tático
-                board = game.board()
-                solution_text = []
-                n = game
-                while n.variations:
-                    n = n.variation(0)
-                    solution_text.append(n.board().san(n.move)) # wait, san needs previous board
-                
-                # reconstruindo SAN:
                 san_moves = []
                 n = game
                 while n.variations:

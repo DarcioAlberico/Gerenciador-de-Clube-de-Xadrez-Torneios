@@ -180,6 +180,9 @@ class TournamentCoreMixin(_DatabaseInfra):
                     accelerated_system = src.accelerated_system,
                     hide_standings = src.hide_standings,
                     calculate_performance = src.calculate_performance,
+                    tiebreak_sequence = src.tiebreak_sequence,
+                    prize_policy = src.prize_policy,
+                    prize_tax_percent = src.prize_tax_percent,
                     pairing_method = src.pairing_method,
                     pairing_system = src.pairing_system,
                     acceleration_method = src.acceleration_method,
@@ -192,10 +195,12 @@ class TournamentCoreMixin(_DatabaseInfra):
                     team_pairing_method = src.team_pairing_method,
                     team_standing_primary = src.team_standing_primary,
                     team_standing_secondary = src.team_standing_secondary,
+                    team_tiebreak_sequence = src.team_tiebreak_sequence,
                     team_fixed_board_order = src.team_fixed_board_order,
                     team_board_order_policy = src.team_board_order_policy,
                     team_reserve_policy = src.team_reserve_policy,
                     team_lineup_deadline = src.team_lineup_deadline,
+                    team_rating_tolerance = src.team_rating_tolerance,
                     team_max_substitutions = src.team_max_substitutions,
                     rating_fee_fide = src.rating_fee_fide,
                     rating_fee_cbx = src.rating_fee_cbx,
@@ -232,6 +237,61 @@ class TournamentCoreMixin(_DatabaseInfra):
                         self.now(),
                     )
                     for row in schedules
+                ],
+            )
+            prizes = connection.execute(
+                """
+                SELECT kind, label, category, rank_from, rank_to, amount, position
+                FROM tournament_prizes
+                WHERE tournament_id = ?
+                ORDER BY position, id
+                """,
+                (source_tournament_id,),
+            ).fetchall()
+            connection.executemany(
+                """
+                INSERT INTO tournament_prizes (
+                    tournament_id, kind, label, category, rank_from, rank_to,
+                    amount, position, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    (
+                        new_tournament_id,
+                        str(row["kind"] or "overall"),
+                        str(row["label"] or ""),
+                        str(row["category"] or ""),
+                        int(row["rank_from"] or 1),
+                        int(row["rank_to"] or row["rank_from"] or 1),
+                        float(row["amount"] or 0.0),
+                        int(row["position"] or 0),
+                        self.now(),
+                    )
+                    for row in prizes
+                ],
+            )
+            layouts = connection.execute(
+                """
+                SELECT report_key, columns_json
+                FROM report_layouts
+                WHERE tournament_id = ?
+                """,
+                (source_tournament_id,),
+            ).fetchall()
+            connection.executemany(
+                """
+                INSERT INTO report_layouts (
+                    tournament_id, report_key, columns_json, updated_at
+                ) VALUES (?, ?, ?, ?)
+                """,
+                [
+                    (
+                        new_tournament_id,
+                        str(row["report_key"] or ""),
+                        str(row["columns_json"] or "[]"),
+                        self.now(),
+                    )
+                    for row in layouts
                 ],
             )
             return new_tournament_id
@@ -304,6 +364,18 @@ class TournamentCoreMixin(_DatabaseInfra):
     ) -> None:
         with self.connect() as connection:
             self._ensure_tournament_settings(connection, tournament_id)
+            incoming = dict(data)
+            current = connection.execute(
+                """
+                SELECT *
+                FROM tournament_settings
+                WHERE tournament_id = ?
+                """,
+                (tournament_id,),
+            ).fetchone()
+            merged = dict(current) if current else {}
+            merged.update(incoming)
+            data = merged
             connection.execute(
                 """
                 UPDATE tournament_settings
@@ -324,7 +396,8 @@ class TournamentCoreMixin(_DatabaseInfra):
                     team_pairing_method = ?, team_standing_primary = ?,
                     team_standing_secondary = ?, team_fixed_board_order = ?,
                     team_board_order_policy = ?, team_reserve_policy = ?,
-                    team_lineup_deadline = ?, team_max_substitutions = ?,
+                    team_lineup_deadline = ?, team_rating_tolerance = ?,
+                    team_max_substitutions = ?,
                     rating_fee_fide = ?, rating_fee_cbx = ?, rating_fee_lbx = ?,
                     archived = ?, updated_at = ?
                 WHERE tournament_id = ?
@@ -373,6 +446,7 @@ class TournamentCoreMixin(_DatabaseInfra):
                     str(data.get("team_board_order_policy", "fixed")).strip() or "fixed",
                     str(data.get("team_reserve_policy", "same_team")).strip() or "same_team",
                     str(data.get("team_lineup_deadline", "")).strip(),
+                    int(data.get("team_rating_tolerance", 0) or 0),
                     int(data.get("team_max_substitutions", 0) or 0),
                     float(data.get("rating_fee_fide", 0.0) or 0.0),
                     float(data.get("rating_fee_cbx", 0.0) or 0.0),
@@ -382,6 +456,19 @@ class TournamentCoreMixin(_DatabaseInfra):
                     tournament_id,
                 ),
             )
+            if "pairing_method" in incoming:
+                connection.execute(
+                    """
+                    UPDATE tournament_settings
+                    SET pairing_method = ?, updated_at = ?
+                    WHERE tournament_id = ?
+                    """,
+                    (
+                        str(data.get("pairing_method") or "swiss").strip() or "swiss",
+                        self.now(),
+                        tournament_id,
+                    ),
+                )
 
     def save_fide_rating_report(
         self,

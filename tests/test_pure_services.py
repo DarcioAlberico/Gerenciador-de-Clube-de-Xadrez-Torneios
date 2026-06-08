@@ -18,8 +18,10 @@ from unittest import mock
 
 import chess
 
+from src.core.database import Database
 from src.services.chess_validation import ChessValidationService
 from src.services.constants import AppError
+from src.services.education_service import LibraryService
 from src.services.export_service import (
     REGISTRATION_FORM_QUESTIONS,
     ExportService,
@@ -34,6 +36,7 @@ from src.services.list_layouts import (
     resolve_columns,
     serialize_columns,
 )
+from src.services.pairing.constraints import rating_for_initial_order, select_rating_for_order
 from src.services.report_engine import ReportEngine
 
 START_FEN = chess.STARTING_FEN
@@ -162,6 +165,26 @@ class ChessValidationPgnTest(unittest.TestCase):
         game = result["games"][0]
         self.assertTrue(game["errors"])
         self.assertEqual(game["parse_status"], "warning")
+
+
+class LibraryServicePgnImportTest(unittest.TestCase):
+    def test_fen_puzzle_without_tactic_annotation_imports_solution_san(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "albericus.db")
+            service = LibraryService(db)
+            pgn = (
+                '[Event "Puzzle"]\n'
+                f'[FEN "{START_FEN}"]\n\n'
+                "1. e4 e5 *\n"
+            )
+
+            imported = service.import_pgn(pgn)
+            items = service.list_items()
+
+        self.assertEqual(imported, 1)
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["title"], "Puzzle - Puzzle")
+        self.assertEqual(items[0]["solution"], "e4 e5")
 
 
 class ListLayoutsTest(unittest.TestCase):
@@ -339,6 +362,18 @@ class ReportEngineDreTest(unittest.TestCase):
         self.assertEqual(dre["total_income"], 0.0)
         self.assertEqual(dre["total_expense"], 0.0)
         self.assertEqual(dre["net_balance"], 0.0)
+
+    def test_calculate_dre_handles_null_category(self) -> None:
+        # A coluna category permite NULL (dado legado/externo): cai em "Geral"
+        # sem derrubar o DRE (antes, None.strip() levantava AttributeError).
+        transactions = [
+            {"type": "income", "category": None, "amount": 15.0},
+            {"type": "expense", "category": None, "amount": 5.0},
+        ]
+        dre = self._engine([], transactions).calculate_dre("", "")
+        self.assertEqual(dre["income_by_category"], {"Geral": 15.0})
+        self.assertEqual(dre["expense_by_category"], {"Geral": 5.0})
+        self.assertEqual(dre["net_balance"], 10.0)
 
     def test_generate_dre_report_writes_pdf_and_forces_suffix(self) -> None:
         engine = self._engine(
@@ -827,6 +862,56 @@ class GoogleFormsAvailabilityTest(unittest.TestCase):
                 custom = root / "custom.json"
                 db.settings["google_oauth_client_secret_path"] = str(custom)
                 self.assertEqual(service.client_secret_path(), custom)
+
+
+class SelectRatingForOrderTest(unittest.TestCase):
+    """Fonte unica de 'rating por ordem inicial' (seeding + importacao oficial)."""
+
+    KWARGS = {"rating": 1500, "national": 1800, "international": 1700}
+
+    def test_named_orders_select_expected_rating(self) -> None:
+        self.assertEqual(select_rating_for_order("national_rating", **self.KWARGS), 1800)
+        self.assertEqual(select_rating_for_order("international_rating", **self.KWARGS), 1700)
+        self.assertEqual(select_rating_for_order("international_then_national", **self.KWARGS), 1700)
+        self.assertEqual(select_rating_for_order("max_rating", **self.KWARGS), 1800)
+
+    def test_named_orders_fall_back_when_source_is_zero(self) -> None:
+        # national ausente -> usa o rating de trabalho; idem internacional.
+        self.assertEqual(
+            select_rating_for_order("national_rating", rating=1500, national=0, international=1700),
+            1500,
+        )
+        self.assertEqual(
+            select_rating_for_order(
+                "international_then_national", rating=1500, national=1800, international=0
+            ),
+            1800,
+        )
+
+    def test_default_branch_differs_by_caller(self) -> None:
+        # "rating"/"manual"/desconhecida: o seeding usa o proprio rating
+        # (default=None); a importacao oficial passa o melhor disponivel.
+        for order in ("rating", "manual", "ordem_desconhecida"):
+            self.assertEqual(select_rating_for_order(order, **self.KWARGS), 1500)
+            self.assertEqual(
+                select_rating_for_order(order, default=max(1800, 1700, 1500), **self.KWARGS),
+                1800,
+            )
+
+    def test_player_wrapper_matches_canonical(self) -> None:
+        player = {"rating": 1500, "national_rating": 1800, "international_rating": 1700}
+        for order in (
+            "rating",
+            "national_rating",
+            "international_rating",
+            "international_then_national",
+            "max_rating",
+            "manual",
+        ):
+            self.assertEqual(
+                rating_for_initial_order(player, order),
+                select_rating_for_order(order, **self.KWARGS),
+            )
 
 
 if __name__ == "__main__":

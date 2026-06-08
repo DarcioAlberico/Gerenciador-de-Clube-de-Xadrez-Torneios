@@ -1,6 +1,7 @@
 import customtkinter as ctk
 from typing import Any
 import tkinter as tk
+from tkinter import filedialog
 
 class LibraryMixin:
     def show_library(self) -> None:
@@ -74,7 +75,18 @@ class LibraryMixin:
                 frame.grid_columnconfigure(0, weight=1)
                 entry = ctk.CTkEntry(frame)
                 entry.grid(row=0, column=0, sticky="ew", padx=(0, 4))
-                btn = ctk.CTkButton(frame, text="...", width=30, command=lambda e=entry: [e.delete(0, "end"), e.insert(0, ctk.filedialog.askopenfilename(filetypes=[("Imagens", "*.png;*.jpg;*.jpeg;*.gif;*.webp;*.svg"), ("Todos", "*.*")]))])
+                def browse_image(e=entry):
+                    path = filedialog.askopenfilename(
+                        filetypes=[
+                            ("Imagens", "*.png;*.jpg;*.jpeg;*.gif;*.webp;*.svg"),
+                            ("Todos", "*.*"),
+                        ]
+                    )
+                    if path:
+                        e.delete(0, "end")
+                        e.insert(0, path)
+
+                btn = ctk.CTkButton(frame, text="...", width=30, command=browse_image)
                 btn.grid(row=0, column=1)
                 def _prev(e=entry):
                     img_path = e.get().strip()

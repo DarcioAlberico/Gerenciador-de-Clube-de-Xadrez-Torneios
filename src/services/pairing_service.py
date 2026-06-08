@@ -44,6 +44,7 @@ from src.services.pairing import (
     plan_team_board_player_swap as _plan_team_board_player_swap,
     played_pairs as _played_pairs,
     prohibited_pairs_for_round as _prohibited_pairs_for_round,
+    rating_for_initial_order as _rating_for_initial_order,
     result_submission_issue as _result_submission_issue,
     result_states_summary as _result_states_summary,
     round_robin_pairings as _round_robin_pairings,
@@ -679,7 +680,7 @@ class PairingService:
             if settings.get("disable_bye") and len(to_pair) % 2 == 1:
                 raise AppError("O bye esta desativado. Use numero par de jogadores ativos.")
             if next_number == 1:
-                pairings = _first_round_pairings(to_pair)
+                pairings = _first_round_pairings(to_pair, settings)
             else:
                 pairings = self._swiss_pairings(tournament_id, to_pair, next_number)
             pairings = _append_requested_bye_pairings(pairings, bye_by_player)
@@ -1652,11 +1653,15 @@ class PairingService:
     ) -> list[dict[str, Any]]:
         standings = {item["player_id"]: item for item in self.standings(tournament_id)}
         settings = self.db.get_tournament_settings(tournament_id) or {}
+        initial_order = str(settings.get("initial_order") or "rating")
         seeding = [
             int(player["id"])
             for player in sorted(
                 players,
-                key=lambda p: (-int(p.get("rating") or 0), str(p.get("name", "")).casefold()),
+                key=lambda p: (
+                    -_rating_for_initial_order(p, initial_order),
+                    str(p.get("name") or "").casefold(),
+                ),
             )
         ]
         standings = _accelerated_standings(

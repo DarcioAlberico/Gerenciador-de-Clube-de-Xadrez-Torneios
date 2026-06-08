@@ -160,6 +160,9 @@ class TRF25Exporter(TRF16Exporter):
 
         settings = self.db.get_tournament_settings(tournament_id) or {}
         warnings = self.validate(tournament_id)
+        order_warning = self._starting_rank_order_warning(settings)
+        if order_warning:
+            warnings.append(order_warning)
         players = sorted(
             self.db.list_players(tournament_id, active_only=False),
             key=lambda player: (
@@ -681,14 +684,29 @@ class TRF25Exporter(TRF16Exporter):
     ) -> str | None:
         """Registro 172 — obrigatório quando há registros NRS (§1.2). Emite só
         sob a mesma condição do `_national_rating_records`: federação válida e ao
-        menos um jogador com rating nacional. O ranking é montado pela ordem FIDE,
-        então o método é `FIDE`."""
+        menos um jogador com rating nacional. O starting-rank do TRF é sempre
+        montado pela ordem do rating FIDE (ver `export`), independente do
+        `initial_order` do torneio, então o método declarado é `FIDE`; quando o
+        torneio usa outra ordem inicial, o `export` emite um aviso."""
         federation = str(settings.get("federation") or "").strip()
         if not self.export_service._trf_valid_federation_code(federation):
             return None
         if not any(int(p.get("national_rating") or 0) > 0 for p in players):
             return None
         return record_172(federation, "FIDE")
+
+    @staticmethod
+    def _starting_rank_order_warning(settings: dict[str, Any]) -> str | None:
+        """Aviso quando a ordem inicial do torneio não é o rating FIDE: o SNo do
+        TRF segue o rating FIDE e pode divergir do seeding usado no pareamento."""
+        initial_order = str(settings.get("initial_order") or "rating").strip()
+        if initial_order in ("rating", "international_rating"):
+            return None
+        return (
+            f"Ordem inicial '{initial_order}' nao e o rating FIDE: o numero de "
+            "ordem (SNo) do TRF segue o rating FIDE e pode nao corresponder ao "
+            "seeding usado no pareamento (o registro 172 declara o metodo FIDE)."
+        )
 
     def _national_rating_records(
         self,

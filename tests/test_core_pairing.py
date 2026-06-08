@@ -460,6 +460,54 @@ class PairingRulesTest(CoreServiceTestCase):
         with self.assertRaises(AppError):
             self.service.generate_next_round(self.tournament_id)
 
+    def test_first_round_respects_initial_order_rating_source(self) -> None:
+        self.tournament_service.save_profile(
+            self.tournament_id,
+            {
+                "name": "Torneio teste",
+                "rounds_count": "5",
+                "bye_points": "1",
+            },
+            {"initial_order": "national_rating"},
+            [],
+        )
+        fide_high_id = self.db.create_player(
+            self.tournament_id,
+            name="FIDE alto",
+            rating=1000,
+            national_rating=1000,
+            international_rating=2500,
+        )
+        national_1_id = self.db.create_player(
+            self.tournament_id,
+            name="Nacional 1",
+            rating=1000,
+            national_rating=2400,
+            international_rating=0,
+        )
+        national_2_id = self.db.create_player(
+            self.tournament_id,
+            name="Nacional 2",
+            rating=1000,
+            national_rating=2300,
+            international_rating=0,
+        )
+        national_low_id = self.db.create_player(
+            self.tournament_id,
+            name="Nacional baixo",
+            rating=1000,
+            national_rating=900,
+            international_rating=0,
+        )
+
+        round_data = self.service.generate_next_round(self.tournament_id)
+        pairings = self.db.get_pairings_for_round(round_data["id"])
+
+        self.assertEqual(pairings[0]["white_player_id"], national_1_id)
+        self.assertEqual(pairings[0]["black_player_id"], fide_high_id)
+        self.assertEqual(pairings[1]["white_player_id"], national_low_id)
+        self.assertEqual(pairings[1]["black_player_id"], national_2_id)
+
     def test_prohibited_pairing_is_never_paired(self) -> None:
         self._create_players(8)
         players = self.db.list_players(self.tournament_id, active_only=True)
@@ -869,6 +917,53 @@ class PairingRulesTest(CoreServiceTestCase):
         accel = pair_set(self.service._swiss_pairings(self.tournament_id, players, 2))
         self.assertIn(frozenset({seeding[0], seeding[2]}), accel)
         self.assertNotIn(frozenset({seeding[0], seeding[4]}), accel)
+
+    def test_acceleration_seeding_respects_initial_order(self) -> None:
+        # Regressão: o seeding que alimenta a aceleração no Suíço deve seguir a
+        # MESMA ordem inicial da R1 (initial_order), não o rating puro. Aqui o
+        # national_rating define o topo {A,B,C,D}, enquanto o rating puro elegeria
+        # {A,B,E,F}; com o bug, a metade superior por ordem nacional ficaria
+        # espalhada entre os dois grupos de pontuação e cruzaria para a base.
+        self.db.save_tournament_settings(
+            self.tournament_id,
+            {"initial_order": "national_rating", "acceleration_method": "accelerated"},
+        )
+        # (rotulo, national, rating): national desc = A..H; rating desc = A,B,E,F,C,D,G,H.
+        specs = [
+            ("A", 2400, 1080),
+            ("B", 2300, 1070),
+            ("C", 2200, 1040),
+            ("D", 2100, 1030),
+            ("E", 2000, 1060),
+            ("F", 1900, 1050),
+            ("G", 1800, 1020),
+            ("H", 1700, 1010),
+        ]
+        ids = {
+            label: self.db.create_player(
+                self.tournament_id,
+                name=label,
+                rating=rating,
+                national_rating=national,
+                international_rating=0,
+            )
+            for label, national, rating in specs
+        }
+
+        players = self.db.list_players(self.tournament_id, active_only=True)
+        pairings = self.service._swiss_pairings(self.tournament_id, players, 2)
+        pairs = {
+            frozenset({int(p["white_player_id"]), int(p["black_player_id"])})
+            for p in pairings
+            if p.get("black_player_id") is not None
+        }
+
+        top = {ids[label] for label in ("A", "B", "C", "D")}
+        crossing = [pair for pair in pairs if len(pair & top) == 1]
+        self.assertEqual(crossing, [], f"aceleracao ignorou initial_order: {crossing}")
+        # Topo por ordem nacional pareia S1 x S2: A (1o) com C (3o), nunca com a base.
+        self.assertIn(frozenset({ids["A"], ids["C"]}), pairs)
+        self.assertNotIn(frozenset({ids["A"], ids["E"]}), pairs)
 
     def test_custom_acceleration_applies_configured_params(self) -> None:
         from src.services.pairing import accelerated_standings, acceleration_spec
