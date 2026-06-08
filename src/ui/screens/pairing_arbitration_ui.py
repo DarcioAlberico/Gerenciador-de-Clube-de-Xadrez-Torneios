@@ -68,8 +68,8 @@ class ArbitrationPagesMixin:
 
         main = ctk.CTkFrame(body, fg_color="transparent")
         main.grid(row=1, column=0, sticky="nsew")
-        main.grid_columnconfigure(0, weight=2)
-        main.grid_columnconfigure(1, weight=1)
+        main.grid_columnconfigure(0, weight=3)
+        main.grid_columnconfigure(1, weight=2)
         main.grid_rowconfigure(0, weight=1)
         main.grid_rowconfigure(1, weight=1)
 
@@ -152,12 +152,16 @@ class ArbitrationPagesMixin:
                 sticky="w",
             )
 
+        # "Acoes rapidas" em 3 colunas: cabem sem rolagem e aproveitam a largura
+        # extra cedida pela coluna esquerda (antes os itens finais, ex.: intervalo
+        # de atualizacao, ficavam cortados na coluna estreita de 2 colunas).
         actions_panel = self._make_panel(main)
         actions_panel.grid(row=0, column=1, rowspan=2, sticky="nsew")
         actions_panel.grid_columnconfigure(0, weight=1)
         actions_panel.grid_columnconfigure(1, weight=1)
+        actions_panel.grid_columnconfigure(2, weight=1)
         self._section_title(actions_panel, "Acoes rapidas").grid(
-            row=0, column=0, columnspan=2, padx=14, pady=(14, 8), sticky="w"
+            row=0, column=0, columnspan=3, padx=14, pady=(14, 8), sticky="w"
         )
         action_groups = [
             ("Rodada", [
@@ -183,23 +187,25 @@ class ArbitrationPagesMixin:
             ]),
         ]
         action_row = 1
+        columns = 3
         for group_label, actions in action_groups:
             self._section_title(actions_panel, group_label, subsection=True).grid(
-                row=action_row, column=0, columnspan=2, padx=14, pady=(4, 4), sticky="w"
+                row=action_row, column=0, columnspan=columns, padx=14, pady=(4, 4), sticky="w"
             )
             action_row += 1
             for index, (label, command) in enumerate(actions):
+                col = index % columns
                 ctk.CTkButton(actions_panel, text=label, command=command).grid(
-                    row=action_row + index // 2,
-                    column=index % 2,
-                    padx=(14 if index % 2 == 0 else 4, 14 if index % 2 else 4),
+                    row=action_row + index // columns,
+                    column=col,
+                    padx=(14 if col == 0 else 4, 14 if col == columns - 1 else 4),
                     pady=(0, 8),
                     sticky="ew",
                 )
-            action_row += (len(actions) + 1) // 2
+            action_row += (len(actions) + columns - 1) // columns
 
         controls = ctk.CTkFrame(actions_panel, fg_color="transparent")
-        controls.grid(row=action_row, column=0, columnspan=2, padx=14, pady=(4, 12), sticky="ew")
+        controls.grid(row=action_row, column=0, columnspan=columns, padx=14, pady=(4, 12), sticky="ew")
         auto_refresh = ctk.CTkCheckBox(
             controls,
             text="Atualizar automaticamente",
