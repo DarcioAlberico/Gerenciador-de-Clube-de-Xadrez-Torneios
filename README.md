@@ -3,7 +3,7 @@ Gerenciador de clube de xadrez com gerenciador de torneios embutidos. Gerencia C
 
 # Albericus
 
-Aplicativo desktop em Python para emparceiramento de torneios de xadrez.
+Aplicativo desktop em Python para Gerenciar Clube/Escolas_Turmas e Torneios de Xadrez.
 
 ## Funcionalidades implementadas
 
