@@ -6,6 +6,7 @@ from src.services.constants import RESULT_POINTS, AppError
 from src.services.pairing import (
     clock_event_issue,
     finalize_issues,
+    pairing_diagnostics,
     performance_rating,
     plan_pairing_player_swap,
     plan_team_board_player_swap,
@@ -13,6 +14,13 @@ from src.services.pairing import (
     team_match_summary,
     team_starter_roster,
 )
+
+
+def _players(count: int) -> list[dict[str, object]]:
+    return [
+        {"id": player_id, "name": f"Jogador {player_id}", "rating": 1800 - player_id}
+        for player_id in range(1, count + 1)
+    ]
 
 
 class TestTeamMatchSummary(unittest.TestCase):
@@ -179,6 +187,56 @@ class TestFinalizeIssues(unittest.TestCase):
         ]
         result = finalize_issues(issues, acknowledged_keys=set(), limit=1)
         self.assertEqual([item["issue_key"] for item in result], ["b"])
+
+
+class TestPairingDiagnostics(unittest.TestCase):
+    def test_repeated_opponent_is_marked_inevitable_with_two_players(self):
+        diagnostics = pairing_diagnostics(
+            [{"board_number": 1, "white_player_id": 1, "black_player_id": 2, "is_bye": 0}],
+            histories={},
+            played_pairs={frozenset((1, 2))},
+            bye_player_ids=set(),
+            players=_players(2),
+        )
+
+        self.assertEqual(1, len(diagnostics))
+        self.assertEqual("opponent_repeat", diagnostics[0]["kind"])
+        self.assertIs(diagnostics[0]["avoidable"], False)
+        self.assertEqual("attention", diagnostics[0]["severity"])
+
+    def test_repeated_opponent_is_marked_avoidable_when_exact_alternative_exists(self):
+        diagnostics = pairing_diagnostics(
+            [
+                {"board_number": 1, "white_player_id": 1, "black_player_id": 2, "is_bye": 0},
+                {"board_number": 2, "white_player_id": 3, "black_player_id": 4, "is_bye": 0},
+            ],
+            histories={},
+            played_pairs={frozenset((1, 2))},
+            bye_player_ids=set(),
+            players=_players(4),
+        )
+
+        repeated = [item for item in diagnostics if item["kind"] == "opponent_repeat"]
+        self.assertEqual(1, len(repeated))
+        self.assertIs(repeated[0]["avoidable"], True)
+        self.assertEqual("decision", repeated[0]["severity"])
+
+    def test_hard_color_violation_is_marked_avoidable_when_colors_can_be_repaired(self):
+        diagnostics = pairing_diagnostics(
+            [
+                {"board_number": 1, "white_player_id": 1, "black_player_id": 2, "is_bye": 0},
+                {"board_number": 2, "white_player_id": 3, "black_player_id": 4, "is_bye": 0},
+            ],
+            histories={1: ["W", "W"], 2: ["B", "B"], 3: ["W", "W"], 4: ["B", "B"]},
+            played_pairs=set(),
+            bye_player_ids=set(),
+            players=_players(4),
+        )
+
+        hard_colors = [item for item in diagnostics if item["kind"] == "hard_color"]
+        self.assertEqual(4, len(hard_colors))
+        self.assertTrue(all(item["avoidable"] is True for item in hard_colors))
+        self.assertTrue(all(item["severity"] == "decision" for item in hard_colors))
 
 
 class TestPerformanceRating(unittest.TestCase):

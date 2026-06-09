@@ -19,3 +19,6 @@ Manual/media__*.png
 # Credenciais Google (NUNCA versionar) - colocadas manualmente ao distribuir/configurar
 **/google_client_secret.json
 **/google_forms_token.json
+# Engines FIDE externos e material de pesquisa (validacao local; nao versionar)
+bbpPairings-6.0.0/
+Algoritmos_de_emparceiramento/

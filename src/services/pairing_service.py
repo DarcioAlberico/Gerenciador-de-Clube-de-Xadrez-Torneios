@@ -34,6 +34,7 @@ from src.services.pairing import (
     first_round_team_matches as _first_round_team_matches,
     individual_preview_payload as _individual_preview_payload,
     individual_round_dashboard_metrics as _individual_round_dashboard_metrics,
+    pairing_diagnostics as _pairing_diagnostics,
     issue_matches_round as _issue_matches_round,
     issue_metrics as _issue_metrics,
     knockout_pairings as _knockout_pairings,
@@ -436,9 +437,64 @@ class PairingService:
             if issue is not None:
                 issues.append(issue)
 
+        issues.extend(self._pairing_arbitration_issues(tournament_id, tournament))
+
         issues = _finalize_issues(issues, acknowledged_keys, safe_limit)
         metrics = _issue_metrics(issues)
         return {"metrics": metrics, "issues": issues}
+
+    def _pairing_arbitration_issues(
+        self,
+        tournament_id: int,
+        tournament: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        if tournament.get("competition_type") == "team":
+            return []
+        settings = self.db.get_tournament_settings(tournament_id) or {}
+        if str(settings.get("pairing_method") or "swiss") != "swiss":
+            return []
+        latest_round = self.db.get_latest_round(tournament_id)
+        if not latest_round or latest_round.get("status") != "generated":
+            return []
+
+        round_id = int(latest_round["id"])
+        current_pairings = self.db.get_pairings_for_round(round_id)
+        if not current_pairings:
+            return []
+
+        closed_pairings = self.db.get_pairings_for_tournament(tournament_id, closed_only=True)
+        diagnostics = _pairing_diagnostics(
+            current_pairings,
+            _color_histories(closed_pairings),
+            _played_pairs(closed_pairings),
+            _bye_player_ids(closed_pairings),
+            players=self.db.list_players(tournament_id, active_only=True),
+            standings={int(item["player_id"]): item for item in self.standings(tournament_id)},
+        )
+
+        issues = []
+        for diagnostic in diagnostics:
+            player_suffix = "-".join(str(player_id) for player_id in diagnostic.get("player_ids") or [])
+            board_number = int(diagnostic.get("board_number") or 0)
+            kind = str(diagnostic.get("kind") or "diagnostic")
+            issues.append(
+                {
+                    "issue_key": f"pairing:{kind}:{round_id}:{board_number}:{player_suffix}",
+                    "severity": diagnostic.get("severity") or "attention",
+                    "source": "pairing",
+                    "kind": kind,
+                    "title": diagnostic.get("title") or "Alerta de pareamento",
+                    "detail": diagnostic.get("detail") or "",
+                    "round_id": round_id,
+                    "entity_id": diagnostic.get("pairing_id"),
+                    "created_at": latest_round.get("created_at") or "",
+                    "payload": {
+                        **diagnostic,
+                        "round_number": latest_round.get("number"),
+                    },
+                }
+            )
+        return issues
 
     @staticmethod
     def filter_arbitration_issues(
@@ -720,6 +776,7 @@ class PairingService:
     ) -> dict[str, Any]:
         histories = self._color_histories(tournament_id)
         played_pairs = self._played_pairs(tournament_id)
+        bye_player_ids = self._bye_player_ids(tournament_id)
         standings = {int(item["player_id"]): item for item in self.standings(tournament_id)}
         return _individual_preview_payload(
             tournament_id=tournament_id,
@@ -727,6 +784,7 @@ class PairingService:
             plan=plan,
             histories=histories,
             played_pairs=played_pairs,
+            bye_player_ids=bye_player_ids,
             standings=standings,
             pairing_engine_version=self.PAIRING_ENGINE_VERSION,
             ruleset_version=self.RULESET_VERSION,
@@ -1516,8 +1574,8 @@ class PairingService:
             team_id = int(standing["team_id"])
             round_cells: dict[int, dict[str, Any]] = {}
             for round_number in rounds:
-                match = matches_by_team_round.get((team_id, round_number))
-                if not match:
+                round_match = matches_by_team_round.get((team_id, round_number))
+                if not round_match:
                     round_cells[round_number] = {
                         "kind": "absent",
                         "label": "-",
@@ -1525,25 +1583,25 @@ class PairingService:
                         "boards": [],
                     }
                     continue
-                if match.get("is_bye"):
+                if round_match.get("is_bye"):
                     round_cells[round_number] = {
-                        **match,
+                        **round_match,
                         "kind": "bye",
                         "label": (
-                            f"BYE MP {self._compact_number(match.get('white_match_points'))} "
-                            f"GP {self._compact_number(match.get('white_game_points'))}"
+                            f"BYE MP {self._compact_number(round_match.get('white_match_points'))} "
+                            f"GP {self._compact_number(round_match.get('white_game_points'))}"
                         ),
                         "boards": [],
                     }
                     continue
-                is_white = team_id == int(match["white_team_id"])
-                opponent_id = int(match["black_team_id"] if is_white else match["white_team_id"])
+                is_white = team_id == int(round_match["white_team_id"])
+                opponent_id = int(round_match["black_team_id"] if is_white else round_match["white_team_id"])
                 opponent = standings_by_team.get(opponent_id, {})
-                match_points = match.get("white_match_points" if is_white else "black_match_points")
-                game_points = match.get("white_game_points" if is_white else "black_game_points")
-                result = str(match.get("result") or "")
+                match_points = round_match.get("white_match_points" if is_white else "black_match_points")
+                game_points = round_match.get("white_game_points" if is_white else "black_game_points")
+                result = str(round_match.get("result") or "")
                 round_cells[round_number] = {
-                    **match,
+                    **round_match,
                     "kind": "match",
                     "opponent_id": opponent_id,
                     "opponent_position": int(opponent.get("position") or 0),
@@ -1555,7 +1613,7 @@ class PairingService:
                         f"{self._oriented_match_result(result, is_white)} "
                         f"MP {self._compact_number(match_points)} GP {self._compact_number(game_points)}"
                     ),
-                    "boards": boards_by_match_id[int(match["id"])],
+                    "boards": boards_by_match_id[int(round_match["id"])],
                 }
             rows.append({**standing, "rounds": round_cells})
         return {
@@ -1635,7 +1693,7 @@ class PairingService:
             prev_round = self.db.get_round_by_number(tournament_id, next_number - 1)
             if not prev_round:
                 raise AppError("Rodada anterior não encontrada.")
-            previous_pairings = self.db.list_pairings(prev_round["id"])
+            previous_pairings = self.db.get_pairings_for_round(int(prev_round["id"]))
         return _knockout_pairings(players, next_number, settings, previous_pairings)
 
     @staticmethod

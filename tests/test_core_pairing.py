@@ -965,6 +965,175 @@ class PairingRulesTest(CoreServiceTestCase):
         self.assertIn(frozenset({ids["A"], ids["C"]}), pairs)
         self.assertNotIn(frozenset({ids["A"], ids["E"]}), pairs)
 
+    def test_swiss_avoids_avoidable_opponent_repeat(self) -> None:
+        # Regressao confirmada contra o JaVaFo (motor FIDE oficial): com 14
+        # jogadores e o favorito vencendo, na R6 o pareamento guloso por bracket
+        # repetia um par do fundo (J13xJ14, ja jogados na R3) mesmo existindo um
+        # pareamento sem repeticao. A salvaguarda global deve elimina-la
+        # (regra FIDE C.04.1.b: nao repetir adversario).
+        tid = self.db.create_tournament("Anti-repeticao", rounds_count=7)
+        rating_by_id = {}
+        for i in range(14):
+            pid = self.db.create_player(tid, name=f"J{i + 1:02d}", rating=2000 - i * 25)
+            rating_by_id[pid] = 2000 - i * 25
+
+        played: set = set()
+        for _ in range(5):
+            rd = self.service.generate_next_round(tid)
+            for p in self.db.get_pairings_for_round(int(rd["id"])):
+                white, black = p.get("white_player_id"), p.get("black_player_id")
+                if black is None:
+                    continue
+                played.add(frozenset({white, black}))
+                result = "1-0" if rating_by_id[white] >= rating_by_id[black] else "0-1"
+                self.service.update_result(tid, int(p["id"]), result)
+            self.service.close_round(tid, int(rd["id"]))
+
+        rd6 = self.service.generate_next_round(tid)
+        repeats = [
+            (p["white_player_id"], p["black_player_id"])
+            for p in self.db.get_pairings_for_round(int(rd6["id"]))
+            if p.get("black_player_id") is not None
+            and frozenset({p["white_player_id"], p["black_player_id"]}) in played
+        ]
+        self.assertEqual(repeats, [], f"repeticao de adversario evitavel na R6: {repeats}")
+
+    def test_swiss_avoids_avoidable_hard_color_violations_in_bottom_boards(self) -> None:
+        # Regressao comparada contra o JaVaFo/Swiss-Manager: com 10 jogadores e
+        # favoritos vencendo, a R5 antiga mantinha grupos de pontuacao no fundo
+        # mas dava saldo de cor +/-3 e terceira cor igual evitaveis.
+        tid = self.db.create_tournament("Cores no fundo", rounds_count=7)
+        rating_by_id = {
+            self.db.create_player(tid, name=f"J{i + 1:02d}", rating=2400 - i * 10): 2400 - i * 10
+            for i in range(10)
+        }
+
+        for _ in range(4):
+            rd = self.service.generate_next_round(tid)
+            for p in self.db.get_pairings_for_round(int(rd["id"])):
+                white, black = p.get("white_player_id"), p.get("black_player_id")
+                if black is None:
+                    continue
+                result = "1-0" if rating_by_id[white] >= rating_by_id[black] else "0-1"
+                self.service.update_result(tid, int(p["id"]), result)
+            self.service.close_round(tid, int(rd["id"]))
+
+        histories = self.service._color_histories(tid)
+        rd5 = self.service.generate_next_round(tid)
+        violations = self._hard_color_violations(
+            self.db.get_pairings_for_round(int(rd5["id"])), histories
+        )
+
+        self.assertEqual([], violations)
+
+    def test_swiss_avoids_avoidable_color_third_repeat_after_many_floats(self) -> None:
+        # Mesmo padrao em campo maior: na R6 de 14 jogadores, o fundo da tabela
+        # antigo podia produzir terceira cor igual apesar de haver pareamento
+        # global sem essa violacao.
+        tid = self.db.create_tournament("Cores apos floats", rounds_count=7)
+        rating_by_id = {
+            self.db.create_player(tid, name=f"J{i + 1:02d}", rating=2400 - i * 10): 2400 - i * 10
+            for i in range(14)
+        }
+
+        for _ in range(5):
+            rd = self.service.generate_next_round(tid)
+            for p in self.db.get_pairings_for_round(int(rd["id"])):
+                white, black = p.get("white_player_id"), p.get("black_player_id")
+                if black is None:
+                    continue
+                result = "1-0" if rating_by_id[white] >= rating_by_id[black] else "0-1"
+                self.service.update_result(tid, int(p["id"]), result)
+            self.service.close_round(tid, int(rd["id"]))
+
+        histories = self.service._color_histories(tid)
+        rd6 = self.service.generate_next_round(tid)
+        violations = self._hard_color_violations(
+            self.db.get_pairings_for_round(int(rd6["id"])), histories
+        )
+
+        self.assertEqual([], violations)
+
+    def test_swiss_bye_tiebreak_avoids_avoidable_color_violation(self) -> None:
+        # Regressao achada por stress: com 7 jogadores, a escolha padrao do bye
+        # entre jogadores empatados no menor score deixava o restante sem
+        # pareamento de cor limpo. O desempate deve considerar a qualidade do
+        # pareamento restante sem dar bye a jogador de score superior.
+        tid = self.db.create_tournament("Bye desempata cor", rounds_count=7)
+        for index, rating in enumerate([2402, 2391, 2383, 2377, 2371, 2365, 2359], start=1):
+            self.db.create_player(tid, name=f"J{index:02d}", rating=rating)
+
+        for round_number in range(1, 8):
+            histories = self.service._color_histories(tid)
+            rd = self.service.generate_next_round(tid)
+            pairings = self.db.get_pairings_for_round(int(rd["id"]))
+            violations = self._hard_color_violations(pairings, histories)
+            self.assertEqual([], violations, f"violacao evitavel na rodada {round_number}: {violations}")
+
+            for pairing in pairings:
+                if pairing.get("is_bye"):
+                    continue
+                result = ("1-0", "0-1", "1/2-1/2")[
+                    (round_number + int(pairing["board_number"])) % 3
+                ]
+                self.service.update_result(tid, int(pairing["id"]), result)
+            self.service.close_round(tid, int(rd["id"]))
+
+    def test_swiss_global_swap_reduces_hard_color_violations_above_exhaustive_limit(self) -> None:
+        # Acima de 16 jogadores nao usamos otimo global completo; a salvaguarda
+        # gulosa + trocas locais precisa cobrir casos grandes em que uma troca
+        # 2-a-2 ainda nao basta. Este cenario de 46 jogadores exigiu remalha de
+        # 4 mesas para eliminar a violacao restante no fundo.
+        tid = self.db.create_tournament("Cores campo grande", rounds_count=7)
+        rating_by_id = {
+            self.db.create_player(tid, name=f"J{i + 1:02d}", rating=2400 - i * 10): 2400 - i * 10
+            for i in range(46)
+        }
+
+        for round_number in range(1, 8):
+            histories = self.service._color_histories(tid)
+            played = self.service._played_pairs(tid)
+            rd = self.service.generate_next_round(tid)
+            pairings = self.db.get_pairings_for_round(int(rd["id"]))
+            repeats = [
+                (pairing["white_player_id"], pairing["black_player_id"])
+                for pairing in pairings
+                if pairing.get("black_player_id") is not None
+                and frozenset({pairing["white_player_id"], pairing["black_player_id"]}) in played
+            ]
+            violations = self._hard_color_violations(pairings, histories)
+            self.assertEqual([], repeats, f"repeticao evitavel na rodada {round_number}: {repeats}")
+            self.assertEqual([], violations, f"violacao evitavel na rodada {round_number}: {violations}")
+
+            for pairing in pairings:
+                white, black = pairing.get("white_player_id"), pairing.get("black_player_id")
+                if black is None:
+                    continue
+                result = "1-0" if rating_by_id[white] >= rating_by_id[black] else "0-1"
+                self.service.update_result(tid, int(pairing["id"]), result)
+            self.service.close_round(tid, int(rd["id"]))
+
+    @staticmethod
+    def _hard_color_violations(
+        pairings: list[dict[str, Any]],
+        histories: dict[int, list[str]],
+    ) -> list[tuple[int, str, str, int]]:
+        violations = []
+        for pairing in pairings:
+            if pairing.get("is_bye") or pairing.get("black_player_id") is None:
+                continue
+            assignments = (
+                (int(pairing["white_player_id"]), "W"),
+                (int(pairing["black_player_id"]), "B"),
+            )
+            for player_id, color in assignments:
+                history = [item for item in histories.get(player_id, []) if item in {"W", "B"}]
+                color_balance = history.count("W") - history.count("B")
+                color_balance += 1 if color == "W" else -1
+                if abs(color_balance) > 2 or history[-2:] == [color, color]:
+                    violations.append((player_id, color, "".join(history), color_balance))
+        return violations
+
     def test_custom_acceleration_applies_configured_params(self) -> None:
         from src.services.pairing import accelerated_standings, acceleration_spec
 
