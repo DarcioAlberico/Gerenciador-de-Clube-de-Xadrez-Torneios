@@ -5,6 +5,9 @@ from __future__ import annotations
 from typing import Any
 
 
+COLOR_HARD_VIOLATION_PENALTY = 100_000
+
+
 def would_make_three_colors(player_id: int, color: str, histories: dict[int, list[str]]) -> bool:
     history = histories.get(int(player_id), [])
     return len(history) >= 2 and history[-2:] == [color, color]
@@ -21,6 +24,21 @@ def is_color_valid_fide(player_id: int, color: str, histories: dict[int, list[st
     if len(history) >= 2 and history[-2:] == [color, color]:
         return False
     return True
+
+
+def color_hard_violation(player_id: int, color: str, histories: dict[int, list[str]]) -> int:
+    return 0 if is_color_valid_fide(player_id, color, histories) else 1
+
+
+def color_assignment_cost(
+    player_id: int,
+    color: str,
+    histories: dict[int, list[str]],
+) -> tuple[int, int]:
+    return (
+        color_hard_violation(player_id, color, histories),
+        assignment_color_penalty(player_id, color, histories),
+    )
 
 
 def rank_by_player_id(standings: dict[int, dict[str, Any]]) -> dict[int, int]:
@@ -181,15 +199,19 @@ def choose_colors(
 ) -> tuple[int, int]:
     player_id = player["id"]
     opponent_id = opponent["id"]
-    first_penalty = assignment_color_penalty(player_id, "W", histories)
-    first_penalty += assignment_color_penalty(opponent_id, "B", histories)
+    first_hard, first_penalty = color_assignment_cost(player_id, "W", histories)
+    opponent_hard, opponent_penalty = color_assignment_cost(opponent_id, "B", histories)
+    first_hard += opponent_hard
+    first_penalty += opponent_penalty
 
-    second_penalty = assignment_color_penalty(player_id, "B", histories)
-    second_penalty += assignment_color_penalty(opponent_id, "W", histories)
+    second_hard, second_penalty = color_assignment_cost(player_id, "B", histories)
+    opponent_hard, opponent_penalty = color_assignment_cost(opponent_id, "W", histories)
+    second_hard += opponent_hard
+    second_penalty += opponent_penalty
 
-    if first_penalty < second_penalty:
+    if (first_hard, first_penalty) < (second_hard, second_penalty):
         return player_id, opponent_id
-    if second_penalty < first_penalty:
+    if (second_hard, second_penalty) < (first_hard, first_penalty):
         return opponent_id, player_id
 
     if int(player["rating"] or 0) >= int(opponent["rating"] or 0):
@@ -205,15 +227,19 @@ def choose_team_colors(
 ) -> tuple[int, int]:
     team_id = int(team["id"])
     opponent_id = int(opponent["id"])
-    first_penalty = assignment_color_penalty(team_id, "W", histories)
-    first_penalty += assignment_color_penalty(opponent_id, "B", histories)
+    first_hard, first_penalty = color_assignment_cost(team_id, "W", histories)
+    opponent_hard, opponent_penalty = color_assignment_cost(opponent_id, "B", histories)
+    first_hard += opponent_hard
+    first_penalty += opponent_penalty
 
-    second_penalty = assignment_color_penalty(team_id, "B", histories)
-    second_penalty += assignment_color_penalty(opponent_id, "W", histories)
+    second_hard, second_penalty = color_assignment_cost(team_id, "B", histories)
+    opponent_hard, opponent_penalty = color_assignment_cost(opponent_id, "W", histories)
+    second_hard += opponent_hard
+    second_penalty += opponent_penalty
 
-    if first_penalty < second_penalty:
+    if (first_hard, first_penalty) < (second_hard, second_penalty):
         return team_id, opponent_id
-    if second_penalty < first_penalty:
+    if (second_hard, second_penalty) < (first_hard, first_penalty):
         return opponent_id, team_id
     if seed_ratings.get(team_id, 0) >= seed_ratings.get(opponent_id, 0):
         return team_id, opponent_id
@@ -258,14 +284,19 @@ def pair_penalty(
     if frozenset((player_id, opponent_id)) in played_pairs:
         penalty += repeat_pairing_penalty
 
-    white_a, black_a = choose_colors(player, opponent, histories)
-    color_penalty = assignment_color_penalty(player_id, "W", histories)
-    color_penalty += assignment_color_penalty(opponent_id, "B", histories)
-    if white_a == opponent_id and black_a == player_id:
+    white_a, _black_a = choose_colors(player, opponent, histories)
+    if white_a == player_id:
+        hard_violations = color_hard_violation(player_id, "W", histories)
+        hard_violations += color_hard_violation(opponent_id, "B", histories)
+        color_penalty = assignment_color_penalty(player_id, "W", histories)
+        color_penalty += assignment_color_penalty(opponent_id, "B", histories)
+    else:
+        hard_violations = color_hard_violation(player_id, "B", histories)
+        hard_violations += color_hard_violation(opponent_id, "W", histories)
         color_penalty = assignment_color_penalty(player_id, "B", histories)
         color_penalty += assignment_color_penalty(opponent_id, "W", histories)
 
-    return penalty + color_penalty
+    return penalty + hard_violations * COLOR_HARD_VIOLATION_PENALTY + color_penalty
 
 
 def team_pair_penalty(

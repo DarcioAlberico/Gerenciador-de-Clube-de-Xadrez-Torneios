@@ -91,6 +91,7 @@ def issue_metrics(issues: list[dict[str, Any]]) -> dict[str, int]:
         "qr_pending": sum(1 for item in issues if item["source"] == "qr"),
         "sync_conflicts": sum(1 for item in issues if item["source"] == "sync"),
         "clock_alerts": sum(1 for item in issues if item["source"] == "clock"),
+        "pairing_alerts": sum(1 for item in issues if item["source"] == "pairing"),
         "decision_required": sum(1 for item in issues if item["severity"] == "decision"),
     }
 

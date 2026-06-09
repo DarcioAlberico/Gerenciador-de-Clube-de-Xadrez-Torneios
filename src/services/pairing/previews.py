@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from src.services.constants import player_pairing_name
-from src.services.pairing.constraints import would_make_three_colors
+from src.services.pairing.diagnostics import pairing_diagnostics
 
 
 def individual_preview_payload(
@@ -15,18 +15,35 @@ def individual_preview_payload(
     plan: dict[str, Any],
     histories: dict[int, list[str]],
     played_pairs: set[frozenset[int]],
+    bye_player_ids: set[int],
     standings: dict[int, dict[str, Any]],
     pairing_engine_version: str,
     ruleset_version: str,
 ) -> dict[str, Any]:
     players_by_id = {int(player["id"]): player for player in plan["players"]}
+    diagnostics = pairing_diagnostics(
+        plan["pairings"],
+        histories,
+        played_pairs,
+        bye_player_ids,
+        players=plan["players"],
+        standings=standings,
+    )
+    diagnostics_by_board: dict[int, list[dict[str, Any]]] = {}
+    for diagnostic in diagnostics:
+        diagnostics_by_board.setdefault(int(diagnostic.get("board_number") or 0), []).append(diagnostic)
+
     preview_pairings = []
     alert_count = 0
     for pairing in plan["pairings"]:
         white_id = int(pairing["white_player_id"])
         black_id = int(pairing["black_player_id"]) if pairing.get("black_player_id") else None
+        board_number = int(pairing["board_number"])
         alerts = []
         explanation = []
+        for diagnostic in diagnostics_by_board.get(board_number, []):
+            alerts.append(_diagnostic_alert(diagnostic))
+            explanation.append(str(diagnostic.get("detail") or ""))
         if pairing.get("is_bye"):
             code = str(pairing.get("result") or "").strip().upper()
             if code in {"F", "H", "Z"}:
@@ -36,8 +53,6 @@ def individual_preview_payload(
                 alerts.append("Bye")
                 explanation.append("Jogador recebeu bye por numero impar de participantes ativos.")
         elif black_id is not None:
-            if frozenset((white_id, black_id)) in played_pairs:
-                alerts.append("Confronto repetido")
             white_score = float(standings.get(white_id, {}).get("points", 0.0) or 0.0)
             black_score = float(standings.get(black_id, {}).get("points", 0.0) or 0.0)
             if abs(white_score - black_score) > 1.0:
@@ -46,17 +61,13 @@ def individual_preview_payload(
                 "Pareado por pontuacao e criterios do metodo configurado; "
                 f"placares atuais {white_score:g} x {black_score:g}."
             )
-            if would_make_three_colors(white_id, "W", histories):
-                alerts.append("Brancas pela terceira vez seguida")
-            if would_make_three_colors(black_id, "B", histories):
-                alerts.append("Pretas pela terceira vez seguida")
 
         alert_count += len(alerts)
         white = players_by_id.get(white_id, {})
         black = players_by_id.get(black_id or 0, {})
         preview_pairings.append(
             {
-                "board_number": int(pairing["board_number"]),
+                "board_number": board_number,
                 "white_player_id": white_id,
                 "white_name": player_pairing_name(white) if white else str(white_id),
                 "white_rating": int(white.get("rating") or 0) if white else 0,
@@ -79,6 +90,16 @@ def individual_preview_payload(
         "pairings": preview_pairings,
         "alerts_count": alert_count,
     }
+
+
+def _diagnostic_alert(diagnostic: dict[str, Any]) -> str:
+    title = str(diagnostic.get("title") or "Alerta de pareamento")
+    avoidable = diagnostic.get("avoidable")
+    if avoidable is True:
+        return f"{title} evitavel"
+    if avoidable is False:
+        return f"{title} inevitavel"
+    return title
 
 
 def team_preview_payload(

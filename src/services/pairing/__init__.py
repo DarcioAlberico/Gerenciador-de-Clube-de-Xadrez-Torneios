@@ -72,6 +72,7 @@ from src.services.pairing.constraints import (
     team_pairing_order_key,
     would_make_three_colors,
 )
+from src.services.pairing.diagnostics import pairing_diagnostics
 from src.services.pairing.fide_dutch import (
     append_requested_bye_pairings,
     dutch_bracket_pairing,
@@ -193,6 +194,7 @@ __all__ = [
     "pair_penalty",
     "pairing_order_key",
     "pairing_input_snapshot",
+    "pairing_diagnostics",
     "plan_pairing_player_swap",
     "plan_team_board_player_swap",
     "played_pairs",
