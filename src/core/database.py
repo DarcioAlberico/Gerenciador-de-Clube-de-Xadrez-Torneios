@@ -1067,6 +1067,9 @@ class Database(
     def get_app_settings(self) -> dict[str, Any]:
         defaults = {
             "appearance_mode": "System",
+            "accent_preset": "blue",
+            "bg_preset": "slate",
+            "frame_bg_preset": "slate",
             "default_export_dir": str(default_export_dir()),
             "backup_dir": str(self.backup_dir),
             "operator_name": "Administrador",
@@ -1183,6 +1186,9 @@ class Database(
         allowed_keys = {
             "appearance_mode",
             "color_theme",
+            "accent_preset",
+            "bg_preset",
+            "frame_bg_preset",
             "default_export_dir",
             "backup_dir",
             "cloud_sync_dir",
