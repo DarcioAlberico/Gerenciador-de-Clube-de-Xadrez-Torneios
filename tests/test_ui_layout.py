@@ -333,6 +333,51 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.assertIn("Lima, Lucas", row_values)
         self.assertIn("Cruz, Rafael", row_values)
 
+    def test_projector_mode_loads_and_renders_pairings(self) -> None:
+        self.db.create_player(
+            self.tournament_id,
+            name="Lucas",
+            surname="Lima",
+            given_name="Lucas",
+            rating=1800,
+        )
+        self.db.create_player(
+            self.tournament_id,
+            name="Rafael",
+            surname="Cruz",
+            given_name="Rafael",
+            rating=1700,
+        )
+        self.app.pairing_service.generate_next_round(self.tournament_id)
+
+        self.app.show_pairings()
+        self.app.update()
+
+        # Call projector mode
+        self.app._open_projector_mode()
+        self.app.update()
+
+        dialogs = [
+            widget
+            for widget in self.app.winfo_children()
+            if isinstance(widget, ctk.CTkToplevel)
+        ]
+        self.assertEqual(len(dialogs), 1)
+        dialog = dialogs[0]
+
+        # Check if players are rendered in projector window
+        labels = [
+            str(widget.cget("text"))
+            for widget in self._walk(dialog)
+            if isinstance(widget, ctk.CTkLabel)
+        ]
+        self.assertTrue(any("Lima, Lucas" in label for label in labels))
+        self.assertTrue(any("Cruz, Rafael" in label for label in labels))
+
+        # Close the dialog
+        dialog.destroy()
+        self.app.update()
+
     def test_team_pairing_screen_generates_team_round(self) -> None:
         tournament_service = TournamentService(self.db)
         team_service = TeamService(self.db)
@@ -463,6 +508,63 @@ class UiLayoutSmokeTest(unittest.TestCase):
 
         self.assertTrue(output_path.exists())
         self.assertIn("Smoke", output_path.read_text(encoding="utf-8-sig"))
+
+    def test_bye_edit_warning_and_restore_in_ui(self) -> None:
+        self.db.create_player(self.tournament_id, name="Bruno", rating=1800, club="Clube", category="ABS")
+        self.db.create_player(self.tournament_id, name="Carlos", rating=1700, club="Clube", category="ABS")
+        self.db.create_player(self.tournament_id, name="Daniel", rating=1600, club="Clube", category="ABS")
+
+        self.app.show_pairings()
+        self.app.update()
+        self._click_button("Gerar proxima rodada")
+        self.app.update()
+
+        # The round has 2 boards: Board 1 (Bruno x Carlos), Board 2 (Daniel x BYE)
+        bye_row = self.app.pairing_tree.get_children()[1]
+        self.app.pairing_tree.selection_set(bye_row)
+        self.app._on_pairing_select()
+
+        # Try to change result to "1-0"
+        self.app.result_option.set("1-0")
+
+        # 1. Test "cancel" choice (should abort edit and restore OptionMenu to "BYE")
+        with mock.patch.object(self.app, "_prompt_bye_edit_warning", return_value="cancel") as mock_prompt:
+            self._click_button("Salvar resultado")
+            self.app.update()
+            mock_prompt.assert_called_once_with("BYE", "1-0")
+
+        # Result should still be "BYE" in database
+        pairings = self.db.get_pairings_for_round(self.app.current_round_id)
+        self.assertEqual(pairings[1]["result"], "BYE")
+        self.assertEqual(self.app.result_option.get(), "BYE")
+
+        # 2. Test "restore" choice (should keep result as "BYE")
+        self.app.result_option.set("1-0")
+        with mock.patch.object(self.app, "_prompt_bye_edit_warning", return_value="restore") as mock_prompt:
+            self._click_button("Salvar resultado")
+            self.app.update()
+            mock_prompt.assert_called_once_with("BYE", "1-0")
+
+        pairings = self.db.get_pairings_for_round(self.app.current_round_id)
+        self.assertEqual(pairings[1]["result"], "BYE")
+        bye_row_new = self.app.pairing_tree.get_children()[1]
+        self.app.pairing_tree.selection_set(bye_row_new)
+        self.app._on_pairing_select()
+        self.assertEqual(self.app.result_option.get(), "BYE")
+
+        # 3. Test "edit" choice (should actually save the new result "1-0")
+        self.app.result_option.set("1-0")
+        with mock.patch.object(self.app, "_prompt_bye_edit_warning", return_value="edit") as mock_prompt:
+            self._click_button("Salvar resultado")
+            self.app.update()
+            mock_prompt.assert_called_once_with("BYE", "1-0")
+
+        pairings = self.db.get_pairings_for_round(self.app.current_round_id)
+        self.assertEqual(pairings[1]["result"], "1-0")
+        bye_row_new2 = self.app.pairing_tree.get_children()[1]
+        self.app.pairing_tree.selection_set(bye_row_new2)
+        self.app._on_pairing_select()
+        self.assertEqual(self.app.result_option.get(), "1-0")
 
     def test_pairing_preview_does_not_create_round_from_ui(self) -> None:
         self.db.create_player(self.tournament_id, name="Bruno", rating=1800, club="Clube", category="ABS")

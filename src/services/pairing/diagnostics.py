@@ -19,9 +19,10 @@ def pairing_diagnostics(
     *,
     players: list[dict[str, Any]] | None = None,
     standings: dict[int, dict[str, Any]] | None = None,
+    float_histories: dict[int, list[str]] | None = None,
     max_exact_players: int = 17,
 ) -> list[dict[str, Any]]:
-    """Retorna alertas sobre repeticao, bye repetido e violacao dura de cor.
+    """Retorna alertas sobre integridade e qualidade absoluta do pareamento.
 
     Quando o campo cabe na busca exata, cada alerta recebe ``avoidable``:
     True quando havia pareamento alternativo com menos violacoes absolutas do
@@ -39,6 +40,7 @@ def pairing_diagnostics(
     )
 
     diagnostics: list[dict[str, Any]] = []
+    diagnostics.extend(_duplicate_player_diagnostics(pairings, players_by_id, current_quality, best_quality))
     for pairing in pairings:
         white_id = _optional_int(pairing.get("white_player_id"))
         black_id = _optional_int(pairing.get("black_player_id"))
@@ -110,6 +112,18 @@ def pairing_diagnostics(
                 )
             )
 
+        if standings is not None and float_histories is not None:
+            diagnostics.extend(
+                _float_repeat_diagnostics(
+                    pairing,
+                    standings,
+                    float_histories,
+                    players_by_id,
+                    current_quality,
+                    best_quality,
+                )
+            )
+
     diagnostics.sort(key=lambda item: (int(item.get("board_number") or 0), str(item.get("kind") or "")))
     return diagnostics
 
@@ -125,10 +139,11 @@ def _diagnostic(
     avoidable: bool | None,
     current_quality: AbsoluteQuality,
     best_quality: AbsoluteQuality | None,
+    severity: str | None = None,
 ) -> dict[str, Any]:
     return {
         "kind": kind,
-        "severity": "decision" if avoidable is True else "attention",
+        "severity": severity or ("decision" if avoidable is True else "attention"),
         "board_number": board_number,
         "pairing_id": pairing_id,
         "player_ids": player_ids,
@@ -148,6 +163,99 @@ def _diagnostic(
             "hard_color": best_quality[2],
         },
     }
+
+
+def _duplicate_player_diagnostics(
+    pairings: list[dict[str, Any]],
+    players_by_id: dict[int, dict[str, Any]],
+    current_quality: AbsoluteQuality,
+    best_quality: AbsoluteQuality | None,
+) -> list[dict[str, Any]]:
+    appearances: dict[int, list[int]] = {}
+    for pairing in pairings:
+        board_number = _optional_int(pairing.get("board_number")) or 0
+        white_id = _optional_int(pairing.get("white_player_id"))
+        black_id = _optional_int(pairing.get("black_player_id"))
+        if white_id is not None:
+            appearances.setdefault(white_id, []).append(board_number)
+        if not pairing.get("is_bye") and black_id is not None:
+            appearances.setdefault(black_id, []).append(board_number)
+
+    diagnostics: list[dict[str, Any]] = []
+    for player_id, boards in appearances.items():
+        if len(boards) <= 1:
+            continue
+        board_text = ", ".join(str(board) for board in sorted(boards))
+        diagnostics.append(
+            _diagnostic(
+                kind="duplicate_player",
+                board_number=min(boards),
+                pairing_id=None,
+                player_ids=[player_id],
+                title="Jogador duplicado",
+                detail=(
+                    f"{_player_label(player_id, players_by_id)} aparece em mais de uma mesa "
+                    f"na rodada ({board_text}); o pareamento deve ser corrigido."
+                ),
+                avoidable=None,
+                current_quality=current_quality,
+                best_quality=best_quality,
+                severity="decision",
+            )
+        )
+    return diagnostics
+
+
+def _float_repeat_diagnostics(
+    pairing: dict[str, Any],
+    standings: dict[int, dict[str, Any]],
+    float_histories: dict[int, list[str]],
+    players_by_id: dict[int, dict[str, Any]],
+    current_quality: AbsoluteQuality,
+    best_quality: AbsoluteQuality | None,
+) -> list[dict[str, Any]]:
+    if pairing.get("is_bye"):
+        return []
+    white_id = _optional_int(pairing.get("white_player_id"))
+    black_id = _optional_int(pairing.get("black_player_id"))
+    if white_id is None or black_id is None:
+        return []
+
+    white_score = float(standings.get(white_id, {}).get("points", 0.0) or 0.0)
+    black_score = float(standings.get(black_id, {}).get("points", 0.0) or 0.0)
+    if white_score == black_score:
+        return []
+
+    assignments = (
+        (white_id, "up", "cima") if white_score < black_score else (white_id, "down", "baixo"),
+        (black_id, "down", "baixo") if white_score < black_score else (black_id, "up", "cima"),
+    )
+    diagnostics: list[dict[str, Any]] = []
+    board_number = _optional_int(pairing.get("board_number")) or 0
+    pairing_id = _optional_int(pairing.get("id"))
+    for player_id, direction, label in assignments:
+        history = [item for item in float_histories.get(player_id, []) if item in {"up", "down"}]
+        if history[-1:] != [direction]:
+            continue
+        recent = ", ".join(history[-2:] + [direction])
+        diagnostics.append(
+            _diagnostic(
+                kind="float_repeat",
+                board_number=board_number,
+                pairing_id=pairing_id,
+                player_ids=[player_id],
+                title="Floater repetido",
+                detail=(
+                    f"{_player_label(player_id, players_by_id)} voltaria a flutuar para {label}; "
+                    f"historico recente: {recent}."
+                ),
+                avoidable=None,
+                current_quality=current_quality,
+                best_quality=best_quality,
+                severity="attention",
+            )
+        )
+    return diagnostics
 
 
 def _current_absolute_quality(

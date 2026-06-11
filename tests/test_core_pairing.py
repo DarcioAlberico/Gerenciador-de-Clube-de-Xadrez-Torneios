@@ -1079,6 +1079,26 @@ class PairingRulesTest(CoreServiceTestCase):
                 self.service.update_result(tid, int(pairing["id"]), result)
             self.service.close_round(tid, int(rd["id"]))
 
+    def test_bbp_dutch_2025_c5_fixture_matches_reference(self) -> None:
+        self.assertEqual(
+            self._bbp_fixture_next_pairs("dutch_2025_C5"),
+            self._bbp_expected_pairs("dutch_2025_C5"),
+        )
+
+    def test_bbp_dutch_2025_c9_fixture_matches_reference(self) -> None:
+        self.assertEqual(
+            self._bbp_fixture_next_pairs("dutch_2025_C9"),
+            self._bbp_expected_pairs("dutch_2025_C9"),
+        )
+
+    def test_bbp_issue_7_large_fixture_generates_valid_pairing(self) -> None:
+        summary = self._bbp_fixture_next_summary("issue_7")
+
+        self.assertEqual(30, len(summary["pairs"]))
+        self.assertEqual([], summary["repeats"])
+        self.assertEqual([], summary["hard_colors"])
+        self.assertNotEqual(summary["pairs"], self._bbp_expected_pairs("issue_7"))
+
     def test_swiss_global_swap_reduces_hard_color_violations_above_exhaustive_limit(self) -> None:
         # Acima de 16 jogadores nao usamos otimo global completo; a salvaguarda
         # gulosa + trocas locais precisa cobrir casos grandes em que uma troca
@@ -1112,6 +1132,115 @@ class PairingRulesTest(CoreServiceTestCase):
                 result = "1-0" if rating_by_id[white] >= rating_by_id[black] else "0-1"
                 self.service.update_result(tid, int(pairing["id"]), result)
             self.service.close_round(tid, int(rd["id"]))
+
+    def _bbp_fixture_next_pairs(self, case_name: str) -> list[tuple[int, int]]:
+        return list(self._bbp_fixture_next_summary(case_name)["pairs"])
+
+    def _bbp_fixture_next_summary(self, case_name: str) -> dict[str, Any]:
+        from src.services.trf_import import build_trf_rounds, parse_trf
+
+        fixture_dir = Path(__file__).resolve().parents[1] / "bbpPairings-6.0.0" / "test" / "tests"
+        parsed = parse_trf((fixture_dir / f"{case_name}.input").read_text(encoding="utf-8"))
+        identity = {int(player["start_rank"]): int(player["start_rank"]) for player in parsed["players"]}
+        played_rounds = max((number for number, _pairings in build_trf_rounds(parsed["players"], identity)), default=0)
+        target_round = played_rounds + 1
+
+        tournament_id = self.db.create_tournament(f"BBP {case_name}", rounds_count=max(3, target_round))
+        rank_to_id: dict[int, int] = {}
+        rank_by_id: dict[int, int] = {}
+        for player in parsed["players"]:
+            rank = int(player["start_rank"])
+            player_id = self.db.create_player(
+                tournament_id,
+                name=str(player["name"]),
+                rating=int(player["rating"] or 0),
+            )
+            rank_to_id[rank] = player_id
+            rank_by_id[player_id] = rank
+
+        pairings_by_round: dict[int, list[dict[str, Any]]] = {
+            number: list(pairings)
+            for number, pairings in build_trf_rounds(parsed["players"], rank_to_id)
+            if number < target_round
+        }
+        for player in parsed["players"]:
+            player_id = rank_to_id[int(player["start_rank"])]
+            for round_number, cell in enumerate(player["rounds"], start=1):
+                code = self._bbp_nonpairing_result(cell)
+                if not code:
+                    continue
+                if round_number < target_round:
+                    round_pairings = pairings_by_round.setdefault(round_number, [])
+                    if not self._bbp_round_has_player(round_pairings, player_id):
+                        round_pairings.append(
+                            {
+                                "board_number": len(round_pairings) + 1,
+                                "white_player_id": player_id,
+                                "black_player_id": None,
+                                "result": code,
+                                "is_bye": 1,
+                            }
+                        )
+                elif round_number == target_round:
+                    self.db.add_requested_bye(tournament_id, player_id, target_round, code)
+
+        for round_number in sorted(pairings_by_round):
+            round_pairings = pairings_by_round[round_number]
+            for board_number, pairing in enumerate(round_pairings, start=1):
+                pairing["board_number"] = board_number
+            round_id = self.db.create_round_with_pairings(tournament_id, round_number, round_pairings)
+            self.db.close_round(round_id)
+
+        histories = self.service._color_histories(tournament_id)
+        played_pairs = self.service._played_pairs(tournament_id)
+        round_data = self.service.generate_next_round(tournament_id)
+        pairs: list[tuple[int, int]] = []
+        repeats: list[tuple[int, int]] = []
+        hard_colors: list[tuple[int, str, str, int]] = []
+        for pairing in self.db.get_pairings_for_round(int(round_data["id"])):
+            if pairing.get("is_bye") and str(pairing.get("result") or "").strip().upper() in {"F", "H", "Z"}:
+                continue
+            white_id = int(pairing["white_player_id"])
+            white_rank = rank_by_id[white_id]
+            black_id = pairing.get("black_player_id")
+            black_id = int(black_id) if black_id else 0
+            black_rank = rank_by_id[black_id] if black_id else 0
+            pairs.append((white_rank, black_rank))
+            if black_id and frozenset((white_id, black_id)) in played_pairs:
+                repeats.append((white_rank, black_rank))
+            if black_id:
+                hard_colors.extend(self._hard_color_violations([pairing], histories))
+        return {
+            "pairs": pairs,
+            "repeats": repeats,
+            "hard_colors": [
+                (rank_by_id[player_id], color, history, balance)
+                for player_id, color, history, balance in hard_colors
+            ],
+        }
+
+    @staticmethod
+    def _bbp_nonpairing_result(cell: dict[str, str]) -> str:
+        if str(cell.get("opponent_rank") or "").strip() != "0000":
+            return ""
+        if str(cell.get("color") or "").strip() != "-":
+            return ""
+        code = str(cell.get("result") or "").strip().upper()
+        return code if code in {"F", "H", "Z"} else ""
+
+    @staticmethod
+    def _bbp_round_has_player(pairings: list[dict[str, Any]], player_id: int) -> bool:
+        return any(
+            int(pairing.get("white_player_id") or 0) == player_id
+            or int(pairing.get("black_player_id") or 0) == player_id
+            for pairing in pairings
+        )
+
+    @staticmethod
+    def _bbp_expected_pairs(case_name: str) -> list[tuple[int, int]]:
+        fixture_dir = Path(__file__).resolve().parents[1] / "bbpPairings-6.0.0" / "test" / "tests"
+        lines = (fixture_dir / f"{case_name}.output.expected").read_text(encoding="utf-8").splitlines()
+        return [tuple(map(int, line.split())) for line in lines[1:]]
 
     @staticmethod
     def _hard_color_violations(

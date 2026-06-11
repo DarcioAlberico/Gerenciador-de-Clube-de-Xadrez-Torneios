@@ -43,7 +43,7 @@ class TRF16Exporter:
         player_id_to_start_rank = {int(player["id"]): index for index, player in enumerate(players, start=1)}
         standings_by_player = self.export_service._trf_player_standings(tournament, players)
         round_count = max(
-            [int(tournament.get("rounds_count") or 0), *(int(round_data["number"]) for round_data in rounds)],
+            [int(round_data["number"]) for round_data in rounds],
             default=0,
         )
         teams = self.db.list_teams(tournament_id, active_only=False) if is_team_tournament else []
@@ -84,6 +84,7 @@ class TRF16Exporter:
             for deputy in self.export_service._trf_deputy_arbiters(tournament_id, settings):
                 handle.write(self.export_service._trf_tournament_line("112", deputy))
             handle.write(self.export_service._trf_tournament_line("122", tournament.get("time_control", "")))
+            handle.write(self.export_service._trf_tournament_line("142", str(tournament.get("rounds_count") or round_count)))
             handle.write(self.export_service._trf_round_dates_line(round_count, schedule))
 
             for player in players:

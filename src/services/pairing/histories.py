@@ -53,8 +53,20 @@ def bye_player_ids(pairings: list[dict[str, Any]]) -> set[int]:
     return {
         pairing["white_player_id"]
         for pairing in pairings
-        if pairing["is_bye"]
+        if pairing["is_bye"] and _blocks_pairing_allocated_bye(pairing.get("result"))
     }
+
+
+def _blocks_pairing_allocated_bye(result: Any) -> bool:
+    """True when a prior unplayed result blocks a future pairing-allocated bye.
+
+    BBP/FIDE 2025 distinguish zero/half-point absences (Z/H), which count as
+    unplayed games, from full-point byes and pairing-allocated byes. Z/H should
+    influence C9 quality, but they do not make the player ineligible for the
+    pairing-allocated bye.
+    """
+    code = str(result or "").strip().upper()
+    return code in {"", "BYE", "U", "F"}
 
 
 def color_histories(pairings: list[dict[str, Any]]) -> dict[int, list[str]]:

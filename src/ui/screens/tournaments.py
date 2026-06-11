@@ -868,29 +868,90 @@ class TournamentPagesMixin(TournamentPlayersMixin, TournamentSettingsMixin):
             
         dialog = ctk.CTkToplevel(self)
         dialog.title("Equipe de Arbitragem")
-        dialog.geometry("600x400")
+        dialog.geometry("900x550")
         dialog.transient(self)
         dialog.grab_set()
         
         main_frame = ctk.CTkFrame(dialog, fg_color="transparent")
         main_frame.pack(fill="both", expand=True, padx=20, pady=20)
         
-        form_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
-        form_frame.pack(fill="x", pady=(0, 10))
+        main_frame.grid_columnconfigure(0, weight=1, minsize=380)
+        main_frame.grid_columnconfigure(1, weight=1, minsize=420)
+        main_frame.grid_rowconfigure(0, weight=1)
         
-        all_referees = self.referee_service.list_referees(active_only=True)
-        ref_map = {f"{r['name']} ({r['category']})": r["id"] for r in all_referees}
+        # Coluna Esquerda: Formulários (Painel Rolável)
+        left_column = ctk.CTkScrollableFrame(main_frame, fg_color=THEME_PANEL_BG, corner_radius=8)
+        left_column.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
+        left_column.grid_columnconfigure(0, weight=1)
         
-        ctk.CTkLabel(form_frame, text="Adicionar árbitro:").pack(side="left", padx=(0, 10))
+        # Coluna Direita: Listagem e Ações
+        right_column = ctk.CTkFrame(main_frame, fg_color="transparent")
+        right_column.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
+        right_column.grid_columnconfigure(0, weight=1)
+        right_column.grid_rowconfigure(1, weight=1)
         
-        ref_option = ctk.CTkOptionMenu(form_frame, values=list(ref_map.keys()) if ref_map else ["Nenhum árbitro ativo"])
-        ref_option.pack(side="left", padx=(0, 10))
+        # SEÇÃO 1: Vincular Árbitro Existente
+        ctk.CTkLabel(left_column, text="Vincular Árbitro Existente", font=font_section()).grid(row=0, column=0, padx=16, pady=(12, 6), sticky="w")
         
-        role_option = ctk.CTkOptionMenu(form_frame, values=["Árbitro Principal", "Árbitro Auxiliar", "Diretor"])
-        role_option.pack(side="left", padx=(0, 10))
+        form_assign = ctk.CTkFrame(left_column, fg_color="transparent")
+        form_assign.grid(row=1, column=0, padx=16, pady=4, sticky="ew")
+        form_assign.grid_columnconfigure(0, weight=1)
         
-        list_frame = ctk.CTkFrame(main_frame)
-        list_frame.pack(fill="both", expand=True)
+        ctk.CTkLabel(form_assign, text="Selecione o Árbitro:").grid(row=0, column=0, sticky="w", pady=(4, 0))
+        
+        ref_option = ctk.CTkOptionMenu(form_assign, values=["Carregando..."], width=300)
+        ref_option.grid(row=1, column=0, sticky="ew", pady=(2, 6))
+        
+        ctk.CTkLabel(form_assign, text="Papel / Função no Torneio:").grid(row=2, column=0, sticky="w", pady=(4, 0))
+        
+        role_option = ctk.CTkOptionMenu(form_assign, values=["Árbitro Principal", "Árbitro Auxiliar", "Diretor"], width=300)
+        role_option.grid(row=3, column=0, sticky="ew", pady=(2, 10))
+        
+        # SEÇÃO 2: Cadastrar Novo Árbitro
+        ctk.CTkLabel(left_column, text="Cadastrar Novo Árbitro", font=font_section()).grid(row=2, column=0, padx=16, pady=(20, 6), sticky="w")
+        
+        form_register = ctk.CTkFrame(left_column, fg_color="transparent")
+        form_register.grid(row=3, column=0, padx=16, pady=4, sticky="ew")
+        form_register.grid_columnconfigure(1, weight=1)
+        
+        reg_fields = [
+            ("name", "Nome *"),
+            ("fide_id", "FIDE ID"),
+            ("cbx_id", "CBX ID"),
+            ("federation_id", "ID Federação"),
+            ("phone", "Telefone"),
+            ("email", "E-mail"),
+            ("notes", "Observações")
+        ]
+        
+        reg_entries = {}
+        for index, (key, label) in enumerate(reg_fields):
+            ctk.CTkLabel(form_register, text=label).grid(row=index, column=0, padx=(0, 10), pady=4, sticky="w")
+            entry = ctk.CTkEntry(form_register, width=220)
+            entry.grid(row=index, column=1, padx=0, pady=4, sticky="ew")
+            reg_entries[key] = entry
+            
+        # Campo Categoria
+        cat_index = len(reg_fields)
+        ctk.CTkLabel(form_register, text="Categoria:").grid(row=cat_index, column=0, padx=(0, 10), pady=4, sticky="w")
+        cat_option = ctk.CTkOptionMenu(form_register, values=["AN", "AR", "AF", "AI", "Outro"], width=220)
+        cat_option.grid(row=cat_index, column=1, padx=0, pady=4, sticky="ew")
+        cat_option.set("AN")
+        
+        # Campo Função no Torneio para o Novo Árbitro
+        role_new_index = cat_index + 1
+        ctk.CTkLabel(form_register, text="Papel Torneio:").grid(row=role_new_index, column=0, padx=(0, 10), pady=4, sticky="w")
+        role_new_option = ctk.CTkOptionMenu(form_register, values=["Árbitro Principal", "Árbitro Auxiliar", "Diretor"], width=220)
+        role_new_option.grid(row=role_new_index, column=1, padx=0, pady=4, sticky="ew")
+        role_new_option.set("Árbitro Auxiliar")
+        
+        # Coluna Direita: Tabela de Árbitros Vinculados
+        ctk.CTkLabel(right_column, text="Árbitros Vinculados ao Torneio", font=font_section()).grid(row=0, column=0, padx=12, pady=(12, 6), sticky="w")
+        
+        list_frame = ctk.CTkFrame(right_column)
+        list_frame.grid(row=1, column=0, sticky="nsew", padx=10, pady=10)
+        list_frame.grid_columnconfigure(0, weight=1)
+        list_frame.grid_rowconfigure(0, weight=1)
         
         tree = self._make_tree(
             list_frame,
@@ -898,8 +959,19 @@ class TournamentPagesMixin(TournamentPlayersMixin, TournamentSettingsMixin):
             {"id": "ID", "name": "Nome", "role": "Papel", "category": "Cat."},
             {"id": 40, "name": 200, "role": 150, "category": 60}
         )
-        tree.pack(fill="both", expand=True, padx=10, pady=10)
+        tree.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
         
+        ref_map = {}
+        
+        def refresh_referee_options():
+            nonlocal ref_map
+            all_referees = self.referee_service.list_referees(active_only=True)
+            ref_map = {f"{r['name']} ({r['category']})": r["id"] for r in all_referees}
+            values = list(ref_map.keys()) if ref_map else ["Nenhum árbitro ativo"]
+            ref_option.configure(values=values)
+            if values:
+                ref_option.set(values[0])
+                
         def load_tournament_refs():
             tree.delete(*tree.get_children())
             refs = self.referee_service.list_tournament_referees(self.current_tournament_id)
@@ -909,11 +981,13 @@ class TournamentPagesMixin(TournamentPlayersMixin, TournamentSettingsMixin):
         def add_referee():
             if not ref_map:
                 return
-            ref_id = ref_map.get(ref_option.get())
+            selected_val = ref_option.get()
+            ref_id = ref_map.get(selected_val)
             if not ref_id:
                 return
             self.referee_service.assign_tournament_referee(self.current_tournament_id, ref_id, role_option.get())
             load_tournament_refs()
+            self._show_toast("Árbitro vinculado com sucesso.", kind="success")
             
         def remove_referee():
             selected = tree.selection()
@@ -922,13 +996,65 @@ class TournamentPagesMixin(TournamentPlayersMixin, TournamentSettingsMixin):
             ref_id = int(tree.item(selected[0], "values")[0])
             self.referee_service.remove_tournament_referee(self.current_tournament_id, ref_id)
             load_tournament_refs()
+            self._show_toast("Árbitro removido do torneio.", kind="success")
             
-        ctk.CTkButton(form_frame, text="Adicionar", command=add_referee).pack(side="left")
+        def register_and_add_referee():
+            name = reg_entries["name"].get().strip()
+            if not name:
+                self._show_toast("Nome do árbitro é obrigatório.", kind="error")
+                return
+                
+            payload = {
+                "name": name,
+                "phone": reg_entries["phone"].get().strip(),
+                "email": reg_entries["email"].get().strip(),
+                "federation_id": reg_entries["federation_id"].get().strip(),
+                "fide_id": reg_entries["fide_id"].get().strip(),
+                "cbx_id": reg_entries["cbx_id"].get().strip(),
+                "category": cat_option.get(),
+                "active": 1,
+                "notes": reg_entries["notes"].get().strip()
+            }
+            
+            try:
+                # 1. Cadastra o árbitro globalmente no banco de dados
+                new_ref_id = self.referee_service.create_referee(payload)
+                
+                # 2. Vincula o árbitro ao torneio atual com a função selecionada
+                role = role_new_option.get()
+                self.referee_service.assign_tournament_referee(self.current_tournament_id, new_ref_id, role)
+                
+                # 3. Atualiza as listas na tela
+                refresh_referee_options()
+                load_tournament_refs()
+                
+                # 4. Limpa os campos do formulário
+                for entry in reg_entries.values():
+                    entry.delete(0, "end")
+                cat_option.set("AN")
+                role_new_option.set("Árbitro Auxiliar")
+                
+                self._show_toast("Árbitro cadastrado e vinculado com sucesso.", kind="success")
+            except Exception as exc:
+                self._show_error(exc)
+                
+        # Botão de Ação para vincular árbitro existente
+        btn_add = ctk.CTkButton(form_assign, text="Vincular ao Torneio", command=add_referee)
+        btn_add.grid(row=4, column=0, sticky="ew", pady=(10, 5))
         
-        btn_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
-        btn_frame.pack(fill="x", pady=(10, 0))
-        ctk.CTkButton(btn_frame, text="Remover Selecionado", command=remove_referee, fg_color=THEME_DANGER, hover_color=THEME_DANGER_HOVER).pack(side="right")
+        # Botão de Ação para cadastrar e vincular novo árbitro
+        btn_register = ctk.CTkButton(form_register, text="Cadastrar e Vincular", command=register_and_add_referee)
+        btn_register.grid(row=role_new_index + 1, column=0, columnspan=2, sticky="ew", pady=(15, 10))
         
+        # Botões de Ação na coluna da direita (abaixo da tabela)
+        btn_frame = ctk.CTkFrame(right_column, fg_color="transparent")
+        btn_frame.grid(row=2, column=0, sticky="ew", pady=(10, 0))
+        
+        btn_remove = ctk.CTkButton(btn_frame, text="Remover Selecionado", command=remove_referee, fg_color=THEME_DANGER, hover_color=THEME_DANGER_HOVER)
+        btn_remove.pack(side="right")
+        
+        # Carregamentos iniciais
+        refresh_referee_options()
         load_tournament_refs()
 
     def _make_time_control_menu(self, parent: ctk.CTkFrame, width: int = 230) -> ctk.CTkOptionMenu:

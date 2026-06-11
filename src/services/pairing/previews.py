@@ -17,6 +17,7 @@ def individual_preview_payload(
     played_pairs: set[frozenset[int]],
     bye_player_ids: set[int],
     standings: dict[int, dict[str, Any]],
+    float_histories: dict[int, list[str]] | None = None,
     pairing_engine_version: str,
     ruleset_version: str,
 ) -> dict[str, Any]:
@@ -28,6 +29,7 @@ def individual_preview_payload(
         bye_player_ids,
         players=plan["players"],
         standings=standings,
+        float_histories=float_histories,
     )
     diagnostics_by_board: dict[int, list[dict[str, Any]]] = {}
     for diagnostic in diagnostics:
