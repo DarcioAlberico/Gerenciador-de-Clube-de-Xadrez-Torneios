@@ -140,6 +140,47 @@ class FreeTournamentMixin:
         self.show_players()
         return tournament_id
 
+    # ------------------------------------------------------------------
+    # Mecanicas do Modo Livre (so atuam no perfil Livre/Escolar = free)
+    # ------------------------------------------------------------------
+    def _is_free_mode(self, tournament_id: int | None = None) -> bool:
+        """True se o torneio (atual, por padrao) esta no perfil Livre/Escolar."""
+        tid = tournament_id or getattr(self, "current_tournament_id", None)
+        if not tid:
+            return False
+        settings = self.db.get_tournament_settings(int(tid)) or {}
+        return str(settings.get("tournament_profile") or "free") == "free"
+
+    def free_mode_repair_round(self) -> None:
+        """Modo Livre: limpa o emparceiramento da rodada atual e regera.
+
+        Util quando jogadores entram ou saem de surpresa (ex.: metade de uma
+        escola falta de repente): marca-se os ausentes e re-emparceira so com
+        quem esta presente. So opera no perfil Livre/Escolar e nunca em rodada
+        ja encerrada (delete_generated_round ja protege isso). Nao interfere em
+        torneios oficiais.
+        """
+        try:
+            self.require_permission("tournament_write")
+            if not self._is_free_mode():
+                raise AppError("Disponivel apenas no Modo Livre (perfil Livre/Escolar).")
+            round_id = getattr(self, "current_round_id", None)
+            if not round_id:
+                raise AppError("Selecione uma rodada para re-emparceirar.")
+            if not messagebox.askyesno(
+                "Re-emparceirar (Modo Livre)",
+                "Isto vai limpar o emparceiramento desta rodada e gerar um novo, "
+                "considerando apenas os jogadores ativos no momento.\n\nContinuar?",
+            ):
+                return
+            self.pairing_service.delete_generated_round(int(round_id))
+            self.pairing_service.generate_next_round(self.current_tournament_id)
+            if hasattr(self, "_load_round_options"):
+                self._load_round_options()
+            self._show_toast("Rodada re-emparceirada no Modo Livre.", kind="success")
+        except Exception as exc:
+            self._show_error(exc)
+
     def _center_over_self(self, win: ctk.CTkToplevel, width: int, height: int) -> None:
         """Centraliza horizontalmente sobre a janela principal, levemente acima."""
         win.update_idletasks()

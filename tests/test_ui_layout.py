@@ -147,6 +147,40 @@ class UiLayoutSmokeTest(unittest.TestCase):
         settings = self.db.get_tournament_settings(tournament_id)
         self.assertEqual((settings or {}).get("tournament_profile"), "free")
 
+    def _set_tournament_profile(self, tournament_id: int, profile: str) -> None:
+        settings = self.db.get_tournament_settings(tournament_id) or {}
+        settings["tournament_profile"] = profile
+        self.db.save_tournament_settings(tournament_id, settings)
+
+    def test_is_free_mode_reflete_perfil_do_torneio(self) -> None:
+        self.assertTrue(self.app._is_free_mode(self.tournament_id))
+        self._set_tournament_profile(self.tournament_id, "fide")
+        self.assertFalse(self.app._is_free_mode(self.tournament_id))
+
+    def test_free_mode_repair_round_limpa_e_regera(self) -> None:
+        self.assertTrue(self.app._is_free_mode(self.tournament_id))
+        self.app.current_round_id = 777
+        chamadas = {"delete": [], "generate": []}
+        self.app.pairing_service.delete_generated_round = lambda rid: chamadas["delete"].append(rid)
+        self.app.pairing_service.generate_next_round = lambda tid: chamadas["generate"].append(tid)
+        self.app._load_round_options = lambda: None
+        with mock.patch("src.ui.screens.free_tournament.messagebox.askyesno", return_value=True):
+            self.app.free_mode_repair_round()
+        self.assertEqual(chamadas["delete"], [777])
+        self.assertEqual(chamadas["generate"], [self.tournament_id])
+
+    def test_free_mode_repair_round_bloqueia_fora_do_modo_livre(self) -> None:
+        self._set_tournament_profile(self.tournament_id, "fide")
+        self.app.current_round_id = 123
+        chamadas = []
+        self.app.pairing_service.delete_generated_round = lambda rid: chamadas.append(rid)
+        erros: list[str] = []
+        self.app._show_error = lambda exc: erros.append(str(exc))
+        with mock.patch("src.ui.screens.free_tournament.messagebox.askyesno", return_value=True):
+            self.app.free_mode_repair_round()
+        self.assertEqual(chamadas, [])  # perfil oficial nao dispara re-pair
+        self.assertTrue(any("Modo Livre" in erro for erro in erros))
+
     def test_member_and_tournament_can_be_created_from_ui_forms(self) -> None:
         self.app.show_members()
         self.app.update()
