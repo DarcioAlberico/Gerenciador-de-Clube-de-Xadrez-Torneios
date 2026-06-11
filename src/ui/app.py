@@ -999,8 +999,9 @@ class AlbericusApp(
             self.tournament_label.configure(text="Nenhum torneio selecionado")
             return
         scope = self._tournament_scope_text(tournament)
+        mode = "Modo Livre" if self._is_free_mode(tournament_id) else "Modo Oficial"
         self.tournament_label.configure(
-            text=f"{tournament['name']} | {scope} | {tournament['rounds_count']} rodadas | {tournament['status']}"
+            text=f"{tournament['name']} | {scope} | {tournament['rounds_count']} rodadas | {tournament['status']} | {mode}"
         )
         self._refresh_statusbar()
 

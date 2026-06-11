@@ -375,7 +375,7 @@ class TournamentPlayersMixin:
                 # Modo Livre: se ha rodadas encerradas, pergunta 0,0 ou meio-ponto
                 # (0,5) por rodada ausente. Fora do Modo Livre devolve (True, None)
                 # e o calculo padrao de late_entry_points segue intacto.
-                proceed, late_points = self.free_mode_late_entry_starting_points(
+                proceed, late_points = self.prepare_late_entry(
                     self.current_tournament_id
                 )
                 if not proceed:

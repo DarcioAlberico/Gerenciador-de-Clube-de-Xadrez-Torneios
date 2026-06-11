@@ -229,6 +229,52 @@ class UiLayoutSmokeTest(unittest.TestCase):
         player = self.db.get_player(player_id)
         self.assertEqual(player["starting_points"], 1.5)
 
+    def test_prepare_late_entry_modo_livre_delega_meio_ponto(self) -> None:
+        self.app.db.list_rounds = lambda _tid: [{"status": "closed"}, {"status": "closed"}]
+        with mock.patch(
+            "src.ui.screens.free_tournament.messagebox.askyesnocancel", return_value=True
+        ):
+            proceed, points = self.app.prepare_late_entry(self.tournament_id)
+        self.assertTrue(proceed)
+        self.assertEqual(points, 1.0)
+
+    def test_prepare_late_entry_oficial_avisa_e_confirma(self) -> None:
+        self._set_tournament_profile(self.tournament_id, "fide")
+        self.app.db.list_rounds = lambda _tid: [{"status": "closed"}, {"status": "closed"}]
+        with mock.patch(
+            "src.ui.screens.free_tournament.messagebox.askyesno", return_value=True
+        ) as aviso:
+            proceed, points = self.app.prepare_late_entry(self.tournament_id)
+        self.assertTrue(proceed)
+        self.assertIsNone(points)  # modo oficial mantem o calculo padrao de pontos
+        aviso.assert_called_once()
+
+    def test_prepare_late_entry_oficial_cancela_adicao(self) -> None:
+        self._set_tournament_profile(self.tournament_id, "fide")
+        self.app.db.list_rounds = lambda _tid: [{"status": "closed"}, {"status": "closed"}]
+        with mock.patch(
+            "src.ui.screens.free_tournament.messagebox.askyesno", return_value=False
+        ):
+            proceed, points = self.app.prepare_late_entry(self.tournament_id)
+        self.assertFalse(proceed)
+        self.assertIsNone(points)
+
+    def test_prepare_late_entry_oficial_sem_2_rodadas_nao_avisa(self) -> None:
+        self._set_tournament_profile(self.tournament_id, "fide")
+        self.app.db.list_rounds = lambda _tid: [{"status": "closed"}]
+        with mock.patch("src.ui.screens.free_tournament.messagebox.askyesno") as aviso:
+            proceed, points = self.app.prepare_late_entry(self.tournament_id)
+        self.assertTrue(proceed)
+        self.assertIsNone(points)
+        aviso.assert_not_called()
+
+    def test_set_current_tournament_indica_modo_no_rotulo(self) -> None:
+        self.app._set_current_tournament(self.tournament_id)
+        self.assertIn("Modo Livre", self.app.tournament_label.cget("text"))
+        self._set_tournament_profile(self.tournament_id, "fide")
+        self.app._set_current_tournament(self.tournament_id)
+        self.assertIn("Modo Oficial", self.app.tournament_label.cget("text"))
+
     def test_member_and_tournament_can_be_created_from_ui_forms(self) -> None:
         self.app.show_members()
         self.app.update()

@@ -181,6 +181,14 @@ class FreeTournamentMixin:
         except Exception as exc:
             self._show_error(exc)
 
+    def _closed_rounds_count(self, tournament_id: int) -> int:
+        """Quantidade de rodadas ja encerradas do torneio."""
+        return sum(
+            1
+            for r in self.db.list_rounds(int(tournament_id))
+            if str(r.get("status")) == "closed"
+        )
+
     def free_mode_late_entry_starting_points(
         self, tournament_id: int | None = None
     ) -> tuple[bool, float | None]:
@@ -196,9 +204,7 @@ class FreeTournamentMixin:
         tid = tournament_id or getattr(self, "current_tournament_id", None)
         if not tid or not self._is_free_mode(tid):
             return True, None
-        closed = sum(
-            1 for r in self.db.list_rounds(int(tid)) if str(r.get("status")) == "closed"
-        )
+        closed = self._closed_rounds_count(int(tid))
         if closed <= 0:
             return True, None
         choice = messagebox.askyesnocancel(
@@ -211,8 +217,34 @@ class FreeTournamentMixin:
         )
         if choice is None:
             return False, None
-        points = round((0.5 if choice else 0.0) * closed, 2)
-        return True, points
+        return True, round((0.5 if choice else 0.0) * closed, 2)
+
+    def prepare_late_entry(
+        self, tournament_id: int | None = None
+    ) -> tuple[bool, float | None]:
+        """Fluxo de entrada tardia que chaveia conforme o perfil do torneio.
+
+        - Modo Livre (free): delega ao free_mode_late_entry_starting_points
+          (pergunta 0,0 ou 0,5 por rodada ausente).
+        - Modo Oficial (fide/club): apos a 2a rodada encerrada, avisa que a
+          inscricao tardia foge ao regulamento FIDE e pede confirmacao -- nao
+          bloqueia e mantem o calculo padrao de pontos (starting_points=None).
+        """
+        tid = tournament_id or getattr(self, "current_tournament_id", None)
+        if not tid:
+            return True, None
+        if self._is_free_mode(tid):
+            return self.free_mode_late_entry_starting_points(tid)
+        if self._closed_rounds_count(int(tid)) >= 2:
+            confirmar = messagebox.askyesno(
+                "Entrada tardia (Modo Oficial)",
+                "Ja ha 2 ou mais rodadas encerradas. Em torneios oficiais "
+                "(FIDE/CBX), a inscricao tardia apos a 2a rodada foge ao "
+                "regulamento de pareamento.\n\nInscrever este jogador mesmo assim?",
+            )
+            if not confirmar:
+                return False, None
+        return True, None
 
     def _center_over_self(self, win: ctk.CTkToplevel, width: int, height: int) -> None:
         """Centraliza horizontalmente sobre a janela principal, levemente acima."""
