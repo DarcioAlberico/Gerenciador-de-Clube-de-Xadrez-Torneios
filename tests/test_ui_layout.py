@@ -85,8 +85,9 @@ class UiLayoutSmokeTest(unittest.TestCase):
                         offenders = self._widgets_past_right_edge()
                         self.assertEqual([], offenders)
 
-    def test_free_tournament_mode_opens_modal_with_notice_and_closes(self) -> None:
+    def test_free_tournament_mode_mostra_aviso_e_cancela(self) -> None:
         before_tournament = self.app.current_tournament_id
+        before_count = len(self.db.list_tournaments())
         dialog = self.app.show_free_tournament_mode()
         self.app.update()
         try:
@@ -98,22 +99,53 @@ class UiLayoutSmokeTest(unittest.TestCase):
             ]
             self.assertTrue(any("Modo Livre Ativado" in label for label in labels))
             self.assertTrue(any("organizada onde o importante" in label for label in labels))
-            buttons = [
-                widget
+            button_texts = {
+                widget.cget("text")
                 for widget in self._walk(dialog)
-                if isinstance(widget, ctk.CTkButton) and widget.cget("text") == "Entendi"
-            ]
-            self.assertEqual(len(buttons), 1)
-            # Abrir o aviso nao deve mexer no estado do torneio oficial em curso.
-            self.assertEqual(self.app.current_tournament_id, before_tournament)
+                if isinstance(widget, ctk.CTkButton)
+            }
+            self.assertIn("Iniciar Modo Livre", button_texts)
+            self.assertIn("Cancelar", button_texts)
 
-            buttons[0].invoke()
+            for widget in self._walk(dialog):
+                if isinstance(widget, ctk.CTkButton) and widget.cget("text") == "Cancelar":
+                    widget.invoke()
+                    break
             self.app.update()
             self.assertFalse(dialog.winfo_exists())
+            # Cancelar nao cria torneio nem mexe no torneio oficial em curso.
+            self.assertEqual(self.app.current_tournament_id, before_tournament)
+            self.assertEqual(len(self.db.list_tournaments()), before_count)
         finally:
             if dialog.winfo_exists():
                 dialog.destroy()
                 self.app.update()
+
+    def test_free_tournament_mode_iniciar_cria_torneio_em_perfil_livre(self) -> None:
+        self.app._ask_string = lambda *args, **kwargs: "Festival Escolar"
+        before_ids = {tournament["id"] for tournament in self.db.list_tournaments()}
+        dialog = self.app.show_free_tournament_mode()
+        self.app.update()
+        for widget in self._walk(dialog):
+            if isinstance(widget, ctk.CTkButton) and widget.cget("text") == "Iniciar Modo Livre":
+                widget.invoke()
+                break
+        else:
+            self.fail("Botao 'Iniciar Modo Livre' nao encontrado")
+        self.app.update()
+
+        self.assertFalse(dialog.winfo_exists())
+        novos = [
+            tournament
+            for tournament in self.db.list_tournaments()
+            if tournament["id"] not in before_ids and tournament["name"] == "Festival Escolar"
+        ]
+        self.assertEqual(len(novos), 1)
+        tournament_id = novos[0]["id"]
+        self.assertEqual(self.app.current_tournament_id, tournament_id)
+        # O torneio criado pelo Modo Livre nasce no perfil Livre/Escolar (free).
+        settings = self.db.get_tournament_settings(tournament_id)
+        self.assertEqual((settings or {}).get("tournament_profile"), "free")
 
     def test_member_and_tournament_can_be_created_from_ui_forms(self) -> None:
         self.app.show_members()

@@ -19,11 +19,25 @@ class FreeTournamentMixin:
         body = ctk.CTkFrame(dialog, fg_color=THEME_PANEL_BG)
         body.pack(fill="both", expand=True, padx=16, pady=16)
 
-        # Rodape com o botao "Entendi" fixado na parte inferior (empacotado
-        # primeiro para ancorar embaixo independentemente da altura do texto).
+        # Rodape fixado na parte inferior (empacotado primeiro para ancorar
+        # embaixo independentemente da altura do texto). "Iniciar Modo Livre"
+        # cria um torneio ja no perfil Livre/Escolar; "Cancelar" so fecha.
         footer = ctk.CTkFrame(body, fg_color="transparent")
         footer.pack(side="bottom", fill="x", pady=(12, 0))
-        ctk.CTkButton(footer, text="Entendi", width=150, command=dialog.destroy).pack()
+        ctk.CTkButton(
+            footer,
+            text="Iniciar Modo Livre",
+            width=190,
+            command=lambda: self._start_free_tournament(dialog),
+        ).pack(side="right")
+        ctk.CTkButton(
+            footer,
+            text="Cancelar",
+            width=110,
+            fg_color=THEME_NEUTRAL,
+            hover_color=THEME_NEUTRAL_HOVER,
+            command=dialog.destroy,
+        ).pack(side="right", padx=(0, 8))
 
         icon = getattr(self, "_ctk_menu_icons", {}).get("torneios")
         ctk.CTkLabel(
@@ -86,7 +100,7 @@ class FreeTournamentMixin:
         self._center_over_self(dialog, 500, 430)
         dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
         dialog.bind("<Escape>", lambda _e: dialog.destroy())
-        dialog.bind("<Return>", lambda _e: dialog.destroy())
+        dialog.bind("<Return>", lambda _e: self._start_free_tournament(dialog))
 
         def _grab() -> None:
             try:
@@ -98,6 +112,33 @@ class FreeTournamentMixin:
         dialog.lift()
         dialog.focus()
         return dialog
+
+    def _start_free_tournament(self, dialog: ctk.CTkToplevel) -> int | None:
+        """Fecha o aviso e cria um torneio ja em Modo Livre (perfil free).
+
+        Nao toca em torneios existentes nem no fluxo oficial: apenas cria um
+        evento novo, que por padrao ja nasce com tournament_profile='free'.
+        """
+        dialog.destroy()
+        name = self._ask_string("Novo Torneio Livre", "Nome do torneio:")
+        if name is None:
+            return None  # usuario cancelou o prompt de nome
+        name = name.strip() or f"Torneio Livre {date.today().strftime('%d/%m/%Y')}"
+        try:
+            tournament_id = self.tournament_service.create_tournament(
+                {"name": name, "rounds_count": "5", "bye_points": "1"}
+            )
+        except Exception as exc:
+            self._show_error(exc)
+            return None
+        self._set_current_tournament(tournament_id)
+        logger.info("Torneio livre criado: %s", tournament_id)
+        self._show_toast(
+            f"Modo Livre iniciado: '{name}'. Ajuste rodadas, datas e jogadores quando quiser.",
+            kind="success",
+        )
+        self.show_players()
+        return tournament_id
 
     def _center_over_self(self, win: ctk.CTkToplevel, width: int, height: int) -> None:
         """Centraliza horizontalmente sobre a janela principal, levemente acima."""
