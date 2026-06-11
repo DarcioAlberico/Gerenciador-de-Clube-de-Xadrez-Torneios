@@ -4,7 +4,10 @@ import unittest
 
 from src.services.constants import RESULT_POINTS, AppError
 from src.services.pairing import (
+    bye_player_ids,
+    choose_colors,
     clock_event_issue,
+    color_preference,
     finalize_issues,
     pairing_diagnostics,
     performance_rating,
@@ -237,6 +240,94 @@ class TestPairingDiagnostics(unittest.TestCase):
         self.assertEqual(4, len(hard_colors))
         self.assertTrue(all(item["avoidable"] is True for item in hard_colors))
         self.assertTrue(all(item["severity"] == "decision" for item in hard_colors))
+
+    def test_duplicate_player_is_flagged_as_decision(self):
+        diagnostics = pairing_diagnostics(
+            [
+                {"board_number": 1, "white_player_id": 1, "black_player_id": 2, "is_bye": 0},
+                {"board_number": 2, "white_player_id": 1, "black_player_id": 3, "is_bye": 0},
+            ],
+            histories={},
+            played_pairs=set(),
+            bye_player_ids=set(),
+            players=_players(3),
+        )
+
+        duplicates = [item for item in diagnostics if item["kind"] == "duplicate_player"]
+        self.assertEqual(1, len(duplicates))
+        self.assertEqual([1], duplicates[0]["player_ids"])
+        self.assertEqual("decision", duplicates[0]["severity"])
+        self.assertIn("mais de uma mesa", duplicates[0]["detail"])
+
+    def test_repeated_float_is_flagged_when_same_direction_repeats(self):
+        diagnostics = pairing_diagnostics(
+            [{"board_number": 1, "white_player_id": 1, "black_player_id": 2, "is_bye": 0}],
+            histories={},
+            played_pairs=set(),
+            bye_player_ids=set(),
+            players=_players(2),
+            standings={1: {"points": 1.0}, 2: {"points": 2.0}},
+            float_histories={1: ["up"], 2: ["down"]},
+        )
+
+        floats = [item for item in diagnostics if item["kind"] == "float_repeat"]
+        self.assertEqual(2, len(floats))
+        self.assertEqual({1, 2}, {item["player_ids"][0] for item in floats})
+        self.assertTrue(all(item["severity"] == "attention" for item in floats))
+        self.assertTrue(all(item["avoidable"] is None for item in floats))
+
+
+class TestByeEligibilityHistory(unittest.TestCase):
+    def test_zero_and_half_point_absences_do_not_block_pairing_allocated_bye(self):
+        pairings = [
+            {"white_player_id": 1, "black_player_id": None, "result": "Z", "is_bye": 1},
+            {"white_player_id": 2, "black_player_id": None, "result": "H", "is_bye": 1},
+            {"white_player_id": 3, "black_player_id": None, "result": "F", "is_bye": 1},
+            {"white_player_id": 4, "black_player_id": None, "result": "BYE", "is_bye": 1},
+        ]
+
+        self.assertEqual({3, 4}, bye_player_ids(pairings))
+
+
+class TestColorPreference(unittest.TestCase):
+    def test_no_history_has_no_preference(self):
+        preference = color_preference(1, {})
+
+        self.assertIsNone(preference.due_color)
+        self.assertEqual("none", preference.strength)
+        self.assertEqual(0, preference.color_imbalance)
+
+    def test_two_same_colors_are_absolute_preference(self):
+        preference = color_preference(1, {1: ["W", "W"]})
+
+        self.assertEqual("B", preference.due_color)
+        self.assertEqual("absolute", preference.strength)
+        self.assertEqual(2, preference.color_imbalance)
+        self.assertEqual("W", preference.repeated_color)
+        self.assertTrue(preference.is_absolute)
+
+    def test_color_imbalance_is_strong_preference_when_not_absolute(self):
+        preference = color_preference(1, {1: ["W", "B", "W"]})
+
+        self.assertEqual("B", preference.due_color)
+        self.assertEqual("strong", preference.strength)
+        self.assertEqual(1, preference.color_imbalance)
+
+    def test_balanced_history_prefers_alternating_last_color_mildly(self):
+        preference = color_preference(1, {1: ["W", "B"]})
+
+        self.assertEqual("W", preference.due_color)
+        self.assertEqual("mild", preference.strength)
+        self.assertEqual(0, preference.color_imbalance)
+
+    def test_choose_colors_satisfies_opposite_absolute_preferences(self):
+        white_id, black_id = choose_colors(
+            {"id": 1, "name": "A", "rating": 1800},
+            {"id": 2, "name": "B", "rating": 1700},
+            {1: ["W", "W"], 2: ["B", "B"]},
+        )
+
+        self.assertEqual((2, 1), (white_id, black_id))
 
 
 class TestPerformanceRating(unittest.TestCase):

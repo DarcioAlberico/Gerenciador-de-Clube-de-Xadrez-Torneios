@@ -88,6 +88,7 @@ PAIRING_SYSTEMS = {
     "lim": "Lim",
     "team_swiss": "Suico por equipes",
     "custom_authorized": "Customizado/autorizado",
+    "gacrux_swiss": "Suico (Gacrux)",
 }
 ACCELERATION_METHODS = {
     "none": "Sem aceleracao",

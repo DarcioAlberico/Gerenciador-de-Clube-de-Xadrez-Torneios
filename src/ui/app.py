@@ -6,6 +6,7 @@ import tkinter as tk
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
+from PIL import Image, ImageTk
 
 from .screens.admin import AdminPagesMixin
 from .screens.club import ClubPagesMixin
@@ -48,15 +49,33 @@ class AlbericusApp(
         ctk.set_default_color_theme("blue")
 
         self.title("Albericus - Emparceiramento de Xadrez v1.0")
-        self.geometry("1180x760")
-        self.minsize(980, 640)
+        # Janela começa pequena e centralizada para a tela de login.
+        # Apos o login bem-sucedido e maximizada automaticamente.
+        _lw, _lh = 420, 400
+        self.update_idletasks()
+        _sw = self.winfo_screenwidth()
+        _sh = self.winfo_screenheight()
+        _lx = (_sw - _lw) // 2
+        _ly = (_sh - _lh) // 2
+        self.geometry(f"{_lw}x{_lh}+{_lx}+{_ly}")
+        self.resizable(False, False)
 
         self.db = db or Database()
         self._arbitration_auto_refresh_enabled = True
         self._arbitration_refresh_interval_seconds = 15
         self._arbitration_inline_tables_limit = 20
+        # Aplica os presets de aparencia antes de criar qualquer widget.
+        try:
+            _init_settings = self.db.get_app_settings()
+            from src.ui.support import apply_accent_preset, apply_bg_preset, apply_frame_bg_preset
+            apply_bg_preset(str(_init_settings.get("bg_preset") or "slate"))
+            apply_frame_bg_preset(str(_init_settings.get("frame_bg_preset") or "slate"))
+            apply_accent_preset(str(_init_settings.get("accent_preset") or "blue"))
+        except Exception:
+            pass
         self._apply_app_settings()
         self._set_window_icon()
+        self._load_menu_icons()
         self.dashboard_service = DashboardService(self.db)
         self.referee_service = RefereeService(self.db)
         self.club_service = ClubService(self.db)
@@ -141,6 +160,58 @@ class AlbericusApp(
             self._SCHEDULED_DISPATCH_INTERVAL_MS, self._scheduled_dispatch_tick
         )
 
+    def _rebuild_ui_after_theme_change(self) -> None:
+        """Reconstroi toda a UI com o novo tema de cores, sem reiniciar o processo.
+
+        O CTk aplica set_default_color_theme apenas em widgets criados APOS a
+        chamada. Por isso, destruimos os frames principais e os recriamos para
+        que o novo tema seja aplicado a todos os elementos.
+        """
+        # Cancela jobs de background para evitar callbacks em widgets destruidos.
+        for attr in ("_arbitration_refresh_job", "_scheduled_dispatch_job"):
+            job = getattr(self, attr, None)
+            if job is not None:
+                try:
+                    self.after_cancel(job)
+                except Exception:
+                    pass
+                setattr(self, attr, None)
+
+        # Remove toasts ativos (sao filhos diretos de self, nao do content)
+        for toast in list(getattr(self, "_active_toasts", [])):
+            try:
+                toast.destroy()
+            except Exception:
+                pass
+        self._active_toasts = []
+
+        # Aplica os 3 presets de aparencia antes de recriar os widgets.
+        _settings = self.db.get_app_settings()
+        from src.ui.support import apply_accent_preset, apply_bg_preset, apply_frame_bg_preset
+        apply_bg_preset(str(_settings.get("bg_preset") or "slate"))
+        apply_frame_bg_preset(str(_settings.get("frame_bg_preset") or "slate"))
+        apply_accent_preset(str(_settings.get("accent_preset") or "blue"))
+        self._apply_app_settings()
+
+        # Destroi os frames principals — novos widgets usarao o tema atualizado.
+        for attr in ("statusbar", "content"):
+            frame = getattr(self, attr, None)
+            if frame is not None:
+                try:
+                    frame.destroy()
+                except Exception:
+                    pass
+
+        # Reconstroi a interface.
+        self._build_menu()
+        self._build_statusbar()
+        self._build_content()
+        self._configure_tree_style(register_callback=False)
+        self.show_app_settings()
+        self._refresh_statusbar()
+        self._start_scheduled_dispatch()
+        self._show_toast("Tema aplicado com sucesso.", kind="success")
+
     def _scheduled_dispatch_tick(self) -> None:
         self._dispatch_scheduled_messages_once()
         self._scheduled_dispatch_job = self.after(
@@ -165,10 +236,23 @@ class AlbericusApp(
             logger.error("Falha no despacho de mensagens agendadas: %s", exc)
 
     def _build_login_screen(self) -> None:
-        self.login_frame = ctk.CTkFrame(self, corner_radius=10)
+        self.login_frame = ctk.CTkFrame(self, corner_radius=12, width=320)
         self.login_frame.place(relx=0.5, rely=0.5, anchor="center")
+        self.login_frame.grid_propagate(False)
 
-        ctk.CTkLabel(self.login_frame, text="Albericus", font=ctk.CTkFont(size=24, weight="bold")).pack(pady=(20, 10))
+        # Logotipo de Login
+        try:
+            logo_path = resource_path("assets/icons/64/16-login.png")
+            if logo_path.exists():
+                img_pil = Image.open(logo_path)
+                logo_img = ctk.CTkImage(light_image=img_pil, dark_image=img_pil, size=(64, 64))
+                logo_label = ctk.CTkLabel(self.login_frame, image=logo_img, text="")
+                logo_label.pack(pady=(20, 0))
+                self._login_logo = logo_img
+        except Exception as exc:
+            logger.error("Erro ao carregar logotipo de login: %s", exc)
+
+        ctk.CTkLabel(self.login_frame, text="Albericus", font=ctk.CTkFont(size=24, weight="bold")).pack(pady=(10, 10))
         ctk.CTkLabel(self.login_frame, text="Acesso Restrito", font=ctk.CTkFont(size=14)).pack(pady=(0, 20))
 
         self.username_entry = ctk.CTkEntry(self.login_frame, placeholder_text="Usuário", width=200)
@@ -188,6 +272,10 @@ class AlbericusApp(
                 return
             if self.security_service.login(user, pwd):
                 self.login_frame.destroy()
+                # Maximiza a janela principal apos o login.
+                self.resizable(True, True)
+                self.minsize(980, 640)
+                self.state("zoomed")
                 self._build_menu()
                 self._build_statusbar()
                 self._build_content()
@@ -214,12 +302,25 @@ class AlbericusApp(
         except Exception:
             pass
         scale = getattr(self, "_ui_scale_percent", 120) / 100
+        body_font_size = max(10, int(10 * scale))
         style.configure(
             "Treeview",
-            rowheight=max(28, int(28 * scale)),
-            font=("Segoe UI", max(10, int(10 * scale))),
+            rowheight=max(34, int(34 * scale)),   # mais respiro entre linhas
+            font=("Segoe UI", body_font_size),
+            borderwidth=0,
+            relief="flat",
         )
-        style.configure("Treeview.Heading", font=("Segoe UI", max(10, int(10 * scale)), "bold"))
+        style.configure(
+            "Treeview.Heading",
+            font=("Segoe UI", max(10, int(10 * scale)), "bold"),
+            relief="flat",
+            padding=(6, 6),
+        )
+        style.map(
+            "Treeview",
+            background=[("selected", "#334155")],
+            foreground=[("selected", "#F1F5F9")],
+        )
         self._update_tree_colors(style)
         if register_callback:
             ctk.AppearanceModeTracker.add(self._on_appearance_change, self)
@@ -233,65 +334,71 @@ class AlbericusApp(
         bg = THEME_TREE_BG[0] if mode == "Light" else THEME_TREE_BG[1]
         fg = THEME_TREE_FG[0] if mode == "Light" else THEME_TREE_FG[1]
         style.configure("Treeview", background=bg, fieldbackground=bg, foreground=fg)
-        style.configure("Treeview.Heading", background=bg, foreground=fg)
+        # Cabecalho: fundo ligeiramente mais escuro, texto branco em negrito
+        hdr_bg = "#0F172A" if mode == "Dark" else "#CBD5E1"
+        style.configure("Treeview.Heading", background=hdr_bg, foreground=fg)
+        style.map("Treeview.Heading", background=[("active", hdr_bg)])
 
 
     def _build_menu(self) -> None:
         menubar = tk.Menu(self)
         self.config(menu=menubar)
         
+        def get_ico(name: str):
+            return self._menu_icons.get(name)
+
         # 1. Clube
         club_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Clube", menu=club_menu)
-        club_menu.add_command(label="Dashboard Visual", command=self.show_visual_dashboard, accelerator="Ctrl+1")
-        club_menu.add_command(label="Perfil do Clube", command=self.show_club)
-        club_menu.add_command(label="Membros", command=self.show_members)
-        club_menu.add_command(label="Níveis", command=self.show_learning_levels)
-        club_menu.add_command(label="Responsáveis", command=self.show_guardians)
+        club_menu.add_command(label="Dashboard Visual", command=self.show_visual_dashboard, accelerator="Ctrl+1", image=get_ico("dashboard"), compound="left")
+        club_menu.add_command(label="Perfil do Clube", command=self.show_club, image=get_ico("clube"), compound="left")
+        club_menu.add_command(label="Membros", command=self.show_members, image=get_ico("membros"), compound="left")
+        club_menu.add_command(label="Níveis", command=self.show_learning_levels, image=get_ico("aulas"), compound="left")
+        club_menu.add_command(label="Responsáveis", command=self.show_guardians, image=get_ico("membros"), compound="left")
 
         # 2. Treinamento
         training_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Treinamento", menu=training_menu)
-        training_menu.add_command(label="Aulas", command=self.show_training)
-        training_menu.add_command(label="Exercícios", command=self.show_exercises)
+        training_menu.add_command(label="Aulas", command=self.show_training, image=get_ico("aulas"), compound="left")
+        training_menu.add_command(label="Exercícios", command=self.show_exercises, image=get_ico("biblioteca"), compound="left")
 
         # 3. Gestão
         mgmt_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Gestão", menu=mgmt_menu)
-        mgmt_menu.add_command(label="Árbitros", command=self.show_referees)
-        mgmt_menu.add_command(label="Inventário", command=self.show_inventory)
-        mgmt_menu.add_command(label="Financeiro", command=self.show_finance)
-        mgmt_menu.add_command(label="Calendário", command=self.show_calendar)
-        mgmt_menu.add_command(label="Ranking Interno", command=self.show_internal_ranking)
+        mgmt_menu.add_command(label="Árbitros", command=self.show_referees, image=get_ico("arbitros"), compound="left")
+        mgmt_menu.add_command(label="Inventário", command=self.show_inventory, image=get_ico("integracoes"), compound="left")
+        mgmt_menu.add_command(label="Financeiro", command=self.show_finance, image=get_ico("financeiro"), compound="left")
+        mgmt_menu.add_command(label="Calendário", command=self.show_calendar, image=get_ico("calendario"), compound="left")
+        mgmt_menu.add_command(label="Ranking Interno", command=self.show_internal_ranking, image=get_ico("dashboard"), compound="left")
 
         # 4. Torneio
         tourn_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Torneio", menu=tourn_menu)
-        tourn_menu.add_command(label="Torneios", command=self.show_tournaments, accelerator="Ctrl+2")
-        tourn_menu.add_command(label="Central do Torneio", command=self.show_tournament_dashboard, accelerator="Ctrl+3")
-        tourn_menu.add_command(label="Painel do Árbitro", command=self.show_arbitration_panel)
-        tourn_menu.add_command(label="Config. Torneio", command=self.show_tournament_settings)
+        tourn_menu.add_command(label="Torneios", command=self.show_tournaments, accelerator="Ctrl+2", image=get_ico("torneios"), compound="left")
+        tourn_menu.add_command(label="Central do Torneio", command=self.show_tournament_dashboard, accelerator="Ctrl+3", image=get_ico("emparceiramento"), compound="left")
+        tourn_menu.add_command(label="Painel do Árbitro", command=self.show_arbitration_panel, image=get_ico("arbitros"), compound="left")
+        tourn_menu.add_command(label="Config. Torneio", command=self.show_tournament_settings, image=get_ico("configuracoes"), compound="left")
         tourn_menu.add_separator()
-        tourn_menu.add_command(label="Jogadores", command=self.show_players)
-        tourn_menu.add_command(label="Equipes", command=self.show_teams)
-        tourn_menu.add_command(label="Rodadas", command=self.show_pairings, accelerator="Ctrl+4")
-        tourn_menu.add_command(label="Classificação", command=self.show_standings, accelerator="Ctrl+5")
-        tourn_menu.add_command(label="Diplomas", command=self.show_certificates)
+        tourn_menu.add_command(label="Jogadores", command=self.show_players, image=get_ico("membros"), compound="left")
+        tourn_menu.add_command(label="Equipes", command=self.show_teams, image=get_ico("clube"), compound="left")
+        tourn_menu.add_command(label="Rodadas", command=self.show_pairings, accelerator="Ctrl+4", image=get_ico("emparceiramento"), compound="left")
+        tourn_menu.add_command(label="Classificação", command=self.show_standings, accelerator="Ctrl+5", image=get_ico("dashboard"), compound="left")
+        tourn_menu.add_command(label="Diplomas", command=self.show_certificates, image=get_ico("relatorios"), compound="left")
 
         # 5. Ferramentas
         tools_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Ferramentas", menu=tools_menu)
-        tools_menu.add_command(label="Exportar", command=self.show_export)
-        tools_menu.add_command(label="Relatórios Administrativos", command=self.show_administrative_reports)
-        tools_menu.add_command(label="DRE Financeiro", command=self.show_financial_reports)
-        tools_menu.add_command(label="Comunicação", command=self.show_communication)
-        tools_menu.add_command(label="Integrações Operacionais", command=self.show_integrations)
+        tools_menu.add_command(label="Exportar", command=self.show_export, image=get_ico("integracoes"), compound="left")
+        tools_menu.add_command(label="Relatórios Administrativos", command=self.show_administrative_reports, image=get_ico("relatorios"), compound="left")
+        tools_menu.add_command(label="DRE Financeiro", command=self.show_financial_reports, image=get_ico("financeiro"), compound="left")
+        tools_menu.add_command(label="Comunicação", command=self.show_communication, image=get_ico("comunicacao"), compound="left")
+        tools_menu.add_command(label="Integrações Operacionais", command=self.show_integrations, image=get_ico("integracoes"), compound="left")
 
         # 6. Configurações
         settings_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Configurações", menu=settings_menu)
-        settings_menu.add_command(label="Config. App", command=self.show_app_settings, accelerator="Ctrl+,")
-        settings_menu.add_command(label="Auditoria Completa", command=self.show_audit_logs)
+        settings_menu.add_command(label="Config. App", command=self.show_app_settings, accelerator="Ctrl+,", image=get_ico("configuracoes"), compound="left")
+        settings_menu.add_command(label="Auditoria Completa", command=self.show_audit_logs, image=get_ico("auditoria"), compound="left")
 
         # 7. Ajuda
         help_menu = tk.Menu(menubar, tearoff=0)
@@ -376,46 +483,46 @@ class AlbericusApp(
             method()
         self._refresh_statusbar()
 
-    def _command_palette_actions(self) -> list[tuple[str, Callable[[], None], str]]:
-        """Registry de ações do command palette: (label, callable, keywords)."""
+    def _command_palette_actions(self) -> list[tuple[str, Callable[[], None], str, str | None]]:
+        """Registry de ações do command palette: (label, callable, keywords, icon_key)."""
         return [
             # Navegação — Clube
-            ("Dashboard Visual", self.show_visual_dashboard, "inicio painel home"),
-            ("Perfil do Clube", self.show_club, "clube unidade"),
-            ("Membros", self.show_members, "socios alunos pessoas"),
-            ("Níveis de Aprendizagem", self.show_learning_levels, "niveis turmas"),
-            ("Responsáveis", self.show_guardians, "guardian pais"),
+            ("Dashboard Visual", self.show_visual_dashboard, "inicio painel home", "dashboard"),
+            ("Perfil do Clube", self.show_club, "clube unidade", "clube"),
+            ("Membros", self.show_members, "socios alunos pessoas", "membros"),
+            ("Níveis de Aprendizagem", self.show_learning_levels, "niveis turmas", "aulas"),
+            ("Responsáveis", self.show_guardians, "guardian pais", "membros"),
             # Treinamento
-            ("Aulas", self.show_training, "treinamento aula classe"),
-            ("Exercícios", self.show_exercises, "treino problemas"),
+            ("Aulas", self.show_training, "treinamento aula classe", "aulas"),
+            ("Exercícios", self.show_exercises, "treino problemas", "biblioteca"),
             # Gestão
-            ("Árbitros", self.show_referees, "arbitros juiz"),
-            ("Inventário", self.show_inventory, "estoque material"),
-            ("Financeiro", self.show_finance, "caixa contas dinheiro"),
-            ("Calendário", self.show_calendar, "agenda eventos datas"),
-            ("Ranking Interno", self.show_internal_ranking, "rating classificacao"),
+            ("Árbitros", self.show_referees, "arbitros juiz", "arbitros"),
+            ("Inventário", self.show_inventory, "estoque material", "integracoes"),
+            ("Financeiro", self.show_finance, "caixa contas dinheiro", "financeiro"),
+            ("Calendário", self.show_calendar, "agenda eventos datas", "calendario"),
+            ("Ranking Interno", self.show_internal_ranking, "rating classificacao", "dashboard"),
             # Torneio
-            ("Torneios", self.show_tournaments, "lista campeonatos"),
-            ("Central do Torneio", self.show_tournament_dashboard, "dashboard torneio"),
-            ("Painel do Árbitro", self.show_arbitration_panel, "arbitragem pendencias"),
-            ("Configurações do Torneio", self.show_tournament_settings, "config torneio"),
-            ("Jogadores", self.show_players, "participantes inscritos"),
-            ("Equipes", self.show_teams, "times equipe"),
-            ("Rodadas / Emparceiramento", self.show_pairings, "pairings round chave"),
-            ("Classificação", self.show_standings, "tabela standings ranking"),
-            ("Diplomas / Certificados", self.show_certificates, "certificado diploma"),
+            ("Torneios", self.show_tournaments, "lista campeonatos", "torneios"),
+            ("Central do Torneio", self.show_tournament_dashboard, "dashboard torneio", "emparceiramento"),
+            ("Painel do Árbitro", self.show_arbitration_panel, "arbitragem pendencias", "arbitros"),
+            ("Configurações do Torneio", self.show_tournament_settings, "config torneio", "configuracoes"),
+            ("Jogadores", self.show_players, "participantes inscritos", "membros"),
+            ("Equipes", self.show_teams, "times equipe", "clube"),
+            ("Rodadas / Emparceiramento", self.show_pairings, "pairings round chave", "emparceiramento"),
+            ("Classificação", self.show_standings, "tabela standings ranking", "dashboard"),
+            ("Diplomas / Certificados", self.show_certificates, "certificado diploma", "relatorios"),
             # Ferramentas
-            ("Exportar", self.show_export, "trf16 pdf csv chess-results"),
-            ("Relatórios Administrativos", self.show_administrative_reports, "relatorio admin"),
-            ("DRE Financeiro", self.show_financial_reports, "dre financeiro relatorio"),
-            ("Comunicação", self.show_communication, "mensagem whatsapp comunicado"),
-            ("Integrações Operacionais", self.show_integrations, "qr relogio sync clock"),
+            ("Exportar", self.show_export, "trf16 pdf csv chess-results", "integracoes"),
+            ("Relatórios Administrativos", self.show_administrative_reports, "relatorio admin", "relatorios"),
+            ("DRE Financeiro", self.show_financial_reports, "dre financeiro relatorio", "financeiro"),
+            ("Comunicação", self.show_communication, "mensagem whatsapp comunicado", "comunicacao"),
+            ("Integrações Operacionais", self.show_integrations, "qr relogio sync clock", "integracoes"),
             # Configurações
-            ("Configurações do App", self.show_app_settings, "preferencias config"),
-            ("Auditoria Completa", self.show_audit_logs, "log auditoria historico"),
+            ("Configurações do App", self.show_app_settings, "preferencias config", "configuracoes"),
+            ("Auditoria Completa", self.show_audit_logs, "log auditoria historico", "auditoria"),
             # Ações
-            ("Recarregar tela (F5)", self._refresh_current_view, "refresh atualizar"),
-            ("Biblioteca Pedagógica", self.show_library, "biblioteca acervo"),
+            ("Recarregar tela (F5)", self._refresh_current_view, "refresh atualizar", "configuracoes"),
+            ("Biblioteca Pedagógica", self.show_library, "biblioteca acervo", "biblioteca"),
         ]
 
     def _show_command_palette(self) -> None:
@@ -460,7 +567,7 @@ class AlbericusApp(
         def execute(index: int) -> None:
             if not (0 <= index < len(state["filtered"])):
                 return
-            _, fn, _ = state["filtered"][index]
+            _, fn, _, _ = state["filtered"][index]
             close()
             try:
                 fn()
@@ -471,11 +578,14 @@ class AlbericusApp(
             for row in state["rows"]:
                 row.destroy()
             state["rows"] = []
-            for index, (label, _fn, _kw) in enumerate(state["filtered"]):
+            for index, (label, _fn, _kw, icon_key) in enumerate(state["filtered"]):
                 is_selected = index == state["selected"]
+                img = self._ctk_menu_icons.get(icon_key) if hasattr(self, "_ctk_menu_icons") else None
                 row = ctk.CTkLabel(
                     list_holder,
-                    text=label,
+                    text=f"  {label}",
+                    image=img,
+                    compound="left",
                     anchor="w",
                     fg_color=THEME_ACCENT if is_selected else "transparent",
                     text_color=("#FFFFFF", "#0B0F19") if is_selected else THEME_TEXT_MAIN,
@@ -495,9 +605,9 @@ class AlbericusApp(
             if not query:
                 state["filtered"] = list(actions)
             else:
-                scored: list[tuple[int, tuple[str, Callable, str]]] = []
+                scored: list[tuple[int, tuple[str, Callable, str, str | None]]] = []
                 for action in actions:
-                    label, _fn, kw = action
+                    label, _fn, kw, icon_key = action
                     haystack = f"{label} {kw}".lower()
                     if query in haystack:
                         # prefixo do label = melhor pontuação
@@ -909,9 +1019,17 @@ class AlbericusApp(
         try:
             settings = self.db.get_app_settings()
             ctk.set_appearance_mode(str(settings.get("appearance_mode") or "System"))
-            color_theme = settings.get("color_theme")
-            if color_theme and color_theme in ["blue", "green", "dark-blue"]:
-                ctk.set_default_color_theme(color_theme)
+            # Sempre usa "blue" como base estrutural (formas, raios, espessuras).
+            # A cor de destaque e controlada por accent_preset via ThemeManager.
+            ctk.set_default_color_theme("blue")
+            # Re-aplica o accent apos carregar o tema base (set_default_color_theme
+            # sobrescreve o ThemeManager; o patch deve vir depois).
+            try:
+                accent_key = str(settings.get("accent_preset") or "blue")
+                from src.ui.support import apply_accent_preset
+                apply_accent_preset(accent_key)
+            except Exception:
+                pass
             try:
                 scale_percent = int(str(settings.get("ui_scale_percent") or "120"))
             except ValueError:
@@ -964,6 +1082,41 @@ class AlbericusApp(
             self.iconbitmap(str(icon_path))
         except Exception:
             logger.exception("Falha ao carregar icone do aplicativo")
+
+    def _load_menu_icons(self) -> None:
+        self._menu_icons = {}
+        self._ctk_menu_icons = {}
+        icon_mappings = {
+            "dashboard": "01-dashboard.png",
+            "clube": "02-clube.png",
+            "membros": "03-membros.png",
+            "torneios": "04-torneios.png",
+            "emparceiramento": "05-emparceiramento.png",
+            "arbitros": "06-arbitros.png",
+            "relatorios": "07-relatorios.png",
+            "auditoria": "08-auditoria.png",
+            "comunicacao": "09-comunicacao.png",
+            "configuracoes": "10-configuracoes.png",
+            "integracoes": "11-integracoes.png",
+            "biblioteca": "12-biblioteca.png",
+            "aulas": "13-aulas.png",
+            "financeiro": "14-financeiro.png",
+            "calendario": "15-calendario.png",
+            "login": "16-login.png"
+        }
+        for name, filename in icon_mappings.items():
+            path24 = resource_path(f"assets/icons/24/{filename}")
+            if path24.exists():
+                try:
+                    img = Image.open(path24)
+                    self._menu_icons[name] = ImageTk.PhotoImage(img)
+                    self._ctk_menu_icons[name] = ctk.CTkImage(
+                        light_image=img,
+                        dark_image=img,
+                        size=(20, 20)
+                    )
+                except Exception as exc:
+                    logger.error(f"Erro ao carregar icone {filename}: {exc}")
 
     def _default_export_dir(self) -> Path:
         try:

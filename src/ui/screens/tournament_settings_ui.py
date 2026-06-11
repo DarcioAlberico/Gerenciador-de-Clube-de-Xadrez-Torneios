@@ -5,6 +5,7 @@ from datetime import datetime
 from ..support import *
 
 from src.services.pairing.acceleration import acceleration_spec
+from src.services.constants import PAIRING_SYSTEMS
 from src.services.pairing import (
     DEFAULT_PLAYER_TIEBREAKS,
     DEFAULT_TEAM_TIEBREAKS,
@@ -231,6 +232,7 @@ class TournamentSettingsMixin:
         profile_by_label = {label: value for value, label in TOURNAMENT_PROFILES.items()}
         type_by_label = {label: value for value, label in TOURNAMENT_TYPES.items()}
         pairing_by_label = {label: value for value, label in PAIRING_METHODS.items()}
+        system_by_label = {label: value for value, label in PAIRING_SYSTEMS.items()}
         team_pairing_by_label = {label: value for value, label in TEAM_PAIRING_METHODS.items()}
         team_criterion_by_label = {label: value for value, label in TEAM_STANDING_CRITERIA.items()}
         acceleration_by_label = {label: value for value, label in ACCELERATION_METHODS.items()}
@@ -256,6 +258,15 @@ class TournamentSettingsMixin:
         pairing_option = ctk.CTkOptionMenu(tab_rules, values=list(pairing_by_label.keys()), width=350)
         stack(tab_rules, pairing_option, label="Sistema de emparceiramento")
         pairing_option.set(PAIRING_METHODS.get(settings.get("pairing_method", "swiss"), PAIRING_METHODS["swiss"]))
+
+        system_option = ctk.CTkOptionMenu(tab_rules, values=list(system_by_label.keys()), width=350)
+        stack(tab_rules, system_option, label="Motor/Regra de emparceiramento")
+        system_option.set(
+            PAIRING_SYSTEMS.get(
+                settings.get("pairing_system", "custom_authorized"),
+                PAIRING_SYSTEMS["custom_authorized"],
+            )
+        )
 
         # Pontuacao/criterios por equipes (campos textuais + menus)
         team_setting_fields = [
@@ -598,6 +609,26 @@ class TournamentSettingsMixin:
                     "Informe um numero de rodadas inteiro maior ou igual a 1.",
                 )
 
+            # Alerta nao-bloqueante: no Suico, rounds_count > (jogadores ativos - 1)
+            # forcaria repeticao de adversario na rodada excedente. Apenas avisa
+            # (borda amarela + toast) e deixa salvar: o arbitro pode ainda estar
+            # cadastrando jogadores, ou usar outro formato de pareamento.
+            _pairing_method = pairing_by_label.get(pairing_option.get(), "swiss")
+            _n_active = len(self.db.list_players(self.current_tournament_id, active_only=True))
+            _rounds_int = int(rounds_raw)
+            if _pairing_method == "swiss" and _n_active >= 2 and _rounds_int > _n_active - 1:
+                try:
+                    tournament_entries["rounds_count"].configure(border_color="#e6a817")
+                except Exception:
+                    pass
+                self._show_toast(
+                    f"Aviso: {_n_active} jogador(es) ativo(s). O maximo sem repeticao de "
+                    f"adversario e {_n_active - 1} rodada(s); com {_rounds_int}, a ultima "
+                    f"rodada pode nao fechar.",
+                    kind="warning",
+                    duration_ms=6000,
+                )
+
             bye_raw = str(tournament_payload.get("bye_points", "")).strip().replace(",", ".")
             if bye_raw:
                 try:
@@ -633,6 +664,7 @@ class TournamentSettingsMixin:
             settings_payload["tournament_profile"] = profile_by_label[tournament_profile_option.get()]
             settings_payload["tournament_type"] = type_by_label[tournament_type_option.get()]
             settings_payload["pairing_method"] = pairing_by_label[pairing_option.get()]
+            settings_payload["pairing_system"] = system_by_label[system_option.get()]
             settings_payload["team_pairing_method"] = team_pairing_by_label[team_pairing_option.get()]
             settings_payload["team_standing_primary"] = team_criterion_by_label[team_primary_option.get()]
             settings_payload["team_standing_secondary"] = team_criterion_by_label[team_secondary_option.get()]

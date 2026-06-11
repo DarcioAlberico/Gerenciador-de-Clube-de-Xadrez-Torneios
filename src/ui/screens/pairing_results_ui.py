@@ -88,7 +88,7 @@ class PairingResultsMixin:
                 padx=4,
                 sticky="ew",
             )
-            ctk.CTkButton(round_actions, text="Excluir gerada", command=self._delete_current_round).grid(
+            ctk.CTkButton(round_actions, text="Excluir rodada", command=self._delete_current_round).grid(
                 row=0,
                 column=3,
                 padx=4,
@@ -146,6 +146,24 @@ class PairingResultsMixin:
                 column=5,
                 padx=(4, 0),
                 pady=(8, 0),
+                sticky="ew",
+            )
+            ctk.CTkButton(
+                round_actions,
+                text="  📽  Modo Projetor",
+                command=self._open_projector_mode,
+                fg_color=("#B45309", "#F59E0B"),
+                hover_color=("#92400E", "#D97706"),
+                text_color=("#FFFFFF", "#000000"),
+                font=ctk.CTkFont(family="Segoe UI", size=15, weight="bold"),
+                height=44,
+                corner_radius=8,
+            ).grid(
+                row=2,
+                column=0,
+                columnspan=6,
+                padx=0,
+                pady=(10, 0),
                 sticky="ew",
             )
 
@@ -655,10 +673,12 @@ class PairingResultsMixin:
             return
         pairings = self.db.get_pairings_for_round(self.current_round_id)
         submissions_by_pairing, corrected_pairing_ids, _corrected_team_board_ids = self._result_state_context()
-        for pairing in pairings:
+        for row_index, pairing in enumerate(pairings):
             white_name = pairing_player_name(pairing, "white")
             black_name = "BYE" if pairing["is_bye"] else pairing_player_name(pairing, "black")
             state = self._individual_result_state(pairing, submissions_by_pairing, corrected_pairing_ids)
+            result_val = str(pairing["result"] or "")
+            zebra = "oddrow" if row_index % 2 == 0 else "evenrow"
             item_id = self.pairing_tree.insert(
                 "",
                 "end",
@@ -666,12 +686,12 @@ class PairingResultsMixin:
                     pairing["board_number"],
                     white_name,
                     pairing["white_rating"],
-                    pairing["result"],
+                    result_val,
                     state,
                     black_name,
                     "" if pairing["is_bye"] else pairing["black_rating"],
                 ),
-                tags=(self._result_state_tag(state),),
+                tags=(self._result_state_tag(state), zebra),
             )
             self.pairing_row_map[item_id] = pairing["id"]
             self.pairing_detail_map[item_id] = {
@@ -834,13 +854,60 @@ class PairingResultsMixin:
 
     @staticmethod
     def _configure_result_state_tags(tree: ttk.Treeview) -> None:
-        tree.tag_configure("result_state_vazio", foreground="#64748B")
-        tree.tag_configure("result_state_registrado", foreground="#166534")
-        tree.tag_configure("result_state_submetido_qr", foreground="#B45309")
-        tree.tag_configure("result_state_aprovado_qr", foreground="#166534")
-        tree.tag_configure("result_state_rejeitado_qr", foreground="#991B1B")
-        tree.tag_configure("result_state_corrigido", foreground="#7C3AED")
-        tree.tag_configure("result_state_bloqueado", foreground="#334155")
+        import platform
+        _bold = ("Segoe UI", 10, "bold") if platform.system() == "Windows" else ("Helvetica", 10, "bold")
+        _normal = ("Segoe UI", 10) if platform.system() == "Windows" else ("Helvetica", 10)
+
+        # Linhas alternadas (zebra striping)
+        tree.tag_configure("oddrow",  background="#1E293B", font=_normal)
+        tree.tag_configure("evenrow", background="#172032", font=_normal)
+
+        # Estados de resultado — fonte em negrito + cor de fundo sutil
+        tree.tag_configure(
+            "result_state_vazio",
+            foreground="#94A3B8",
+            font=_normal,
+        )
+        tree.tag_configure(
+            "result_state_registrado",
+            foreground="#86EFAC",   # verde brilhante (modo escuro)
+            font=_bold,
+        )
+        tree.tag_configure(
+            "result_state_submetido_qr",
+            foreground="#FCD34D",   # amarelo âmbar
+            background="#1C1A0A",
+            font=_bold,
+        )
+        tree.tag_configure(
+            "result_state_aprovado_qr",
+            foreground="#34D399",   # esmeralda
+            background="#042010",
+            font=_bold,
+        )
+        tree.tag_configure(
+            "result_state_rejeitado_qr",
+            foreground="#FCA5A5",   # vermelho claro
+            background="#1C0505",
+            font=_bold,
+        )
+        tree.tag_configure(
+            "result_state_corrigido",
+            foreground="#C4B5FD",   # lilas
+            background="#12080A",
+            font=_bold,
+        )
+        tree.tag_configure(
+            "result_state_bloqueado",
+            foreground="#475569",   # cinza azulado apagado
+            font=_normal,
+        )
+
+        # Tags de resultado (para destacar o placar)
+        tree.tag_configure("result_win_white", foreground="#FACC15", font=_bold)
+        tree.tag_configure("result_win_black", foreground="#FACC15", font=_bold)
+        tree.tag_configure("result_draw",      foreground="#94A3B8", font=_bold)
+        tree.tag_configure("result_bye",       foreground="#475569", font=_normal)
 
     def _select_first_pending_pairing(self) -> None:
         if not hasattr(self, "pairing_tree"):
@@ -883,7 +950,11 @@ class PairingResultsMixin:
             return
         values = self.pairing_tree.item(selected[0], "values")
         result = values[6] if getattr(self, "pairing_team_mode", False) and len(values) > 6 else values[3] if len(values) > 3 else ""
-        if result in RESULTS:
+        allowed = set(RESULTS)
+        pairing_detail = self._selected_pairing()
+        if pairing_detail and pairing_detail.get("row_type") == "individual_pairing" and pairing_detail.get("is_bye"):
+            allowed.update({"BYE", "F", "H", "Z"})
+        if result in allowed:
             self.result_option.set(result)
 
     def _bind_pairing_result_shortcuts(self) -> None:
@@ -1026,9 +1097,36 @@ class PairingResultsMixin:
             pairing_id = self._selected_pairing_id()
             if not pairing_id:
                 raise AppError("Selecione um tabuleiro." if getattr(self, "pairing_team_mode", False) else "Selecione uma mesa.")
+            pairing_detail = self._selected_pairing()
             result = self.result_option.get()
-            if result not in RESULTS:
+            allowed = set(RESULTS)
+            if pairing_detail and pairing_detail.get("row_type") == "individual_pairing" and pairing_detail.get("is_bye"):
+                allowed.update({"BYE", "F", "H", "Z"})
+            if result not in allowed:
                 raise AppError("Resultado invalido.")
+                
+            if pairing_detail and pairing_detail.get("row_type") == "individual_pairing" and pairing_detail.get("is_bye"):
+                # Determine default bye result
+                round_data = self.db.get_round(int(pairing_detail["round_id"]))
+                round_number = int(round_data["number"]) if round_data else 1
+                requested_byes = self.db.list_requested_byes_for_round(
+                    int(self.current_tournament_id),
+                    round_number
+                )
+                player_id = int(pairing_detail["white_player_id"])
+                req_bye = next((rb for rb in requested_byes if int(rb["player_id"]) == player_id), None)
+                default_result = req_bye["bye_type"] if req_bye else "BYE"
+                
+                if result != default_result:
+                    choice = self._prompt_bye_edit_warning(default_result, result)
+                    if choice == "cancel":
+                        # Restore previous result in OptionMenu
+                        self.result_option.set(pairing_detail.get("result") or "")
+                        return
+                    elif choice == "restore":
+                        result = default_result
+                        self.result_option.set(result)
+
             if self.current_round_id:
                 round_data = self.db.get_round(self.current_round_id)
                 if round_data and round_data["status"] == "closed":
@@ -1047,6 +1145,83 @@ class PairingResultsMixin:
             self._load_selected_round_pairings()
         except Exception as exc:
             self._show_error(exc)
+
+    def _prompt_bye_edit_warning(self, default_result: str, chosen_result: str) -> str:
+        choice = "cancel"
+        
+        dialog = ctk.CTkToplevel(self)
+        dialog.title("Aviso: Editar BYE")
+        dialog.geometry("450x230")
+        dialog.resizable(False, False)
+        dialog.transient(self)
+        dialog.grab_set()
+        dialog.grid_columnconfigure(0, weight=1)
+        dialog.grid_rowconfigure(1, weight=1)
+        
+        dialog.update_idletasks()
+        width = dialog.winfo_width()
+        height = dialog.winfo_height()
+        x = self.winfo_x() + (self.winfo_width() // 2) - (width // 2)
+        y = self.winfo_y() + (self.winfo_height() // 2) - (height // 2)
+        dialog.geometry(f"+{x}+{y}")
+
+        msg = (
+            "Esta mesa é um BYE (sem oponente).\n"
+            "Alterar o resultado para algo diferente do padrão pode causar inconsistências "
+            "e impedir o fechamento correto da rodada.\n\n"
+            f"Resultado padrão: '{default_result}'\n"
+            f"Resultado escolhido: '{chosen_result or 'pendente'}'"
+        )
+        
+        ctk.CTkLabel(
+            dialog,
+            text=msg,
+            justify="left",
+            wraplength=410,
+            font=ctk.CTkFont(family="Segoe UI", size=13),
+        ).grid(row=0, column=0, padx=20, pady=20, sticky="w")
+        
+        actions = ctk.CTkFrame(dialog, fg_color="transparent")
+        actions.grid(row=2, column=0, pady=(0, 20), padx=20, sticky="ew")
+        
+        actions.grid_columnconfigure(0, weight=1)
+        actions.grid_columnconfigure(1, weight=1)
+        actions.grid_columnconfigure(2, weight=1)
+        
+        def set_choice(val):
+            nonlocal choice
+            choice = val
+            dialog.destroy()
+            
+        btn_restore = ctk.CTkButton(
+            actions,
+            text="Voltar ao Padrão",
+            command=lambda: set_choice("restore"),
+            fg_color="#10B981",
+            hover_color="#059669",
+        )
+        btn_restore.grid(row=0, column=0, padx=(0, 6), sticky="ew")
+        
+        btn_edit = ctk.CTkButton(
+            actions,
+            text="Realmente Editar",
+            command=lambda: set_choice("edit"),
+            fg_color="#EF4444",
+            hover_color="#DC2626",
+        )
+        btn_edit.grid(row=0, column=1, padx=6, sticky="ew")
+        
+        btn_cancel = ctk.CTkButton(
+            actions,
+            text="Cancelar",
+            command=lambda: set_choice("cancel"),
+            fg_color="#4B5563",
+            hover_color="#374151",
+        )
+        btn_cancel.grid(row=0, column=2, padx=(6, 0), sticky="ew")
+        
+        self.wait_window(dialog)
+        return choice
 
     def _show_selected_pairing_qr_link(self) -> None:
         try:
@@ -1409,9 +1584,325 @@ class PairingResultsMixin:
             self.require_permission("tournament_write")
             if not self.current_round_id:
                 raise AppError("Selecione uma rodada.")
-            if not messagebox.askyesno("Confirmar", "Excluir a rodada gerada selecionada?"):
+            if not messagebox.askyesno("Confirmar", "Excluir a rodada selecionada?"):
                 return
             self.pairing_service.delete_generated_round(self.current_round_id)
             self._load_round_options()
         except Exception as exc:
             self._show_error(exc)
+
+    def _get_projector_data(self) -> list[dict[str, str]]:
+        if not self.current_round_id:
+            return []
+        
+        data = []
+        if getattr(self, "pairing_team_mode", False):
+            matches = self.db.list_team_matches_for_round(self.current_round_id)
+            for match in matches:
+                if match["is_bye"]:
+                    data.append({
+                        "board": f"M{match['match_number']}",
+                        "white": match["white_team_name"],
+                        "black": "BYE"
+                    })
+                    continue
+                for board in self.db.list_team_boards(int(match["id"])):
+                    white_name = player_pairing_name({
+                        "name": board.get("white_player_name"),
+                        "surname": board.get("white_player_surname"),
+                        "given_name": board.get("white_player_given_name"),
+                    })
+                    black_name = player_pairing_name({
+                        "name": board.get("black_player_name"),
+                        "surname": board.get("black_player_surname"),
+                        "given_name": board.get("black_player_given_name"),
+                    })
+                    data.append({
+                        "board": f"M{match['match_number']} T{board['board_number']}",
+                        "white": f"{white_name} ({match['white_team_name']})",
+                        "black": f"{black_name} ({match['black_team_name']})"
+                    })
+        else:
+            pairings = self.db.get_pairings_for_round(self.current_round_id)
+            for pairing in pairings:
+                white_name = pairing_player_name(pairing, "white")
+                black_name = "BYE" if pairing["is_bye"] else pairing_player_name(pairing, "black")
+                data.append({
+                    "board": str(pairing["board_number"]),
+                    "white": white_name,
+                    "black": black_name
+                })
+        return data
+
+    def _open_projector_mode(self) -> None:
+        import math
+        
+        if not self.current_round_id:
+            self._show_error(AppError("Selecione uma rodada primeiro."))
+            return
+            
+        pairings_data = self._get_projector_data()
+        if not pairings_data:
+            self._show_error(AppError("Não há emparceiramentos nesta rodada para exibir."))
+            return
+            
+        dialog = ctk.CTkToplevel(self)
+        dialog.title("Modo Projetor - Albericus")
+        dialog.configure(fg_color="#000000") # Fundo preto para alto contraste
+        dialog.transient(self)
+        dialog.grab_set()
+        # Abre maximizado por padrão
+        dialog.after(10, lambda: dialog.state("zoomed"))
+        
+        # Estado do projetor
+        state = {
+            "current_page": 0,
+            "font_size": 24,
+            "num_cols": 2,
+            "rows_per_col": 15,
+            "slideshow_active": True,
+            "slide_interval_ms": 10000,
+            "after_id": None,
+            "fullscreen": False
+        }
+        
+        # Frame de Controle Superior (Fundo escuro discreto)
+        controls_frame = ctk.CTkFrame(dialog, fg_color="#111111", corner_radius=0, height=60)
+        controls_frame.pack(fill="x", side="top", padx=0, pady=0)
+        
+        # Frame de Conteúdo (Totalmente preto)
+        content_frame = ctk.CTkFrame(dialog, fg_color="#000000", corner_radius=0)
+        content_frame.pack(fill="both", expand=True, padx=20, pady=20)
+        
+        # Funções de Atualização
+        def get_capacity():
+            return state["num_cols"] * state["rows_per_col"]
+            
+        def get_total_pages():
+            cap = get_capacity()
+            return max(1, math.ceil(len(pairings_data) / cap))
+            
+        def on_columns_change(val):
+            state["num_cols"] = int(val.split()[0])
+            state["current_page"] = 0
+            draw_page()
+            reset_slideshow_timer()
+            
+        def on_rows_change(val):
+            state["rows_per_col"] = int(val)
+            state["current_page"] = 0
+            draw_page()
+            reset_slideshow_timer()
+            
+        def on_interval_change(val):
+            state["slide_interval_ms"] = int(val.replace("s", "")) * 1000
+            reset_slideshow_timer()
+            
+        def change_font_size(delta):
+            state["font_size"] = max(12, min(48, state["font_size"] + delta))
+            draw_page()
+            
+        def toggle_slideshow():
+            state["slideshow_active"] = not state["slideshow_active"]
+            if state["slideshow_active"]:
+                btn_play.configure(text="⏸ Pausar")
+                reset_slideshow_timer()
+            else:
+                btn_play.configure(text="▶ Iniciar")
+                if state["after_id"]:
+                    dialog.after_cancel(state["after_id"])
+                    state["after_id"] = None
+            update_page_label()
+            
+        def prev_page():
+            total_pages = get_total_pages()
+            state["current_page"] = (state["current_page"] - 1) % total_pages
+            draw_page()
+            reset_slideshow_timer()
+            
+        def next_page():
+            total_pages = get_total_pages()
+            state["current_page"] = (state["current_page"] + 1) % total_pages
+            draw_page()
+            reset_slideshow_timer()
+            
+        def reset_slideshow_timer():
+            if state["after_id"]:
+                dialog.after_cancel(state["after_id"])
+                state["after_id"] = None
+            if state["slideshow_active"]:
+                state["after_id"] = dialog.after(state["slide_interval_ms"], auto_advance)
+                
+        def auto_advance():
+            total_pages = get_total_pages()
+            if total_pages > 1:
+                state["current_page"] = (state["current_page"] + 1) % total_pages
+                draw_page()
+            reset_slideshow_timer()
+            
+        def update_page_label():
+            total_pages = get_total_pages()
+            status_text = "Slide" if state["slideshow_active"] else "Pausado"
+            lbl_page.configure(text=f"Pág: {state['current_page'] + 1}/{total_pages} ({status_text})")
+            
+        def toggle_fullscreen(event=None):
+            state["fullscreen"] = not state["fullscreen"]
+            dialog.attributes("-fullscreen", state["fullscreen"])
+            if state["fullscreen"]:
+                controls_frame.pack_forget()
+                self._show_toast("Pressione ESC ou F11 para sair do modo tela cheia.", kind="info", duration_ms=2500)
+            else:
+                controls_frame.pack(fill="x", side="top", padx=0, pady=0)
+                controls_frame.pack_configure(before=content_frame)
+                
+        def exit_fullscreen(event=None):
+            if state["fullscreen"]:
+                state["fullscreen"] = False
+                dialog.attributes("-fullscreen", False)
+                controls_frame.pack(fill="x", side="top", padx=0, pady=0)
+                controls_frame.pack_configure(before=content_frame)
+                
+        # Configurar Controles
+        # Fonte controls
+        lbl_font = ctk.CTkLabel(controls_frame, text="Fonte:", text_color="#FFFFFF", font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"))
+        lbl_font.pack(side="left", padx=(15, 5))
+        
+        btn_font_dec = ctk.CTkButton(controls_frame, text="-", width=30, height=28, font=ctk.CTkFont(size=14, weight="bold"), command=lambda: change_font_size(-2))
+        btn_font_dec.pack(side="left", padx=2)
+        
+        btn_font_inc = ctk.CTkButton(controls_frame, text="+", width=30, height=28, font=ctk.CTkFont(size=14, weight="bold"), command=lambda: change_font_size(2))
+        btn_font_inc.pack(side="left", padx=2)
+        
+        # Colunas controls
+        lbl_cols = ctk.CTkLabel(controls_frame, text="Colunas:", text_color="#FFFFFF", font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"))
+        lbl_cols.pack(side="left", padx=(15, 5))
+        
+        cols_menu = ctk.CTkOptionMenu(controls_frame, values=["1 Coluna", "2 Colunas", "3 Colunas", "4 Colunas"], width=110, height=28, command=on_columns_change)
+        cols_menu.pack(side="left", padx=2)
+        cols_menu.set("2 Colunas")
+        
+        # Linhas controls
+        lbl_rows = ctk.CTkLabel(controls_frame, text="Linhas:", text_color="#FFFFFF", font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"))
+        lbl_rows.pack(side="left", padx=(15, 5))
+        
+        rows_menu = ctk.CTkOptionMenu(controls_frame, values=["10", "15", "20", "25", "30"], width=80, height=28, command=on_rows_change)
+        rows_menu.pack(side="left", padx=2)
+        rows_menu.set("15")
+        
+        # Slideshow controls
+        lbl_slide = ctk.CTkLabel(controls_frame, text="Slideshow:", text_color="#FFFFFF", font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"))
+        lbl_slide.pack(side="left", padx=(15, 5))
+        
+        btn_prev = ctk.CTkButton(controls_frame, text="◀", width=35, height=28, command=prev_page)
+        btn_prev.pack(side="left", padx=2)
+        
+        btn_play = ctk.CTkButton(controls_frame, text="⏸ Pausar", width=80, height=28, command=toggle_slideshow)
+        btn_play.pack(side="left", padx=2)
+        
+        btn_next = ctk.CTkButton(controls_frame, text="▶", width=35, height=28, command=next_page)
+        btn_next.pack(side="left", padx=2)
+        
+        interval_menu = ctk.CTkOptionMenu(controls_frame, values=["5s", "8s", "10s", "12s", "15s", "20s"], width=75, height=28, command=on_interval_change)
+        interval_menu.pack(side="left", padx=5)
+        interval_menu.set("10s")
+        
+        # Pagina indicator
+        lbl_page = ctk.CTkLabel(controls_frame, text="Pág: 1/1 (Slide)", text_color="#FBBF24", font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"))
+        lbl_page.pack(side="left", padx=(15, 10))
+        
+        # Tela cheia button
+        btn_fs = ctk.CTkButton(controls_frame, text="Tela Cheia [F11]", width=120, height=28, fg_color="#334155", hover_color="#475569", command=toggle_fullscreen)
+        btn_fs.pack(side="right", padx=15)
+        
+        # Atalhos
+        dialog.bind("<Escape>", exit_fullscreen)
+        dialog.bind("<F11>", toggle_fullscreen)
+        
+        def draw_page():
+            for child in content_frame.winfo_children():
+                child.destroy()
+                
+            num_cols = state["num_cols"]
+            rows_per_col = state["rows_per_col"]
+            cap = num_cols * rows_per_col
+            total_pages = get_total_pages()
+            
+            if state["current_page"] >= total_pages:
+                state["current_page"] = 0
+            curr_page = state["current_page"]
+            
+            update_page_label()
+            
+            start_idx = curr_page * cap
+            end_idx = start_idx + cap
+            page_pairings = pairings_data[start_idx:end_idx]
+            
+            header_font = ctk.CTkFont(family="Segoe UI", size=state["font_size"] + 2, weight="bold")
+            bold_font   = ctk.CTkFont(family="Segoe UI", size=state["font_size"],     weight="bold")
+            board_font  = ctk.CTkFont(family="Segoe UI", size=state["font_size"] + 8, weight="bold")
+            
+            # Grid columns config
+            for c in range(num_cols):
+                content_frame.grid_columnconfigure(c, weight=1, uniform="equal")
+            content_frame.grid_rowconfigure(0, weight=1)
+            
+            for c in range(num_cols):
+                col_start = c * rows_per_col
+                col_pairings = page_pairings[col_start : col_start + rows_per_col]
+                if not col_pairings and c > 0:
+                    continue
+                    
+                col_frame = ctk.CTkFrame(content_frame, fg_color="transparent")
+                col_frame.grid(row=0, column=c, sticky="nsew", padx=10, pady=0)
+                col_frame.grid_columnconfigure(0, weight=1)
+                
+                # Cabeçalho da coluna
+                header_row = ctk.CTkFrame(col_frame, fg_color="#1E293B", corner_radius=4)
+                header_row.grid(row=0, column=0, sticky="ew", pady=(0, 6))
+                header_row.grid_columnconfigure(0, weight=1)
+                header_row.grid_columnconfigure(1, weight=3)
+                header_row.grid_columnconfigure(2, weight=3)
+                
+                ctk.CTkLabel(header_row, text="Mesa", font=header_font, text_color="#F59E0B").grid(row=0, column=0, padx=8, pady=8)
+                ctk.CTkLabel(header_row, text="Brancas", font=header_font, text_color="#FFFFFF").grid(row=0, column=1, padx=8, pady=8, sticky="w")
+                ctk.CTkLabel(header_row, text="Pretas", font=header_font, text_color="#FFFFFF").grid(row=0, column=2, padx=8, pady=8, sticky="w")
+                
+                # Linhas da tabela
+                for r, pairing in enumerate(col_pairings):
+                    is_bye = pairing["black"] == "BYE" or pairing["white"] == "BYE"
+                    
+                    if is_bye:
+                        bg_color = "#1E293B" if r % 2 == 0 else "#0F172A"
+                        text_color = "#94A3B8"
+                        board_color = "#D97706"
+                    else:
+                        bg_color = "#1E293B" if r % 2 == 0 else "#0F172A"
+                        text_color = "#FFFFFF"
+                        board_color = "#FBBF24"
+                        
+                    row_frame = ctk.CTkFrame(col_frame, fg_color=bg_color, corner_radius=4)
+                    row_frame.grid(row=r + 1, column=0, sticky="ew", pady=2)
+                    row_frame.grid_columnconfigure(0, weight=1)
+                    row_frame.grid_columnconfigure(1, weight=3)
+                    row_frame.grid_columnconfigure(2, weight=3)
+                    
+                    # Labels mesa, brancas e pretas (todos em negrito)
+                    lbl_board = ctk.CTkLabel(row_frame, text=pairing["board"], font=board_font, text_color=board_color)
+                    lbl_board.grid(row=0, column=0, padx=8, pady=6)
+                    
+                    lbl_white = ctk.CTkLabel(row_frame, text=pairing["white"], font=bold_font, text_color=text_color, anchor="w")
+                    lbl_white.grid(row=0, column=1, padx=8, pady=6, sticky="w")
+                    
+                    lbl_black = ctk.CTkLabel(row_frame, text=pairing["black"], font=bold_font, text_color=text_color, anchor="w")
+                    lbl_black.grid(row=0, column=2, padx=8, pady=6, sticky="w")
+        
+        def on_close():
+            if state["after_id"]:
+                dialog.after_cancel(state["after_id"])
+                state["after_id"] = None
+            dialog.destroy()
+            
+        dialog.protocol("WM_DELETE_WINDOW", on_close)
+        
+        draw_page()
+        reset_slideshow_timer()

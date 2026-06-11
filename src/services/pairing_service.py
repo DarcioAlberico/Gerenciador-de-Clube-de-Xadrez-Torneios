@@ -470,6 +470,7 @@ class PairingService:
             _bye_player_ids(closed_pairings),
             players=self.db.list_players(tournament_id, active_only=True),
             standings={int(item["player_id"]): item for item in self.standings(tournament_id)},
+            float_histories=self._float_histories(tournament_id),
         )
 
         issues = []
@@ -735,10 +736,14 @@ class PairingService:
                 )
             if settings.get("disable_bye") and len(to_pair) % 2 == 1:
                 raise AppError("O bye esta desativado. Use numero par de jogadores ativos.")
-            if next_number == 1:
-                pairings = _first_round_pairings(to_pair, settings)
+            if settings.get("pairing_system") == "gacrux_swiss":
+                from src.services.pairing.gacrux_engine import GacruxEngine
+                pairings = GacruxEngine(self.db).pair_round(tournament_id, to_pair, next_number)
             else:
-                pairings = self._swiss_pairings(tournament_id, to_pair, next_number)
+                if next_number == 1:
+                    pairings = _first_round_pairings(to_pair, settings)
+                else:
+                    pairings = self._swiss_pairings(tournament_id, to_pair, next_number)
             pairings = _append_requested_bye_pairings(pairings, bye_by_player)
         return {
             "players": players,
@@ -775,6 +780,7 @@ class PairingService:
         plan: dict[str, Any],
     ) -> dict[str, Any]:
         histories = self._color_histories(tournament_id)
+        float_histories = self._float_histories(tournament_id)
         played_pairs = self._played_pairs(tournament_id)
         bye_player_ids = self._bye_player_ids(tournament_id)
         standings = {int(item["player_id"]): item for item in self.standings(tournament_id)}
@@ -786,6 +792,7 @@ class PairingService:
             played_pairs=played_pairs,
             bye_player_ids=bye_player_ids,
             standings=standings,
+            float_histories=float_histories,
             pairing_engine_version=self.PAIRING_ENGINE_VERSION,
             ruleset_version=self.RULESET_VERSION,
         )
@@ -1003,7 +1010,10 @@ class PairingService:
         pairing = self.db.get_pairing(pairing_id)
         if not pairing or int(pairing["tournament_id"]) != int(tournament_id):
             raise AppError("Mesa nao encontrada para o torneio selecionado.")
-        if result not in RESULTS:
+        allowed = set(RESULTS)
+        if pairing.get("is_bye"):
+            allowed.update({"BYE", "F", "H", "Z"})
+        if result not in allowed:
             raise AppError("Resultado invalido.")
         before = {
             "pairing_id": int(pairing_id),

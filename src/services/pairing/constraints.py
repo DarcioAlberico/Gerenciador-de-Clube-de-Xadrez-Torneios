@@ -2,10 +2,30 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 
 COLOR_HARD_VIOLATION_PENALTY = 100_000
+COLOR_PREFERENCE_PENALTIES = {
+    "absolute": 250,
+    "strong": 80,
+    "mild": 20,
+    "none": 0,
+}
+
+
+@dataclass(frozen=True)
+class ColorPreference:
+    due_color: str | None
+    strength: str
+    color_imbalance: int
+    repeated_color: str | None
+    played_games: int
+
+    @property
+    def is_absolute(self) -> bool:
+        return self.strength == "absolute"
 
 
 def would_make_three_colors(player_id: int, color: str, histories: dict[int, list[str]]) -> bool:
@@ -28,6 +48,37 @@ def is_color_valid_fide(player_id: int, color: str, histories: dict[int, list[st
 
 def color_hard_violation(player_id: int, color: str, histories: dict[int, list[str]]) -> int:
     return 0 if is_color_valid_fide(player_id, color, histories) else 1
+
+
+def color_preference(player_id: int, histories: dict[int, list[str]]) -> ColorPreference:
+    """Perfil de preferencia de cor no estilo BBP/FIDE Dutch.
+
+    ``due_color`` e a cor que melhora o historico do jogador; ``strength`` indica
+    se a preferencia e absoluta, forte, leve ou inexistente.
+    """
+    history = [item for item in histories.get(int(player_id), []) if item in {"W", "B"}]
+    if not history:
+        return ColorPreference(None, "none", 0, None, 0)
+
+    white_count = history.count("W")
+    black_count = history.count("B")
+    signed_balance = white_count - black_count
+    lower_color = "B" if signed_balance > 0 else "W"
+    last_color = history[-1]
+    streak = 1
+    for color in reversed(history[:-1]):
+        if color != last_color:
+            break
+        streak += 1
+
+    repeated_color = last_color if streak > 1 else None
+    if abs(signed_balance) > 1:
+        return ColorPreference(lower_color, "absolute", signed_balance, repeated_color, len(history))
+    if repeated_color is not None:
+        return ColorPreference(_opposite_color(repeated_color), "absolute", signed_balance, repeated_color, len(history))
+    if signed_balance:
+        return ColorPreference(lower_color, "strong", signed_balance, None, len(history))
+    return ColorPreference(_opposite_color(last_color), "mild", signed_balance, None, len(history))
 
 
 def color_assignment_cost(
@@ -172,24 +223,18 @@ def assignment_color_penalty(
     color: str,
     histories: dict[int, list[str]],
 ) -> int:
-    history = [item for item in histories.get(player_id, []) if item in {"W", "B"}]
-    white_count = history.count("W")
-    black_count = history.count("B")
-    next_white = white_count + (1 if color == "W" else 0)
-    next_black = black_count + (1 if color == "B" else 0)
-    penalty = abs(next_white - next_black) * 12
+    preference = color_preference(player_id, histories)
+    next_balance = preference.color_imbalance + (1 if color == "W" else -1)
+    penalty = abs(next_balance) * 12
 
-    if history[-2:] == [color, color]:
-        penalty += 250
-    elif history[-1:] == [color]:
-        penalty += 20
-
-    if white_count - black_count >= 2 and color == "W":
-        penalty += 120
-    if black_count - white_count >= 2 and color == "B":
-        penalty += 120
+    if preference.due_color is not None and color != preference.due_color:
+        penalty += COLOR_PREFERENCE_PENALTIES[preference.strength]
 
     return penalty
+
+
+def _opposite_color(color: str) -> str:
+    return "B" if color == "W" else "W"
 
 
 def choose_colors(

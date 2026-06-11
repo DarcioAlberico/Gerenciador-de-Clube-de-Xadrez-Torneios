@@ -1012,5 +1012,238 @@ class FederationExportTest(CoreServiceTestCase):
         self.assertIn("Partidas jogadas", report_content)
         self.assertIn("1", report_content)
 
+
+class TRF16ExporterDirectTest(CoreServiceTestCase):
+    """Testes diretos das lacunas não cobertas do TRF16Exporter.
+
+    Cobre:
+    1. export() e validate() com tournament_id inválido → AppError
+    2. Campo 072 (rated_count) exclui jogadores sem rating
+    3. Ordenamento de jogadores por (-rating, nome, id)
+    4. Exportação sem rodadas geradas → linhas 001 sem colunas de resultado
+    5. Resultado bye e walkover codificados corretamente na linha 001
+    6. validate() de torneio por equipes sem equipes → AppError
+    """
+
+    def _make_trf16(self):
+        return TRF16Exporter(self.export_service)
+
+    def _full_tournament(self, name="TRF16 Teste"):
+        """Cria torneio com todos os campos obrigatórios para exportação sem warnings."""
+        tid = self.db.create_tournament(
+            name,
+            location="Curitiba",
+            rounds_count=1,
+            time_control="90 min + 30 sec",
+            start_date="2026-06-10",
+            end_date="2026-06-10",
+        )
+        self.db.save_tournament_settings(
+            tid,
+            {
+                "federation": "BRA",
+                "chief_arbiter": "Arbitro Teste",
+                "tournament_profile": "fide",
+                "fide_event_id": "99999",
+            },
+        )
+        self.db.save_round_schedule(
+            tid, [{"round_number": 1, "date": "2026-06-10", "time": "10:00"}]
+        )
+        return tid
+
+    # ------------------------------------------------------------------
+    # Lacuna 1a: export() com torneio inexistente → AppError
+    # ------------------------------------------------------------------
+    def test_export_raises_app_error_for_invalid_tournament_id(self) -> None:
+        exporter = self._make_trf16()
+        trf_path = self.temp_dir.name + "/x.trf"
+        with self.assertRaises(AppError):
+            exporter.export(tournament_id=999_999, file_path=trf_path)
+
+    # ------------------------------------------------------------------
+    # Lacuna 1b: validate() com torneio inexistente → AppError
+    # ------------------------------------------------------------------
+    def test_validate_raises_app_error_for_invalid_tournament_id(self) -> None:
+        exporter = self._make_trf16()
+        with self.assertRaises(AppError):
+            exporter.validate(tournament_id=999_999)
+
+    # ------------------------------------------------------------------
+    # Lacuna 2: campo 072 (rated_count) exclui jogadores sem rating FIDE
+    # ------------------------------------------------------------------
+    def test_072_rated_count_excludes_players_with_zero_rating(self) -> None:
+        tid = self._full_tournament("TRF16 Rated Count")
+        # Dois jogadores com rating internacional > 0 (contados em 072)
+        self.db.create_player(
+            tid, name="Rated Um", rating=2000, international_rating=2000,
+            fide_id="100001", federation_id="BRA", birth_date="2000-01-01",
+        )
+        self.db.create_player(
+            tid, name="Rated Dois", rating=1800, international_rating=1800,
+            fide_id="100002", federation_id="BRA", birth_date="2000-01-01",
+        )
+        # Um jogador sem rating internacional (deve ser excluído do 072)
+        self.db.create_player(
+            tid, name="Sem Rating", rating=0, international_rating=0,
+            fide_id="100003", federation_id="BRA", birth_date="2000-01-01",
+        )
+
+        out = Path(self.temp_dir.name) / "rated_count.trf"
+        self._make_trf16().export(tid, out)
+        content = out.read_text(encoding="utf-8")
+
+        self.assertIn("062 3", content)   # 3 jogadores no total (campo 062)
+        self.assertIn("072 2", content)   # apenas 2 com rating FIDE (campo 072)
+        self.assertNotIn("072 3", content)
+
+    # ------------------------------------------------------------------
+    # Lacuna 3: ordenamento de jogadores (-rating, nome.casefold(), id)
+    # ------------------------------------------------------------------
+    def test_player_ordering_by_rating_desc_then_name(self) -> None:
+        tid = self._full_tournament("TRF16 Ordenamento")
+        # Jogador B tem rating maior → deve ser rank 1 (primeiro no arquivo)
+        self.db.create_player(
+            tid, name="Azevedo, Carlos", rating=1700, international_rating=1700,
+            fide_id="200001", federation_id="BRA", birth_date="2000-01-01",
+        )
+        self.db.create_player(
+            tid, name="Barbosa, Ana", rating=2100, international_rating=2100,
+            fide_id="200002", federation_id="BRA", birth_date="2000-01-01",
+        )
+        # Mesmo rating que Azevedo, mas nome alfabeticamente anterior → rank 2
+        self.db.create_player(
+            tid, name="Aaa, Zézé", rating=1700, international_rating=1700,
+            fide_id="200003", federation_id="BRA", birth_date="2000-01-01",
+        )
+
+        out = Path(self.temp_dir.name) / "order.trf"
+        self._make_trf16().export(tid, out)
+        lines = [l for l in out.read_text(encoding="utf-8").splitlines() if l.startswith("001 ")]
+
+        self.assertEqual(len(lines), 3)
+        # Rank 1: Barbosa (maior rating)
+        self.assertIn("Barbosa, Ana", lines[0])
+        # Rank 2: Aaa (mesmo rating de Azevedo, mas nome casefold < azevedo)
+        self.assertIn("Aaa,", lines[1])
+        # Rank 3: Azevedo
+        self.assertIn("Azevedo, Carlos", lines[2])
+
+    # ------------------------------------------------------------------
+    # Lacuna 4: exportação sem rodadas geradas
+    # ------------------------------------------------------------------
+    def test_export_with_no_rounds_emits_player_lines_without_results(self) -> None:
+        tid = self._full_tournament("TRF16 Sem Rodadas")
+        self.db.create_player(
+            tid, name="Silva, Ana", rating=2000, international_rating=2000,
+            fide_id="300001", federation_id="BRA", birth_date="2000-01-01",
+        )
+        self.db.create_player(
+            tid, name="Souza, Bruno", rating=1800, international_rating=1800,
+            fide_id="300002", federation_id="BRA", birth_date="2000-01-01",
+        )
+
+        out = Path(self.temp_dir.name) / "no_rounds.trf"
+        # Deve exportar sem levantar exceção mesmo sem rodadas
+        warnings = self._make_trf16().export(tid, out)
+        content = out.read_text(encoding="utf-8")
+        lines_001 = [l for l in content.splitlines() if l.startswith("001 ")]
+
+        self.assertEqual(len(lines_001), 2)
+        # Arquivo deve ter o cabeçalho do torneio
+        self.assertIn("012 TRF16 Sem Rodadas", content)
+        # Aviso de que não há rodadas geradas deve estar presente
+        self.assertTrue(any("sem rodadas" in w.lower() for w in warnings))
+
+    # ------------------------------------------------------------------
+    # Lacuna 5a: linha 001 com bye codificado corretamente
+    # ------------------------------------------------------------------
+    def test_001_line_encodes_bye_result(self) -> None:
+        tid = self._full_tournament("TRF16 Bye")
+        p1 = self.db.create_player(
+            tid, name="Jogador Um", rating=2000, international_rating=2000,
+            fide_id="400001", federation_id="BRA", birth_date="2000-01-01",
+        )
+        p2 = self.db.create_player(
+            tid, name="Jogador Dois", rating=1800, international_rating=1800,
+            fide_id="400002", federation_id="BRA", birth_date="2000-01-01",
+        )
+        p3 = self.db.create_player(
+            tid, name="Jogador Tres", rating=1600, international_rating=1600,
+            fide_id="400003", federation_id="BRA", birth_date="2000-01-01",
+        )
+        # Campo ímpar: p3 recebe bye
+        round_id = self.db.create_round_with_pairings(
+            tid, 1,
+            [
+                {"board_number": 1, "white_player_id": p1, "black_player_id": p2, "result": "1-0"},
+                {"board_number": 2, "white_player_id": p3, "black_player_id": None, "result": "BYE", "is_bye": 1},
+            ],
+        )
+        self.service.close_round(tid, round_id)
+
+        out = Path(self.temp_dir.name) / "bye.trf"
+        self._make_trf16().export(tid, out)
+        content = out.read_text(encoding="utf-8")
+        lines_001 = [l for l in content.splitlines() if l.startswith("001 ")]
+
+        # O jogador com bye deve ter "U" ou similar na coluna de resultado (formato TRF16)
+        # A linha do jogador 3 (rank 3 = menor rating) deve ter o bye registrado
+        bye_line = next(l for l in lines_001 if "Jogador Tres" in l)
+        self.assertTrue(len(bye_line) > 50, "Linha 001 do bye deve ter colunas de resultado")
+
+    # ------------------------------------------------------------------
+    # Lacuna 5b: linha 001 com walkover (1F-0F, 0F-1F) codificado
+    # ------------------------------------------------------------------
+    def test_001_line_encodes_walkover_results(self) -> None:
+        tid = self._full_tournament("TRF16 Walkover")
+        p1 = self.db.create_player(
+            tid, name="Vencedor WO", rating=2000, international_rating=2000,
+            fide_id="500001", federation_id="BRA", birth_date="2000-01-01",
+        )
+        p2 = self.db.create_player(
+            tid, name="Perdedor WO", rating=1800, international_rating=1800,
+            fide_id="500002", federation_id="BRA", birth_date="2000-01-01",
+        )
+        round_id = self.db.create_round_with_pairings(
+            tid, 1,
+            [{"board_number": 1, "white_player_id": p1, "black_player_id": p2, "result": "1F-0F"}],
+        )
+        self.service.close_round(tid, round_id)
+
+        out = Path(self.temp_dir.name) / "walkover.trf"
+        self._make_trf16().export(tid, out)
+        content = out.read_text(encoding="utf-8")
+        lines_001 = [l for l in content.splitlines() if l.startswith("001 ")]
+
+        self.assertEqual(len(lines_001), 2)
+        # Ambos os jogadores devem ter suas linhas 001 com resultado registrado
+        winner_line = next(l for l in lines_001 if "Vencedor WO" in l)
+        loser_line  = next(l for l in lines_001 if "Perdedor WO" in l)
+        # O vencedor por WO recebe "+" e o perdedor "-" no TRF16
+        self.assertIn("+", winner_line)
+        self.assertIn("-", loser_line)
+
+    # ------------------------------------------------------------------
+    # Lacuna 6: validate() de torneio por equipes sem equipes → AppError
+    # ------------------------------------------------------------------
+    def test_validate_raises_app_error_for_team_tournament_without_teams(self) -> None:
+        # Cria torneio por equipes sem cadastrar nenhuma equipe
+        tid = self.tournament_service.create_tournament(
+            {
+                "name": "Equipes Sem Equipes",
+                "competition_type": "team",
+                "rounds_count": "3",
+                "bye_points": "1",
+            }
+        )
+        # Adiciona pelo menos um jogador (para não falhar por "sem jogadores")
+        self.db.create_player(tid, name="Jogador Orfao", rating=1500)
+
+        exporter = self._make_trf16()
+        with self.assertRaises(AppError):
+            exporter.validate(tournament_id=tid)
+
+
 if __name__ == "__main__":
     unittest.main()

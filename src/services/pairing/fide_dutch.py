@@ -899,7 +899,21 @@ def choose_bye_player_with_pairing_quality(
         "score_diff_penalty": score_diff_penalty,
     }
 
-    def remaining_quality(bye_player: dict[str, Any]) -> tuple[int, int, float, int, str]:
+    def unplayed_count(player_id: int) -> int:
+        return sum(1 for item in float_histories.get(int(player_id), []) if item == "bye")
+
+    unplayed_by_player = {int(player["id"]): unplayed_count(int(player["id"])) for player in tied_lowest}
+    if len(set(unplayed_by_player.values())) > 1:
+        min_unplayed = min(unplayed_by_player.values())
+        tied_lowest = [
+            player for player in tied_lowest
+            if unplayed_by_player.get(int(player["id"]), 0) == min_unplayed
+        ]
+        prefer_bye_rank = True
+    else:
+        prefer_bye_rank = False
+
+    def remaining_quality(bye_player: dict[str, Any]) -> tuple[Any, ...]:
         remaining = [player for player in players if int(player["id"]) != int(bye_player["id"])]
         if len(remaining) <= min(12, max_exhaustive_pairing_players):
             pairs = optimal_player_pairs(
@@ -934,13 +948,13 @@ def choose_bye_player_with_pairing_quality(
             ranks,
             **quality_kwargs,
         )
-        return (
-            quality[0],
-            quality[1],
-            quality[2],
+        bye_rank = (
             int(bye_player["rating"] or 0),
             str(bye_player.get("name") or "").casefold(),
         )
+        if prefer_bye_rank:
+            return (quality[0], quality[1], *bye_rank, quality[2])
+        return (quality[0], quality[1], quality[2], *bye_rank)
 
     return min(tied_lowest, key=remaining_quality)
 

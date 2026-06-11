@@ -1,0 +1,46 @@
+================================================================================
+  RELATÓRIO DE STRESS — ALBERICUS — 10.000 TORNEIOS ALEATÓRIOS
+================================================================================
+
+Total simulados          :   10,000
+Sucessos                 :    9,999
+Falhas (total)           :        1
+  dos quais timeouts     :        0
+Taxa de falha            :   0.010%
+Warnings de standings    :        0
+Tempo total              : 21237.74 s
+Throughput               :     0.47 torneios/s
+Workers paralelos        :        4
+Campo máximo             :      50j
+Seed aleatório           :       42
+
+--------------------------------------------------------------------------------
+DURAÇÃO — ms (todos)
+  Min=1167.9  Avg=8492.9  P50=7726.5  P95=17466.0  P99=20557.7  Max=27613.8
+
+DURAÇÃO — ms (sucessos)
+  Min=1167.9  Avg=8493.5  P50=7726.5  P95=17466.0  P99=20557.7  Max=27613.8
+
+--------------------------------------------------------------------------------
+DISTRIBUIÇÃO POR TAMANHO
+  small_10_50            total= 6,507  falhas=    0  (0.00%)
+  tiny_2_9               total= 3,493  falhas=    1  (0.03%)
+
+--------------------------------------------------------------------------------
+FALHAS POR FASE / TIPO
+  Fase: close_round_2
+    AppError                                     1×
+
+--------------------------------------------------------------------------------
+TOP 20 FALHAS MAIS DEMORADAS
+  # 1  # 9,271  j=  2  rnd=2  fase=close_round_2  tipo=AppError  2009ms
+       Resolva as pendencias de arbitragem bloqueantes antes de fechar a rodada (pairing/opponent_repeat).
+
+--------------------------------------------------------------------------------
+TODAS AS FALHAS
+  # 9,271  j=  2  rnd=2  ok=1  fase=close_round_2  tipo=AppError
+      Resolva as pendencias de arbitragem bloqueantes antes de fechar a rodada (pairing/opponent_repeat).
+
+================================================================================
+FIM DO RELATÓRIO
+================================================================================

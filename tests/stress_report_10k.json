@@ -1,0 +1,73 @@
+{
+  "summary": {
+    "total_tournaments": 10000,
+    "total_success": 9999,
+    "total_failures": 1,
+    "total_timeouts": 0,
+    "failure_rate_pct": 0.01,
+    "total_warnings": 0,
+    "total_elapsed_s": 21237.74,
+    "throughput_per_s": 0.47,
+    "workers": 4,
+    "max_players": 50,
+    "seed": 42
+  },
+  "duration_all_ms": {
+    "min": 1167.89,
+    "max": 27613.85,
+    "avg": 8492.88,
+    "p50": 7726.53,
+    "p95": 17466.0,
+    "p99": 20557.66
+  },
+  "duration_success_ms": {
+    "min": 1167.89,
+    "max": 27613.85,
+    "avg": 8493.53,
+    "p50": 7726.53,
+    "p95": 17466.0,
+    "p99": 20557.66
+  },
+  "failures_by_phase": {
+    "close_round_2": {
+      "AppError": 1
+    }
+  },
+  "size_distribution": {
+    "small_10_50": 6507,
+    "tiny_2_9": 3493
+  },
+  "failure_by_size": {
+    "tiny_2_9": 1
+  },
+  "top_20_longest_failures": [
+    {
+      "index": 9271,
+      "num_players": 2,
+      "num_rounds": 2,
+      "success": false,
+      "rounds_completed": 1,
+      "failure_phase": "close_round_2",
+      "failure_type": "AppError",
+      "failure_detail": "Resolva as pendencias de arbitragem bloqueantes antes de fechar a rodada (pairing/opponent_repeat).",
+      "duration_ms": 2009.2795999953523,
+      "warnings": [],
+      "timed_out": false
+    }
+  ],
+  "all_failures": [
+    {
+      "index": 9271,
+      "num_players": 2,
+      "num_rounds": 2,
+      "success": false,
+      "rounds_completed": 1,
+      "failure_phase": "close_round_2",
+      "failure_type": "AppError",
+      "failure_detail": "Resolva as pendencias de arbitragem bloqueantes antes de fechar a rodada (pairing/opponent_repeat).",
+      "duration_ms": 2009.2795999953523,
+      "warnings": [],
+      "timed_out": false
+    }
+  ]
+}
