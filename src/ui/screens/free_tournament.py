@@ -181,6 +181,39 @@ class FreeTournamentMixin:
         except Exception as exc:
             self._show_error(exc)
 
+    def free_mode_late_entry_starting_points(
+        self, tournament_id: int | None = None
+    ) -> tuple[bool, float | None]:
+        """Decide os pontos iniciais de um jogador que entra tarde no Modo Livre.
+
+        Retorna (prosseguir, starting_points):
+        - Fora do Modo Livre ou sem rodadas encerradas: (True, None) -> mantem o
+          calculo padrao do sistema (late_entry_points global).
+        - Com rodadas encerradas no Modo Livre: pergunta se o jogador herda
+          meio-ponto pedagogico (0,5) ou zero (0,0) por rodada ausente.
+          Devolve (True, valor) ao escolher, ou (False, None) se cancelar.
+        """
+        tid = tournament_id or getattr(self, "current_tournament_id", None)
+        if not tid or not self._is_free_mode(tid):
+            return True, None
+        closed = sum(
+            1 for r in self.db.list_rounds(int(tid)) if str(r.get("status")) == "closed"
+        )
+        if closed <= 0:
+            return True, None
+        choice = messagebox.askyesnocancel(
+            "Entrada tardia (Modo Livre)",
+            f"Este jogador esta entrando apos {closed} rodada(s) ja encerrada(s).\n\n"
+            "Ele deve herdar meio-ponto pedagogico (0,5) por rodada ausente?\n\n"
+            "Sim  =  0,5 por rodada (mantem o aluno motivado)\n"
+            "Nao  =  0,0 (zero)\n"
+            "Cancelar  =  nao adicionar agora",
+        )
+        if choice is None:
+            return False, None
+        points = round((0.5 if choice else 0.0) * closed, 2)
+        return True, points
+
     def _center_over_self(self, win: ctk.CTkToplevel, width: int, height: int) -> None:
         """Centraliza horizontalmente sobre a janela principal, levemente acima."""
         win.update_idletasks()

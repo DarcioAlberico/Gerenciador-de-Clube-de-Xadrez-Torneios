@@ -181,6 +181,54 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.assertEqual(chamadas, [])  # perfil oficial nao dispara re-pair
         self.assertTrue(any("Modo Livre" in erro for erro in erros))
 
+    def test_late_entry_sem_rodadas_encerradas_usa_padrao(self) -> None:
+        with mock.patch("src.ui.screens.free_tournament.messagebox.askyesnocancel") as pergunta:
+            proceed, points = self.app.free_mode_late_entry_starting_points(self.tournament_id)
+        self.assertTrue(proceed)
+        self.assertIsNone(points)
+        pergunta.assert_not_called()
+
+    def test_late_entry_meio_ponto_por_rodada_ausente(self) -> None:
+        self.app.db.list_rounds = lambda _tid: [{"status": "closed"}, {"status": "closed"}]
+        with mock.patch(
+            "src.ui.screens.free_tournament.messagebox.askyesnocancel", return_value=True
+        ):
+            proceed, points = self.app.free_mode_late_entry_starting_points(self.tournament_id)
+        self.assertTrue(proceed)
+        self.assertEqual(points, 1.0)  # 0,5 x 2 rodadas encerradas
+
+    def test_late_entry_zero_por_rodada_ausente(self) -> None:
+        self.app.db.list_rounds = lambda _tid: [{"status": "closed"}, {"status": "open"}]
+        with mock.patch(
+            "src.ui.screens.free_tournament.messagebox.askyesnocancel", return_value=False
+        ):
+            proceed, points = self.app.free_mode_late_entry_starting_points(self.tournament_id)
+        self.assertTrue(proceed)
+        self.assertEqual(points, 0.0)
+
+    def test_late_entry_cancelar_aborta_adicao(self) -> None:
+        self.app.db.list_rounds = lambda _tid: [{"status": "closed"}]
+        with mock.patch(
+            "src.ui.screens.free_tournament.messagebox.askyesnocancel", return_value=None
+        ):
+            proceed, points = self.app.free_mode_late_entry_starting_points(self.tournament_id)
+        self.assertFalse(proceed)
+        self.assertIsNone(points)
+
+    def test_late_entry_fora_do_modo_livre_nao_pergunta(self) -> None:
+        self._set_tournament_profile(self.tournament_id, "fide")
+        self.app.db.list_rounds = lambda _tid: [{"status": "closed"}]
+        with mock.patch("src.ui.screens.free_tournament.messagebox.askyesnocancel") as pergunta:
+            proceed, points = self.app.free_mode_late_entry_starting_points(self.tournament_id)
+        self.assertTrue(proceed)
+        self.assertIsNone(points)
+        pergunta.assert_not_called()
+
+    def test_create_player_persiste_starting_points_explicito(self) -> None:
+        player_id = self.db.create_player(self.tournament_id, name="Tardio", starting_points=1.5)
+        player = self.db.get_player(player_id)
+        self.assertEqual(player["starting_points"], 1.5)
+
     def test_member_and_tournament_can_be_created_from_ui_forms(self) -> None:
         self.app.show_members()
         self.app.update()
