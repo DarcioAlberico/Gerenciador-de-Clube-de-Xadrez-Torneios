@@ -85,6 +85,36 @@ class UiLayoutSmokeTest(unittest.TestCase):
                         offenders = self._widgets_past_right_edge()
                         self.assertEqual([], offenders)
 
+    def test_free_tournament_mode_opens_modal_with_notice_and_closes(self) -> None:
+        before_tournament = self.app.current_tournament_id
+        dialog = self.app.show_free_tournament_mode()
+        self.app.update()
+        try:
+            self.assertIsInstance(dialog, ctk.CTkToplevel)
+            labels = [
+                str(widget.cget("text"))
+                for widget in self._walk(dialog)
+                if isinstance(widget, ctk.CTkLabel)
+            ]
+            self.assertTrue(any("Modo Livre Ativado" in label for label in labels))
+            self.assertTrue(any("organizada onde o importante" in label for label in labels))
+            buttons = [
+                widget
+                for widget in self._walk(dialog)
+                if isinstance(widget, ctk.CTkButton) and widget.cget("text") == "Entendi"
+            ]
+            self.assertEqual(len(buttons), 1)
+            # Abrir o aviso nao deve mexer no estado do torneio oficial em curso.
+            self.assertEqual(self.app.current_tournament_id, before_tournament)
+
+            buttons[0].invoke()
+            self.app.update()
+            self.assertFalse(dialog.winfo_exists())
+        finally:
+            if dialog.winfo_exists():
+                dialog.destroy()
+                self.app.update()
+
     def test_member_and_tournament_can_be_created_from_ui_forms(self) -> None:
         self.app.show_members()
         self.app.update()
