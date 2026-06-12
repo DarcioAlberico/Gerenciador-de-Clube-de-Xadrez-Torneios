@@ -110,9 +110,12 @@ class CertificateService:
         return template_id
 
     def update_template(self, template_id: int, data: dict[str, Any]) -> None:
-        if not self.db.get_certificate_template(template_id):
+        existing = self.db.get_certificate_template(template_id)
+        if not existing:
             raise AppError("Modelo de diploma nao encontrado.")
-        payload = self._validated_template_payload(data)
+        # Campos do formulario sobrescrevem; os ausentes (ex.: estilo/marca
+        # d'agua, se o form nao os enviar) herdam do modelo atual.
+        payload = self._validated_template_payload({**existing, **data})
         try:
             self.db.update_certificate_template(template_id, **payload)
         except sqlite3.IntegrityError as exc:
@@ -138,6 +141,35 @@ class CertificateService:
             created += 1
         logger.info("Galeria de diplomas semeada: %s novos modelos de %s", created, count)
         return {"created": created, "total": count}
+
+    def preview_template_pdf(self, template_data: dict[str, Any], file_path: str | Path) -> Path:
+        """Gera um diploma de amostra (1 pagina) com os dados do formulario.
+
+        Usa um destinatario ficticio com todos os campos preenchidos, para o
+        usuario ver o estilo/marca d'agua antes de exportar de verdade.
+        """
+        template = self._template_for_export(
+            None,
+            str(template_data.get("certificate_type", "participation") or "participation"),
+            template_data,
+        )
+        recipient = {
+            "name": "Maria Eduarda Albuquerque",
+            "tournament": "Torneio Aberto de Demonstracao 2026",
+            "position": 1, "position_label": "1o",
+            "category": "Sub-14", "category_position": 1, "category_position_label": "1o",
+            "points": "6,5", "rating": 1820, "club": "Clube de Xadrez Albericus",
+            "location": "Teresina-PI", "date_range": "12/06/2026",
+            "session": "Aula de Finais de Torre", "event": "Festival de Xadrez do Clube",
+            "class_name": "Turma A", "instructor": "Prof. Ana", "learning_level": "Intermediario",
+            "verification_code": "ALB-PREVIEW",
+        }
+        path = Path(file_path)
+        if path.suffix.lower() != ".pdf":
+            path = path.with_suffix(".pdf")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        self._write_certificates_pdf(path, template, [recipient])
+        return path
 
     def preview_template(
         self,
