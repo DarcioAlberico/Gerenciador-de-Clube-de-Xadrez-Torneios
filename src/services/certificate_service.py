@@ -119,6 +119,26 @@ class CertificateService:
             raise AppError("Ja existe um modelo de diploma com este nome.") from exc
         logger.info("Modelo de diploma atualizado: %s", template_id)
 
+    def seed_gallery(self, count: int = 50) -> dict[str, int]:
+        """Cria a galeria de modelos prontos no banco (idempotente por nome).
+
+        Distribui ``count`` modelos pelos 10 estilos x paletas x tipos (ver
+        ``certificates.gallery``); pula os que ja existem pelo nome. Devolve
+        quantos foram criados.
+        """
+        from src.services.certificates.gallery import build_gallery, model_to_template
+
+        existing = {str(t.get("name")) for t in self.db.list_certificate_templates(active_only=False)}
+        created = 0
+        for model in build_gallery(count):
+            if model.name in existing:
+                continue
+            self.db.create_certificate_template(**model_to_template(model))
+            existing.add(model.name)
+            created += 1
+        logger.info("Galeria de diplomas semeada: %s novos modelos de %s", created, count)
+        return {"created": created, "total": count}
+
     def preview_template(
         self,
         tournament_id: int,

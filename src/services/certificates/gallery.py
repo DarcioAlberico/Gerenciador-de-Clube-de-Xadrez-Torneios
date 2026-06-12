@@ -8,9 +8,12 @@ para variedade). É a base tanto do preview quanto do seed da galeria no banco
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 from .palettes import PALETTES, PALETTES_BY_PRESET, DEFAULT_PALETTE_BY_PRESET
 from .styles import STYLE_PRESETS
+
+_TOURNAMENT_TYPES = ("overall_award", "category_award", "participation")
 
 # Texto padrão (título, corpo) por tipo de certificado — com variáveis {...}.
 TYPE_TEXT: dict[str, tuple[str, str]] = {
@@ -49,28 +52,29 @@ class GalleryModel:
         return self.certificate_type in ("overall_award", "category_award")
 
 
+def _preset_combos(preset_key: str) -> list[tuple[str, str]]:
+    """Para um preset, pareia cada tipo de certificado com uma paleta (ciclada)."""
+    palettes = PALETTES_BY_PRESET.get(preset_key) or (DEFAULT_PALETTE_BY_PRESET[preset_key],)
+    return [(palettes[i % len(palettes)], cert_type) for i, cert_type in enumerate(_TYPE_CYCLE)]
+
+
 def build_gallery(limit: int = 50) -> list[GalleryModel]:
-    """Devolve até ``limit`` modelos distribuídos pelos 10 presets (sem repetir
-    a combinação preset×paleta×tipo)."""
+    """Devolve até ``limit`` modelos distribuídos pelos 10 presets.
+
+    Round-robin por profundidade: na rodada N, cada preset contribui com o seu
+    N-ésimo par (paleta, tipo). Como cada preset oferece um par por tipo, os 10
+    presets × 5 tipos dão 50 modelos únicos (preset×paleta×tipo).
+    """
     presets = list(STYLE_PRESETS)
-    pal_cursor = {p: 0 for p in presets}
-    seen: set[tuple[str, str, str]] = set()
+    combos = {preset_key: _preset_combos(preset_key) for preset_key in presets}
+    max_depth = max((len(c) for c in combos.values()), default=0)
     models: list[GalleryModel] = []
-    type_i = 0
-    while len(models) < limit:
-        added = False
+    for depth in range(max_depth):
         for preset_key in presets:
-            if len(models) >= limit:
-                break
-            palettes = PALETTES_BY_PRESET.get(preset_key) or (DEFAULT_PALETTE_BY_PRESET[preset_key],)
-            palette_key = palettes[pal_cursor[preset_key] % len(palettes)]
-            pal_cursor[preset_key] += 1
-            cert_type = _TYPE_CYCLE[type_i % len(_TYPE_CYCLE)]
-            type_i += 1
-            key = (preset_key, palette_key, cert_type)
-            if key in seen:
+            preset_combos = combos[preset_key]
+            if depth >= len(preset_combos):
                 continue
-            seen.add(key)
+            palette_key, cert_type = preset_combos[depth]
             title, body = TYPE_TEXT[cert_type]
             models.append(GalleryModel(
                 name=f"{STYLE_PRESETS[preset_key].name} · {PALETTES[palette_key].name} · {TYPE_LABEL[cert_type]}",
@@ -80,7 +84,27 @@ def build_gallery(limit: int = 50) -> list[GalleryModel]:
                 title_template=title,
                 body_template=body,
             ))
-            added = True
-        if not added:
-            break
+            if len(models) >= limit:
+                return models
     return models
+
+
+def model_to_template(model: GalleryModel) -> dict[str, Any]:
+    """Converte um modelo da galeria no payload de um ``certificate_template``."""
+    footer = "{local} - {periodo}" if model.certificate_type in _TOURNAMENT_TYPES else "{clube} - {data}"
+    return {
+        "name": model.name,
+        "certificate_type": model.certificate_type,
+        "title_template": model.title_template,
+        "body_template": model.body_template,
+        "footer_template": footer,
+        "orientation": "landscape",
+        "signature_left": "Organizacao",
+        "signature_right": "Arbitragem / Direcao",
+        "style_preset": model.style_preset,
+        "palette_key": model.palette_key,
+        "seal_enabled": 1,
+        "watermark_enabled": 1,
+        "medal_by_placement": 1,
+        "active": 1,
+    }
