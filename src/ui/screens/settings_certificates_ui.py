@@ -27,6 +27,8 @@ class SettingsCertificatesMixin:
         label_by_wm = {key: label for label, key in wm_by_label.items()}
         piece_by_label = {"Cavalo": "knight", "Torre": "rook", "Dama": "queen", "Rei": "king", "Peao": "pawn"}
         label_by_piece = {key: label for label, key in piece_by_label.items()}
+        kind_by_label = {"Gerado (estilo)": "generated", "Imagem com campos": "image_overlay"}
+        label_by_kind = {key: label for label, key in kind_by_label.items()}
 
         frame = ctk.CTkFrame(parent)
         frame.grid_columnconfigure(0, weight=1)
@@ -63,6 +65,9 @@ class SettingsCertificatesMixin:
         medal_switch.grid(row=11, column=0, padx=10, pady=(0, 8), sticky="w")
         for switch in (seal_switch, watermark_switch, medal_switch):
             switch.select()
+        ctk.CTkLabel(frame, text="Modo do diploma").grid(row=12, column=0, padx=10, pady=(2, 4), sticky="w")
+        kind_option = ctk.CTkOptionMenu(frame, values=list(kind_by_label), width=250)
+        kind_option.grid(row=13, column=0, padx=10, pady=(0, 8), sticky="ew")
 
         def style_payload() -> dict[str, Any]:
             return {
@@ -74,6 +79,7 @@ class SettingsCertificatesMixin:
                 "seal_enabled": 1 if seal_switch.get() else 0,
                 "watermark_enabled": 1 if watermark_switch.get() else 0,
                 "medal_by_placement": 1 if medal_switch.get() else 0,
+                "template_kind": kind_by_label.get(kind_option.get(), "generated"),
             }
 
         def load_style(template: dict[str, Any]) -> None:
@@ -88,6 +94,7 @@ class SettingsCertificatesMixin:
                 (medal_switch, "medal_by_placement"),
             ):
                 switch.select() if int(template.get(key, 1) or 0) else switch.deselect()
+            kind_option.set(label_by_kind.get(str(template.get("template_kind") or "generated"), "Gerado (estilo)"))
 
         return frame, style_payload, load_style
 
@@ -908,6 +915,23 @@ class SettingsCertificatesMixin:
             except Exception as exc:
                 self._show_error(exc)
 
+        def export_art_guide() -> None:
+            try:
+                orientation = CERTIFICATE_ORIENTATION_VALUES[orientation_option.get()]
+                file_path = filedialog.asksaveasfilename(
+                    title="Exportar guia de arte",
+                    initialdir=str(self._default_export_dir()),
+                    initialfile="guia_arte_diploma.pdf",
+                    defaultextension=".pdf",
+                    filetypes=[("PDF", "*.pdf"), ("Todos os arquivos", "*.*")],
+                )
+                if not file_path:
+                    return
+                result = self.certificate_service.export_art_guide(file_path, orientation)
+                self._show_info(f"Guia de arte exportado:\n{result}")
+            except Exception as exc:
+                self._show_error(exc)
+
         def export_certificates() -> None:
             try:
                 template_payload = current_template_payload()
@@ -1022,6 +1046,7 @@ class SettingsCertificatesMixin:
             [
                 ("Pré-visualizar", preview_template),
                 ("Gerar galeria (50 modelos)", generate_gallery),
+                ("Exportar guia de arte", export_art_guide),
                 ("Salvar modelo", save_template),
                 ("Salvar como novo", save_template_as_new),
                 ("Gerar PDF", export_certificates),

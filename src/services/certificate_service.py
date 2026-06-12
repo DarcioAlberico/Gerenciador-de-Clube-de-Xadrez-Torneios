@@ -171,6 +171,34 @@ class CertificateService:
         self._write_certificates_pdf(path, template, [recipient])
         return path
 
+    def export_art_guide(self, file_path: str | Path, orientation: str = "landscape") -> Path:
+        """Exporta o guia de arte A4 (modo imagem): margens + zonas dos campos.
+
+        O usuario desenha o fundo no tamanho indicado e importa como imagem de
+        fundo; no modo 'image_overlay' o gerador sobrepoe os dados nas zonas.
+        """
+        try:
+            from reportlab.lib.pagesizes import A4, landscape
+            from reportlab.pdfgen import canvas
+        except ImportError as exc:
+            raise AppError("Instale reportlab para exportar PDF.") from exc
+
+        from src.services.certificates.standard_size import render_guide
+        from src.services.certificates.surface import ReportLabSurface
+
+        page_size = A4 if orientation == "portrait" else landscape(A4)
+        width, height = page_size
+        path = Path(file_path)
+        if path.suffix.lower() != ".pdf":
+            path = path.with_suffix(".pdf")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        document = canvas.Canvas(str(path), pagesize=page_size)
+        render_guide(ReportLabSurface(document, width, height), orientation)
+        document.showPage()
+        document.save()
+        logger.info("Guia de arte de diploma exportado em %s", path)
+        return path
+
     def preview_template(
         self,
         tournament_id: int,
@@ -1187,6 +1215,7 @@ class CertificateService:
             raise AppError("Instale reportlab para exportar PDF.") from exc
 
         from src.services.certificates.adapter import build_inputs
+        from src.services.certificates.overlay import render_overlay
         from src.services.certificates.renderer import render_certificate
         from src.services.certificates.surface import ReportLabSurface
 
@@ -1194,11 +1223,19 @@ class CertificateService:
         width, height = page_size
         document = canvas.Canvas(str(path), pagesize=page_size)
 
+        kind = str(template.get("template_kind") or "generated")
         watermark_image = None
-        if str(template.get("watermark_kind") or "") == "image":
+        overlay_image = None
+        if kind == "image_overlay":
+            overlay_image = CertificateService._load_template_image(
+                template, "background_image_path",
+                "Imagem de fundo nao encontrada.",
+                "Nao foi possivel carregar a imagem de fundo do diploma.",
+                ImageReader,
+            )
+        elif str(template.get("watermark_kind") or "") == "image":
             watermark_image = CertificateService._load_template_image(
-                template,
-                "watermark_image_path",
+                template, "watermark_image_path",
                 "Imagem da marca d'agua nao encontrada.",
                 "Nao foi possivel carregar a imagem da marca d'agua do diploma.",
                 ImageReader,
@@ -1206,10 +1243,13 @@ class CertificateService:
 
         for recipient in recipients:
             preset, palette, content, options = build_inputs(template, recipient)
-            if watermark_image is not None:
-                options = dataclass_replace(options, watermark_image=watermark_image)
             surface = ReportLabSurface(document, width, height)
-            render_certificate(surface, preset, palette, content, options)
+            if kind == "image_overlay":
+                render_overlay(surface, palette, content, overlay_image)
+            else:
+                if watermark_image is not None:
+                    options = dataclass_replace(options, watermark_image=watermark_image)
+                render_certificate(surface, preset, palette, content, options)
             document.showPage()
         document.save()
 
