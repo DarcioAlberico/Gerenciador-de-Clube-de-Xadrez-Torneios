@@ -85,6 +85,196 @@ class UiLayoutSmokeTest(unittest.TestCase):
                         offenders = self._widgets_past_right_edge()
                         self.assertEqual([], offenders)
 
+    def test_free_tournament_mode_mostra_aviso_e_cancela(self) -> None:
+        before_tournament = self.app.current_tournament_id
+        before_count = len(self.db.list_tournaments())
+        dialog = self.app.show_free_tournament_mode()
+        self.app.update()
+        try:
+            self.assertIsInstance(dialog, ctk.CTkToplevel)
+            labels = [
+                str(widget.cget("text"))
+                for widget in self._walk(dialog)
+                if isinstance(widget, ctk.CTkLabel)
+            ]
+            self.assertTrue(any("Modo Livre Ativado" in label for label in labels))
+            self.assertTrue(any("organizada onde o importante" in label for label in labels))
+            button_texts = {
+                widget.cget("text")
+                for widget in self._walk(dialog)
+                if isinstance(widget, ctk.CTkButton)
+            }
+            self.assertIn("Iniciar Modo Livre", button_texts)
+            self.assertIn("Cancelar", button_texts)
+
+            for widget in self._walk(dialog):
+                if isinstance(widget, ctk.CTkButton) and widget.cget("text") == "Cancelar":
+                    widget.invoke()
+                    break
+            self.app.update()
+            self.assertFalse(dialog.winfo_exists())
+            # Cancelar nao cria torneio nem mexe no torneio oficial em curso.
+            self.assertEqual(self.app.current_tournament_id, before_tournament)
+            self.assertEqual(len(self.db.list_tournaments()), before_count)
+        finally:
+            if dialog.winfo_exists():
+                dialog.destroy()
+                self.app.update()
+
+    def test_free_tournament_mode_iniciar_cria_torneio_em_perfil_livre(self) -> None:
+        self.app._ask_string = lambda *args, **kwargs: "Festival Escolar"
+        before_ids = {tournament["id"] for tournament in self.db.list_tournaments()}
+        dialog = self.app.show_free_tournament_mode()
+        self.app.update()
+        for widget in self._walk(dialog):
+            if isinstance(widget, ctk.CTkButton) and widget.cget("text") == "Iniciar Modo Livre":
+                widget.invoke()
+                break
+        else:
+            self.fail("Botao 'Iniciar Modo Livre' nao encontrado")
+        self.app.update()
+
+        self.assertFalse(dialog.winfo_exists())
+        novos = [
+            tournament
+            for tournament in self.db.list_tournaments()
+            if tournament["id"] not in before_ids and tournament["name"] == "Festival Escolar"
+        ]
+        self.assertEqual(len(novos), 1)
+        tournament_id = novos[0]["id"]
+        self.assertEqual(self.app.current_tournament_id, tournament_id)
+        # O torneio criado pelo Modo Livre nasce no perfil Livre/Escolar (free).
+        settings = self.db.get_tournament_settings(tournament_id)
+        self.assertEqual((settings or {}).get("tournament_profile"), "free")
+
+    def _set_tournament_profile(self, tournament_id: int, profile: str) -> None:
+        settings = self.db.get_tournament_settings(tournament_id) or {}
+        settings["tournament_profile"] = profile
+        self.db.save_tournament_settings(tournament_id, settings)
+
+    def test_is_free_mode_reflete_perfil_do_torneio(self) -> None:
+        self.assertTrue(self.app._is_free_mode(self.tournament_id))
+        self._set_tournament_profile(self.tournament_id, "fide")
+        self.assertFalse(self.app._is_free_mode(self.tournament_id))
+
+    def test_free_mode_repair_round_limpa_e_regera(self) -> None:
+        self.assertTrue(self.app._is_free_mode(self.tournament_id))
+        self.app.current_round_id = 777
+        chamadas = {"delete": [], "generate": []}
+        self.app.pairing_service.delete_generated_round = lambda rid: chamadas["delete"].append(rid)
+        self.app.pairing_service.generate_next_round = lambda tid: chamadas["generate"].append(tid)
+        self.app._load_round_options = lambda: None
+        with mock.patch("src.ui.screens.free_tournament.messagebox.askyesno", return_value=True):
+            self.app.free_mode_repair_round()
+        self.assertEqual(chamadas["delete"], [777])
+        self.assertEqual(chamadas["generate"], [self.tournament_id])
+
+    def test_free_mode_repair_round_bloqueia_fora_do_modo_livre(self) -> None:
+        self._set_tournament_profile(self.tournament_id, "fide")
+        self.app.current_round_id = 123
+        chamadas = []
+        self.app.pairing_service.delete_generated_round = lambda rid: chamadas.append(rid)
+        erros: list[str] = []
+        self.app._show_error = lambda exc: erros.append(str(exc))
+        with mock.patch("src.ui.screens.free_tournament.messagebox.askyesno", return_value=True):
+            self.app.free_mode_repair_round()
+        self.assertEqual(chamadas, [])  # perfil oficial nao dispara re-pair
+        self.assertTrue(any("Modo Livre" in erro for erro in erros))
+
+    def test_late_entry_sem_rodadas_encerradas_usa_padrao(self) -> None:
+        with mock.patch("src.ui.screens.free_tournament.messagebox.askyesnocancel") as pergunta:
+            proceed, points = self.app.free_mode_late_entry_starting_points(self.tournament_id)
+        self.assertTrue(proceed)
+        self.assertIsNone(points)
+        pergunta.assert_not_called()
+
+    def test_late_entry_meio_ponto_por_rodada_ausente(self) -> None:
+        self.app.db.list_rounds = lambda _tid: [{"status": "closed"}, {"status": "closed"}]
+        with mock.patch(
+            "src.ui.screens.free_tournament.messagebox.askyesnocancel", return_value=True
+        ):
+            proceed, points = self.app.free_mode_late_entry_starting_points(self.tournament_id)
+        self.assertTrue(proceed)
+        self.assertEqual(points, 1.0)  # 0,5 x 2 rodadas encerradas
+
+    def test_late_entry_zero_por_rodada_ausente(self) -> None:
+        self.app.db.list_rounds = lambda _tid: [{"status": "closed"}, {"status": "open"}]
+        with mock.patch(
+            "src.ui.screens.free_tournament.messagebox.askyesnocancel", return_value=False
+        ):
+            proceed, points = self.app.free_mode_late_entry_starting_points(self.tournament_id)
+        self.assertTrue(proceed)
+        self.assertEqual(points, 0.0)
+
+    def test_late_entry_cancelar_aborta_adicao(self) -> None:
+        self.app.db.list_rounds = lambda _tid: [{"status": "closed"}]
+        with mock.patch(
+            "src.ui.screens.free_tournament.messagebox.askyesnocancel", return_value=None
+        ):
+            proceed, points = self.app.free_mode_late_entry_starting_points(self.tournament_id)
+        self.assertFalse(proceed)
+        self.assertIsNone(points)
+
+    def test_late_entry_fora_do_modo_livre_nao_pergunta(self) -> None:
+        self._set_tournament_profile(self.tournament_id, "fide")
+        self.app.db.list_rounds = lambda _tid: [{"status": "closed"}]
+        with mock.patch("src.ui.screens.free_tournament.messagebox.askyesnocancel") as pergunta:
+            proceed, points = self.app.free_mode_late_entry_starting_points(self.tournament_id)
+        self.assertTrue(proceed)
+        self.assertIsNone(points)
+        pergunta.assert_not_called()
+
+    def test_create_player_persiste_starting_points_explicito(self) -> None:
+        player_id = self.db.create_player(self.tournament_id, name="Tardio", starting_points=1.5)
+        player = self.db.get_player(player_id)
+        self.assertEqual(player["starting_points"], 1.5)
+
+    def test_prepare_late_entry_modo_livre_delega_meio_ponto(self) -> None:
+        self.app.db.list_rounds = lambda _tid: [{"status": "closed"}, {"status": "closed"}]
+        with mock.patch(
+            "src.ui.screens.free_tournament.messagebox.askyesnocancel", return_value=True
+        ):
+            proceed, points = self.app.prepare_late_entry(self.tournament_id)
+        self.assertTrue(proceed)
+        self.assertEqual(points, 1.0)
+
+    def test_prepare_late_entry_oficial_avisa_e_confirma(self) -> None:
+        self._set_tournament_profile(self.tournament_id, "fide")
+        self.app.db.list_rounds = lambda _tid: [{"status": "closed"}, {"status": "closed"}]
+        with mock.patch(
+            "src.ui.screens.free_tournament.messagebox.askyesno", return_value=True
+        ) as aviso:
+            proceed, points = self.app.prepare_late_entry(self.tournament_id)
+        self.assertTrue(proceed)
+        self.assertIsNone(points)  # modo oficial mantem o calculo padrao de pontos
+        aviso.assert_called_once()
+
+    def test_prepare_late_entry_oficial_cancela_adicao(self) -> None:
+        self._set_tournament_profile(self.tournament_id, "fide")
+        self.app.db.list_rounds = lambda _tid: [{"status": "closed"}, {"status": "closed"}]
+        with mock.patch(
+            "src.ui.screens.free_tournament.messagebox.askyesno", return_value=False
+        ):
+            proceed, points = self.app.prepare_late_entry(self.tournament_id)
+        self.assertFalse(proceed)
+        self.assertIsNone(points)
+
+    def test_prepare_late_entry_oficial_sem_2_rodadas_nao_avisa(self) -> None:
+        self._set_tournament_profile(self.tournament_id, "fide")
+        self.app.db.list_rounds = lambda _tid: [{"status": "closed"}]
+        with mock.patch("src.ui.screens.free_tournament.messagebox.askyesno") as aviso:
+            proceed, points = self.app.prepare_late_entry(self.tournament_id)
+        self.assertTrue(proceed)
+        self.assertIsNone(points)
+        aviso.assert_not_called()
+
+    def test_set_current_tournament_indica_modo_no_rotulo(self) -> None:
+        self.app._set_current_tournament(self.tournament_id)
+        self.assertIn("Modo Livre", self.app.tournament_label.cget("text"))
+        self._set_tournament_profile(self.tournament_id, "fide")
+        self.app._set_current_tournament(self.tournament_id)
+        self.assertIn("Modo Oficial", self.app.tournament_label.cget("text"))
+
     def test_member_and_tournament_can_be_created_from_ui_forms(self) -> None:
         self.app.show_members()
         self.app.update()

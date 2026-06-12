@@ -372,6 +372,14 @@ class TournamentPlayersMixin:
                 rating = int(entries["rating"].get() or "0")
                 national_rating = int(entries["national_rating"].get() or "0")
                 international_rating = int(entries["international_rating"].get() or "0")
+                # Modo Livre: se ha rodadas encerradas, pergunta 0,0 ou meio-ponto
+                # (0,5) por rodada ausente. Fora do Modo Livre devolve (True, None)
+                # e o calculo padrao de late_entry_points segue intacto.
+                proceed, late_points = self.prepare_late_entry(
+                    self.current_tournament_id
+                )
+                if not proceed:
+                    return
                 self.db.create_player(
                     self.current_tournament_id,
                     name=name,
@@ -390,6 +398,7 @@ class TournamentPlayersMixin:
                     national_rating=national_rating,
                     international_rating=international_rating,
                     player_status=PLAYER_STATUS_VALUES[player_status_option.get()],
+                    starting_points=late_points,
                 )
                 logger.info("Jogador criado no torneio %s: %s", self.current_tournament_id, name)
                 clear_form()

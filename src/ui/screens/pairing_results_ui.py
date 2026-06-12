@@ -167,6 +167,18 @@ class PairingResultsMixin:
                 sticky="ew",
             )
 
+            # Modo Livre: re-emparceirar (limpar + regerar) a rodada atual.
+            # So aparece no perfil Livre/Escolar; nao afeta torneios oficiais.
+            if self._is_free_mode():
+                ctk.CTkButton(
+                    round_actions,
+                    text="Re-emparceirar (Modo Livre)",
+                    command=self.free_mode_repair_round,
+                    fg_color=THEME_ACCENT,
+                    height=36,
+                    corner_radius=8,
+                ).grid(row=3, column=0, columnspan=6, padx=0, pady=(8, 0), sticky="ew")
+
         if show_initial_call:
             roster_panel = self._make_panel(body)
             roster_panel.grid(row=1, column=0, sticky="nsew")

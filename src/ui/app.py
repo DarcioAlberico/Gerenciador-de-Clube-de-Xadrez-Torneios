@@ -11,6 +11,7 @@ from PIL import Image, ImageTk
 from .screens.admin import AdminPagesMixin
 from .screens.club import ClubPagesMixin
 from .screens.dashboard import DashboardPagesMixin
+from .screens.free_tournament import FreeTournamentMixin
 from .screens.library import LibraryMixin
 from .screens.pairings import PairingPagesMixin
 from .screens.referees import RefereePagesMixin
@@ -39,6 +40,7 @@ class AlbericusApp(
     AuditPagesMixin,
     CommunicationPagesMixin,
     IntegrationPagesMixin,
+    FreeTournamentMixin,
     ctk.CTk,
 ):
     def __init__(self, db: Database | None = None) -> None:
@@ -361,6 +363,8 @@ class AlbericusApp(
         menubar.add_cascade(label="Treinamento", menu=training_menu)
         training_menu.add_command(label="Aulas", command=self.show_training, image=get_ico("aulas"), compound="left")
         training_menu.add_command(label="Exercícios", command=self.show_exercises, image=get_ico("biblioteca"), compound="left")
+        training_menu.add_separator()
+        training_menu.add_command(label="Torneio | Livre", command=self.show_free_tournament_mode, image=get_ico("torneios"), compound="left")
 
         # 3. Gestão
         mgmt_menu = tk.Menu(menubar, tearoff=0)
@@ -495,6 +499,7 @@ class AlbericusApp(
             # Treinamento
             ("Aulas", self.show_training, "treinamento aula classe", "aulas"),
             ("Exercícios", self.show_exercises, "treino problemas", "biblioteca"),
+            ("Torneio | Livre", self.show_free_tournament_mode, "modo livre escolar casual amistoso bagunca", "torneios"),
             # Gestão
             ("Árbitros", self.show_referees, "arbitros juiz", "arbitros"),
             ("Inventário", self.show_inventory, "estoque material", "integracoes"),
@@ -994,8 +999,9 @@ class AlbericusApp(
             self.tournament_label.configure(text="Nenhum torneio selecionado")
             return
         scope = self._tournament_scope_text(tournament)
+        mode = "Modo Livre" if self._is_free_mode(tournament_id) else "Modo Oficial"
         self.tournament_label.configure(
-            text=f"{tournament['name']} | {scope} | {tournament['rounds_count']} rodadas | {tournament['status']}"
+            text=f"{tournament['name']} | {scope} | {tournament['rounds_count']} rodadas | {tournament['status']} | {mode}"
         )
         self._refresh_statusbar()
 
