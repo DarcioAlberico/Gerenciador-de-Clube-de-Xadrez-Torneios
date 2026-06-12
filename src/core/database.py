@@ -65,7 +65,7 @@ DEFAULT_CERTIFICATE_TEMPLATES = (
         "certificate_type": "participation",
         "title_template": "Certificado de Participacao",
         "body_template": (
-            "Certificamos que {nome} participou do torneio {torneio}, "
+            "participou do torneio {torneio}, "
             "obtendo {pontos} ponto(s) e a {posicao} colocacao na classificacao."
         ),
         "footer_template": "{local} - {periodo}",
@@ -84,7 +84,7 @@ DEFAULT_CERTIFICATE_TEMPLATES = (
         "certificate_type": "overall_award",
         "title_template": "Certificado de Premiacao",
         "body_template": (
-            "Certificamos que {nome} conquistou a {posicao} colocacao geral "
+            "conquistou a {posicao} colocacao geral "
             "no torneio {torneio}, com {pontos} ponto(s)."
         ),
         "footer_template": "{local} - {periodo}",
@@ -103,7 +103,7 @@ DEFAULT_CERTIFICATE_TEMPLATES = (
         "certificate_type": "category_award",
         "title_template": "Certificado de Premiacao",
         "body_template": (
-            "Certificamos que {nome} conquistou a {posicao_categoria} colocacao "
+            "conquistou a {posicao_categoria} colocacao "
             "na categoria {categoria} do torneio {torneio}, com {pontos} ponto(s)."
         ),
         "footer_template": "{local} - {periodo}",
@@ -122,7 +122,7 @@ DEFAULT_CERTIFICATE_TEMPLATES = (
         "certificate_type": "member_certificate",
         "title_template": "Certificado",
         "body_template": (
-            "Certificamos que {nome} integra as atividades do clube {clube}, "
+            "integra as atividades do clube {clube}, "
             "na turma {turma}, categoria {categoria}."
         ),
         "footer_template": "{local} - {data}",
@@ -141,7 +141,7 @@ DEFAULT_CERTIFICATE_TEMPLATES = (
         "certificate_type": "training_participation",
         "title_template": "Certificado de Participacao",
         "body_template": (
-            "Certificamos que {nome} participou da atividade {aula}, "
+            "participou da atividade {aula}, "
             "realizada em {data}, na turma {turma}."
         ),
         "footer_template": "{clube} - {local}",
@@ -159,7 +159,7 @@ DEFAULT_CERTIFICATE_TEMPLATES = (
         "name": "Evento padrao",
         "certificate_type": "event_participation",
         "title_template": "Certificado de Participacao",
-        "body_template": "Certificamos que {nome} participou do evento {evento}, realizado em {data}.",
+        "body_template": "participou do evento {evento}, realizado em {data}.",
         "footer_template": "{clube} - {local}",
         "orientation": "landscape",
         "signature_left": "Organizacao",
@@ -176,7 +176,7 @@ DEFAULT_CERTIFICATE_TEMPLATES = (
         "certificate_type": "internal_ranking",
         "title_template": "Certificado de Destaque",
         "body_template": (
-            "Certificamos que {nome} obteve a {posicao} colocacao no ranking interno, "
+            "obteve a {posicao} colocacao no ranking interno, "
             "com rating {rating}."
         ),
         "footer_template": "{clube} - {data}",
@@ -195,7 +195,7 @@ DEFAULT_CERTIFICATE_TEMPLATES = (
         "certificate_type": "participation",
         "title_template": "Certificado de Participacao",
         "body_template": (
-            "Certificamos que {nome} participou do torneio {torneio}, "
+            "participou do torneio {torneio}, "
             "obtendo {pontos} ponto(s) e a {posicao} colocacao na classificacao."
         ),
         "footer_template": "{local} - {periodo}",
@@ -216,7 +216,7 @@ DEFAULT_CERTIFICATE_TEMPLATES = (
         "certificate_type": "member_certificate",
         "title_template": "Certificado",
         "body_template": (
-            "Certificamos que {nome} integra as atividades do clube {clube}, "
+            "integra as atividades do clube {clube}, "
             "na turma {turma}, categoria {categoria}."
         ),
         "footer_template": "{local} - {data}",
@@ -237,7 +237,7 @@ DEFAULT_CERTIFICATE_TEMPLATES = (
         "certificate_type": "overall_award",
         "title_template": "Certificado de Premiacao",
         "body_template": (
-            "Certificamos que {nome} conquistou a {posicao} colocacao geral "
+            "conquistou a {posicao} colocacao geral "
             "no torneio {torneio}, com {pontos} ponto(s)."
         ),
         "footer_template": "{local} - {periodo}",
@@ -258,7 +258,7 @@ DEFAULT_CERTIFICATE_TEMPLATES = (
         "certificate_type": "category_award",
         "title_template": "Certificado de Premiacao",
         "body_template": (
-            "Certificamos que {nome} conquistou a {posicao_categoria} colocacao "
+            "conquistou a {posicao_categoria} colocacao "
             "na categoria {categoria} do torneio {torneio}, com {pontos} ponto(s)."
         ),
         "footer_template": "{local} - {periodo}",
@@ -279,7 +279,7 @@ DEFAULT_CERTIFICATE_TEMPLATES = (
         "certificate_type": "internal_ranking",
         "title_template": "Certificado de Destaque",
         "body_template": (
-            "Certificamos que {nome} obteve a {posicao} colocacao no ranking interno, "
+            "obteve a {posicao} colocacao no ranking interno, "
             "com rating {rating}."
         ),
         "footer_template": "{clube} - {data}",
@@ -386,7 +386,7 @@ class Database(
     InventoryMixin,
     RefereesMixin,
 ):
-    SCHEMA_VERSION = 42
+    SCHEMA_VERSION = 43
 
     def __init__(
         self,

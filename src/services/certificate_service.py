@@ -813,6 +813,45 @@ class CertificateService:
                 16,
             ),
             "active": 1 if data.get("active", 1) else 0,
+            **CertificateService._validated_style_fields(data),
+        }
+
+    @staticmethod
+    def _validated_style_fields(data: dict[str, Any]) -> dict[str, Any]:
+        """Valida os campos de estilo/marca d'água do modelo (schema v43)."""
+        from src.services.certificates.palettes import PALETTES
+        from src.services.certificates.styles import STYLE_PRESETS, WATERMARKS
+
+        style_preset = str(data.get("style_preset", "classic")).strip() or "classic"
+        if style_preset not in STYLE_PRESETS:
+            raise AppError("Estilo de diploma invalido.")
+        template_kind = str(data.get("template_kind", "generated")).strip() or "generated"
+        if template_kind not in ("generated", "image_overlay"):
+            raise AppError("Modo de diploma invalido.")
+        palette_key = str(data.get("palette_key", "")).strip()
+        if palette_key and palette_key not in PALETTES:
+            raise AppError("Paleta de diploma invalida.")
+        watermark_kind = str(data.get("watermark_kind", "")).strip()
+        if watermark_kind and watermark_kind not in WATERMARKS:
+            raise AppError("Tipo de marca d'agua invalido.")
+        watermark_image_path = CertificateService._validated_optional_image_path(
+            data.get("watermark_image_path", ""),
+            "Imagem da marca d'agua nao encontrada.",
+        )
+        return {
+            "style_preset": style_preset,
+            "template_kind": template_kind,
+            "palette_key": palette_key,
+            "seal_enabled": 1 if data.get("seal_enabled", 1) else 0,
+            "watermark_enabled": 1 if data.get("watermark_enabled", 1) else 0,
+            "watermark_kind": watermark_kind,
+            "watermark_piece": str(data.get("watermark_piece", "")).strip(),
+            "watermark_image_path": watermark_image_path,
+            "watermark_opacity": CertificateService._validated_opacity(
+                data.get("watermark_opacity", 0.08), "opacidade da marca d'agua"
+            ),
+            "medal_by_placement": 1 if data.get("medal_by_placement", 1) else 0,
+            "field_layout_json": str(data.get("field_layout_json", "")).strip(),
         }
 
     @staticmethod
@@ -1081,95 +1120,44 @@ class CertificateService:
         recipients: list[dict[str, Any]],
         source_title: str = "",
     ) -> None:
+        """Desenha o PDF delegando ao pacote modular ``src.services.certificates``.
+
+        A fachada cuida do I/O (canvas, imagem de marca d'agua); o estilo, o
+        layout e o traçado vivem no pacote. ``source_title`` segue na assinatura
+        por compatibilidade -- o novo desenho traz o contexto no proprio corpo.
+        """
         try:
-            from reportlab.lib import colors
-            from reportlab.lib.enums import TA_CENTER
+            from dataclasses import replace as dataclass_replace
             from reportlab.lib.pagesizes import A4, landscape
-            from reportlab.lib.styles import ParagraphStyle
-            from reportlab.lib.units import cm
             from reportlab.lib.utils import ImageReader
             from reportlab.pdfgen import canvas
-            from reportlab.platypus import Frame, Paragraph
         except ImportError as exc:
             raise AppError("Instale reportlab para exportar PDF.") from exc
+
+        from src.services.certificates.adapter import build_inputs
+        from src.services.certificates.renderer import render_certificate
+        from src.services.certificates.surface import ReportLabSurface
 
         page_size = A4 if template.get("orientation") == "portrait" else landscape(A4)
         width, height = page_size
         document = canvas.Canvas(str(path), pagesize=page_size)
-        primary_color = colors.HexColor(str(template.get("primary_color") or "#1E3A8A"))
-        accent_color = colors.HexColor(str(template.get("accent_color") or "#93C5FD"))
-        title_style = ParagraphStyle(
-            "CertificateTitle",
-            fontName="Helvetica-Bold",
-            fontSize=int(template.get("title_font_size") or 32),
-            leading=int(template.get("title_font_size") or 32) + 6,
-            alignment=TA_CENTER,
-            textColor=primary_color,
-        )
-        body_style = ParagraphStyle(
-            "CertificateBody",
-            fontName="Helvetica",
-            fontSize=int(template.get("body_font_size") or 18),
-            leading=int(template.get("body_font_size") or 18) + 10,
-            alignment=TA_CENTER,
-            textColor=colors.HexColor("#1F2937"),
-        )
-        footer_style = ParagraphStyle(
-            "CertificateFooter",
-            fontName="Helvetica",
-            fontSize=int(template.get("footer_font_size") or 10),
-            leading=int(template.get("footer_font_size") or 10) + 4,
-            alignment=TA_CENTER,
-            textColor=colors.HexColor("#475569"),
-        )
-        background = CertificateService._load_template_image(
-            template,
-            "background_image_path",
-            "Imagem de fundo nao encontrada.",
-            "Nao foi possivel carregar a imagem de fundo do diploma.",
-            ImageReader,
-        )
-        logo = CertificateService._load_template_image(
-            template,
-            "logo_path",
-            "Arquivo de logo nao encontrado.",
-            "Nao foi possivel carregar o logo do diploma.",
-            ImageReader,
-        )
-        secondary_logo = CertificateService._load_template_image(
-            template,
-            "secondary_logo_path",
-            "Arquivo de logo secundario nao encontrado.",
-            "Nao foi possivel carregar o logo secundario do diploma.",
-            ImageReader,
-        )
-        background_opacity = CertificateService._validated_opacity(
-            template.get("background_opacity", 0.18),
-            "opacidade do fundo",
-        )
+
+        watermark_image = None
+        if str(template.get("watermark_kind") or "") == "image":
+            watermark_image = CertificateService._load_template_image(
+                template,
+                "watermark_image_path",
+                "Imagem da marca d'agua nao encontrada.",
+                "Nao foi possivel carregar a imagem da marca d'agua do diploma.",
+                ImageReader,
+            )
 
         for recipient in recipients:
-            CertificateService._draw_certificate_page(
-                document,
-                width,
-                height,
-                cm,
-                colors,
-                primary_color,
-                accent_color,
-                background,
-                background_opacity,
-                logo,
-                secondary_logo,
-                Frame,
-                Paragraph,
-                title_style,
-                body_style,
-                footer_style,
-                source_title,
-                template,
-                recipient,
-            )
+            preset, palette, content, options = build_inputs(template, recipient)
+            if watermark_image is not None:
+                options = dataclass_replace(options, watermark_image=watermark_image)
+            surface = ReportLabSurface(document, width, height)
+            render_certificate(surface, preset, palette, content, options)
             document.showPage()
         document.save()
 
