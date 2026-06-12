@@ -117,7 +117,9 @@ class FreeTournamentMixin:
         """Fecha o aviso e cria um torneio ja em Modo Livre (perfil free).
 
         Nao toca em torneios existentes nem no fluxo oficial: apenas cria um
-        evento novo, que por padrao ja nasce com tournament_profile='free'.
+        evento novo, marcado explicitamente com tournament_profile='free' (o
+        fluxo comum de "Criar torneio" usa perfil oficial), de modo que o
+        Modo Livre fique restrito aos eventos abertos por aqui.
         """
         dialog.destroy()
         name = self._ask_string("Novo Torneio Livre", "Nome do torneio:")
@@ -126,7 +128,7 @@ class FreeTournamentMixin:
         name = name.strip() or f"Torneio Livre {date.today().strftime('%d/%m/%Y')}"
         try:
             tournament_id = self.tournament_service.create_tournament(
-                {"name": name, "rounds_count": "5", "bye_points": "1"}
+                {"name": name, "rounds_count": "5", "bye_points": "1", "tournament_profile": "free"}
             )
         except Exception as exc:
             self._show_error(exc)
