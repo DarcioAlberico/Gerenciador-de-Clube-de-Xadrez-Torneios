@@ -544,6 +544,7 @@ CREATE TABLE IF NOT EXISTS tournament_settings (
     initial_order TEXT NOT NULL DEFAULT 'rating',
     tournament_type TEXT NOT NULL DEFAULT 'real',
     tournament_profile TEXT NOT NULL DEFAULT 'free',
+    free_mode INTEGER NOT NULL DEFAULT 0,
     allow_public_registration INTEGER NOT NULL DEFAULT 0,
     allow_player_result_edit INTEGER NOT NULL DEFAULT 0,
     allow_dangerous_changes INTEGER NOT NULL DEFAULT 0,

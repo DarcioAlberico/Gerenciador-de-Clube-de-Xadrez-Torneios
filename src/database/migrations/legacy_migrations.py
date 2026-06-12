@@ -53,6 +53,7 @@ class LegacyMigrations:
             39: self._migrate_to_v39,
             40: self._migrate_to_v40,
             41: self._migrate_to_v41,
+            42: self._migrate_to_v42,
         }
 
     def _run_schema_migrations(self, connection: sqlite3.Connection) -> None:
@@ -153,6 +154,8 @@ class LegacyMigrations:
             self._migrate_to_v40(connection)
         if self.db.SCHEMA_VERSION >= 41:
             self._migrate_to_v41(connection)
+        if self.db.SCHEMA_VERSION >= 42:
+            self._migrate_to_v42(connection)
 
     def _migrate_to_v1(self, connection: sqlite3.Connection) -> None:
         now = self.db.now()
@@ -1769,4 +1772,21 @@ class LegacyMigrations:
         if "chess_results_url" not in columns:
             connection.execute(
                 "ALTER TABLE tournament_settings ADD COLUMN chess_results_url TEXT NOT NULL DEFAULT ''"
+            )
+
+    def _migrate_to_v42(self, connection: sqlite3.Connection) -> None:
+        """Marca dedicada do Modo Livre: tournament_settings.free_mode.
+
+        Antes o Modo Livre era inferido do perfil 'free', que e o default de
+        qualquer torneio -- entao todo evento comum/legado disparava as
+        ferramentas do Modo Livre. A marca passa a ser gravada so pelo fluxo
+        'Torneio | Modo Livre'; torneios existentes nascem com 0 (Modo Oficial).
+        """
+        self._ensure_free_mode_schema(connection)
+
+    def _ensure_free_mode_schema(self, connection: sqlite3.Connection) -> None:
+        columns = self.db._table_columns(connection, "tournament_settings")
+        if "free_mode" not in columns:
+            connection.execute(
+                "ALTER TABLE tournament_settings ADD COLUMN free_mode INTEGER NOT NULL DEFAULT 0"
             )

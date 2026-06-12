@@ -47,6 +47,9 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.tournament_id = TournamentService(self.db).create_tournament(
             {"name": "Smoke", "rounds_count": "3", "bye_points": "1"}
         )
+        # O torneio-base entra em Modo Livre (marca dedicada), como faria o
+        # fluxo 'Torneio | Modo Livre'. Testes de Modo Oficial desmarcam.
+        self.db.set_free_mode(self.tournament_id, True)
         try:
             self.app = AlbericusApp(db=self.db)
         except TclError as exc:
@@ -121,7 +124,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
                 dialog.destroy()
                 self.app.update()
 
-    def test_free_tournament_mode_iniciar_cria_torneio_em_perfil_livre(self) -> None:
+    def test_free_tournament_mode_iniciar_marca_modo_livre(self) -> None:
         self.app._ask_string = lambda *args, **kwargs: "Festival Escolar"
         before_ids = {tournament["id"] for tournament in self.db.list_tournaments()}
         dialog = self.app.show_free_tournament_mode()
@@ -143,18 +146,26 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.assertEqual(len(novos), 1)
         tournament_id = novos[0]["id"]
         self.assertEqual(self.app.current_tournament_id, tournament_id)
-        # O torneio criado pelo Modo Livre nasce no perfil Livre/Escolar (free).
+        # O torneio criado pelo Modo Livre recebe a marca dedicada free_mode,
+        # que e o que habilita o modo (o perfil segue no default e nao decide).
         settings = self.db.get_tournament_settings(tournament_id)
-        self.assertEqual((settings or {}).get("tournament_profile"), "free")
+        self.assertEqual((settings or {}).get("free_mode"), 1)
+        self.assertTrue(self.app._is_free_mode(tournament_id))
 
     def _set_tournament_profile(self, tournament_id: int, profile: str) -> None:
         settings = self.db.get_tournament_settings(tournament_id) or {}
         settings["tournament_profile"] = profile
         self.db.save_tournament_settings(tournament_id, settings)
 
-    def test_is_free_mode_reflete_perfil_do_torneio(self) -> None:
-        self.assertTrue(self.app._is_free_mode(self.tournament_id))
-        self._set_tournament_profile(self.tournament_id, "fide")
+    def _set_free_mode(self, tournament_id: int, enabled: bool) -> None:
+        self.db.set_free_mode(tournament_id, enabled)
+
+    def test_is_free_mode_reflete_marca_dedicada(self) -> None:
+        self.assertTrue(self.app._is_free_mode(self.tournament_id))  # marcado no setUp
+        self._set_free_mode(self.tournament_id, False)
+        self.assertFalse(self.app._is_free_mode(self.tournament_id))
+        # o perfil 'free' (default de todo torneio) nao reativa o Modo Livre
+        self._set_tournament_profile(self.tournament_id, "free")
         self.assertFalse(self.app._is_free_mode(self.tournament_id))
 
     def test_free_mode_repair_round_limpa_e_regera(self) -> None:
@@ -170,7 +181,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.assertEqual(chamadas["generate"], [self.tournament_id])
 
     def test_free_mode_repair_round_bloqueia_fora_do_modo_livre(self) -> None:
-        self._set_tournament_profile(self.tournament_id, "fide")
+        self._set_free_mode(self.tournament_id, False)
         self.app.current_round_id = 123
         chamadas = []
         self.app.pairing_service.delete_generated_round = lambda rid: chamadas.append(rid)
@@ -178,7 +189,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.app._show_error = lambda exc: erros.append(str(exc))
         with mock.patch("src.ui.screens.free_tournament.messagebox.askyesno", return_value=True):
             self.app.free_mode_repair_round()
-        self.assertEqual(chamadas, [])  # perfil oficial nao dispara re-pair
+        self.assertEqual(chamadas, [])  # fora do Modo Livre nao dispara re-pair
         self.assertTrue(any("Modo Livre" in erro for erro in erros))
 
     def test_late_entry_sem_rodadas_encerradas_usa_padrao(self) -> None:
@@ -216,7 +227,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.assertIsNone(points)
 
     def test_late_entry_fora_do_modo_livre_nao_pergunta(self) -> None:
-        self._set_tournament_profile(self.tournament_id, "fide")
+        self._set_free_mode(self.tournament_id, False)
         self.app.db.list_rounds = lambda _tid: [{"status": "closed"}]
         with mock.patch("src.ui.screens.free_tournament.messagebox.askyesnocancel") as pergunta:
             proceed, points = self.app.free_mode_late_entry_starting_points(self.tournament_id)
@@ -239,7 +250,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.assertEqual(points, 1.0)
 
     def test_prepare_late_entry_oficial_avisa_e_confirma(self) -> None:
-        self._set_tournament_profile(self.tournament_id, "fide")
+        self._set_free_mode(self.tournament_id, False)
         self.app.db.list_rounds = lambda _tid: [{"status": "closed"}, {"status": "closed"}]
         with mock.patch(
             "src.ui.screens.free_tournament.messagebox.askyesno", return_value=True
@@ -250,7 +261,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
         aviso.assert_called_once()
 
     def test_prepare_late_entry_oficial_cancela_adicao(self) -> None:
-        self._set_tournament_profile(self.tournament_id, "fide")
+        self._set_free_mode(self.tournament_id, False)
         self.app.db.list_rounds = lambda _tid: [{"status": "closed"}, {"status": "closed"}]
         with mock.patch(
             "src.ui.screens.free_tournament.messagebox.askyesno", return_value=False
@@ -260,7 +271,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.assertIsNone(points)
 
     def test_prepare_late_entry_oficial_sem_2_rodadas_nao_avisa(self) -> None:
-        self._set_tournament_profile(self.tournament_id, "fide")
+        self._set_free_mode(self.tournament_id, False)
         self.app.db.list_rounds = lambda _tid: [{"status": "closed"}]
         with mock.patch("src.ui.screens.free_tournament.messagebox.askyesno") as aviso:
             proceed, points = self.app.prepare_late_entry(self.tournament_id)
@@ -271,7 +282,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
     def test_set_current_tournament_indica_modo_no_rotulo(self) -> None:
         self.app._set_current_tournament(self.tournament_id)
         self.assertIn("Modo Livre", self.app.tournament_label.cget("text"))
-        self._set_tournament_profile(self.tournament_id, "fide")
+        self._set_free_mode(self.tournament_id, False)
         self.app._set_current_tournament(self.tournament_id)
         self.assertIn("Modo Oficial", self.app.tournament_label.cget("text"))
 

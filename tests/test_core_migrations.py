@@ -258,6 +258,7 @@ class DatabaseMigrationsTest(CoreServiceTestCase):
         self.assertEqual(user_version, Database.SCHEMA_VERSION)
         self.assertIn("competition_type", tournament_columns)
         self.assertIn("tournament_profile", settings_columns)
+        self.assertIn("free_mode", settings_columns)
         self.assertIn("pairing_system", settings_columns)
         self.assertIn("acceleration_method", settings_columns)
         self.assertIn("team_boards_count", settings_columns)
@@ -851,6 +852,7 @@ class DatabaseMigrationsTest(CoreServiceTestCase):
         self.assertIn("class_id", tournament_columns)
         self.assertIn("competition_type", tournament_columns)
         self.assertIn("tournament_profile", settings_columns)
+        self.assertIn("free_mode", settings_columns)
         self.assertIn("team_boards_count", settings_columns)
         self.assertIn("team_match_win_points", settings_columns)
         self.assertIn("team_match_draw_points", settings_columns)
@@ -1053,6 +1055,43 @@ class DatabaseMigrationsTest(CoreServiceTestCase):
         self.assertEqual(template["background_image_path"], "")
         self.assertEqual(template["background_opacity"], 0.18)
         self.assertEqual(template["secondary_logo_path"], "")
+        self.assertEqual(Database.SCHEMA_VERSION, user_version)
+
+    def test_v41_database_adds_free_mode_column(self) -> None:
+        legacy_path = Path(self.temp_dir.name) / "legacy_v41_free_mode.db"
+        connection = sqlite3.connect(legacy_path)
+        try:
+            connection.executescript(
+                """
+                CREATE TABLE tournament_settings (
+                    tournament_id INTEGER PRIMARY KEY,
+                    tournament_profile TEXT NOT NULL DEFAULT 'free',
+                    updated_at TEXT NOT NULL DEFAULT ''
+                );
+
+                INSERT INTO tournament_settings (tournament_id, tournament_profile, updated_at)
+                VALUES (1, 'free', '2026-01-01');
+
+                PRAGMA user_version = 41;
+                """
+            )
+            connection.commit()
+        finally:
+            connection.close()
+
+        migrated = Database(legacy_path, backup_dir=self.backup_dir)
+        with migrated.connect() as migrated_connection:
+            settings_columns = {
+                row["name"]
+                for row in migrated_connection.execute("PRAGMA table_info(tournament_settings)").fetchall()
+            }
+            free_mode_value = migrated_connection.execute(
+                "SELECT free_mode FROM tournament_settings WHERE tournament_id = 1"
+            ).fetchone()[0]
+            user_version = migrated_connection.execute("PRAGMA user_version").fetchone()[0]
+
+        self.assertIn("free_mode", settings_columns)
+        self.assertEqual(free_mode_value, 0)  # torneios legados ficam em Modo Oficial
         self.assertEqual(Database.SCHEMA_VERSION, user_version)
 
     def test_v10_database_adds_exercise_library_schema(self) -> None:

@@ -172,6 +172,7 @@ class TournamentCoreMixin(_DatabaseInfra):
                     initial_order = src.initial_order,
                     tournament_type = src.tournament_type,
                     tournament_profile = src.tournament_profile,
+                    free_mode = src.free_mode,
                     allow_public_registration = src.allow_public_registration,
                     allow_player_result_edit = src.allow_player_result_edit,
                     allow_dangerous_changes = src.allow_dangerous_changes,
@@ -355,6 +356,21 @@ class TournamentCoreMixin(_DatabaseInfra):
             connection.execute(
                 "UPDATE tournament_settings SET chess_results_url = ?, updated_at = ? WHERE tournament_id = ?",
                 ((url or "").strip(), self.now(), tournament_id),
+            )
+
+    def set_free_mode(self, tournament_id: int, enabled: bool) -> None:
+        """Marca/desmarca o torneio como Modo Livre (fluxo 'Torneio | Modo Livre').
+
+        Fonte unica de verdade do Modo Livre: as ferramentas pedagogicas
+        (re-emparceiramento livre, entrada tardia flexivel) e o indicador de
+        modo passam a depender desta marca, nao mais do perfil 'free' -- que e
+        o default de qualquer torneio e por isso nao distingue o modo.
+        """
+        with self.connect() as connection:
+            self._ensure_tournament_settings(connection, tournament_id)
+            connection.execute(
+                "UPDATE tournament_settings SET free_mode = ?, updated_at = ? WHERE tournament_id = ?",
+                (1 if enabled else 0, self.now(), tournament_id),
             )
 
     def save_tournament_settings(

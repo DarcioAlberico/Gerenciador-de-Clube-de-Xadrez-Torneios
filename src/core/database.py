@@ -386,7 +386,7 @@ class Database(
     InventoryMixin,
     RefereesMixin,
 ):
-    SCHEMA_VERSION = 41
+    SCHEMA_VERSION = 42
 
     def __init__(
         self,
