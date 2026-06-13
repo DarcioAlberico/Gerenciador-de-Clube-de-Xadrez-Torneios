@@ -11,6 +11,7 @@ import customtkinter as ctk
 from src.core.database import Database
 from src.core.services import AppError, TeamService, TournamentService
 from src.ui.app import AlbericusApp
+from tests.support.ctk_cleanup import release_dead_ctk_windows
 
 
 class UiLayoutSmokeTest(unittest.TestCase):
@@ -74,6 +75,10 @@ class UiLayoutSmokeTest(unittest.TestCase):
         if hasattr(self, "app"):
             self._cancel_pending_callbacks()
             self.app.destroy()
+            # customtkinter nao desregistra a janela dos seus trackers globais em
+            # destroy(); sem isto cada AlbericusApp vaza e a suite acumula ate
+            # estourar o tempo. Ver tests/support/ctk_cleanup.py.
+            release_dead_ctk_windows()
         self.temp_dir.cleanup()
 
     def test_main_pages_keep_controls_inside_window_at_supported_sizes(self) -> None:

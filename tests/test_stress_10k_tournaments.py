@@ -67,6 +67,11 @@ REPORT_DIR       = Path(__file__).parent
 TIMEOUT_SECONDS  = 60       # timeout por torneio (não pode matar threads, mas marca tmo)
 MAX_WORKERS      = 4        # threads paralelas
 
+# A corrida completa de 10.000 torneios leva ~2-3h; por isso fica FORA da suíte
+# padrão e só roda sob demanda com ALBERICUS_RUN_STRESS=1. Os edge cases rápidos
+# (classe StressEdgeCasesTest) continuam rodando sempre.
+RUN_STRESS_ENV_VAR = "ALBERICUS_RUN_STRESS"
+
 # Campo: 2–50 jogadores para desempenho praticável (<3h total)
 PROFILE_WEIGHTS = {
     "tiny":   0.35,   # 2–9 jogadores
@@ -342,10 +347,16 @@ def _write_txt(report, path):
 # Testes principais
 # ---------------------------------------------------------------------------
 
+@unittest.skipUnless(
+    os.environ.get(RUN_STRESS_ENV_VAR) == "1",
+    f"Stress de {NUM_TOURNAMENTS:,} torneios (~2-3h). Defina {RUN_STRESS_ENV_VAR}=1 para rodar.",
+)
 class StressTenThousandTournamentsTest(unittest.TestCase):
     """
     10.000 torneios aleatórios, 2-50 jogadores, 4 workers paralelos.
     Estimativa: ~2-3 horas.
+
+    Fora da suíte padrão: só roda com ALBERICUS_RUN_STRESS=1 (ver decorator).
     """
     _all_results: list[TournamentResult] = []
     _report: dict[str, Any] = {}
