@@ -54,6 +54,7 @@ class LegacyMigrations:
             40: self._migrate_to_v40,
             41: self._migrate_to_v41,
             42: self._migrate_to_v42,
+            43: self._migrate_to_v43,
         }
 
     def _run_schema_migrations(self, connection: sqlite3.Connection) -> None:
@@ -156,6 +157,8 @@ class LegacyMigrations:
             self._migrate_to_v41(connection)
         if self.db.SCHEMA_VERSION >= 42:
             self._migrate_to_v42(connection)
+        if self.db.SCHEMA_VERSION >= 43:
+            self._migrate_to_v43(connection)
 
     def _migrate_to_v1(self, connection: sqlite3.Connection) -> None:
         now = self.db.now()
@@ -1790,3 +1793,32 @@ class LegacyMigrations:
             connection.execute(
                 "ALTER TABLE tournament_settings ADD COLUMN free_mode INTEGER NOT NULL DEFAULT 0"
             )
+
+    def _migrate_to_v43(self, connection: sqlite3.Connection) -> None:
+        """Diplomas reformulados: estilo/marca d'água em certificate_templates.
+
+        Adiciona preset visual, modo (gerado/imagem), paleta, toggles de selo e
+        marca d'água, tipo/peça/imagem/opacidade da marca d'água, medalha por
+        colocacao e layout de campos. Modelos existentes herdam o preset
+        'classic' e os padroes -- nenhum perde o que tinha.
+        """
+        self._ensure_certificate_style_schema(connection)
+
+    def _ensure_certificate_style_schema(self, connection: sqlite3.Connection) -> None:
+        columns = self.db._table_columns(connection, "certificate_templates")
+        additions = {
+            "style_preset": "TEXT NOT NULL DEFAULT 'classic'",
+            "template_kind": "TEXT NOT NULL DEFAULT 'generated'",
+            "palette_key": "TEXT NOT NULL DEFAULT ''",
+            "seal_enabled": "INTEGER NOT NULL DEFAULT 1",
+            "watermark_enabled": "INTEGER NOT NULL DEFAULT 1",
+            "watermark_kind": "TEXT NOT NULL DEFAULT ''",
+            "watermark_piece": "TEXT NOT NULL DEFAULT ''",
+            "watermark_image_path": "TEXT DEFAULT ''",
+            "watermark_opacity": "REAL NOT NULL DEFAULT 0.08",
+            "medal_by_placement": "INTEGER NOT NULL DEFAULT 1",
+            "field_layout_json": "TEXT NOT NULL DEFAULT ''",
+        }
+        for column, definition in additions.items():
+            if column not in columns:
+                connection.execute(f"ALTER TABLE certificate_templates ADD COLUMN {column} {definition}")
