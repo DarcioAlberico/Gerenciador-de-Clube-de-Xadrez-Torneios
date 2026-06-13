@@ -110,14 +110,94 @@ class CertificateService:
         return template_id
 
     def update_template(self, template_id: int, data: dict[str, Any]) -> None:
-        if not self.db.get_certificate_template(template_id):
+        existing = self.db.get_certificate_template(template_id)
+        if not existing:
             raise AppError("Modelo de diploma nao encontrado.")
-        payload = self._validated_template_payload(data)
+        # Campos do formulario sobrescrevem; os ausentes (ex.: estilo/marca
+        # d'agua, se o form nao os enviar) herdam do modelo atual.
+        payload = self._validated_template_payload({**existing, **data})
         try:
             self.db.update_certificate_template(template_id, **payload)
         except sqlite3.IntegrityError as exc:
             raise AppError("Ja existe um modelo de diploma com este nome.") from exc
         logger.info("Modelo de diploma atualizado: %s", template_id)
+
+    def seed_gallery(self, count: int = 50) -> dict[str, int]:
+        """Cria a galeria de modelos prontos no banco (idempotente por nome).
+
+        Distribui ``count`` modelos pelos 10 estilos x paletas x tipos (ver
+        ``certificates.gallery``); pula os que ja existem pelo nome. Devolve
+        quantos foram criados.
+        """
+        from src.services.certificates.gallery import build_gallery, model_to_template
+
+        existing = {str(t.get("name")) for t in self.db.list_certificate_templates(active_only=False)}
+        created = 0
+        for model in build_gallery(count):
+            if model.name in existing:
+                continue
+            self.db.create_certificate_template(**model_to_template(model))
+            existing.add(model.name)
+            created += 1
+        logger.info("Galeria de diplomas semeada: %s novos modelos de %s", created, count)
+        return {"created": created, "total": count}
+
+    def preview_template_pdf(self, template_data: dict[str, Any], file_path: str | Path) -> Path:
+        """Gera um diploma de amostra (1 pagina) com os dados do formulario.
+
+        Usa um destinatario ficticio com todos os campos preenchidos, para o
+        usuario ver o estilo/marca d'agua antes de exportar de verdade.
+        """
+        template = self._template_for_export(
+            None,
+            str(template_data.get("certificate_type", "participation") or "participation"),
+            template_data,
+        )
+        recipient = {
+            "name": "Maria Eduarda Albuquerque",
+            "tournament": "Torneio Aberto de Demonstracao 2026",
+            "position": 1, "position_label": "1o",
+            "category": "Sub-14", "category_position": 1, "category_position_label": "1o",
+            "points": "6,5", "rating": 1820, "club": "Clube de Xadrez Albericus",
+            "location": "Teresina-PI", "date_range": "12/06/2026",
+            "session": "Aula de Finais de Torre", "event": "Festival de Xadrez do Clube",
+            "class_name": "Turma A", "instructor": "Prof. Ana", "learning_level": "Intermediario",
+            "verification_code": "ALB-PREVIEW",
+        }
+        path = Path(file_path)
+        if path.suffix.lower() != ".pdf":
+            path = path.with_suffix(".pdf")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        self._write_certificates_pdf(path, template, [recipient])
+        return path
+
+    def export_art_guide(self, file_path: str | Path, orientation: str = "landscape") -> Path:
+        """Exporta o guia de arte A4 (modo imagem): margens + zonas dos campos.
+
+        O usuario desenha o fundo no tamanho indicado e importa como imagem de
+        fundo; no modo 'image_overlay' o gerador sobrepoe os dados nas zonas.
+        """
+        try:
+            from reportlab.lib.pagesizes import A4, landscape
+            from reportlab.pdfgen import canvas
+        except ImportError as exc:
+            raise AppError("Instale reportlab para exportar PDF.") from exc
+
+        from src.services.certificates.standard_size import render_guide
+        from src.services.certificates.surface import ReportLabSurface
+
+        page_size = A4 if orientation == "portrait" else landscape(A4)
+        width, height = page_size
+        path = Path(file_path)
+        if path.suffix.lower() != ".pdf":
+            path = path.with_suffix(".pdf")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        document = canvas.Canvas(str(path), pagesize=page_size)
+        render_guide(ReportLabSurface(document, width, height), orientation)
+        document.showPage()
+        document.save()
+        logger.info("Guia de arte de diploma exportado em %s", path)
+        return path
 
     def preview_template(
         self,
@@ -813,6 +893,45 @@ class CertificateService:
                 16,
             ),
             "active": 1 if data.get("active", 1) else 0,
+            **CertificateService._validated_style_fields(data),
+        }
+
+    @staticmethod
+    def _validated_style_fields(data: dict[str, Any]) -> dict[str, Any]:
+        """Valida os campos de estilo/marca d'água do modelo (schema v43)."""
+        from src.services.certificates.palettes import PALETTES
+        from src.services.certificates.styles import STYLE_PRESETS, WATERMARKS
+
+        style_preset = str(data.get("style_preset", "classic")).strip() or "classic"
+        if style_preset not in STYLE_PRESETS:
+            raise AppError("Estilo de diploma invalido.")
+        template_kind = str(data.get("template_kind", "generated")).strip() or "generated"
+        if template_kind not in ("generated", "image_overlay"):
+            raise AppError("Modo de diploma invalido.")
+        palette_key = str(data.get("palette_key", "")).strip()
+        if palette_key and palette_key not in PALETTES:
+            raise AppError("Paleta de diploma invalida.")
+        watermark_kind = str(data.get("watermark_kind", "")).strip()
+        if watermark_kind and watermark_kind not in WATERMARKS:
+            raise AppError("Tipo de marca d'agua invalido.")
+        watermark_image_path = CertificateService._validated_optional_image_path(
+            data.get("watermark_image_path", ""),
+            "Imagem da marca d'agua nao encontrada.",
+        )
+        return {
+            "style_preset": style_preset,
+            "template_kind": template_kind,
+            "palette_key": palette_key,
+            "seal_enabled": 1 if data.get("seal_enabled", 1) else 0,
+            "watermark_enabled": 1 if data.get("watermark_enabled", 1) else 0,
+            "watermark_kind": watermark_kind,
+            "watermark_piece": str(data.get("watermark_piece", "")).strip(),
+            "watermark_image_path": watermark_image_path,
+            "watermark_opacity": CertificateService._validated_opacity(
+                data.get("watermark_opacity", 0.08), "opacidade da marca d'agua"
+            ),
+            "medal_by_placement": 1 if data.get("medal_by_placement", 1) else 0,
+            "field_layout_json": str(data.get("field_layout_json", "")).strip(),
         }
 
     @staticmethod
@@ -1081,95 +1200,56 @@ class CertificateService:
         recipients: list[dict[str, Any]],
         source_title: str = "",
     ) -> None:
+        """Desenha o PDF delegando ao pacote modular ``src.services.certificates``.
+
+        A fachada cuida do I/O (canvas, imagem de marca d'agua); o estilo, o
+        layout e o traçado vivem no pacote. ``source_title`` segue na assinatura
+        por compatibilidade -- o novo desenho traz o contexto no proprio corpo.
+        """
         try:
-            from reportlab.lib import colors
-            from reportlab.lib.enums import TA_CENTER
+            from dataclasses import replace as dataclass_replace
             from reportlab.lib.pagesizes import A4, landscape
-            from reportlab.lib.styles import ParagraphStyle
-            from reportlab.lib.units import cm
             from reportlab.lib.utils import ImageReader
             from reportlab.pdfgen import canvas
-            from reportlab.platypus import Frame, Paragraph
         except ImportError as exc:
             raise AppError("Instale reportlab para exportar PDF.") from exc
+
+        from src.services.certificates.adapter import build_inputs
+        from src.services.certificates.overlay import render_overlay
+        from src.services.certificates.renderer import render_certificate
+        from src.services.certificates.surface import ReportLabSurface
 
         page_size = A4 if template.get("orientation") == "portrait" else landscape(A4)
         width, height = page_size
         document = canvas.Canvas(str(path), pagesize=page_size)
-        primary_color = colors.HexColor(str(template.get("primary_color") or "#1E3A8A"))
-        accent_color = colors.HexColor(str(template.get("accent_color") or "#93C5FD"))
-        title_style = ParagraphStyle(
-            "CertificateTitle",
-            fontName="Helvetica-Bold",
-            fontSize=int(template.get("title_font_size") or 32),
-            leading=int(template.get("title_font_size") or 32) + 6,
-            alignment=TA_CENTER,
-            textColor=primary_color,
-        )
-        body_style = ParagraphStyle(
-            "CertificateBody",
-            fontName="Helvetica",
-            fontSize=int(template.get("body_font_size") or 18),
-            leading=int(template.get("body_font_size") or 18) + 10,
-            alignment=TA_CENTER,
-            textColor=colors.HexColor("#1F2937"),
-        )
-        footer_style = ParagraphStyle(
-            "CertificateFooter",
-            fontName="Helvetica",
-            fontSize=int(template.get("footer_font_size") or 10),
-            leading=int(template.get("footer_font_size") or 10) + 4,
-            alignment=TA_CENTER,
-            textColor=colors.HexColor("#475569"),
-        )
-        background = CertificateService._load_template_image(
-            template,
-            "background_image_path",
-            "Imagem de fundo nao encontrada.",
-            "Nao foi possivel carregar a imagem de fundo do diploma.",
-            ImageReader,
-        )
-        logo = CertificateService._load_template_image(
-            template,
-            "logo_path",
-            "Arquivo de logo nao encontrado.",
-            "Nao foi possivel carregar o logo do diploma.",
-            ImageReader,
-        )
-        secondary_logo = CertificateService._load_template_image(
-            template,
-            "secondary_logo_path",
-            "Arquivo de logo secundario nao encontrado.",
-            "Nao foi possivel carregar o logo secundario do diploma.",
-            ImageReader,
-        )
-        background_opacity = CertificateService._validated_opacity(
-            template.get("background_opacity", 0.18),
-            "opacidade do fundo",
-        )
+
+        kind = str(template.get("template_kind") or "generated")
+        watermark_image = None
+        overlay_image = None
+        if kind == "image_overlay":
+            overlay_image = CertificateService._load_template_image(
+                template, "background_image_path",
+                "Imagem de fundo nao encontrada.",
+                "Nao foi possivel carregar a imagem de fundo do diploma.",
+                ImageReader,
+            )
+        elif str(template.get("watermark_kind") or "") == "image":
+            watermark_image = CertificateService._load_template_image(
+                template, "watermark_image_path",
+                "Imagem da marca d'agua nao encontrada.",
+                "Nao foi possivel carregar a imagem da marca d'agua do diploma.",
+                ImageReader,
+            )
 
         for recipient in recipients:
-            CertificateService._draw_certificate_page(
-                document,
-                width,
-                height,
-                cm,
-                colors,
-                primary_color,
-                accent_color,
-                background,
-                background_opacity,
-                logo,
-                secondary_logo,
-                Frame,
-                Paragraph,
-                title_style,
-                body_style,
-                footer_style,
-                source_title,
-                template,
-                recipient,
-            )
+            preset, palette, content, options = build_inputs(template, recipient)
+            surface = ReportLabSurface(document, width, height)
+            if kind == "image_overlay":
+                render_overlay(surface, palette, content, overlay_image)
+            else:
+                if watermark_image is not None:
+                    options = dataclass_replace(options, watermark_image=watermark_image)
+                render_certificate(surface, preset, palette, content, options)
             document.showPage()
         document.save()
 
@@ -1191,148 +1271,6 @@ class CertificateService:
             return image_reader_class(str(resolved_image))
         except Exception as exc:
             raise AppError(load_message) from exc
-
-    @staticmethod
-    def _draw_background_image(
-        document: Any,
-        background: Any,
-        width: float,
-        height: float,
-        opacity: float,
-    ) -> None:
-        if not background or opacity <= 0:
-            return
-        image_width, image_height = background.getSize()
-        if image_width <= 0 or image_height <= 0:
-            return
-        scale = max(width / image_width, height / image_height)
-        draw_width = image_width * scale
-        draw_height = image_height * scale
-        x = (width - draw_width) / 2
-        y = (height - draw_height) / 2
-        document.saveState()
-        if hasattr(document, "setFillAlpha"):
-            document.setFillAlpha(opacity)
-        if hasattr(document, "setStrokeAlpha"):
-            document.setStrokeAlpha(opacity)
-        document.drawImage(
-            background,
-            x,
-            y,
-            width=draw_width,
-            height=draw_height,
-            preserveAspectRatio=True,
-            mask="auto",
-        )
-        document.restoreState()
-
-    @staticmethod
-    def _draw_logo(
-        document: Any,
-        logo: Any,
-        x: float,
-        y: float,
-        max_width: float,
-        max_height: float,
-    ) -> None:
-        image_width, image_height = logo.getSize()
-        if image_width <= 0 or image_height <= 0:
-            return
-        scale = min(max_width / image_width, max_height / image_height)
-        draw_width = image_width * scale
-        draw_height = image_height * scale
-        document.drawImage(
-            logo,
-            x,
-            y + (max_height - draw_height) / 2,
-            width=draw_width,
-            height=draw_height,
-            preserveAspectRatio=True,
-            mask="auto",
-        )
-
-    @staticmethod
-    def _draw_certificate_page(
-        document: Any,
-        width: float,
-        height: float,
-        cm: float,
-        colors: Any,
-        primary_color: Any,
-        accent_color: Any,
-        background: Any,
-        background_opacity: float,
-        logo: Any,
-        secondary_logo: Any,
-        frame_class: Any,
-        paragraph_class: Any,
-        title_style: Any,
-        body_style: Any,
-        footer_style: Any,
-        source_title: str,
-        template: dict[str, Any],
-        recipient: dict[str, Any],
-    ) -> None:
-        CertificateService._draw_background_image(document, background, width, height, background_opacity)
-        margin = 1.1 * cm
-        document.setStrokeColor(primary_color)
-        document.setLineWidth(3)
-        document.rect(margin, margin, width - 2 * margin, height - 2 * margin)
-        document.setStrokeColor(accent_color)
-        document.setLineWidth(1)
-        document.rect(margin + 0.28 * cm, margin + 0.28 * cm, width - 2 * (margin + 0.28 * cm), height - 2 * (margin + 0.28 * cm))
-        document.setFillColor(accent_color)
-        document.rect(margin + 0.52 * cm, height - margin - 0.64 * cm, width - 2 * (margin + 0.52 * cm), 0.08 * cm, stroke=0, fill=1)
-
-        if logo:
-            CertificateService._draw_logo(document, logo, 2.1 * cm, height - 3.3 * cm, 3.0 * cm, 1.7 * cm)
-        if secondary_logo:
-            CertificateService._draw_logo(
-                document,
-                secondary_logo,
-                width - 5.1 * cm,
-                height - 3.3 * cm,
-                3.0 * cm,
-                1.7 * cm,
-            )
-
-        title = CertificateService._render_template_text(str(template.get("title_template") or ""), recipient)
-        title_frame = frame_class(2.3 * cm, height - 4.0 * cm, width - 4.6 * cm, 1.4 * cm, showBoundary=0)
-        title_frame.addFromList([paragraph_class(title, title_style)], document)
-        document.setFont("Helvetica", 13)
-        document.setFillColor(primary_color)
-        document.drawCentredString(width / 2, height - 3.8 * cm, source_title)
-
-        body = CertificateService._render_template_text(str(template.get("body_template") or ""), recipient)
-        body_bottom = 6.2 * cm if width > height else 8.5 * cm
-        body_height = 7.3 * cm if width > height else 9.0 * cm
-        body_frame = frame_class(2.8 * cm, body_bottom, width - 5.6 * cm, body_height, showBoundary=0)
-        body_frame.addFromList([paragraph_class(body, body_style)], document)
-
-        document.setStrokeColor(accent_color)
-        document.setLineWidth(1)
-        line_half = min(3.2 * cm, width * 0.18)
-        left_center = width * 0.32
-        right_center = width * 0.68
-        document.line(left_center - line_half, 3.9 * cm, left_center + line_half, 3.9 * cm)
-        document.line(right_center - line_half, 3.9 * cm, right_center + line_half, 3.9 * cm)
-        document.setFillColor(primary_color)
-        document.setFont("Helvetica", max(8, int(template.get("footer_font_size") or 10)))
-        left_signature = CertificateService._plain_rendered_text(str(template.get("signature_left") or ""), recipient)
-        right_signature = CertificateService._plain_rendered_text(str(template.get("signature_right") or ""), recipient)
-        document.drawCentredString(left_center, 3.45 * cm, left_signature)
-        document.drawCentredString(right_center, 3.45 * cm, right_signature)
-
-        footer = CertificateService._render_template_text(str(template.get("footer_template") or ""), recipient)
-        if not footer:
-            footer = CertificateService._render_template_text("{local} - {periodo}", recipient)
-        footer_frame = frame_class(2.8 * cm, 1.7 * cm, width - 5.6 * cm, 1.2 * cm, showBoundary=0)
-        footer_frame.addFromList([paragraph_class(footer, footer_style)], document)
-        verification_code = str(recipient.get("verification_code") or "").strip()
-        if verification_code:
-            document.setFillColor(colors.HexColor("#64748B"))
-            document.setFont("Helvetica", max(7, int(template.get("footer_font_size") or 10) - 1))
-            document.drawRightString(width - 1.45 * cm, 1.25 * cm, f"Codigo: {verification_code}")
 
     @staticmethod
     def _render_template_text(template: str, recipient: dict[str, Any]) -> str:
@@ -1385,37 +1323,6 @@ class CertificateService:
             "emissao": str(recipient.get("issued_at_label") or ""),
             "emitido_em": str(recipient.get("issued_at_label") or ""),
         }
-
-    @staticmethod
-    def _certificate_title(certificate_type: str) -> str:
-        if certificate_type == "participation":
-            return "Certificado de Participacao"
-        return "Certificado de Premiacao"
-
-    @staticmethod
-    def _certificate_body(certificate_type: str, recipient: dict[str, Any]) -> str:
-        name = CertificateService._escape_pdf_text(str(recipient.get("name") or ""))
-        tournament_name = CertificateService._escape_pdf_text(str(recipient.get("tournament") or ""))
-        points = CertificateService._escape_pdf_text(str(recipient.get("points") or "0"))
-        position = CertificateService._escape_pdf_text(str(recipient.get("position_label") or ""))
-        category = CertificateService._escape_pdf_text(str(recipient.get("category") or ""))
-        category_position = CertificateService._escape_pdf_text(str(recipient.get("category_position_label") or ""))
-
-        if certificate_type == "overall_award":
-            return (
-                f"Certificamos que <b>{name}</b> conquistou a <b>{position}</b> colocacao geral "
-                f"no torneio <b>{tournament_name}</b>, com <b>{points}</b> ponto(s)."
-            )
-        if certificate_type == "category_award":
-            return (
-                f"Certificamos que <b>{name}</b> conquistou a <b>{category_position}</b> colocacao "
-                f"na categoria <b>{category}</b> do torneio <b>{tournament_name}</b>, "
-                f"com <b>{points}</b> ponto(s)."
-            )
-        return (
-            f"Certificamos que <b>{name}</b> participou do torneio <b>{tournament_name}</b>, "
-            f"obtendo <b>{points}</b> ponto(s) e a <b>{position}</b> colocacao na classificacao."
-        )
 
     @staticmethod
     def _escape_pdf_text(value: str) -> str:

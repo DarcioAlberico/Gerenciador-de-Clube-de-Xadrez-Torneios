@@ -212,6 +212,7 @@ save_tournament_settings
 search_official_players
 set_chess_results_url
 set_exercise_active
+set_free_mode
 set_guardian_active
 set_inventory_item_active
 set_learning_level_active

@@ -148,12 +148,6 @@ class TournamentPagesMixin(TournamentPlayersMixin, TournamentSettingsMixin):
                         "start_date": entries["start_date"].get(),
                         "end_date": entries["end_date"].get(),
                         "bye_points": entries["bye_points"].get(),
-                        # Torneios deste fluxo nascem como Modo Oficial (perfil
-                        # Clube/Semi-formal). O perfil "free" (Modo Livre) fica
-                        # reservado ao menu "Torneio | Modo Livre"; assim o
-                        # re-emparceiramento e demais mecanicas do Modo Livre nao
-                        # aparecem em eventos comuns. Ajustavel depois em Config.
-                        "tournament_profile": "club",
                     }
                 )
                 self._set_current_tournament(tournament_id)

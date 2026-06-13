@@ -114,12 +114,12 @@ class FreeTournamentMixin:
         return dialog
 
     def _start_free_tournament(self, dialog: ctk.CTkToplevel) -> int | None:
-        """Fecha o aviso e cria um torneio ja em Modo Livre (perfil free).
+        """Fecha o aviso e cria um torneio ja em Modo Livre.
 
-        Nao toca em torneios existentes nem no fluxo oficial: apenas cria um
-        evento novo, marcado explicitamente com tournament_profile='free' (o
-        fluxo comum de "Criar torneio" usa perfil oficial), de modo que o
-        Modo Livre fique restrito aos eventos abertos por aqui.
+        Nao toca em torneios existentes nem no fluxo oficial: cria um evento
+        novo e grava a marca dedicada free_mode (set_free_mode). E essa marca,
+        nao o perfil, que habilita o re-emparceiramento livre, a entrada tardia
+        flexivel e o indicador 'Modo Livre' apenas neste evento.
         """
         dialog.destroy()
         name = self._ask_string("Novo Torneio Livre", "Nome do torneio:")
@@ -128,8 +128,9 @@ class FreeTournamentMixin:
         name = name.strip() or f"Torneio Livre {date.today().strftime('%d/%m/%Y')}"
         try:
             tournament_id = self.tournament_service.create_tournament(
-                {"name": name, "rounds_count": "5", "bye_points": "1", "tournament_profile": "free"}
+                {"name": name, "rounds_count": "5", "bye_points": "1"}
             )
+            self.db.set_free_mode(tournament_id, True)
         except Exception as exc:
             self._show_error(exc)
             return None
@@ -143,15 +144,21 @@ class FreeTournamentMixin:
         return tournament_id
 
     # ------------------------------------------------------------------
-    # Mecanicas do Modo Livre (so atuam no perfil Livre/Escolar = free)
+    # Mecanicas do Modo Livre (so atuam quando a marca free_mode esta ligada)
     # ------------------------------------------------------------------
     def _is_free_mode(self, tournament_id: int | None = None) -> bool:
-        """True se o torneio (atual, por padrao) esta no perfil Livre/Escolar."""
+        """True se o torneio (atual, por padrao) foi aberto em Modo Livre.
+
+        Le a marca dedicada free_mode, gravada so pelo fluxo 'Torneio | Modo
+        Livre'. Nao depende mais do perfil 'free' (default de todo torneio):
+        assim o re-emparceiramento livre e a entrada tardia flexivel nao vazam
+        para eventos comuns ou legados.
+        """
         tid = tournament_id or getattr(self, "current_tournament_id", None)
         if not tid:
             return False
         settings = self.db.get_tournament_settings(int(tid)) or {}
-        return str(settings.get("tournament_profile") or "free") == "free"
+        return bool(settings.get("free_mode"))
 
     def free_mode_repair_round(self) -> None:
         """Modo Livre: limpa o emparceiramento da rodada atual e regera.
