@@ -311,7 +311,10 @@ class pairing_dutch(pairing):
         if scorelevel == testlevel:
             pass  # Era breakpoint() — testlevel=-1, nunca dispara em produção.
         if len(edges) == 0:
-            raise  
+            # patch local (bug Gacrux): era 'raise' pelado -> RuntimeError "No active
+            # exception to reraise". Sem arestas = nenhum par possivel = categoria -1
+            # ("None can meet", ver docstring); deixa o motor reportar erro limpo.
+            return -1
         if edges[0]["sa"] < scorelevel or edges[0]["sb"] < scorelevel:
             return -1  # There are no pairing for this scorebracket
         if edges[0]["sa"] == 1 and edges[0]["sb"] == 1:
