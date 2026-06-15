@@ -263,8 +263,8 @@ class TournamentSettingsMixin:
         stack(tab_rules, system_option, label="Motor/Regra de emparceiramento")
         system_option.set(
             PAIRING_SYSTEMS.get(
-                settings.get("pairing_system", "custom_authorized"),
-                PAIRING_SYSTEMS["custom_authorized"],
+                settings.get("pairing_system", "gacrux_swiss"),
+                PAIRING_SYSTEMS["gacrux_swiss"],
             )
         )
 

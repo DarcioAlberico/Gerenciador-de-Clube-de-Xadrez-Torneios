@@ -14,6 +14,10 @@ from src.services.federation_exporters.trf16 import TRF16Exporter
 
 logger = logging.getLogger(__name__)
 
+# Teto de tempo do subprocesso do Gacrux: evita pendurar a aplicacao se o motor
+# travar (essencial agora que o Gacrux pode ser o motor padrao de pareamento).
+GACRUX_TIMEOUT_SECONDS = 120
+
 
 class GacruxEngine:
     def __init__(self, db) -> None:
@@ -103,9 +107,16 @@ class GacruxEngine:
                     check=False,
                     cwd=str(project_root),
                     env=env,
+                    timeout=GACRUX_TIMEOUT_SECONDS,
                 )
                 logger.debug("Gacrux STDOUT: %s", result.stdout)
                 logger.debug("Gacrux STDERR: %s", result.stderr)
+            except subprocess.TimeoutExpired as exc:
+                raise AppError(
+                    f"O motor Gacrux excedeu {GACRUX_TIMEOUT_SECONDS}s ao parear a rodada "
+                    f"{round_number} e foi interrompido. Tente novamente ou use o motor proprio "
+                    "nas configuracoes do torneio."
+                ) from exc
             except Exception as e:
                 raise AppError(f"Falha ao executar o motor Gacrux: {e}")
 

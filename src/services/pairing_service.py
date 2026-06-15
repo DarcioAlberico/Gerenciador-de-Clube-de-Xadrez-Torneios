@@ -736,14 +736,24 @@ class PairingService:
                 )
             if settings.get("disable_bye") and len(to_pair) % 2 == 1:
                 raise AppError("O bye esta desativado. Use numero par de jogadores ativos.")
-            if settings.get("pairing_system") == "gacrux_swiss":
+            use_gacrux = settings.get("pairing_system") == "gacrux_swiss"
+            if use_gacrux and _prohibited_pairs_for_round(
+                self.db.list_prohibited_pairings(tournament_id), next_number
+            ):
+                # O Gacrux (via TRF-16) nao recebe as proibicoes desta integracao;
+                # nas rodadas com proibicao ativa caimos no motor proprio, que as respeita.
+                logger.info(
+                    "Rodada %s tem proibicao ativa; usando o motor proprio em vez do Gacrux.",
+                    next_number,
+                )
+                use_gacrux = False
+            if use_gacrux:
                 from src.services.pairing.gacrux_engine import GacruxEngine
                 pairings = GacruxEngine(self.db).pair_round(tournament_id, to_pair, next_number)
+            elif next_number == 1:
+                pairings = _first_round_pairings(to_pair, settings)
             else:
-                if next_number == 1:
-                    pairings = _first_round_pairings(to_pair, settings)
-                else:
-                    pairings = self._swiss_pairings(tournament_id, to_pair, next_number)
+                pairings = self._swiss_pairings(tournament_id, to_pair, next_number)
             pairings = _append_requested_bye_pairings(pairings, bye_by_player)
         return {
             "players": players,
