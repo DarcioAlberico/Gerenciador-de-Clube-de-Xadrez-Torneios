@@ -5,7 +5,7 @@ from datetime import datetime
 from ..support import *
 
 from src.services.pairing.acceleration import acceleration_spec
-from src.services.constants import PAIRING_SYSTEMS
+from src.services.constants import PAIRING_SYSTEMS, TIEBREAK_ENGINES
 from src.services.pairing import (
     DEFAULT_PLAYER_TIEBREAKS,
     DEFAULT_TEAM_TIEBREAKS,
@@ -233,6 +233,7 @@ class TournamentSettingsMixin:
         type_by_label = {label: value for value, label in TOURNAMENT_TYPES.items()}
         pairing_by_label = {label: value for value, label in PAIRING_METHODS.items()}
         system_by_label = {label: value for value, label in PAIRING_SYSTEMS.items()}
+        tiebreak_engine_by_label = {label: value for value, label in TIEBREAK_ENGINES.items()}
         team_pairing_by_label = {label: value for value, label in TEAM_PAIRING_METHODS.items()}
         team_criterion_by_label = {label: value for value, label in TEAM_STANDING_CRITERIA.items()}
         acceleration_by_label = {label: value for value, label in ACCELERATION_METHODS.items()}
@@ -265,6 +266,17 @@ class TournamentSettingsMixin:
             PAIRING_SYSTEMS.get(
                 settings.get("pairing_system", "gacrux_swiss"),
                 PAIRING_SYSTEMS["gacrux_swiss"],
+            )
+        )
+
+        tiebreak_engine_option = ctk.CTkOptionMenu(
+            tab_rules, values=list(tiebreak_engine_by_label.keys()), width=350
+        )
+        stack(tab_rules, tiebreak_engine_option, label="Motor de desempate (classificacao)")
+        tiebreak_engine_option.set(
+            TIEBREAK_ENGINES.get(
+                settings.get("tiebreak_engine", "gacrux"),
+                TIEBREAK_ENGINES["gacrux"],
             )
         )
 
@@ -665,6 +677,7 @@ class TournamentSettingsMixin:
             settings_payload["tournament_type"] = type_by_label[tournament_type_option.get()]
             settings_payload["pairing_method"] = pairing_by_label[pairing_option.get()]
             settings_payload["pairing_system"] = system_by_label[system_option.get()]
+            settings_payload["tiebreak_engine"] = tiebreak_engine_by_label[tiebreak_engine_option.get()]
             settings_payload["team_pairing_method"] = team_pairing_by_label[team_pairing_option.get()]
             settings_payload["team_standing_primary"] = team_criterion_by_label[team_primary_option.get()]
             settings_payload["team_standing_secondary"] = team_criterion_by_label[team_secondary_option.get()]

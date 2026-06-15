@@ -26,6 +26,17 @@ def default_pairing_system() -> str:
     return os.environ.get("ALBERICUS_DEFAULT_PAIRING_SYSTEM", "gacrux_swiss")
 
 
+def default_tiebreak_engine() -> str:
+    """Motor de desempate/classificacao padrao para novos torneios.
+
+    Producao usa o Gacrux (motor FIDE oficial, tiebreakchecker.py). Lido em
+    runtime para que os testes possam forcar o motor proprio via
+    ALBERICUS_DEFAULT_TIEBREAK_ENGINE (ver tests/conftest.py) — suite rapida e
+    deterministica, sem subprocesso.
+    """
+    return os.environ.get("ALBERICUS_DEFAULT_TIEBREAK_ENGINE", "gacrux")
+
+
 class TournamentCoreMixin(_DatabaseInfra):
     def create_tournament(
         self,
@@ -414,7 +425,7 @@ class TournamentCoreMixin(_DatabaseInfra):
                     allow_dangerous_changes = ?, disable_bye = ?,
                     late_entry_points = ?, accelerated_system = ?,
                     hide_standings = ?, calculate_performance = ?,
-                    pairing_system = ?, acceleration_method = ?,
+                    pairing_system = ?, tiebreak_engine = ?, acceleration_method = ?,
                     hide_color_names = ?, show_opponents_in_standings = ?,
                     tiebreak_sequence = ?, team_tiebreak_sequence = ?,
                     prize_policy = ?, prize_tax_percent = ?,
@@ -455,6 +466,7 @@ class TournamentCoreMixin(_DatabaseInfra):
                     int(data.get("hide_standings", 0) or 0),
                     int(data.get("calculate_performance", 0) or 0),
                     str(data.get("pairing_system", default_pairing_system())).strip() or default_pairing_system(),
+                    str(data.get("tiebreak_engine", default_tiebreak_engine())).strip() or default_tiebreak_engine(),
                     str(data.get("acceleration_method", "none")).strip() or "none",
                     int(data.get("hide_color_names", 0) or 0),
                     int(data.get("show_opponents_in_standings", 0) or 0),
@@ -2638,10 +2650,10 @@ class TournamentCoreMixin(_DatabaseInfra):
     ) -> None:
         connection.execute(
             """
-            INSERT OR IGNORE INTO tournament_settings (tournament_id, pairing_system, updated_at)
-            VALUES (?, ?, ?)
+            INSERT OR IGNORE INTO tournament_settings (tournament_id, pairing_system, tiebreak_engine, updated_at)
+            VALUES (?, ?, ?, ?)
             """,
-            (tournament_id, default_pairing_system(), self.now()),
+            (tournament_id, default_pairing_system(), default_tiebreak_engine(), self.now()),
         )
 
     def _ensure_round_schedule(
