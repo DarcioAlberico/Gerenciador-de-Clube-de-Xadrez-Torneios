@@ -1012,6 +1012,12 @@ def swiss_pairings(
     for group in score_groups(pending, standings):
         group.extend(floaters)
         floaters = []
+        # Os floaters que descem têm pontuação maior que os nativos do grupo;
+        # reordenamos para que entrem pelo topo (como o pareamento por equipes
+        # já faz). Sem isto eles caem no fim da lista e voltam a flutuar a cada
+        # grupo, despencando até o fundo da tabela e gerando diferenças de
+        # pontuação evitáveis (violação do downfloat mínimo FIDE C.04).
+        group = sorted(group, key=lambda player: pairing_order_key(player, standings))
 
         group_pairs, group_floaters = dutch_bracket_pairing(
             group,
