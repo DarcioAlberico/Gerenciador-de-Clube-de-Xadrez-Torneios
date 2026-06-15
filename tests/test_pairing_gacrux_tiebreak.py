@@ -5,9 +5,12 @@ motor de I/O ``GacruxTiebreakEngine`` (roda o ``tiebreakchecker.py`` real, como
 os testes de pareamento Gacrux ja fazem).
 """
 
+import json
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from src.core.database import Database
 from src.services.pairing_service import PairingService
@@ -455,6 +458,92 @@ class TestGacruxTeamTiebreaks(unittest.TestCase):
         albericus = self._team_standings_by_id("albericus")
         self.assertTrue(albericus)
         self.assertFalse(any("_gacrux_rank" in item for item in albericus.values()))
+
+
+class TestGacruxRoundRobin(unittest.TestCase):
+    """Round-robin: o motor deve usar regras pre-determinadas (-p), nao Suico (-s).
+
+    Os tiebreaks da FIDE diferem entre Suico e round-robin, entao o flag enviado
+    ao tiebreakchecker depende do metodo de pareamento do torneio.
+    """
+
+    def setUp(self) -> None:
+        import src.services.pairing_service as ps
+        ps._GACRUX_TIEBREAK_CACHE.clear()
+
+        self.temp_dir = tempfile.TemporaryDirectory()
+        db_path = Path(self.temp_dir.name) / "test_gacrux_rr.db"
+        self.db = Database(db_path=str(db_path))
+        self.db.connect()
+        self.db.initialize()
+        self.pairing_service = PairingService(self.db)
+        self.tournament_id = self.db.create_tournament("RR", rounds_count=3, bye_points=1.0)
+        self.db.save_tournament_settings(self.tournament_id, {
+            "time_control": "10 min", "chief_arbiter": "Arb", "federation": "BRA",
+            "location": "Sao Paulo", "start_date": "2026-06-09", "end_date": "2026-06-09",
+        })
+        self.player_ids = [
+            self.db.create_player(
+                self.tournament_id, f"Jogador {i + 1:03d}", club="Club",
+                rating=rating, category="ABS", sex="m", birth_date="2000-01-01",
+            )
+            for i, rating in enumerate([2200, 2100, 2000, 1900])
+        ]
+
+    def tearDown(self) -> None:
+        try:
+            self.temp_dir.cleanup()
+        except OSError:
+            pass
+
+    def _configure_and_play(self, pairing_method: str, n_rounds: int) -> None:
+        self.db.save_tournament_settings(self.tournament_id, {"pairing_method": pairing_method})
+        for _ in range(n_rounds):
+            round_data = self.pairing_service.generate_next_round(self.tournament_id)
+            for pairing in self.db.get_pairings_for_round(round_data["id"]):
+                if not pairing["is_bye"]:
+                    self.pairing_service.update_result(self.tournament_id, pairing["id"], "1-0")
+            self.pairing_service.close_round(self.tournament_id, round_data["id"])
+
+    def _capture_tiebreak_flag(self) -> list[str]:
+        """Roda compute() com o subprocesso mockado e devolve o cmd capturado."""
+        captured: dict[str, list[str]] = {}
+
+        def fake_run(cmd, **kwargs):
+            captured["cmd"] = list(cmd)
+            out_path = cmd[cmd.index("-o") + 1]
+            Path(out_path).write_text(
+                json.dumps({"status": {"code": 0}, "tiebreakResult": {"competitors": []}}),
+                encoding="utf-8",
+            )
+            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+        with mock.patch(
+            "src.services.pairing.gacrux_tiebreak_engine.subprocess.run", side_effect=fake_run
+        ):
+            GacruxTiebreakEngine(self.db).compute(self.tournament_id, ["buchholz"])
+        return captured["cmd"]
+
+    def test_round_robin_passes_predetermined_flag(self):
+        self._configure_and_play("round_robin", 1)
+        cmd = self._capture_tiebreak_flag()
+        self.assertIn("-p", cmd)
+        self.assertNotIn("-s", cmd)
+
+    def test_swiss_still_passes_swiss_flag(self):
+        self._configure_and_play("swiss", 1)
+        cmd = self._capture_tiebreak_flag()
+        self.assertIn("-s", cmd)
+        self.assertNotIn("-p", cmd)
+
+    def test_round_robin_standings_end_to_end(self):
+        # RR completo (3 rodadas, 4 jogadores) calculado pelo Gacrux real com -p.
+        self._configure_and_play("round_robin", 3)
+        self.db.save_tournament_settings(self.tournament_id, {"tiebreak_engine": "gacrux"})
+        standings = self.pairing_service.standings(self.tournament_id)
+        positions = sorted(item["position"] for item in standings)
+        self.assertEqual(positions, list(range(1, len(self.player_ids) + 1)))
+        self.assertTrue(all("_gacrux_rank" in item for item in standings))
 
 
 if __name__ == "__main__":
