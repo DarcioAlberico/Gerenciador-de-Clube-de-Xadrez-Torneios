@@ -1287,6 +1287,13 @@ class LegacyMigrations:
             connection.execute(
                 "ALTER TABLE tournament_settings ADD COLUMN acceleration_method TEXT NOT NULL DEFAULT 'none'"
             )
+        if "tiebreak_engine" not in settings_columns:
+            # Torneios JA existentes mantem o motor proprio (classificacao
+            # historica preservada); torneios novos recebem 'gacrux' via
+            # _ensure_tournament_settings/default_tiebreak_engine().
+            connection.execute(
+                "ALTER TABLE tournament_settings ADD COLUMN tiebreak_engine TEXT NOT NULL DEFAULT 'albericus'"
+            )
 
         connection.executescript(
             """
