@@ -59,6 +59,8 @@ class GacruxTiebreakEngine:
 
         export_service = self._export_service()
         plan = build_tiebreak_plan(codes)
+        settings = self.db.get_tournament_settings(tournament_id) or {}
+        swiss = str(settings.get("pairing_method") or "swiss") != "round_robin"
 
         # Ranking 1-based pela MESMA ordenacao do exporter (==> cid do TRF).
         all_players = sorted(
@@ -72,7 +74,7 @@ class GacruxTiebreakEngine:
         rank_to_player_id = {index: int(p["id"]) for index, p in enumerate(all_players, start=1)}
 
         data = self._run_tiebreakchecker(
-            TRF16Exporter(export_service), tournament_id, plan.specifiers, rounds
+            TRF16Exporter(export_service), tournament_id, plan.specifiers, rounds, swiss=swiss
         )
         by_cid = parse_competitors(data.get("tiebreakResult", {}).get("competitors", []), plan)
 
@@ -106,6 +108,8 @@ class GacruxTiebreakEngine:
         export_service = self._export_service()
         exporter = TRF25Exporter(export_service)
         plan = build_team_tiebreak_plan(codes)
+        settings = self.db.get_tournament_settings(tournament_id) or {}
+        swiss = str(settings.get("team_pairing_method") or "swiss") != "round_robin"
 
         # cid (Team Pairing Number do TRF-25) -> team_id, reusando a MESMA
         # ordenacao do exporter (_prepare_teams ordena por forca/nome).
@@ -122,7 +126,9 @@ class GacruxTiebreakEngine:
         prepared = exporter._prepare_teams(tournament_id, teams, players, start_rank_by_player)
         cid_to_team_id = {index: int(item["team_id"]) for index, item in enumerate(prepared, start=1)}
 
-        data = self._run_tiebreakchecker(exporter, tournament_id, plan.specifiers, rounds)
+        data = self._run_tiebreakchecker(
+            exporter, tournament_id, plan.specifiers, rounds, swiss=swiss
+        )
         by_cid = parse_competitors(data.get("tiebreakResult", {}).get("competitors", []), plan)
 
         out: dict[int, dict[str, Any]] = {}
@@ -155,11 +161,14 @@ class GacruxTiebreakEngine:
         tournament_id: int,
         specifiers: tuple[str, ...],
         current_round: int,
+        swiss: bool = True,
     ) -> dict[str, Any]:
         """Exporta o TRF com ``exporter`` e roda o ``tiebreakchecker.py``.
 
-        Devolve o JSON parseado do Gacrux. ``-t`` vai por ULTIMO: como tem
-        ``nargs='*'``, engoliria flags seguintes.
+        Devolve o JSON parseado do Gacrux. ``swiss`` escolhe as regras: ``-s``
+        (Suico) ou ``-p`` (pre-determinado/round-robin) — necessario porque os
+        tiebreaks da FIDE diferem entre os dois sistemas. ``-t`` vai por ULTIMO:
+        como tem ``nargs='*'``, engoliria flags seguintes.
         """
         current_dir = Path(__file__).resolve().parent
         script_path = current_dir / "gacrux" / "tiebreakchecker.py"
@@ -179,7 +188,10 @@ class GacruxTiebreakEngine:
                 "-i", str(input_path),
                 "-o", str(output_path),
                 "-b", "utf-8",
-                "-s",  # regras de Suico (nossos tipos de torneio dizem "Suico", nao "SWISS")
+                # Suico (-s) ou round-robin/pre-determinado (-p). Nossos tipos de
+                # torneio dizem "Suico" (nao "SWISS"), entao a regra e sempre
+                # explicita; sem isso o motor inferiria pelo numero de jogadores.
+                "-s" if swiss else "-p",
                 "-n", str(current_round),
                 "-F", "JSON",
                 "-t", *specifiers,
