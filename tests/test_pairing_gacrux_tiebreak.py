@@ -11,10 +11,12 @@ from pathlib import Path
 
 from src.core.database import Database
 from src.services.pairing_service import PairingService
+from src.services.tournament_service import TeamService, TournamentService
 from src.services.pairing.gacrux_tiebreak_engine import GacruxTiebreakEngine
 from src.services.pairing.gacrux_tiebreak_map import (
     POINTS_CODE,
     TiebreakPlan,
+    build_team_tiebreak_plan,
     build_tiebreak_plan,
     parse_competitors,
 )
@@ -47,6 +49,16 @@ class TestGacruxTiebreakMap(unittest.TestCase):
     def test_build_plan_maps_cut_and_rating_criteria(self):
         plan = build_tiebreak_plan(["buchholz_cut1", "buchholz_cut2", "aro", "aroc", "performance"])
         self.assertEqual(plan.specifiers, ("PTS", "BH/C1", "BH/C2", "ARO", "ARO/M1", "TPR"))
+
+    def test_build_team_plan_maps_team_codes(self):
+        plan = build_team_tiebreak_plan(["match_points", "game_points", "buchholz", "wins"])
+        self.assertEqual(plan.specifiers, ("MPTS", "GPTS", "BH", "WON"))
+        self.assertEqual(plan.code_order, ("match_points", "game_points", "buchholz", "wins"))
+
+    def test_build_team_plan_falls_back_to_match_points(self):
+        plan = build_team_tiebreak_plan([])
+        self.assertEqual(plan.specifiers, ("MPTS",))
+        self.assertEqual(plan.code_order, ("match_points",))
 
     def test_parse_competitors_aligns_scores_to_codes(self):
         plan = build_tiebreak_plan(["buchholz", "sonneborn_berger", "wins"])
@@ -359,6 +371,90 @@ class TestGacruxFideParity(unittest.TestCase):
                 albericus[pid]["tiebreak_values"]["wins"],
                 f"vitorias (WON) divergiram para o jogador {pid}",
             )
+
+
+class TestGacruxTeamTiebreaks(unittest.TestCase):
+    """Fase 5 (follow-up): desempate por EQUIPES via Gacrux (TRF-25 -> isteam).
+
+    Com o placar padrao FIDE (2/1/0), os match/game points do Gacrux devem bater
+    com os do motor proprio — valida o round-trip TRF-25 e o mapa cid->team_id.
+    """
+
+    def setUp(self) -> None:
+        import src.services.pairing_service as ps
+        ps._GACRUX_TIEBREAK_CACHE.clear()
+
+        self.temp_dir = tempfile.TemporaryDirectory()
+        db_path = Path(self.temp_dir.name) / "test_gacrux_team.db"
+        self.db = Database(db_path=str(db_path))
+        self.db.connect()
+        self.db.initialize()
+        self.pairing_service = PairingService(self.db)
+        self.tournament_service = TournamentService(self.db)
+        self.team_service = TeamService(self.db)
+        self.tournament_id = self.tournament_service.create_tournament({
+            "name": "Interclubes", "competition_type": "team",
+            "rounds_count": "3", "bye_points": "1",
+        })
+        self.db.save_tournament_settings(self.tournament_id, {
+            "team_boards_count": "2",
+            "team_match_win_points": "2", "team_match_draw_points": "1", "team_match_loss_points": "0",
+            "team_pairing_method": "swiss",
+            "team_standing_primary": "match_points", "team_standing_secondary": "game_points",
+            "time_control": "10 min", "chief_arbiter": "Arb", "federation": "BRA",
+            "location": "Sao Paulo", "start_date": "2026-06-09", "end_date": "2026-06-10",
+        })
+        self.team_ids = []
+        for team_index in range(4):
+            team_id = self.team_service.create_team(self.tournament_id, {
+                "name": f"Equipe {team_index + 1}",
+                "club": f"Clube {team_index + 1}",
+                "captain": f"Cap {team_index + 1}",
+            })
+            self.team_ids.append(team_id)
+            for board in range(1, 3):
+                player_id = self.db.create_player(
+                    self.tournament_id, name=f"E{team_index + 1} J{board}",
+                    rating=2200 - team_index * 100 - board * 10, club=f"Clube {team_index + 1}",
+                )
+                self.team_service.add_player(team_id, player_id, board_number=str(board), role="starter")
+        for _ in range(2):
+            round_data = self.pairing_service.generate_next_round(self.tournament_id)
+            for match in self.db.list_team_matches_for_round(round_data["id"]):
+                if match["is_bye"]:
+                    continue
+                for board in self.db.list_team_boards(match["id"]):
+                    self.pairing_service.update_result(self.tournament_id, board["id"], "1-0")
+            self.pairing_service.close_round(self.tournament_id, round_data["id"])
+
+    def tearDown(self) -> None:
+        try:
+            self.temp_dir.cleanup()
+        except OSError:
+            pass
+
+    def _team_standings_by_id(self, engine: str) -> dict[int, dict]:
+        self.db.save_tournament_settings(self.tournament_id, {"tiebreak_engine": engine})
+        return {item["team_id"]: item for item in self.pairing_service.team_standings(self.tournament_id)}
+
+    def test_gacrux_team_engine_matches_points_and_ranks(self):
+        gacrux = self._team_standings_by_id("gacrux")
+        albericus = self._team_standings_by_id("albericus")
+
+        self.assertEqual(set(gacrux.keys()), set(self.team_ids))
+        # Placar padrao 2/1/0 => match/game points do Gacrux == motor proprio.
+        for team_id in self.team_ids:
+            self.assertEqual(gacrux[team_id]["match_points"], albericus[team_id]["match_points"])
+            self.assertEqual(gacrux[team_id]["game_points"], albericus[team_id]["game_points"])
+
+        self.assertTrue(all("_gacrux_rank" in item for item in gacrux.values()))
+        positions = sorted(item["position"] for item in gacrux.values())
+        self.assertEqual(positions, list(range(1, len(self.team_ids) + 1)))
+
+    def test_albericus_team_engine_has_no_gacrux_rank(self):
+        albericus = self._team_standings_by_id("albericus")
+        self.assertTrue(albericus)
+        self.assertFalse(any("_gacrux_rank" in item for item in albericus.values()))
 
 
 if __name__ == "__main__":

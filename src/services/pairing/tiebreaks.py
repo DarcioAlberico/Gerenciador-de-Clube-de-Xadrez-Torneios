@@ -799,6 +799,7 @@ def calculate_team_standings(
     teams: list[dict[str, Any]],
     closed_matches: list[dict[str, Any]],
     sequence: list[dict[str, Any]] | None = None,
+    gacrux_tiebreaks: dict[int, dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     stats: dict[int, dict[str, Any]] = {}
     for team in teams:
@@ -867,12 +868,31 @@ def calculate_team_standings(
             2,
         )
 
+    # Modo Gacrux: sobrescreve os valores canônicos de equipe pelos do motor FIDE
+    # e segue o rank do Gacrux (mesma estratégia do individual; ver
+    # calculate_player_standings).
+    gacrux_tiebreaks = gacrux_tiebreaks or {}
+    for team_stat in stats.values():
+        gx = gacrux_tiebreaks.get(int(team_stat["team_id"]))
+        gx_scores = gx.get("scores") if gx else None
+        if gx:
+            for code in ("match_points", "game_points", "buchholz", "wins"):
+                if gx_scores and code in gx_scores:
+                    team_stat[code] = gx_scores[code]
+            team_stat["_gacrux_rank"] = int(gx.get("rank") or 0)
+
     codes = _resolve_team_codes(settings, sequence)
-    ordered_stats = sorted(
-        stats.values(),
-        key=lambda item: tuple(-team_standing_value(item, code) for code in codes)
-        + (str(item["name"]).casefold(),),
-    )
+    if any("_gacrux_rank" in item for item in stats.values()):
+        ordered_stats = sorted(
+            stats.values(),
+            key=lambda item: (int(item.get("_gacrux_rank") or 0), str(item["name"]).casefold()),
+        )
+    else:
+        ordered_stats = sorted(
+            stats.values(),
+            key=lambda item: tuple(-team_standing_value(item, code) for code in codes)
+            + (str(item["name"]).casefold(),),
+        )
     for index, item in enumerate(ordered_stats, start=1):
         item["team_tiebreak_order"] = list(codes)
         item["position"] = index

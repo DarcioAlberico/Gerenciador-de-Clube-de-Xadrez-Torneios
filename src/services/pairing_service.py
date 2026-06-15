@@ -1801,7 +1801,84 @@ class PairingService:
         teams = self.db.list_teams(tournament_id, active_only=False)
         closed_matches = self.db.list_team_matches_for_tournament(tournament_id, closed_only=True)
         sequence = _parse_team_tiebreak_sequence(settings.get("team_tiebreak_sequence"))
-        return _calculate_team_standings(settings, teams, closed_matches, sequence=sequence)
+        gacrux_tiebreaks = self._gacrux_team_tiebreaks(
+            tournament_id, tournament, settings, sequence, teams, closed_matches
+        )
+        return _calculate_team_standings(
+            settings, teams, closed_matches, sequence=sequence, gacrux_tiebreaks=gacrux_tiebreaks
+        )
+
+    def _gacrux_team_tiebreaks(
+        self,
+        tournament_id: int,
+        tournament: dict[str, Any],
+        settings: dict[str, Any],
+        sequence: list[dict[str, Any]] | None,
+        teams: list[dict[str, Any]],
+        closed_matches: list[dict[str, Any]],
+    ) -> dict[int, dict[str, Any]] | None:
+        """Desempates de EQUIPES pelo motor FIDE (Gacrux), ou None p/ o proprio.
+
+        Espelha _gacrux_player_tiebreaks: None quando o motor nao e o Gacrux, nao
+        ha confronto fechado, ou o motor falhou; cache por assinatura + guarda de
+        reentrancia (o export TRF-25 chama team_standings() de novo).
+        """
+        engine_name = str(settings.get("tiebreak_engine") or default_tiebreak_engine())
+        if engine_name != "gacrux":
+            return None
+        if tournament.get("competition_type") != "team":
+            return None
+        if not closed_matches:
+            return None
+        if int(tournament_id) in _GACRUX_TIEBREAK_INFLIGHT:
+            return None
+
+        if sequence:
+            codes = [str(item["code"]) for item in sequence if item.get("code")]
+        else:
+            codes = []
+        if not codes:
+            primary = str(settings.get("team_standing_primary", "match_points") or "match_points")
+            secondary = str(settings.get("team_standing_secondary", "game_points") or "game_points")
+            codes = [primary, secondary, "buchholz", "wins"]
+
+        results_sig = tuple(sorted(
+            (
+                int(match["id"]),
+                str(match.get("result") or ""),
+                float(match.get("white_match_points") or 0.0),
+                float(match.get("black_match_points") or 0.0),
+                float(match.get("white_game_points") or 0.0),
+                float(match.get("black_game_points") or 0.0),
+            )
+            for match in closed_matches
+        ))
+        teams_sig = tuple(sorted(int(team["id"]) for team in teams))
+        cache_key = ("team", int(tournament_id), tuple(codes), results_sig, teams_sig)
+        cached = _GACRUX_TIEBREAK_CACHE.get(cache_key)
+        if cached is not None:
+            _GACRUX_TIEBREAK_CACHE.move_to_end(cache_key)
+            return cached
+
+        _GACRUX_TIEBREAK_INFLIGHT.add(int(tournament_id))
+        try:
+            from src.services.pairing.gacrux_tiebreak_engine import GacruxTiebreakEngine
+            result = GacruxTiebreakEngine(self.db).compute_teams(tournament_id, codes)
+        except AppError as exc:
+            logger.warning(
+                "Motor Gacrux de desempate (equipes) falhou no torneio %s; usando o motor proprio. (%s)",
+                tournament_id,
+                exc,
+            )
+            return None
+        finally:
+            _GACRUX_TIEBREAK_INFLIGHT.discard(int(tournament_id))
+
+        _GACRUX_TIEBREAK_CACHE[cache_key] = result
+        _GACRUX_TIEBREAK_CACHE.move_to_end(cache_key)
+        while len(_GACRUX_TIEBREAK_CACHE) > _GACRUX_TIEBREAK_CACHE_MAX:
+            _GACRUX_TIEBREAK_CACHE.popitem(last=False)
+        return result
 
     def _knockout_pairings(self, tournament_id: int, players: list[dict[str, Any]], next_number: int, settings: dict[str, Any]) -> list[dict[str, Any]]:
         previous_pairings = None

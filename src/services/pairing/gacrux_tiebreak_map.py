@@ -41,6 +41,16 @@ ALBERICUS_TO_GACRUX: dict[str, str] = {
 # próprio (não entram no plano enviado ao ``tiebreakchecker``).
 UNSUPPORTED_BY_GACRUX: frozenset[str] = frozenset({"cumulative_opp"})
 
+# Critério de equipe do Albericus -> especificador do Gacrux (torneio por
+# equipes). ``match_points``/``game_points`` são os pontos primário/secundário;
+# ``buchholz`` de equipes é, por padrão, o Buchholz sobre match points.
+ALBERICUS_TEAM_TO_GACRUX: dict[str, str] = {
+    "match_points": "MPTS",
+    "game_points": "GPTS",
+    "buchholz": "BH",
+    "wins": "WON",
+}
+
 # Pontos são sempre a 1ª coluna do ``tiebreakScore`` (critério primário).
 POINTS_SPEC = "PTS"
 POINTS_CODE = "points"
@@ -84,6 +94,33 @@ def build_tiebreak_plan(codes: list[str]) -> TiebreakPlan:
         seen.add(code)
         specifiers.append(spec)
         code_order.append(code)
+    return TiebreakPlan(tuple(specifiers), tuple(code_order), tuple(skipped))
+
+
+def build_team_tiebreak_plan(codes: list[str]) -> TiebreakPlan:
+    """Plano de desempate para torneios por EQUIPES.
+
+    Ao contrário do individual, não há ``PTS`` primário fixo: o 1º critério da
+    sequência (tipicamente ``match_points`` -> ``MPTS``) é o primário. Ignora
+    duplicados e códigos sem equivalente Gacrux; cai em ``MPTS`` se nada sobrar.
+    """
+    specifiers: list[str] = []
+    code_order: list[str] = []
+    skipped: list[str] = []
+    seen: set[str] = set()
+    for raw in codes:
+        code = str(raw or "").strip()
+        if not code or code in seen:
+            continue
+        spec = ALBERICUS_TEAM_TO_GACRUX.get(code)
+        if spec is None:
+            skipped.append(code)
+            continue
+        seen.add(code)
+        specifiers.append(spec)
+        code_order.append(code)
+    if not specifiers:
+        specifiers, code_order = ["MPTS"], ["match_points"]
     return TiebreakPlan(tuple(specifiers), tuple(code_order), tuple(skipped))
 
 

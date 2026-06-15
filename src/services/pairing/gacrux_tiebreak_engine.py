@@ -11,7 +11,12 @@ from typing import Any
 from src.services.constants import AppError, player_pairing_name
 from src.services.export_service import ExportService
 from src.services.federation_exporters.trf16 import TRF16Exporter
-from src.services.pairing.gacrux_tiebreak_map import build_tiebreak_plan, parse_competitors
+from src.services.federation_exporters.trf25 import TRF25Exporter
+from src.services.pairing.gacrux_tiebreak_map import (
+    build_team_tiebreak_plan,
+    build_tiebreak_plan,
+    parse_competitors,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -24,14 +29,17 @@ class GacruxTiebreakEngine:
     """Calcula os desempates (classificacao) com o motor FIDE oficial Gacrux.
 
     Espelha o fluxo do ``GacruxEngine`` de pareamento: exporta o estado do
-    torneio para TRF-16 (``TRF16Exporter``), roda ``tiebreakchecker.py`` e
-    traduz ``tiebreakResult`` de volta para ``player_id``. Lida apenas com I/O;
-    o mapeamento de criterios e o parse vivem em ``gacrux_tiebreak_map`` (puro).
+    torneio para TRF, roda ``tiebreakchecker.py`` e traduz ``tiebreakResult`` de
+    volta para ``player_id`` (individual) ou ``team_id`` (equipes). Lida apenas
+    com I/O; o mapeamento de criterios e o parse vivem em ``gacrux_tiebreak_map``.
     """
 
     def __init__(self, db) -> None:
         self.db = db
 
+    # ------------------------------------------------------------------ #
+    # Individual
+    # ------------------------------------------------------------------ #
     def compute(
         self,
         tournament_id: int,
@@ -43,19 +51,16 @@ class GacruxTiebreakEngine:
         ``codes`` e a sequencia de criterios do Albericus (sem ``points``);
         ``current_round`` e o numero de rodadas a considerar (por padrao, o
         total de rodadas fechadas). Retorna ``{}`` quando nao ha rodadas
-        fechadas. Levanta ``AppError`` em qualquer falha do motor — o chamador
-        decide o fallback para o motor proprio.
+        fechadas. Levanta ``AppError`` em qualquer falha do motor.
         """
+        rounds = self._closed_rounds(tournament_id, current_round)
+        if rounds <= 0:
+            return {}
+
+        export_service = self._export_service()
         plan = build_tiebreak_plan(codes)
 
-        # Reaproveita o exportador TRF-16 (mesma instancia/contrato do pareamento).
-        from src.services.pairing_service import PairingService
-        pairing_service = PairingService(self.db)
-        export_service = ExportService(self.db, pairing_service)
-        exporter = TRF16Exporter(export_service)
-
-        # Ranking 1-based pela MESMA ordenacao do exporter (==> cid do TRF):
-        # _trf_rating desc -> nome -> id. Garante cid -> player_id consistente.
+        # Ranking 1-based pela MESMA ordenacao do exporter (==> cid do TRF).
         all_players = sorted(
             self.db.list_players(tournament_id, active_only=False),
             key=lambda player: (
@@ -66,14 +71,101 @@ class GacruxTiebreakEngine:
         )
         rank_to_player_id = {index: int(p["id"]) for index, p in enumerate(all_players, start=1)}
 
-        if current_round is None:
-            current_round = sum(
-                1
-                for round_data in self.db.list_rounds(tournament_id)
-                if round_data.get("status") == "closed"
-            )
-        if current_round <= 0:
+        data = self._run_tiebreakchecker(
+            TRF16Exporter(export_service), tournament_id, plan.specifiers, rounds
+        )
+        by_cid = parse_competitors(data.get("tiebreakResult", {}).get("competitors", []), plan)
+
+        out: dict[int, dict[str, Any]] = {}
+        for cid, payload in by_cid.items():
+            player_id = rank_to_player_id.get(cid)
+            if player_id is not None:
+                out[player_id] = payload
+        logger.debug("Desempates Gacrux por player_id: %s", out)
+        return out
+
+    # ------------------------------------------------------------------ #
+    # Equipes
+    # ------------------------------------------------------------------ #
+    def compute_teams(
+        self,
+        tournament_id: int,
+        codes: list[str],
+        current_round: int | None = None,
+    ) -> dict[int, dict[str, Any]]:
+        """Devolve ``{team_id: {"rank": int, "scores": {codigo: float}}}``.
+
+        Usa o TRF-25 (que carrega o tipo de torneio por equipes e o sistema de
+        pontos), nao o TRF-16. ``codes`` e a sequencia de criterios de equipe do
+        Albericus (match_points, game_points, buchholz, wins).
+        """
+        rounds = self._closed_rounds(tournament_id, current_round)
+        if rounds <= 0:
             return {}
+
+        export_service = self._export_service()
+        exporter = TRF25Exporter(export_service)
+        plan = build_team_tiebreak_plan(codes)
+
+        # cid (Team Pairing Number do TRF-25) -> team_id, reusando a MESMA
+        # ordenacao do exporter (_prepare_teams ordena por forca/nome).
+        players = sorted(
+            self.db.list_players(tournament_id, active_only=False),
+            key=lambda player: (
+                -export_service._trf_rating(player),
+                player_pairing_name(player).casefold(),
+                int(player.get("id") or 0),
+            ),
+        )
+        start_rank_by_player = {int(p["id"]): index for index, p in enumerate(players, start=1)}
+        teams = self.db.list_teams(tournament_id, active_only=False)
+        prepared = exporter._prepare_teams(tournament_id, teams, players, start_rank_by_player)
+        cid_to_team_id = {index: int(item["team_id"]) for index, item in enumerate(prepared, start=1)}
+
+        data = self._run_tiebreakchecker(exporter, tournament_id, plan.specifiers, rounds)
+        by_cid = parse_competitors(data.get("tiebreakResult", {}).get("competitors", []), plan)
+
+        out: dict[int, dict[str, Any]] = {}
+        for cid, payload in by_cid.items():
+            team_id = cid_to_team_id.get(cid)
+            if team_id is not None:
+                out[team_id] = payload
+        logger.debug("Desempates Gacrux por team_id: %s", out)
+        return out
+
+    # ------------------------------------------------------------------ #
+    # Internos
+    # ------------------------------------------------------------------ #
+    def _export_service(self) -> ExportService:
+        from src.services.pairing_service import PairingService
+        return ExportService(self.db, PairingService(self.db))
+
+    def _closed_rounds(self, tournament_id: int, current_round: int | None) -> int:
+        if current_round is not None:
+            return int(current_round)
+        return sum(
+            1
+            for round_data in self.db.list_rounds(tournament_id)
+            if round_data.get("status") == "closed"
+        )
+
+    def _run_tiebreakchecker(
+        self,
+        exporter: TRF16Exporter,
+        tournament_id: int,
+        specifiers: tuple[str, ...],
+        current_round: int,
+    ) -> dict[str, Any]:
+        """Exporta o TRF com ``exporter`` e roda o ``tiebreakchecker.py``.
+
+        Devolve o JSON parseado do Gacrux. ``-t`` vai por ULTIMO: como tem
+        ``nargs='*'``, engoliria flags seguintes.
+        """
+        current_dir = Path(__file__).resolve().parent
+        script_path = current_dir / "gacrux" / "tiebreakchecker.py"
+        if not script_path.exists():
+            raise AppError(f"Motor Gacrux (desempate) nao encontrado em: {script_path}")
+        project_root = current_dir.parent.parent.parent
 
         with tempfile.TemporaryDirectory() as tmpdir:
             input_path = Path(tmpdir) / "input.trf"
@@ -81,23 +173,16 @@ class GacruxTiebreakEngine:
 
             exporter.export(tournament_id, input_path)
 
-            current_dir = Path(__file__).resolve().parent
-            script_path = current_dir / "gacrux" / "tiebreakchecker.py"
-            if not script_path.exists():
-                raise AppError(f"Motor Gacrux (desempate) nao encontrado em: {script_path}")
-            project_root = current_dir.parent.parent.parent
-
-            # -t vai por ULTIMO: como tem nargs='*', engoliria flags seguintes.
             cmd = [
                 sys.executable,
                 str(script_path),
                 "-i", str(input_path),
                 "-o", str(output_path),
                 "-b", "utf-8",
-                "-s",
+                "-s",  # regras de Suico (nossos tipos de torneio dizem "Suico", nao "SWISS")
                 "-n", str(current_round),
                 "-F", "JSON",
-                "-t", *plan.specifiers,
+                "-t", *specifiers,
             ]
 
             env = os.environ.copy()
@@ -142,14 +227,4 @@ class GacruxTiebreakEngine:
             errors = status.get("error", [])
             err_text = "; ".join(errors) if errors else "Erro interno do Gacrux"
             raise AppError(f"Gacrux (desempate): {err_text}")
-
-        tiebreak_result = data.get("tiebreakResult", {})
-        by_cid = parse_competitors(tiebreak_result.get("competitors", []), plan)
-
-        out: dict[int, dict[str, Any]] = {}
-        for cid, payload in by_cid.items():
-            player_id = rank_to_player_id.get(cid)
-            if player_id is not None:
-                out[player_id] = payload
-        logger.debug("Desempates Gacrux por player_id: %s", out)
-        return out
+        return data
