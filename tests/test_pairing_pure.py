@@ -13,6 +13,7 @@ from src.services.pairing import (
     performance_rating,
     plan_pairing_player_swap,
     plan_team_board_player_swap,
+    swiss_pairings,
     team_bye_summary,
     team_match_summary,
     team_starter_roster,
@@ -354,6 +355,57 @@ class TestPerformanceRating(unittest.TestCase):
         player_stat = {"earned_against": [(1, 1.0)]}
         stats = {1: {"rating": 1600}}
         self.assertEqual(performance_rating(player_stat, stats), 2400)
+
+
+class TestSwissDownfloatOrdering(unittest.TestCase):
+    """Floaters que descem entram pelo topo do grupo seguinte (downfloat mínimo).
+
+    Cenário: um jogador isolado no topo (2.0 pts) acima de um grupo de 1.0 e um
+    jogador isolado no fundo (0.0). Sem reordenar o grupo ao receber os floaters,
+    o jogador de 2.0 despencava de grupo em grupo e acabava pareado contra o de
+    0.0 (diferença de 2 pontos). O esperado FIDE (C.04) é descer um grupo por
+    vez, mantendo a diferença de pontuação dos pares em no máximo 1.
+    """
+
+    @staticmethod
+    def _standings(points: dict[int, float]) -> dict[int, dict[str, object]]:
+        return {
+            pid: {
+                "player_id": pid,
+                "points": pts,
+                "position": rank,
+                "rating": 2100 - pid * 100,
+                "buchholz": 0.0,
+                "buchholz_median": 0.0,
+                "sonneborn_berger": 0.0,
+                "wins": 0,
+            }
+            for rank, (pid, pts) in enumerate(points.items(), start=1)
+        }
+
+    def test_high_floater_drops_one_group_not_to_the_bottom(self) -> None:
+        points = {1: 2.0, 2: 1.0, 3: 1.0, 4: 1.0, 5: 1.0, 6: 0.0}
+        players = [{"id": pid, "name": f"P{pid}", "rating": 2100 - pid * 100} for pid in points]
+
+        pairs = swiss_pairings(
+            players,
+            self._standings(points),
+            {},
+            {},
+            set(),
+            set(),
+            max_exhaustive_pairing_players=16,
+            repeat_pairing_penalty=1_000_000,
+            score_group_float_penalty=10_000,
+            score_diff_penalty=1_000,
+        )
+
+        max_diff = max(
+            abs(points[pair["white_player_id"]] - points[pair["black_player_id"]])
+            for pair in pairs
+            if not pair["is_bye"]
+        )
+        self.assertEqual(max_diff, 1.0)
 
 
 if __name__ == "__main__":
