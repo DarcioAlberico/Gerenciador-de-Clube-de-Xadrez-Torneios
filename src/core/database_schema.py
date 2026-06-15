@@ -558,6 +558,7 @@ CREATE TABLE IF NOT EXISTS tournament_settings (
     prize_tax_percent REAL NOT NULL DEFAULT 0.0,
     pairing_method TEXT NOT NULL DEFAULT 'swiss',
     pairing_system TEXT NOT NULL DEFAULT 'gacrux_swiss',
+    tiebreak_engine TEXT NOT NULL DEFAULT 'gacrux',
     acceleration_method TEXT NOT NULL DEFAULT 'none',
     hide_color_names INTEGER NOT NULL DEFAULT 0,
     show_opponents_in_standings INTEGER NOT NULL DEFAULT 0,

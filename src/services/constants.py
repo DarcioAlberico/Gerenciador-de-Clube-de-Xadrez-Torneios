@@ -90,6 +90,12 @@ PAIRING_SYSTEMS = {
     "custom_authorized": "Customizado/autorizado",
     "gacrux_swiss": "Suico (Gacrux)",
 }
+# Motor de calculo dos desempates/classificacao. 'gacrux' usa o motor FIDE
+# oficial (tiebreakchecker.py); 'albericus' usa o calculo proprio (historico).
+TIEBREAK_ENGINES = {
+    "gacrux": "FIDE (Gacrux)",
+    "albericus": "Albericus (proprio)",
+}
 ACCELERATION_METHODS = {
     "none": "Sem aceleracao",
     "accelerated": "Classica (Haley)",
