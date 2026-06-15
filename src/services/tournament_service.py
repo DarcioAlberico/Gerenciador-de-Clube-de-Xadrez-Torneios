@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Mapping, TYPE_CHECKING
 
 from src.core.database import BASE_DIR, DEFAULT_CERTIFICATE_TEMPLATES, Database
+from src.core.database_tournament_core import default_pairing_system
 from src.services.constants import *
 from src.services.pairing import (
     acceleration_spec,
@@ -417,7 +418,7 @@ class TournamentService:
         if tournament_profile not in TOURNAMENT_PROFILES:
             raise AppError("Perfil do torneio invalido.")
 
-        pairing_system = str(data.get("pairing_system", "custom_authorized")).strip() or "custom_authorized"
+        pairing_system = str(data.get("pairing_system", default_pairing_system())).strip() or default_pairing_system()
         if pairing_system not in PAIRING_SYSTEMS:
             raise AppError("Sistema de emparceiramento normativo invalido.")
 

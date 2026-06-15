@@ -7,7 +7,6 @@ e devolvem estruturas explicáveis. PairingService delega para elas.
 from __future__ import annotations
 
 import json
-import math
 from dataclasses import dataclass
 from typing import Any
 
@@ -16,6 +15,7 @@ from src.services.constants import (
     RESULT_POINTS,
     player_full_name,
 )
+from src.services.fide_rating import fide_performance
 
 
 # ---------------------------------------------------------------------------
@@ -321,6 +321,19 @@ def _black_wins(player_stat: dict[str, Any]) -> int:
     )
 
 
+# Critério de desempate -> campo canônico em player_stat. Usado para sobrescrever
+# os valores históricos pelos do motor FIDE (Gacrux) quando ele é o motor ativo,
+# mantendo intacto o restante do contrato de saída da classificação.
+_CODE_TO_CANONICAL_FIELD: dict[str, str] = {
+    "buchholz": "buchholz",
+    "buchholz_median": "buchholz_median",
+    "sonneborn_berger": "sonneborn_berger",
+    "wins": "wins",
+    "performance": "performance",
+    "cumulative": "cumulative",
+}
+
+
 def player_tiebreak_value(
     code: str,
     player_stat: dict[str, Any],
@@ -407,7 +420,7 @@ def performance_components(
     return {
         "label": "Performance",
         "value": player_stat["performance"] if player_stat["performance"] != "" else None,
-        "formula": "Media de rating dos adversarios ajustada pelo percentual de score.",
+        "formula": "Media de rating dos adversarios + dp da tabela FIDE (regra dos 400).",
         "games": rated_games,
         "score": score,
         "average_rating": average_rating,
@@ -434,15 +447,11 @@ def performance_rating(
     games = len(rated)
     score = sum(earned for _rating, earned in rated)
     average_rating = sum(rating for rating, _earned in rated) / games
-    diff: float
-    if score <= 0:
-        diff = -800
-    elif score >= games:
-        diff = 800
-    else:
-        diff = 400 * math.log10(score / (games - score))
-        diff = max(min(diff, 800), -800)
-    return int(round(average_rating + diff))
+    # Tabela oficial FIDE (percentual p -> dp) + regra dos 400, reaproveitando
+    # fide_performance — a MESMA fonte usada pelo relatório de rating e pelas
+    # normas (fide_rating.py) e equivalente ao TPR do motor Gacrux. Antes daqui
+    # usava-se uma aproximação logarítmica, que divergia da FIDE na faixa média.
+    return fide_performance(average_rating, score, games)
 
 
 def team_standing_value(item: dict[str, Any], criterion: str) -> float:
@@ -582,7 +591,25 @@ def order_player_standings(
     Pontos são sempre o critério primário e rating/nome os critérios técnicos
     finais. `sequence` vazia/None usa DEFAULT_PLAYER_TIEBREAKS, reproduzindo a
     classificação histórica byte a byte.
+
+    Quando o motor FIDE (Gacrux) já forneceu o ranking (`_gacrux_rank` presente),
+    ele é a fonte de verdade: o cid/SNo que o Gacrux usa para desempatar empates
+    finais embute a ordem rating→nome, então basta ordenar por esse rank (com
+    rating/nome como critério técnico final defensivo).
     """
+    if any("_gacrux_rank" in item for item in stats.values()):
+        def gacrux_key(item: dict[str, Any]) -> tuple[Any, ...]:
+            return (
+                int(item.get("_gacrux_rank") or 0),
+                -float(item.get("rating", 0) or 0),
+                str(item.get("name", "")).casefold(),
+            )
+
+        ordered_stats = sorted(stats.values(), key=gacrux_key)
+        for index, item in enumerate(ordered_stats, start=1):
+            item["position"] = index
+        return ordered_stats
+
     codes = [code for code, _params in _resolve_player_codes(sequence)]
 
     def sort_key(item: dict[str, Any]) -> tuple[Any, ...]:
@@ -602,6 +629,7 @@ def calculate_player_standings(
     players: list[dict[str, Any]],
     closed_pairings: list[dict[str, Any]],
     sequence: list[dict[str, Any]] | None = None,
+    gacrux_tiebreaks: dict[int, dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     stats: dict[int, dict[str, Any]] = {}
     for player in players:
@@ -732,16 +760,35 @@ def calculate_player_standings(
             2,
         )
 
-    # Escalares ordenáveis dos critérios ativos (sem sobrescrever campos
-    # canônicos como performance/wins) + componentes explicáveis.
+    # Escalares ordenáveis dos critérios ativos + componentes explicáveis.
+    #
+    # No modo Gacrux (`gacrux_tiebreaks` informado), os valores FIDE substituem
+    # os campos canônicos (buchholz, SB, performance…) e os tiebreak_values dos
+    # critérios da sequência; quem não tem equivalente no Gacrux (ex.:
+    # cumulative_opp) mantém o cálculo próprio. A ordenação passa a seguir o rank
+    # do Gacrux (ver order_player_standings).
+    gacrux_tiebreaks = gacrux_tiebreaks or {}
     for player_stat in stats.values():
+        gx = gacrux_tiebreaks.get(int(player_stat["player_id"]))
+        gx_scores = gx.get("scores") if gx else None
+        if gx:
+            for code, field in _CODE_TO_CANONICAL_FIELD.items():
+                if gx_scores and code in gx_scores:
+                    player_stat[field] = gx_scores[code]
+            player_stat["_gacrux_rank"] = int(gx.get("rank") or 0)
+
         player_stat["tiebreak_values"] = {
-            code: player_tiebreak_value(code, player_stat, stats, params, rounds_total)
+            code: (
+                gx_scores[code]
+                if gx_scores and code in gx_scores
+                else player_tiebreak_value(code, player_stat, stats, params, rounds_total)
+            )
             for code, params in codes
         }
         player_stat["tiebreak_order"] = [code for code, _params in codes]
         player_stat["tiebreak_components"] = player_tiebreak_components(
-            player_stat, stats, codes=codes, rounds_total=rounds_total
+            player_stat, stats, codes=codes, rounds_total=rounds_total,
+            value_override=gx_scores,
         )
 
     return order_player_standings(stats, sequence)
@@ -752,6 +799,7 @@ def calculate_team_standings(
     teams: list[dict[str, Any]],
     closed_matches: list[dict[str, Any]],
     sequence: list[dict[str, Any]] | None = None,
+    gacrux_tiebreaks: dict[int, dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     stats: dict[int, dict[str, Any]] = {}
     for team in teams:
@@ -820,12 +868,31 @@ def calculate_team_standings(
             2,
         )
 
+    # Modo Gacrux: sobrescreve os valores canônicos de equipe pelos do motor FIDE
+    # e segue o rank do Gacrux (mesma estratégia do individual; ver
+    # calculate_player_standings).
+    gacrux_tiebreaks = gacrux_tiebreaks or {}
+    for team_stat in stats.values():
+        gx = gacrux_tiebreaks.get(int(team_stat["team_id"]))
+        gx_scores = gx.get("scores") if gx else None
+        if gx:
+            for code in ("match_points", "game_points", "buchholz", "wins"):
+                if gx_scores and code in gx_scores:
+                    team_stat[code] = gx_scores[code]
+            team_stat["_gacrux_rank"] = int(gx.get("rank") or 0)
+
     codes = _resolve_team_codes(settings, sequence)
-    ordered_stats = sorted(
-        stats.values(),
-        key=lambda item: tuple(-team_standing_value(item, code) for code in codes)
-        + (str(item["name"]).casefold(),),
-    )
+    if any("_gacrux_rank" in item for item in stats.values()):
+        ordered_stats = sorted(
+            stats.values(),
+            key=lambda item: (int(item.get("_gacrux_rank") or 0), str(item["name"]).casefold()),
+        )
+    else:
+        ordered_stats = sorted(
+            stats.values(),
+            key=lambda item: tuple(-team_standing_value(item, code) for code in codes)
+            + (str(item["name"]).casefold(),),
+        )
     for index, item in enumerate(ordered_stats, start=1):
         item["team_tiebreak_order"] = list(codes)
         item["position"] = index
@@ -837,6 +904,7 @@ def player_tiebreak_components(
     stats: dict[int, dict[str, Any]],
     codes: list[tuple[str, dict[str, Any]]] | None = None,
     rounds_total: int = 0,
+    value_override: dict[str, float] | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Componentes brutos dos critérios de desempate de um jogador.
 
@@ -845,6 +913,10 @@ def player_tiebreak_components(
     com relatórios/exportações existentes. Quando `codes` é informado, acrescenta
     um componente explicável para cada critério ativo adicional (Buchholz Cut,
     progressivo, Koya, ARO, etc.).
+
+    `value_override` (modo Gacrux) substitui o `value`/`total` exibido de cada
+    critério pelo valor do motor FIDE — a fonte de verdade — preservando os
+    detalhes (listas de adversários) do cálculo próprio apenas como ilustração.
     """
     opponent_rows = []
     opponent_scores = []
@@ -940,7 +1012,9 @@ def player_tiebreak_components(
         for code, params in codes:
             if code in components or code not in PLAYER_TIEBREAKS:
                 continue
-            value = player_tiebreak_value(code, player_stat, stats, params, rounds_total)
+            value = (value_override or {}).get(code)
+            if value is None:
+                value = player_tiebreak_value(code, player_stat, stats, params, rounds_total)
             criterion = PLAYER_TIEBREAKS[code]
             components[code] = {
                 "label": criterion.label,
@@ -948,5 +1022,14 @@ def player_tiebreak_components(
                 "formula": criterion.formula,
                 "total": value,
             }
+
+    # Modo Gacrux: o número exibido de cada critério é o do motor FIDE. Cobre os
+    # critérios calculados localmente (ex.: confronto direto) cujo valor não vem
+    # de um campo canônico já sobrescrito.
+    if value_override:
+        for code, override_value in value_override.items():
+            if code in components:
+                components[code]["value"] = override_value
+                components[code]["total"] = override_value
 
     return components
