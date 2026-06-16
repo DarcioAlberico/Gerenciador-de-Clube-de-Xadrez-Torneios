@@ -261,7 +261,12 @@ class TestPairingDiagnostics(unittest.TestCase):
         self.assertIs(repeated[0]["avoidable"], True)
         self.assertEqual("decision", repeated[0]["severity"])
 
-    def test_hard_color_violation_is_marked_avoidable_when_colors_can_be_repaired(self):
+    def test_hard_color_repairable_by_swap_is_avoidable_but_never_blocks(self):
+        # FIDE C.04.3: receber a mesma cor 3x seguidas / saldo +-3 e' criterio de
+        # QUALIDADE (C11), nunca absoluto -> alerta (attention), jamais bloqueia
+        # (decision). Aqui as cores estao apenas trocadas (J1/J3 deviam jogar de
+        # pretas, J2/J4 de brancas): a violacao some so invertendo cada
+        # tabuleiro, sem mexer no pareamento -> avoidable=True.
         diagnostics = pairing_diagnostics(
             [
                 {"board_number": 1, "white_player_id": 1, "black_player_id": 2, "is_bye": 0},
@@ -276,7 +281,28 @@ class TestPairingDiagnostics(unittest.TestCase):
         hard_colors = [item for item in diagnostics if item["kind"] == "hard_color"]
         self.assertEqual(4, len(hard_colors))
         self.assertTrue(all(item["avoidable"] is True for item in hard_colors))
-        self.assertTrue(all(item["severity"] == "decision" for item in hard_colors))
+        self.assertTrue(all(item["severity"] == "attention" for item in hard_colors))
+
+    def test_hard_color_forced_by_pairing_is_inevitable_and_never_blocks(self):
+        # Regressao do stress #547 (ultima rodada): o topscorer isolado faz
+        # downfloat e seu unico adversario inedito tambem tem preferencia absoluta
+        # de pretas. O motor FIDE (Gacrux) pareia o confronto legalmente (C3 so
+        # restringe NAO-topscorers) e da a 3a branca a um deles (C11, qualidade).
+        # Inverter as cores apenas transferiria a violacao -> inevitavel:
+        # avoidable=False e, sobretudo, nunca bloqueia o fechamento.
+        diagnostics = pairing_diagnostics(
+            [{"board_number": 1, "white_player_id": 1, "black_player_id": 2, "is_bye": 0}],
+            histories={1: ["B", "B", "W", "W"], 2: ["W", "B", "W", "W"]},
+            played_pairs=set(),
+            bye_player_ids=set(),
+            players=_players(2),
+        )
+
+        hard_colors = [item for item in diagnostics if item["kind"] == "hard_color"]
+        self.assertEqual(1, len(hard_colors))
+        self.assertEqual([1], hard_colors[0]["player_ids"])
+        self.assertIs(hard_colors[0]["avoidable"], False)
+        self.assertEqual("attention", hard_colors[0]["severity"])
 
     def test_duplicate_player_is_flagged_as_decision(self):
         diagnostics = pairing_diagnostics(
