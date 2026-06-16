@@ -28,3 +28,6 @@ tests/stress_stop.flag
 tests/stress_run.*.log
 tests/gacrux_crash_*.trf
 tests/gacrux_crash_*.out.json
+tests/gacrux_pair_*.trf
+tests/gacrux_pair_*.out.json
+tests/stress_failures.jsonl

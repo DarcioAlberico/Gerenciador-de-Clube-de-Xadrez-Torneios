@@ -44,6 +44,12 @@ RESULT_POINTS = {
     "0F-1F": (0.0, 1.0),
     "0F-0F": (0.0, 0.0),
 }
+# Resultados por W.O./forfait: a dupla foi PAREADA mas NAO jogou a partida.
+# Pela FIDE C.04.2 (regra 3.5, efetiva 01/02/2026) "two paired participants, who
+# did not play their game or match, may be paired together in a future round" —
+# logo um W.O. nao conta como "ja se enfrentaram" para a regra de nao-repeticao
+# (e o motor Gacrux, rules 2026-02-01, ja os repareia). Ver played_pairs().
+WALKOVER_RESULTS = {"1F-0F", "0F-1F", "0F-0F"}
 # Pontuação fixa do bye solicitado por tipo FIDE (independe de bye_points):
 # F = full-point-bye, H = half-point-bye, Z = zero-point-bye.
 REQUESTED_BYE_POINTS = {"F": 1.0, "H": 0.5, "Z": 0.0}

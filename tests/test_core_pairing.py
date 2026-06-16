@@ -176,6 +176,20 @@ class PairingRulesTest(CoreServiceTestCase):
         tournament_id = self.tournament_service.create_tournament(
             {"name": "Pareamento global", "rounds_count": "20", "bye_points": "1"}
         )
+        # Pares PERMITIDOS na proxima rodada; todos os demais ja foram jogados.
+        allowed_index = {(0, 1), (0, 2), (1, 3), (4, 5)}
+        played_index = [
+            (i, j) for i in range(6) for j in range(i + 1, 6) if (i, j) not in allowed_index
+        ]
+        # Cada confronto ja jogado e um empate REAL (0.5 a cada) -- ao contrario
+        # de um W.O., que pela FIDE C.04.2 nao contaria como confronto. Compensamos
+        # com starting_points para que todos terminem no MESMO grupo de pontuacao,
+        # isolando a regra de nao-repeticao (matching global).
+        degree = [0] * 6
+        for i, j in played_index:
+            degree[i] += 1
+            degree[j] += 1
+        top = max(degree)
         player_ids = [
             self.db.create_player(
                 tournament_id,
@@ -183,31 +197,21 @@ class PairingRulesTest(CoreServiceTestCase):
                 rating=2000 - index * 10,
                 club="Clube",
                 category="Absoluto",
+                starting_points=0.5 * (top - degree[index]),
             )
             for index in range(6)
         ]
-        allowed_pairs = {
-            frozenset((player_ids[0], player_ids[1])),
-            frozenset((player_ids[0], player_ids[2])),
-            frozenset((player_ids[1], player_ids[3])),
-            frozenset((player_ids[4], player_ids[5])),
-        }
-        played_pairs = [
-            (white_id, black_id)
-            for index, white_id in enumerate(player_ids)
-            for black_id in player_ids[index + 1 :]
-            if frozenset((white_id, black_id)) not in allowed_pairs
-        ]
-        for round_number, (white_id, black_id) in enumerate(played_pairs, start=1):
+        allowed_pairs = {frozenset((player_ids[i], player_ids[j])) for i, j in allowed_index}
+        for round_number, (i, j) in enumerate(played_index, start=1):
             round_id = self.db.create_round_with_pairings(
                 tournament_id,
                 round_number,
                 [
                     {
                         "board_number": 1,
-                        "white_player_id": white_id,
-                        "black_player_id": black_id,
-                        "result": "0F-0F",
+                        "white_player_id": player_ids[i],
+                        "black_player_id": player_ids[j],
+                        "result": "1/2-1/2",
                         "is_bye": 0,
                     }
                 ],
