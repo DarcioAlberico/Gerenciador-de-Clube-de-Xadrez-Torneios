@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.services.constants import REQUESTED_BYE_POINTS
+from src.services.constants import REQUESTED_BYE_POINTS, WALKOVER_RESULTS
 
 
 def team_played_pairs(matches: list[dict[str, Any]]) -> set[frozenset[int]]:
@@ -41,9 +41,18 @@ def team_color_histories(matches: list[dict[str, Any]]) -> dict[int, list[str]]:
 
 
 def played_pairs(pairings: list[dict[str, Any]]) -> set[frozenset[int]]:
+    """Pares que efetivamente JOGARAM entre si (regra de nao-repeticao).
+
+    Partidas por W.O./forfait (``WALKOVER_RESULTS``) sao ignoradas: pela FIDE
+    C.04.2 (3.5) jogadores que foram pareados mas nao jogaram a partida PODEM
+    voltar a se enfrentar. Assim a deteccao de ``opponent_repeat`` e o proprio
+    motor ficam alinhados ao Gacrux e a regra vigente (rules 2026-02-01).
+    """
     played: set[frozenset[int]] = set()
     for pairing in pairings:
         if pairing["is_bye"] or not pairing["black_player_id"]:
+            continue
+        if str(pairing.get("result") or "").strip().upper() in WALKOVER_RESULTS:
             continue
         played.add(frozenset((pairing["white_player_id"], pairing["black_player_id"])))
     return played
@@ -70,6 +79,13 @@ def _blocks_pairing_allocated_bye(result: Any) -> bool:
 
 
 def color_histories(pairings: list[dict[str, Any]]) -> dict[int, list[str]]:
+    """Sequencia de cores por jogador (W/B/BYE) para preferencia de cor.
+
+    Partidas por W.O./forfait (``WALKOVER_RESULTS``) NAO entram na sequencia:
+    pela FIDE C.04.2 (3.4) "only played games count" quando a sequencia de cores
+    importa. Sem isso, a cor de um jogo nao jogado inflaria o saldo/streak e
+    geraria violacao dura de cor (``hard_color``) onde o Gacrux nao ve nenhuma.
+    """
     histories: dict[int, list[str]] = {}
     for pairing in pairings:
         white_id = pairing["white_player_id"]
@@ -80,6 +96,8 @@ def color_histories(pairings: list[dict[str, Any]]) -> dict[int, list[str]]:
             continue
         if black_id:
             histories.setdefault(black_id, [])
+            if str(pairing.get("result") or "").strip().upper() in WALKOVER_RESULTS:
+                continue
             histories[white_id].append("W")
             histories[black_id].append("B")
     return histories

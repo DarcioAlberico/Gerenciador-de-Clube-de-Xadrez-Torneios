@@ -7,12 +7,14 @@ from src.services.pairing import (
     bye_player_ids,
     choose_colors,
     clock_event_issue,
+    color_histories,
     color_preference,
     finalize_issues,
     pairing_diagnostics,
     performance_rating,
     plan_pairing_player_swap,
     plan_team_board_player_swap,
+    played_pairs,
     swiss_pairings,
     team_bye_summary,
     team_match_summary,
@@ -25,6 +27,40 @@ def _players(count: int) -> list[dict[str, object]]:
         {"id": player_id, "name": f"Jogador {player_id}", "rating": 1800 - player_id}
         for player_id in range(1, count + 1)
     ]
+
+
+class TestWalkoverNaoContaComoConfronto(unittest.TestCase):
+    """FIDE C.04.2 (3.4/3.5): uma partida por W.O./forfait foi PAREADA mas nao
+    jogada, entao nao conta nem para a regra de nao-repeticao nem para a
+    sequencia de cores. Regressao do impasse em que o Gacrux repareava/recolorava
+    duplas de W.O. (correto) e a arbitragem do Albericus bloqueava (errado)."""
+
+    def test_played_pairs_exclui_walkover(self):
+        pairings = [
+            {"is_bye": 0, "white_player_id": 1, "black_player_id": 2, "result": "1-0"},
+            {"is_bye": 0, "white_player_id": 3, "black_player_id": 4, "result": "1F-0F"},
+            {"is_bye": 0, "white_player_id": 5, "black_player_id": 6, "result": "0F-1F"},
+            {"is_bye": 0, "white_player_id": 7, "black_player_id": 8, "result": "0F-0F"},
+        ]
+        # Apenas o jogo realmente jogado (1 x 2) conta como confronto.
+        self.assertEqual(played_pairs(pairings), {frozenset((1, 2))})
+
+    def test_color_histories_exclui_walkover(self):
+        pairings = [
+            {"is_bye": 0, "white_player_id": 1, "black_player_id": 2, "result": "0-1"},
+            {"is_bye": 0, "white_player_id": 1, "black_player_id": 3, "result": "1F-0F"},  # W.O.
+            {"is_bye": 0, "white_player_id": 1, "black_player_id": 4, "result": "1-0"},
+        ]
+        histories = color_histories(pairings)
+        self.assertEqual(histories[1], ["W", "W"])  # a branca do W.O. nao entra na sequencia
+        self.assertEqual(histories[2], ["B"])
+        self.assertEqual(histories[3], [])           # so teve W.O. -> nenhuma cor registrada
+        self.assertEqual(histories[4], ["B"])
+
+    def test_jogo_real_ainda_conta(self):
+        pairings = [{"is_bye": 0, "white_player_id": 1, "black_player_id": 2, "result": "1-0"}]
+        self.assertEqual(played_pairs(pairings), {frozenset((1, 2))})
+        self.assertEqual(color_histories(pairings), {1: ["W"], 2: ["B"]})
 
 
 class TestTeamMatchSummary(unittest.TestCase):
@@ -225,7 +261,12 @@ class TestPairingDiagnostics(unittest.TestCase):
         self.assertIs(repeated[0]["avoidable"], True)
         self.assertEqual("decision", repeated[0]["severity"])
 
-    def test_hard_color_violation_is_marked_avoidable_when_colors_can_be_repaired(self):
+    def test_hard_color_repairable_by_swap_is_avoidable_but_never_blocks(self):
+        # FIDE C.04.3: receber a mesma cor 3x seguidas / saldo +-3 e' criterio de
+        # QUALIDADE (C11), nunca absoluto -> alerta (attention), jamais bloqueia
+        # (decision). Aqui as cores estao apenas trocadas (J1/J3 deviam jogar de
+        # pretas, J2/J4 de brancas): a violacao some so invertendo cada
+        # tabuleiro, sem mexer no pareamento -> avoidable=True.
         diagnostics = pairing_diagnostics(
             [
                 {"board_number": 1, "white_player_id": 1, "black_player_id": 2, "is_bye": 0},
@@ -240,7 +281,28 @@ class TestPairingDiagnostics(unittest.TestCase):
         hard_colors = [item for item in diagnostics if item["kind"] == "hard_color"]
         self.assertEqual(4, len(hard_colors))
         self.assertTrue(all(item["avoidable"] is True for item in hard_colors))
-        self.assertTrue(all(item["severity"] == "decision" for item in hard_colors))
+        self.assertTrue(all(item["severity"] == "attention" for item in hard_colors))
+
+    def test_hard_color_forced_by_pairing_is_inevitable_and_never_blocks(self):
+        # Regressao do stress #547 (ultima rodada): o topscorer isolado faz
+        # downfloat e seu unico adversario inedito tambem tem preferencia absoluta
+        # de pretas. O motor FIDE (Gacrux) pareia o confronto legalmente (C3 so
+        # restringe NAO-topscorers) e da a 3a branca a um deles (C11, qualidade).
+        # Inverter as cores apenas transferiria a violacao -> inevitavel:
+        # avoidable=False e, sobretudo, nunca bloqueia o fechamento.
+        diagnostics = pairing_diagnostics(
+            [{"board_number": 1, "white_player_id": 1, "black_player_id": 2, "is_bye": 0}],
+            histories={1: ["B", "B", "W", "W"], 2: ["W", "B", "W", "W"]},
+            played_pairs=set(),
+            bye_player_ids=set(),
+            players=_players(2),
+        )
+
+        hard_colors = [item for item in diagnostics if item["kind"] == "hard_color"]
+        self.assertEqual(1, len(hard_colors))
+        self.assertEqual([1], hard_colors[0]["player_ids"])
+        self.assertIs(hard_colors[0]["avoidable"], False)
+        self.assertEqual("attention", hard_colors[0]["severity"])
 
     def test_duplicate_player_is_flagged_as_decision(self):
         diagnostics = pairing_diagnostics(

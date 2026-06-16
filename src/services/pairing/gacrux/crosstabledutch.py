@@ -255,7 +255,10 @@ class crosstable_dutch(crosstable):
                     # bsq = b["csq"][-2:] + ("w" if b["cid"] == c["w"] else "b")
                     acop = a["cop"]
                     bcop = b["cop"]
-                    opp = {"w": "bb", "b":"ww", " ":"nc"}[acop[0]]
+                    # patch local (bug Gacrux v1.9.52): cop pode ser "nc" — jogador
+                    # que so teve bye, sem preferencia de cor. O dict so cobria w/b/" "
+                    # -> KeyError 'n'. .get e seguro: opp so e lido quando acop[0] in (w,b).
+                    opp = {"w": "bb", "b": "ww"}.get(acop[0], "nc")
 
                     if acop[0] == bcop[0] == "w" or acop[0] == bcop[0] == "b":
                         opp = {"w": "bb", "b":"ww"}[acop[0]]

@@ -22,3 +22,12 @@ Manual/media__*.png
 # Engines FIDE externos e material de pesquisa (validacao local; nao versionar)
 bbpPairings-6.0.0/
 Algoritmos_de_emparceiramento/
+# Artefatos transitorios do stress test e do diagnostico do Gacrux (gerados localmente)
+tests/stress_progress.json
+tests/stress_stop.flag
+tests/stress_run.*.log
+tests/gacrux_crash_*.trf
+tests/gacrux_crash_*.out.json
+tests/gacrux_pair_*.trf
+tests/gacrux_pair_*.out.json
+tests/stress_failures.jsonl

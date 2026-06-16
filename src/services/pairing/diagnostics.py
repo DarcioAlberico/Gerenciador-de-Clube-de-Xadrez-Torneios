@@ -91,6 +91,18 @@ def pairing_diagnostics(
                 )
             )
 
+        # FIDE C.04.3 (em vigor 01/02/2026): receber a mesma cor tres vezes
+        # seguidas, ou um saldo de cor alem de +-2, e' o criterio de QUALIDADE C11
+        # (com C12/C13) — algo que o motor FIDE apenas MINIMIZA, jamais um criterio
+        # absoluto. O unico criterio de cor absoluto e' o C3 (dois NAO-topscorers
+        # com a mesma preferencia de cor absoluta nao se enfrentam), que o motor
+        # homologado ja garante. Logo a violacao de cor e' sempre um ALERTA
+        # (attention) e nunca bloqueia o fechamento (decision). A unica
+        # evitabilidade real — mantido o pareamento do motor, que ja respeita
+        # grupos de pontuacao, floats e o C3 — e' "inverter as cores deste
+        # tabuleiro reduziria as violacoes?". A busca global de _best_absolute_
+        # quality ignoraria essa hierarquia e acusaria falsos "evitaveis".
+        color_swap_helps = _color_swap_reduces_hard_violations(white_id, black_id, histories)
         for player_id, color in ((white_id, "W"), (black_id, "B")):
             if is_color_valid_fide(player_id, color, histories):
                 continue
@@ -100,13 +112,14 @@ def pairing_diagnostics(
                     board_number=board_number,
                     pairing_id=pairing_id,
                     player_ids=[player_id],
-                    title="Violacao dura de cor",
+                    title="Preferencia de cor nao atendida",
                     detail=(
                         f"{_player_label(player_id, players_by_id)} receberia "
                         f"{_color_name(color)}; {_hard_color_reason(player_id, color, histories)}. "
-                        f"{_avoidability_text(_avoidable(current_quality, best_quality, 2))}."
+                        f"{_color_avoidability_text(color_swap_helps)}."
                     ),
-                    avoidable=_avoidable(current_quality, best_quality, 2),
+                    avoidable=color_swap_helps,
+                    severity="attention",
                     current_quality=current_quality,
                     best_quality=best_quality,
                 )
@@ -379,6 +392,27 @@ def _minimal_pair_hard_color(
     return min(first, second)
 
 
+def _color_swap_reduces_hard_violations(
+    white_id: int,
+    black_id: int | None,
+    histories: dict[int, list[str]],
+) -> bool:
+    """Mantido o confronto, inverter as cores reduziria as violacoes duras?
+
+    Mede a unica evitabilidade que existe sem desfazer o pareamento do motor FIDE
+    (que ja respeita grupos de pontuacao, floats e o criterio absoluto C3): se o
+    minimo do par sob as duas atribuicoes de cor possiveis for menor que a
+    atribuicao vigente, houve um erro de cor reparavel no proprio tabuleiro; caso
+    contrario a violacao e' inevitavel neste confronto.
+    """
+    if black_id is None:
+        return False
+    current = color_hard_violation(white_id, "W", histories) + color_hard_violation(
+        black_id, "B", histories
+    )
+    return current > _minimal_pair_hard_color(white_id, black_id, histories)
+
+
 def _active_player_ids(
     pairings: list[dict[str, Any]],
     players: list[dict[str, Any]] | None,
@@ -412,6 +446,12 @@ def _avoidability_text(avoidable: bool | None) -> str:
     if avoidable is False:
         return "a busca exata indica que era inevitavel"
     return "campo grande demais para prova exata neste diagnostico"
+
+
+def _color_avoidability_text(swap_helps: bool) -> str:
+    if swap_helps:
+        return "bastaria inverter as cores deste tabuleiro"
+    return "inevitavel neste confronto — criterio de qualidade FIDE, nao impeditivo"
 
 
 def _hard_color_reason(player_id: int, color: str, histories: dict[int, list[str]]) -> str:

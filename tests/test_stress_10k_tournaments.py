@@ -98,7 +98,11 @@ def _player_size(rng: random.Random) -> int:
 
 
 def _num_rounds(n: int, rng: random.Random) -> int:
-    max_r = MAX_ROUNDS_BY_PROFILE["tiny" if n <= 9 else "small"]
+    # Nunca pedir mais rodadas do que o Suico comporta: com n jogadores o teto
+    # absoluto sem repetir confronto e n-1 (round-robin). Pedir alem disso gera
+    # cenarios IMPOSSIVEIS (ex.: 2 jogadores / 2 rodadas) — ruido de teste, nao
+    # bug do motor. O clamp nao altera o consumo do rng (mesmos n/seeds por torneio).
+    max_r = min(MAX_ROUNDS_BY_PROFILE["tiny" if n <= 9 else "small"], n - 1)
     base  = max(1, math.ceil(math.log2(max(2, n))))
     return max(1, min(base + rng.randint(-1, 1), max_r))
 
