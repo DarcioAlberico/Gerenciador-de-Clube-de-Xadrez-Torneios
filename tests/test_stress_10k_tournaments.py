@@ -3,32 +3,32 @@ test_stress_10k_tournaments.py
 ==============================
 Teste de stress pesado: 10.000 torneios aleatórios no motor Albericus.
 
-LIMITES DE CAMPO (JUSTIFICATIVA DE PERFORMANCE)
-------------------------------------------------
-O algoritmo networkx.min_weight_matching é O(n³) no número de jogadores.
-Medições empíricas no ambiente de teste:
+CAMPO DE JOGADORES (2 a 501)
+----------------------------
+O motor de pareamento padrão é o Gacrux (Otto Milvang). Diferente do antigo
+networkx.min_weight_matching (O(n³), proibitivo acima de ~200j), o Gacrux
+escala de forma ~LINEAR no produto (jogadores × rodadas). Benchmark do torneio
+COMPLETO (criar jogadores + todas as rodadas + resultados + ranking), 1 thread
+— reproduzível por tools/stress_bench_field.py:
 
-    10j / 2 rnd  ≈     500 ms
-    20j / 2 rnd  ≈   1.000 ms
-    30j / 2 rnd  ≈   2.000 ms
-    50j / 2 rnd  ≈   5.000 ms
-   100j / 2 rnd  ≈  15.000 ms
-   200j / 2 rnd  ≈  40.000 ms
+     50j /  5rnd  ≈    10 s
+    100j /  6rnd  ≈    16 s
+    200j /  8rnd  ≈    34 s
+    350j /  9rnd  ≈    66 s
+    501j /  9rnd  ≈    94 s
+    501j / 11rnd  ≈   110 s        (modelo: ~3s + 0,0195 × jogadores × rodadas)
 
-Para 10.000 torneios com 4 workers e média ≤ 5s/torneio:
-    10.000 / (4 workers / 5s) ≈ 12.500s ≈ 3.5h  →  campo ≤ 50j, ≤ 5 rodadas
-
-O campo de 2 a 50 jogadores cobre os perfis "tiny" e "small" que
-representam 55% dos torneios reais. Torneios large/giant são testados
-separadamente nos edge cases.
+Por isso o campo cobre 2 a 501 jogadores em cinco perfis (ver PROFILES). A
+cauda large/giant é cara: poucos por cento já dominam o tempo total, então o
+número de torneios (STRESS_NUM no runner) é calibrado junto com os pesos.
 
 Cenários cobertos
 -----------------
-* Número PAR e ÍMPAR de jogadores (2 a 50 jogadores)
+* Campos de 2 a 501 jogadores (par e ímpar) em 5 perfis de tamanho
 * Ratings variados (400 a 3000), idades diversas (5 a 80 anos)
 * Resultados normais, zebras, empates, walkovers (1F-0F, 0F-1F, 0F-0F)
 * Desistências mid-tournament (~0,5% por partida)
-* edge-cases separados para 100j, 200j e 501j (1-2 rodadas)
+* edge-cases dedicados para 100j, 200j e 501j (classe StressEdgeCasesTest)
 
 Relatórios:
     tests/stress_report_10k.json
@@ -51,7 +51,7 @@ from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 logging.disable(logging.CRITICAL)
 
@@ -72,12 +72,34 @@ MAX_WORKERS      = 4        # threads paralelas
 # (classe StressEdgeCasesTest) continuam rodando sempre.
 RUN_STRESS_ENV_VAR = "ALBERICUS_RUN_STRESS"
 
-# Campo: 2–50 jogadores para desempenho praticável (<3h total)
-PROFILE_WEIGHTS = {
-    "tiny":   0.35,   # 2–9 jogadores
-    "small":  0.65,   # 10–50 jogadores
-}
-MAX_ROUNDS_BY_PROFILE = {"tiny": 7, "small": 5}
+# Campo: 2–501 jogadores em 5 perfis de tamanho. O motor Gacrux escala ~linear
+# (ver docstring / tools/stress_bench_field.py), então campos grandes são
+# viáveis — apenas caros: 1 giant (~76s) custa ~20x 1 tiny. Os pesos abaixo
+# focam os campos grandes (large+giant ~45%), que ainda não tinham cobertura.
+class FieldProfile(NamedTuple):
+    name: str
+    min_players: int
+    max_players: int
+    max_rounds: int      # teto de rodadas deste perfil (também limitado a n-1)
+    weight: float        # probabilidade relativa de sortear o perfil
+
+PROFILES: list[FieldProfile] = [
+    FieldProfile("tiny",     2,   9,  7, 0.10),
+    FieldProfile("small",   10,  50,  6, 0.20),
+    FieldProfile("medium",  51, 100,  7, 0.25),
+    FieldProfile("large",  101, 250,  9, 0.27),
+    FieldProfile("giant",  251, 501, 11, 0.18),
+]
+MAX_PLAYERS    = max(p.max_players for p in PROFILES)
+_PROFILE_ORDER = {p.name: i for i, p in enumerate(PROFILES)}
+
+
+def _profile_for_size(n: int) -> FieldProfile:
+    """Perfil cuja faixa contém n (acima do teto, cai no maior). Pura."""
+    for p in PROFILES:
+        if p.min_players <= n <= p.max_players:
+            return p
+    return PROFILES[-1]
 
 RESULT_POOL_NORMAL = [("1-0", 55), ("0-1", 30), ("1/2-1/2", 15)]
 RESULT_POOL_ZEBRA  = [("0-1", 55), ("1-0", 30), ("1/2-1/2", 15)]
@@ -93,8 +115,8 @@ def _tprint(*a, **kw):
 # ---------------------------------------------------------------------------
 
 def _player_size(rng: random.Random) -> int:
-    profile = rng.choices(list(PROFILE_WEIGHTS), weights=list(PROFILE_WEIGHTS.values()), k=1)[0]
-    return rng.randint(2, 9) if profile == "tiny" else rng.randint(10, 50)
+    p = rng.choices(PROFILES, weights=[fp.weight for fp in PROFILES], k=1)[0]
+    return rng.randint(p.min_players, p.max_players)
 
 
 def _num_rounds(n: int, rng: random.Random) -> int:
@@ -102,7 +124,7 @@ def _num_rounds(n: int, rng: random.Random) -> int:
     # absoluto sem repetir confronto e n-1 (round-robin). Pedir alem disso gera
     # cenarios IMPOSSIVEIS (ex.: 2 jogadores / 2 rodadas) — ruido de teste, nao
     # bug do motor. O clamp nao altera o consumo do rng (mesmos n/seeds por torneio).
-    max_r = min(MAX_ROUNDS_BY_PROFILE["tiny" if n <= 9 else "small"], n - 1)
+    max_r = min(_profile_for_size(n).max_rounds, n - 1)
     base  = max(1, math.ceil(math.log2(max(2, n))))
     return max(1, min(base + rng.randint(-1, 1), max_r))
 
@@ -250,8 +272,7 @@ def _run_tournament(index: int, num_players: int, num_rounds: int, seed: int) ->
 # ---------------------------------------------------------------------------
 
 def _bucket(n):
-    if n <= 9: return "tiny_2_9"
-    return "small_10_50"
+    return _profile_for_size(n).name
 
 def _stats(vals):
     if not vals: return {k:0 for k in ("min","max","avg","p50","p95","p99")}
@@ -276,7 +297,7 @@ def _build_report(results, elapsed):
             "total_warnings":sum(len(r.warnings) for r in results),
             "total_elapsed_s":round(elapsed,2),
             "throughput_per_s":round(len(results)/max(0.001,elapsed),2),
-            "workers":MAX_WORKERS, "max_players":50, "seed":SEED,
+            "workers":MAX_WORKERS, "max_players":MAX_PLAYERS, "seed":SEED,
         },
         "duration_all_ms":    _stats([r.duration_ms for r in results]),
         "duration_success_ms":_stats([r.duration_ms for r in ok]),
@@ -311,7 +332,7 @@ def _write_txt(report, path):
     A(f"  Min={d['min']:.1f}  Avg={d['avg']:.1f}  P50={d['p50']:.1f}  P95={d['p95']:.1f}  P99={d['p99']:.1f}  Max={d['max']:.1f}")
     A("")
     A("-"*80); A("DISTRIBUIÇÃO POR TAMANHO")
-    for b,c in sorted(report["size_distribution"].items()):
+    for b,c in sorted(report["size_distribution"].items(), key=lambda kv: _PROFILE_ORDER.get(kv[0], 99)):
         f=report["failure_by_size"].get(b,0)
         A(f"  {b:<22} total={c:>6,}  falhas={f:>5,}  ({100*f/max(1,c):.2f}%)")
     A("")
@@ -353,12 +374,13 @@ def _write_txt(report, path):
 
 @unittest.skipUnless(
     os.environ.get(RUN_STRESS_ENV_VAR) == "1",
-    f"Stress de {NUM_TOURNAMENTS:,} torneios (~2-3h). Defina {RUN_STRESS_ENV_VAR}=1 para rodar.",
+    f"Stress de {NUM_TOURNAMENTS:,} torneios, campos até {MAX_PLAYERS}j (horas). Defina {RUN_STRESS_ENV_VAR}=1 para rodar.",
 )
 class StressTenThousandTournamentsTest(unittest.TestCase):
     """
-    10.000 torneios aleatórios, 2-50 jogadores, 4 workers paralelos.
-    Estimativa: ~2-3 horas.
+    10.000 torneios aleatórios, 2-501 jogadores (5 perfis), 4 workers paralelos.
+    Com a cauda de campos grandes a corrida completa leva muitas horas; para
+    amostras menores use o runner com STRESS_NUM (tools/stress_runner.py).
 
     Fora da suíte padrão: só roda com ALBERICUS_RUN_STRESS=1 (ver decorator).
     """
