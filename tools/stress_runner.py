@@ -12,9 +12,15 @@ de I/O (progresso, flag de parada, relatórios). Mesma seed ⇒ mesmo conjunto d
 torneios do teste oficial, então os relatórios finais são comparáveis.
 
 Configuração por variáveis de ambiente (todas opcionais):
-    STRESS_NUM      nº de torneios   (default: 10.000)
-    STRESS_WORKERS  threads paralelas(default: 4)
-    STRESS_SEED     seed mestre      (default: 42)
+    STRESS_NUM          nº de torneios    (default: 10.000)
+    STRESS_WORKERS      threads paralelas (default: 4)
+    STRESS_SEED         seed mestre       (default: 42)
+    STRESS_MIN_PLAYERS  piso  de jogadores no campo (default: 0 = sem limite)
+    STRESS_MAX_PLAYERS  teto  de jogadores no campo (default: 0 = sem limite)
+
+Os limites de campo truncam os perfis de tamanho (PROFILES) à faixa pedida —
+ex.: STRESS_MAX_PLAYERS=151 corta a cauda cara (large/giant) e mantém só
+2–151 jogadores, permitindo muito mais torneios no mesmo tempo.
 
 Arquivos (em tests/):
     stress_progress.json   heartbeat lido pela GUI (escrita atômica)
@@ -42,6 +48,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 # Reusa a lógica PURA do teste oficial (sem duplicar geração/execução).
+import tests.test_stress_10k_tournaments as stress_mod  # noqa: E402  (ajuste de PROFILES)
 from tests.test_stress_10k_tournaments import (  # noqa: E402
     MAX_WORKERS,
     NUM_TOURNAMENTS,
@@ -66,16 +73,41 @@ TXT_REPORT    = REPORT_DIR / "stress_report_10k.txt"
 
 PROGRESS_SCHEMA   = 1
 WRITE_MIN_GAP_S   = 0.5   # não grava o json com mais frequência que isto
+HEARTBEAT_GAP_S   = 5.0   # heartbeat periódico mantém o ts fresco entre torneios
 RECENT_KEEP       = 14    # quantos torneios recentes manter para exibir
 
 NUM     = int(os.environ.get("STRESS_NUM", NUM_TOURNAMENTS))
 WORKERS = int(os.environ.get("STRESS_WORKERS", MAX_WORKERS))
 RUN_SEED = int(os.environ.get("STRESS_SEED", SEED))
 
+# Limites de campo (0 = sem limite naquele lado, usa o do próprio perfil).
+FIELD_MIN = int(os.environ.get("STRESS_MIN_PLAYERS", 0))
+FIELD_MAX = int(os.environ.get("STRESS_MAX_PLAYERS", 0))
+
 
 # ---------------------------------------------------------------------------
 # Camada PURA — montagem do payload de progresso (sem I/O, testável)
 # ---------------------------------------------------------------------------
+
+def scale_profiles(profiles, field_min, field_max):
+    """Trunca/filtra os perfis de campo para caber em ``[field_min, field_max]``.
+
+    Para cada perfil faz clamp das bordas na faixa pedida e descarta os que
+    ficam totalmente fora dela. Os pesos relativos são preservados (o sorteio
+    em ``_player_size`` renormaliza). Pura: não lê env nem toca em globais.
+    """
+    scaled = []
+    for p in profiles:
+        lo = max(p.min_players, field_min)
+        hi = min(p.max_players, field_max)
+        if lo <= hi:
+            scaled.append(p._replace(min_players=lo, max_players=hi))
+    if not scaled:
+        raise ValueError(
+            f"Faixa de campo [{field_min}, {field_max}] não cobre nenhum perfil."
+        )
+    return scaled
+
 
 def build_progress(
     *,
@@ -143,14 +175,33 @@ def make_recent_entry(res: Any) -> dict[str, Any]:
 # Camada de I/O
 # ---------------------------------------------------------------------------
 
-def write_progress_atomic(payload: dict[str, Any]) -> None:
+def write_progress_atomic(payload: dict[str, Any], *, retries: int = 6,
+                          backoff_s: float = 0.1) -> bool:
     """Grava o json de progresso atomicamente (tmp + os.replace).
 
     Evita que a GUI leia um arquivo pela metade durante a escrita.
+
+    No Windows, ``os.replace`` falha com ``PermissionError`` quando a GUI (ou um
+    antivírus/indexador) tem o arquivo aberto para leitura no mesmo instante —
+    condição transitória que se resolve em milissegundos. Tentamos algumas vezes
+    com backoff e, se ainda assim falhar, desistimos em silêncio: o progresso é
+    best-effort e NUNCA deve derrubar a corrida (uma escrita perdida é coberta
+    pela próxima). Devolve True se gravou, False se desistiu.
     """
-    tmp = PROGRESS_PATH.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
-    os.replace(tmp, PROGRESS_PATH)
+    # tmp único por thread: o heartbeat e o laço principal podem gravar em
+    # paralelo; nomes distintos evitam corromper o mesmo arquivo temporário.
+    tmp = PROGRESS_PATH.parent / f"{PROGRESS_PATH.stem}.{threading.get_ident()}.tmp"
+    data = json.dumps(payload, ensure_ascii=False)
+    for attempt in range(retries):
+        try:
+            tmp.write_text(data, encoding="utf-8")
+            os.replace(tmp, PROGRESS_PATH)
+            return True
+        except (PermissionError, OSError):
+            if attempt == retries - 1:
+                return False          # best-effort: jamais propaga
+            time.sleep(backoff_s * (attempt + 1))
+    return False
 
 
 def stop_requested() -> bool:
@@ -180,8 +231,30 @@ def gen_params(num: int, seed: int) -> list[tuple[int, int, int, int]]:
     return params
 
 
+def apply_field_limits() -> None:
+    """Aplica STRESS_MIN/MAX_PLAYERS reatribuindo os PROFILES do módulo de teste.
+
+    As funções de geração (``_player_size``/``_num_rounds``) leem o global
+    ``PROFILES`` do módulo de origem, então truncá-lo aqui muda o campo sorteado
+    sem alterar a sequência de consumo do rng (mesma estrutura por torneio).
+    """
+    if not FIELD_MIN and not FIELD_MAX:
+        return
+    lo = FIELD_MIN or min(p.min_players for p in stress_mod.PROFILES)
+    hi = FIELD_MAX or max(p.max_players for p in stress_mod.PROFILES)
+    stress_mod.PROFILES = scale_profiles(stress_mod.PROFILES, lo, hi)
+    stress_mod.MAX_PLAYERS = max(p.max_players for p in stress_mod.PROFILES)
+    print(
+        f"[runner] Campo limitado a {lo}-{hi}j | perfis ativos: "
+        + ", ".join(f"{p.name}({p.min_players}-{p.max_players})"
+                    for p in stress_mod.PROFILES),
+        flush=True,
+    )
+
+
 def run() -> int:
     clear_stop_flag()
+    apply_field_limits()
     params = gen_params(NUM, RUN_SEED)
 
     results: list[Any | None] = [None] * NUM
@@ -203,38 +276,65 @@ def run() -> int:
     # progresso inicial (a GUI já mostra "Em execução…")
     write_progress_atomic(snapshot("running"))
 
-    with ThreadPoolExecutor(max_workers=WORKERS) as ex:
-        futures = {
-            ex.submit(_run_tournament, i, n, r, s): idx
-            for idx, (i, n, r, s) in enumerate(params)
-        }
-        for fut in as_completed(futures):
-            idx = futures[fut]
-            try:
-                res = fut.result()
-            except Exception:  # cancelado/abortado — ignora
-                continue
-            with lock:
-                results[idx] = res
-                state["completed"] += 1
-                if not res.success:
-                    state["failures"] += 1
-                if res.timed_out:
-                    state["timeouts"] += 1
-                state["warnings"] += len(res.warnings)
-                recent.appendleft(make_recent_entry(res))
-                now = time.time()
-                do_write = (now - last_write) >= WRITE_MIN_GAP_S
-                if do_write:
-                    last_write = now
-            if do_write:
-                write_progress_atomic(snapshot("running"))
+    # Heartbeat periódico: reescreve o progresso a cada HEARTBEAT_GAP_S mesmo sem
+    # novos torneios concluídos. Vários campos grandes (151j × 8r ~50s) podem rodar
+    # dezenas de segundos sem concluir; sem isto a GUI acusaria "travamento" à toa.
+    # Se o processo travar DE VERDADE, o heartbeat cessa e o alerta volta a valer.
+    stop_hb = threading.Event()
 
-            if not stopping and stop_requested():
-                stopping = True
-                # cancela os torneios ainda não iniciados; os em execução terminam
+    def _heartbeat() -> None:
+        while not stop_hb.wait(HEARTBEAT_GAP_S):
+            with lock:
+                snap = snapshot("running")
+            write_progress_atomic(snap)
+
+    hb = threading.Thread(target=_heartbeat, name="progress-heartbeat", daemon=True)
+    hb.start()
+
+    try:
+        with ThreadPoolExecutor(max_workers=WORKERS) as ex:
+            futures = {
+                ex.submit(_run_tournament, i, n, r, s): idx
+                for idx, (i, n, r, s) in enumerate(params)
+            }
+            try:
+                for fut in as_completed(futures):
+                    idx = futures[fut]
+                    try:
+                        res = fut.result()
+                    except Exception:  # cancelado/abortado — ignora
+                        continue
+                    with lock:
+                        results[idx] = res
+                        state["completed"] += 1
+                        if not res.success:
+                            state["failures"] += 1
+                        if res.timed_out:
+                            state["timeouts"] += 1
+                        state["warnings"] += len(res.warnings)
+                        recent.appendleft(make_recent_entry(res))
+                        now = time.time()
+                        do_write = (now - last_write) >= WRITE_MIN_GAP_S
+                        if do_write:
+                            last_write = now
+                    if do_write:
+                        write_progress_atomic(snapshot("running"))
+
+                    if not stopping and stop_requested():
+                        stopping = True
+                        # cancela os torneios ainda não iniciados; os em execução terminam
+                        ex.shutdown(wait=False, cancel_futures=True)
+                        break
+            except BaseException:
+                # Falha inesperada no laço de coleta NÃO pode virar zumbi: sem isto
+                # o __exit__ do executor faria join de TODAS as tarefas restantes
+                # (horas de CPU "no escuro"). Cancela o pendente e deixa o erro subir
+                # para main(), que grava status=error na hora.
                 ex.shutdown(wait=False, cancel_futures=True)
-                break
+                raise
+    finally:
+        stop_hb.set()
+        hb.join(timeout=2)
 
     elapsed = time.time() - started
     ordered = [r for r in results if r is not None]
