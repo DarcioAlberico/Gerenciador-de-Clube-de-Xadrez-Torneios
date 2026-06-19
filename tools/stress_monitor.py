@@ -25,6 +25,16 @@ from typing import Any
 
 import customtkinter as ctk
 
+# Bandeja do sistema (opcional): minimizar para a tray em vez da barra de tarefas.
+# Degrada para minimização normal se as libs não estiverem disponíveis.
+import threading
+try:
+    import pystray
+    from PIL import Image, ImageDraw
+    _HAS_TRAY = True
+except Exception:
+    _HAS_TRAY = False
+
 # ---------------------------------------------------------------------------
 # Configuração
 # ---------------------------------------------------------------------------
@@ -41,6 +51,17 @@ STATUS_STYLE = {
     "stopped": ("⏹ Encerrado",     "#e0a030"),
     "error":   ("❌ Erro",          "#e55"),
 }
+
+
+def _make_tray_image(size: int = 64):
+    """Ícone da bandeja: um mini-tabuleiro de xadrez 2×2. Puro (requer Pillow)."""
+    img = Image.new("RGB", (size, size), "#2b2b2b")
+    draw = ImageDraw.Draw(img)
+    half = size // 2
+    light = "#e8e8e8"
+    draw.rectangle([0, 0, half - 1, half - 1], fill=light)
+    draw.rectangle([half, half, size - 1, size - 1], fill=light)
+    return img
 
 
 # ---------------------------------------------------------------------------
@@ -172,7 +193,11 @@ class StressMonitor(ctk.CTk):
         self.minsize(460, 420)          # redimensionável: min/maximizar livres
         self._metric_values: dict[str, ctk.CTkLabel] = {}
         self._stopping = False
+        self._tray_icon = None
         self._build()
+        if _HAS_TRAY:
+            self.bind("<Unmap>", self._on_unmap)
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
         self._refresh()
 
     # -- construção da UI ---------------------------------------------------
@@ -230,7 +255,12 @@ class StressMonitor(ctk.CTk):
             command=self._stop,
         )
         self._stop_btn.pack(side="left")
-        ctk.CTkButton(footer, text="Fechar janela", command=self.destroy).pack(side="right")
+        ctk.CTkButton(footer, text="Fechar janela", command=self._on_close).pack(side="right")
+        if _HAS_TRAY:
+            ctk.CTkButton(
+                footer, text="Minimizar p/ bandeja", fg_color="#356", hover_color="#478",
+                command=self._hide_to_tray,
+            ).pack(side="right", padx=(0, 8))
 
     # -- ações --------------------------------------------------------------
     def _stop(self) -> None:
@@ -241,6 +271,66 @@ class StressMonitor(ctk.CTk):
             pass
         self._stopping = True
         self._stop_btn.configure(text="Encerrando…", state="disabled")
+
+    # -- bandeja do sistema (system tray) -----------------------------------
+    def _on_unmap(self, event=None) -> None:
+        """Minimizar (iconify) recolhe a janela para a bandeja."""
+        if _HAS_TRAY and self.state() == "iconic":
+            self._hide_to_tray()
+
+    def _ensure_tray_icon(self) -> None:
+        if self._tray_icon is not None:
+            return
+        menu = pystray.Menu(
+            pystray.MenuItem("Mostrar janela", self._tray_restore, default=True),
+            pystray.MenuItem("Encerrar teste", self._tray_stop_test),
+            pystray.MenuItem("Fechar monitor", self._tray_quit),
+        )
+        self._tray_icon = pystray.Icon(
+            "albericus_stress", _make_tray_image(),
+            "Albericus — Stress (monitor)", menu,
+        )
+        threading.Thread(target=self._tray_icon.run, daemon=True).start()
+
+    def _hide_to_tray(self) -> None:
+        """Esconde a janela e mostra o ícone na bandeja."""
+        if not _HAS_TRAY:
+            self.iconify()
+            return
+        self._ensure_tray_icon()
+        self._tray_icon.visible = True
+        self.withdraw()
+
+    def _tray_restore(self, icon=None, item=None) -> None:
+        # callback roda na thread do pystray → volta ao loop Tk via after().
+        self.after(0, self._do_restore)
+
+    def _do_restore(self) -> None:
+        self.deiconify()
+        try:
+            self.state("normal")
+        except Exception:
+            pass
+        self.lift()
+        self.focus_force()
+        if self._tray_icon is not None:
+            self._tray_icon.visible = False
+
+    def _tray_stop_test(self, icon=None, item=None) -> None:
+        self.after(0, self._stop)
+
+    def _tray_quit(self, icon=None, item=None) -> None:
+        self.after(0, self._on_close)
+
+    def _on_close(self) -> None:
+        """Fecha só o monitor (a corrida continua); encerra a thread da bandeja."""
+        if self._tray_icon is not None:
+            try:
+                self._tray_icon.stop()
+            except Exception:
+                pass
+            self._tray_icon = None
+        self.destroy()
 
     # -- atualização periódica ---------------------------------------------
     def _set_recent(self, lines: list[str]) -> None:
