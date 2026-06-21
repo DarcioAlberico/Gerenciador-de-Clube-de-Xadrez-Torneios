@@ -338,7 +338,7 @@ def run() -> int:
 
     elapsed = time.time() - started
     ordered = [r for r in results if r is not None]
-    report = _build_report(ordered, elapsed)
+    report = _build_report(ordered, elapsed, WORKERS)
 
     # relatórios finais (reusa o formatador do teste oficial)
     JSON_REPORT.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")

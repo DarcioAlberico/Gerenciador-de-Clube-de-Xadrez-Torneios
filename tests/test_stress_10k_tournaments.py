@@ -280,7 +280,7 @@ def _stats(vals):
     return {"min":round(sv[0],2),"max":round(sv[-1],2),"avg":round(sum(sv)/n,2),
             "p50":round(sv[int(n*.50)],2),"p95":round(sv[int(n*.95)],2),"p99":round(sv[int(n*.99)],2)}
 
-def _build_report(results, elapsed):
+def _build_report(results, elapsed, workers=MAX_WORKERS):
     ok  = [r for r in results if r.success]
     fail= [r for r in results if not r.success]
     tmos= [r for r in fail if r.timed_out]
@@ -297,7 +297,7 @@ def _build_report(results, elapsed):
             "total_warnings":sum(len(r.warnings) for r in results),
             "total_elapsed_s":round(elapsed,2),
             "throughput_per_s":round(len(results)/max(0.001,elapsed),2),
-            "workers":MAX_WORKERS, "max_players":MAX_PLAYERS, "seed":SEED,
+            "workers":workers, "max_players":MAX_PLAYERS, "seed":SEED,
         },
         "duration_all_ms":    _stats([r.duration_ms for r in results]),
         "duration_success_ms":_stats([r.duration_ms for r in ok]),
@@ -310,8 +310,8 @@ def _build_report(results, elapsed):
 
 def _write_txt(report, path):
     L=[]; A=L.append
-    A("="*80); A("  RELATÓRIO DE STRESS — ALBERICUS — 10.000 TORNEIOS ALEATÓRIOS"); A("="*80); A("")
     s=report["summary"]
+    A("="*80); A(f"  RELATÓRIO DE STRESS — ALBERICUS — {s['total_tournaments']:,} TORNEIOS ALEATÓRIOS"); A("="*80); A("")
     A(f"Total simulados          : {s['total_tournaments']:>8,}")
     A(f"Sucessos                 : {s['total_success']:>8,}")
     A(f"Falhas (total)           : {s['total_failures']:>8,}")
