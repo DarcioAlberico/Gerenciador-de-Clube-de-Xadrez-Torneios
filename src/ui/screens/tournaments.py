@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from ..support import *
+from ..components import danger_button
 
 from src.services.pairing.acceleration import acceleration_spec
 from src.services.pairing import (
@@ -330,13 +331,7 @@ class TournamentPagesMixin(TournamentPlayersMixin, TournamentSettingsMixin):
         btn_split = ctk.CTkButton(actions, text="Dividir", command=split_selected, width=90)
         btn_split.pack(side="left", padx=(0, 8))
         self._disable_if_unauthorized(btn_split, "tournament_write")
-        btn_delete = ctk.CTkButton(
-            actions,
-            text="Excluir",
-            command=delete_selected,
-            fg_color=THEME_DANGER,
-            width=90,
-        )
+        btn_delete = danger_button(actions, "Excluir", delete_selected, width=90)
         btn_delete.pack(side="left")
         self._disable_if_unauthorized(btn_delete, "tournament_write")
         tree.bind("<Delete>", lambda _event: delete_selected())
@@ -1050,7 +1045,7 @@ class TournamentPagesMixin(TournamentPlayersMixin, TournamentSettingsMixin):
         btn_frame = ctk.CTkFrame(right_column, fg_color="transparent")
         btn_frame.grid(row=2, column=0, sticky="ew", pady=(10, 0))
         
-        btn_remove = ctk.CTkButton(btn_frame, text="Remover Selecionado", command=remove_referee, fg_color=THEME_DANGER, hover_color=THEME_DANGER_HOVER)
+        btn_remove = danger_button(btn_frame, "Remover Selecionado", remove_referee)
         btn_remove.pack(side="right")
         
         # Carregamentos iniciais

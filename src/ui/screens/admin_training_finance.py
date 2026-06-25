@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from ..support import *
+from ..components import danger_button
 
 
 # Sub-mixin de Admin: treinos e financeiro.
@@ -1218,7 +1219,7 @@ class TrainingFinanceMixin:
 
         ctk.CTkButton(spon_form, text="Salvar Patrocinador", command=save_spon).grid(row=20, column=0, padx=16, pady=(16, 8), sticky="ew")
         ctk.CTkButton(spon_form, text="Novo", command=clear_spon_form, fg_color="transparent", border_width=1).grid(row=21, column=0, padx=16, pady=4, sticky="ew")
-        ctk.CTkButton(spon_form, text="Excluir", command=delete_spon, fg_color=THEME_DANGER, hover_color=THEME_DANGER_HOVER).grid(row=22, column=0, padx=16, pady=4, sticky="ew")
+        danger_button(spon_form, "Excluir", delete_spon).grid(row=22, column=0, padx=16, pady=4, sticky="ew")
 
         load_sponsors()
         clear_trans_form()

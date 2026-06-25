@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from ..support import *
+from ..components import danger_button
 
 
 class SettingsUsersMixin:
@@ -72,7 +73,7 @@ class SettingsUsersMixin:
                 self._show_error(str(e))
 
         ctk.CTkButton(btn_frame, text="Novo Usuário", command=create_user).pack(side="left", padx=5)
-        ctk.CTkButton(btn_frame, text="Deletar Usuário", command=delete_user, fg_color="red").pack(side="left", padx=5)
+        danger_button(btn_frame, "Deletar Usuário", delete_user).pack(side="left", padx=5)
 
     def show_membership_plans(self) -> None:
         self._clear_content()
@@ -330,5 +331,5 @@ class SettingsUsersMixin:
             ctk.CTkButton(pwd_dlg, text="Salvar", command=save).pack(pady=30)
 
         ctk.CTkButton(top_bar, text="Novo", command=add_user).pack(side="left", padx=5)
-        ctk.CTkButton(top_bar, text="Excluir", command=delete_user, fg_color="red").pack(side="left", padx=5)
+        danger_button(top_bar, "Excluir", delete_user).pack(side="left", padx=5)
         ctk.CTkButton(top_bar, text="Redefinir Senha", command=change_pwd).pack(side="left", padx=5)

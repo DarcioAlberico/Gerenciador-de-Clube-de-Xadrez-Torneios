@@ -78,6 +78,21 @@ Sistema de tema maduro ([support.py:138-261](src/ui/support.py:138)) · command 
 ([app.py:847](src/ui/app.py:847)) · `_disable_if_unauthorized` (permissão na UI).
 **Nada disso é descartado** — a spec os promove a cidadãos de primeira classe.
 
+### 2.2 Validação visual (2026-06-25)
+
+O diagnóstico foi confirmado rodando o app sobre uma cópia descartável do banco
+(`tools/ui_shot.py`, com bypass de login), em 3 telas representativas:
+
+- **Rodadas** — o _wall of buttons_ é real: 3 fileiras de ~18 botões de cor idêntica,
+  com "Excluir rodada" (destrutivo) no meio da grade. Statusbar útil ("Rodadas 4/5 ·
+  ✓ sem pendências · Modo Oficial"). Confirma P1-1.
+- **Dashboard Visual** — estático, sem faixa de KPIs; o gráfico "Status Financeiro"
+  aparece **vazio com eixos de -0.04 a 0.04** quando não há dados (empty state
+  quebrado), e os painéis mostram "Nenhum aviso"/"Nenhum evento". Confirma P1-8, P1-9.
+- **Configurações do app** — a galeria de temas curados (ponto forte) renderiza bem,
+  mas o título "Configuracoes", as abas "Aparencia"/"Seguranca" e a coluna "Descricao"
+  aparecem **sem acento** ao usuário. Confirma P2-8.
+
 ---
 
 ## 3. Arquitetura-alvo de UI
