@@ -99,6 +99,14 @@ SIZE_SUBSECTION = 13       # Mini-cabeçalho dentro de painel
 SIZE_KPI_VALUE = 22        # Valor numérico em card de KPI
 SIZE_BODY = 12             # Texto corrido
 
+# Escala de espaçamento — use estes tokens em pady/padx no lugar de literais soltos.
+# Padroniza o ritmo vertical/horizontal entre telas (ver ESPEC_UI_UX §4.3).
+SPACE_XS = 4
+SPACE_SM = 8
+SPACE_MD = 12
+SPACE_LG = 16
+SPACE_XL = 24
+
 
 def font_section() -> ctk.CTkFont:
     return ctk.CTkFont(size=SIZE_SECTION, weight="bold")

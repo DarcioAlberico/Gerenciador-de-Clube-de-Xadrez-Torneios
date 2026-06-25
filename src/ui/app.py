@@ -17,6 +17,7 @@ from .screens.pairings import PairingPagesMixin
 from .screens.referees import RefereePagesMixin
 from .screens.settings import SettingsPagesMixin
 from .support import *
+from .components import EmptyState, show_donation_modal
 from .screens.tournaments import TournamentPagesMixin
 from .screens.reports import ReportPagesMixin
 from .screens.audit import AuditPagesMixin
@@ -263,7 +264,7 @@ class AlbericusApp(
         self.password_entry = ctk.CTkEntry(self.login_frame, placeholder_text="Senha", show="*", width=200)
         self.password_entry.pack(pady=10, padx=20)
         
-        self.login_error_label = ctk.CTkLabel(self.login_frame, text="", text_color="red")
+        self.login_error_label = ctk.CTkLabel(self.login_frame, text="", text_color=THEME_DANGER)
         self.login_error_label.pack()
 
         def try_login(event=None):
@@ -411,53 +412,9 @@ class AlbericusApp(
         help_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Ajuda", menu=help_menu)
         
-        def show_donation_modal() -> None:
-            modal = ctk.CTkToplevel(self)
-            modal.title("Apoie o Projeto")
-            modal.geometry("400x350")
-            modal.grab_set()
-            modal.resizable(False, False)
-
-            ctk.CTkLabel(
-                modal, 
-                text="❤ Apoie o Desenvolvimento", 
-                font=ctk.CTkFont(size=20, weight="bold")
-            ).pack(pady=(20, 10))
-
-            ctk.CTkLabel(
-                modal, 
-                text="O Albericus é um projeto independente.\nSe o software tem ajudado você e o seu clube,\nconsidere pagar um café para o desenvolvedor!",
-                justify="center"
-            ).pack(pady=(0, 20))
-            
-            ctk.CTkLabel(modal, text="Chave PIX:", font=ctk.CTkFont(weight="bold")).pack()
-            pix_key = "30436841843"
-            
-            entry = ctk.CTkEntry(modal, width=250, justify="center")
-            entry.pack(pady=(5, 15))
-            entry.insert(0, pix_key)
-            entry.configure(state="readonly")
-
-            def copy_pix():
-                self.clipboard_clear()
-                self.clipboard_append(pix_key)
-                self.update()
-                copy_btn.configure(text="Copiado!", fg_color="#25D366")
-                self.after(2000, lambda: copy_btn.configure(text="Copiar Chave PIX", fg_color=THEME_ACCENT))
-
-            copy_btn = ctk.CTkButton(modal, text="Copiar Chave PIX", command=copy_pix, fg_color=THEME_ACCENT)
-            copy_btn.pack(pady=10)
-
-            def open_livepix():
-                import webbrowser
-                webbrowser.open("https://livepix.gg/darcioalberico")
-
-            livepix_btn = ctk.CTkButton(modal, text="Cartão / Internacional (LivePix)", command=open_livepix, fg_color="#8a2be2", hover_color="#5c1d96")
-            livepix_btn.pack(pady=(0, 10))
-
         help_menu.add_command(label="Buscar ação...", command=self._show_command_palette, accelerator="Ctrl+K")
         help_menu.add_separator()
-        help_menu.add_command(label="❤ Apoie o Projeto", command=show_donation_modal)
+        help_menu.add_command(label="❤ Apoie o Projeto", command=lambda: show_donation_modal(self))
 
     def _register_shortcuts(self) -> None:
         """Atalhos globais. Disponíveis depois do login."""
@@ -992,9 +949,14 @@ class AlbericusApp(
             return True
         self._clear_content()
         self._page_title("Selecione um torneio", "Crie ou abra um torneio antes de usar esta tela.")
-        body = ctk.CTkFrame(self.content, fg_color="transparent")
-        body.grid(row=1, column=0, padx=22, pady=18, sticky="nsew")
-        ctk.CTkButton(body, text="Ir para Torneios", command=self.show_tournaments).pack(anchor="w")
+        empty = EmptyState(
+            self.content,
+            title="Nenhum torneio selecionado",
+            description="Crie um novo torneio ou abra um existente para liberar esta tela.",
+            cta_text="Ir para Torneios",
+            cta_command=self.show_tournaments,
+        )
+        empty.grid(row=1, column=0, padx=22, pady=18, sticky="nsew")
         return False
 
     def _set_current_tournament(self, tournament_id: int) -> None:
