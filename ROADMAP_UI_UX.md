@@ -1,0 +1,174 @@
+# ROADMAP_UI_UX — Plano de implementação de UI/UX do Albericus
+
+> **Status:** Proposta (v1) · **Data:** 2026-06-25 · **Spec:** [ESPEC_UI_UX.md](ESPEC_UI_UX.md)
+> **Estimativa total:** ~6–7 semanas de um dev solo focado · **MVP de percepção:** ~10 dias úteis.
+
+Roadmap derivado da spec. Mescla duas análises (arquitetural + visual), reconciliadas e
+validadas no código. Esforço em dias úteis de um dev solo; impacto e risco em Alto/Médio/Baixo.
+
+---
+
+## 1. Catálogo unificado de achados
+
+IDs estáveis (referenciados pelas tarefas). Prioridade: **P0** destrava evolução ·
+**P1** impacto diário · **P2** polish/escala.
+
+### P0 — Débito estrutural
+
+| ID | Achado | Evidência | Impacto |
+|----|--------|-----------|---------|
+| P0-1 | _God class_: `AlbericusApp` herda 14 mixins de tela | [app.py:29](src/ui/app.py:29) | Alto |
+| P0-2 | Telas-monstro (até 1.920 linhas) misturam view+lógica+estado | `pairing_results_ui.py` etc. | Alto |
+| P0-3 | Estado via `{"value": None}` (22×/12 arquivos) | grep validado | Médio |
+| P0-4 | `from ..support import *` (22 arquivos) | grep validado | Médio |
+| P0-5 | Tema reescreve `sys.modules` (`_propagate_theme_globals`) | [support.py:264](src/ui/support.py:264) | Médio |
+| P0-6 | Troca de tema **destrói/recria** a UI inteira | [app.py:165](src/ui/app.py:165) | Alto |
+
+### P1 — UX e feedback
+
+| ID | Achado | Evidência | Impacto |
+|----|--------|-----------|---------|
+| P1-1 | "Wall of buttons": ~18 botões sem hierarquia na tela de Rodadas | [pairing_results_ui.py:30](src/ui/screens/pairing_results_ui.py:30) | Alto |
+| P1-2 | Tooltips inexistentes em 100% do app (`CTkToolTip` **não** instalado) | — | Alto |
+| P1-3 | Ações longas sem loading (gerar rodada trava UI sem feedback) | `_generate_round` | Alto |
+| P1-4 | `messagebox` nativo em todo erro/confirmação (26×) | grep validado | Alto |
+| P1-5 | 4 `threading.Thread` crus em vez do helper `_run_background` | communication/settings/club_members | Médio |
+| P1-6 | Exclusões destrutivas sem desfazer | `delete_*` | Alto |
+| P1-7 | Navegação só por menu nativo (7 menus, 30+ itens) | [app.py:345](src/ui/app.py:345) | Alto |
+| P1-8 | Pós-login abre "Clube", não dashboard contextual | [app.py:285](src/ui/app.py:285) | Alto |
+| P1-9 | Empty states fracos (label "Nenhum registro") | telas de lista | Médio |
+| P1-10 | KPI cards clicáveis sem hover visual | [app.py:905](src/ui/app.py:905) | Médio |
+| P1-11 | Modal do Modo Livre reabre sempre (sem "não mostrar de novo") | [free_tournament.py:12](src/ui/screens/free_tournament.py:12) | Baixo |
+| P1-12 | Itens de menu desabilitados (Aulas/Exercícios) — **deliberado**, mas confunde | [app.py:367](src/ui/app.py:367) | Baixo |
+
+### P2 — Polish e profissionalização
+
+| ID | Achado | Evidência | Impacto |
+|----|--------|-----------|---------|
+| P2-1 | 58 cores hex hardcoded em telas (ignoram o accent) | grep validado | Médio |
+| P2-2 | 23 `CTkFont(size=)` soltos fora dos tokens | grep validado | Baixo |
+| P2-3 | Botões "✕" com `#a3423c` em vez de `THEME_DANGER` | [tournament_widgets.py:85](src/ui/screens/tournament_widgets.py:85) | Médio |
+| P2-4 | Espaçamento mágico (sem tokens `SPACE_*`) | telas | Baixo |
+| P2-5 | Danger button sem destaque/separação em formulários | telas com Excluir | Médio |
+| P2-6 | Login 420×400 apertado (sem split/branding) | [app.py:56](src/ui/app.py:56) | Baixo |
+| P2-7 | 4 temas JSON órfãos em `assets/themes/` | validado | Baixo |
+| P2-8 | Labels visíveis sem acento ("Configuracoes", "Aparencia") | telas/menu | Médio |
+| P2-9 | Persistência de layout de colunas por usuário/sessão | `widths={...}` fixos | Baixo |
+| P2-10 | Modal de doação aninhado no `_build_menu` | [app.py:414](src/ui/app.py:414) | Baixo |
+| P2-11 | Contraste WCAG AA não auditado (dark/presets quentes) | tokens | Médio |
+| P2-12 | i18n: strings PT-BR espalhadas (sem catálogo) | global | Baixo |
+| P2-13 | Tabelas `ttk.Treeview` sem virtualização (lento em 1.000+ linhas) | trees | Baixo |
+| P2-14 | Charts matplotlib recriados a cada refresh | [dashboard.py](src/ui/screens/dashboard.py) | Baixo |
+
+---
+
+## 2. Fases de implementação
+
+Cada tarefa: **esforço** · **impacto** · **risco** · **depende de** · **aceite**.
+
+### Fase 0 — Fundação de tokens e componentes (baixo risco) · ~5 dias
+
+> Cria a base reutilizável **sem** tocar na arquitetura. Pode começar hoje, em paralelo
+> a tudo. Destrava as fases seguintes e já melhora consistência.
+
+| ID | Tarefa | Esforço | Impacto | Risco | Aceite |
+|----|--------|---------|---------|-------|--------|
+| F0.1 | Tokens `SPACE_*` + aplicar nas telas de maior uso (P2-4) | 1,5d | M | B | Nenhum `pady=(n,m)` mágico nas telas migradas |
+| F0.2 | _Factories_ de botão: `primary/secondary/danger_button` (P2-5) | 1d | A | B | Danger isolado e colorido por token em formulários |
+| F0.3 | Componente `Tooltip` próprio + adotar nos botões críticos (P1-2) | 1,5d | A | B | Tooltip em 100% das ações de Rodadas/Arbitragem |
+| F0.4 | `EmptyState(icon, título, desc, cta)` (P1-9) | 1d | M | B | 3 telas de lista usando EmptyState com CTA |
+| F0.5 | Remover temas JSON órfãos (P2-7) + modal de doação p/ módulo (P2-10) | 0,5d | B | B | `assets/themes/` limpo; `donation.py` separado |
+
+### Fase 1 — Refatoração estrutural (incremental) · ~10–12 dias
+
+> **Sem _big-bang_.** Extrai serviços de tema/navegação, depois migra **uma tela-piloto**
+> e valida o padrão antes de propagar.
+
+| ID | Tarefa | Esforço | Impacto | Risco | Depende | Aceite |
+|----|--------|---------|---------|-------|---------|--------|
+| F1.1 | `theme.py` (tokens + `on_change` listener); matar `_propagate_theme_globals` (P0-5) | 2d | A | M | — | Tokens importados de `theme`; sem `sys.modules` hack |
+| F1.2 | Tema sem destroy/rebuild: `restyle()` por `configure()` (P0-6) | 3d | A | **M-A** | F1.1 | Trocar tema preserva foco/scroll/seleção |
+| F1.3 | `Navigator` + registro único de destinos (de `_command_palette_actions`) (P0-1) | 2d | A | M | — | Navegação central; F5 via `refresh_current()` |
+| F1.4 | `AppShell` (casca fina) coexistindo com mixins legados (P0-1) | 2d | A | M | F1.3 | App sobe via shell; mixins ainda funcionam |
+| F1.5 | **Piloto**: migrar 1 tela para View/Controller/State + `dataclass` (P0-2, P0-3) | 3d | A | M | F1.4 | Tela testável sem subir app; zero `{"value":None}` |
+| F1.6 | Imports explícitos na tela-piloto + 2 telas; lint anti-wildcard no CI (P0-4) | 1,5d | M | B | F1.5 | CI falha em novo `import *` |
+
+> Após o piloto, cada tela-monstro migrada vira um épico próprio no backlog
+> (`pairing_results_ui` → `screens/pairings/{view,controller,state}.py`, etc.).
+
+### Fase 2 — UX e feedback (salto de percepção) · ~7 dias
+
+> O que mais muda a sensação de "profissional" no uso diário. Boa parte independe da Fase 1.
+
+| ID | Tarefa | Esforço | Impacto | Risco | Depende | Aceite |
+|----|--------|---------|---------|-------|---------|--------|
+| F2.1 | Hierarquizar a toolbar de Rodadas: primárias/`Exportar▾`/`Mais▾`/danger isolado (P1-1) | 2d | A | B | F0.2 | ≤6 ações visíveis; destrutivo separado |
+| F2.2 | Confirmação CTk + toast de erro; remover `messagebox` (P1-4); unificar `_show_error` | 1,5d | A | B | F0.2 | Zero `messagebox` em telas migradas |
+| F2.3 | Progresso em ações longas + migrar 4 threads crus p/ `_run_background` (P1-3, P1-5) | 2d | A | M | — | Botão desabilita + spinner; erro vira toast |
+| F2.4 | Undo em exclusões via toast com ação (P1-6) | 1,5d | A | M | F2.2 | "Excluído · Desfazer" onde aplicável |
+| F2.5 | Hover visual em KPI cards clicáveis (P1-10) | 0,5d | M | B | — | Cursor + realce no hover |
+
+### Fase 3 — Navegação e polish (diferenciação) · ~8 dias
+
+| ID | Tarefa | Esforço | Impacto | Risco | Depende | Aceite |
+|----|--------|---------|---------|-------|---------|--------|
+| F3.1 | Sidebar persistente com grupos + item ativo (P1-7) | 4d | A | M | F1.3 | Navegação primária visual; menu vira fallback |
+| F3.2 | Dashboard contextual pós-login (pendências acionáveis) (P1-8) | 3d | A | M | F1.3 | Abre em pendências com deep-link |
+| F3.3 | Tokenizar cores/fonts: 58 hex + 23 fonts + `#a3423c` (P2-1,2,3) + lint CI | 2d | M | B | F1.1 | CI barra novos literais em `screens/` |
+| F3.4 | Modo Livre "não mostrar de novo" (P1-11); Aulas/Exercícios → "(em breve)" (P1-12) | 0,5d | M | B | — | Sem fricção repetida; rótulo claro |
+| F3.5 | Corrigir acentuação das labels visíveis (P2-8) | 0,5d | M | B | — | "Configurações/Aparência/Segurança" |
+| F3.6 | Login com split layout + branding + versão (P2-6) | 1d | B | B | — | Layout dividido; espaço p/ "primeiro acesso" |
+
+### Backlog (não priorizar agora)
+
+- **B-1** Persistência de layout de colunas por usuário (P2-9) — reaproveitar `ColumnLayoutEditor`.
+- **B-2** Auditoria de contraste WCAG AA + preset alto contraste (P2-11).
+- **B-3** i18n: extrair strings para `i18n/pt_BR.json`, manter só PT-BR (P2-12).
+- **B-4** Virtualização/paginação de `Treeview` (P2-13) — antes da base crescer.
+- **B-5** Cache de figuras matplotlib quando dados não mudam (P2-14).
+- **B-6** Migrar telas-monstro restantes para 3 camadas (continuação de F1.5).
+
+---
+
+## 3. Sequenciamento recomendado
+
+```
+Semana 1   ██ Fase 0 (tokens, botões, tooltip, empty state)        ← começa já, baixo risco
+Semana 2   ██ F1.1 theme.py + F1.3 Navigator        + F2.1 toolbar  ← UX em paralelo
+Semana 3   ██ F1.4 AppShell + F1.5 piloto           + F2.2/F2.3
+Semana 4   ██ F1.6 imports/lint + F1.2 tema s/ rebuild (mais arriscado, isolado)
+Semana 5   ██ F3.1 sidebar
+Semana 6   ██ F3.2 dashboard contextual + F3.3 tokenização + polish (F3.4-6)
+Semana 7   ██ folga/estabilização + início do backlog B-6 (telas-monstro)
+```
+
+**Princípios de ordem:**
+1. **Fase 0 primeiro** — fundação reutilizável de baixo risco; tudo depois reusa.
+2. **Tema sem rebuild (F1.2) por último na fundação** — é o mais arriscado; isolar.
+3. **UX (Fase 2) corre em paralelo** — toca pouco a arquitetura; entrega percepção cedo.
+4. **Refactor é incremental** — piloto valida o padrão; nunca _big-bang_.
+
+### MVP de percepção (~10 dias, se for cortar)
+
+`F0.2` + `F0.3` (botões/tooltip) → `F2.1` (toolbar) → `F2.2`+`F2.3` (erro/loading) →
+`F3.1` (sidebar). Transforma a cara do app sem depender do refactor estrutural completo.
+
+---
+
+## 4. CI, testes e qualidade
+
+- **Lints novos no CI:** (a) proibir `from ..support import *` em `src/ui`; (b) proibir
+  `#RRGGBB` e `CTkFont(size=` novos em `src/ui/screens`. Implementáveis como grep/ruff.
+- **Gate de tipos:** ampliar mypy (hoje só `src/core`) para `src/ui/core` e telas
+  migradas — controladores são puros e tipáveis.
+- **Testes:** controladores testáveis sem Tk (cobertura nova); `test_ui_layout.py`
+  permanece como _smoke_ de montagem. Validar troca de tema (F1.2) com checklist
+  claro/escuro por componente.
+- **Regra de PR:** cada tarefa = 1 PR pequeno, alinhado à modularização rígida.
+
+---
+
+## 5. Rastreabilidade
+
+Todo achado (P0/P1/P2) mapeia para ≥1 tarefa (F*) ou item de backlog (B*). Métricas-alvo
+e Definição de Pronto global em [ESPEC_UI_UX.md §10](ESPEC_UI_UX.md).
