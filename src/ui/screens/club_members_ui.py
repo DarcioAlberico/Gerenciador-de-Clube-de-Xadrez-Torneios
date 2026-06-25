@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from ..support import *
+from ..components import danger_button
 
 
 class ClubMembersMixin:
@@ -140,7 +141,7 @@ class ClubMembersMixin:
         freq_btns = ctk.CTkFrame(freq_frame, fg_color="transparent")
         freq_btns.pack(pady=5)
         ctk.CTkButton(freq_btns, text="Add", width=80, command=add_presence).pack(side="left", padx=2)
-        ctk.CTkButton(freq_btns, text="Del", width=80, fg_color="red", command=delete_presence).pack(side="left", padx=2)
+        danger_button(freq_btns, "Del", delete_presence, width=80).pack(side="left", padx=2)
 
         def load_freq():
             freq_tree.delete(*freq_tree.get_children())
@@ -192,7 +193,7 @@ class ClubMembersMixin:
         titles_btns = ctk.CTkFrame(titles_frame, fg_color="transparent")
         titles_btns.pack(pady=5)
         ctk.CTkButton(titles_btns, text="Add", width=80, command=add_title_action).pack(side="left", padx=2)
-        ctk.CTkButton(titles_btns, text="Del", width=80, fg_color="red", command=delete_title_action).pack(side="left", padx=2)
+        danger_button(titles_btns, "Del", delete_title_action, width=80).pack(side="left", padx=2)
 
         def load_titles():
             titles_tree.delete(*titles_tree.get_children())
@@ -232,7 +233,7 @@ class ClubMembersMixin:
             except Exception as e:
                 self._show_error(str(e))
 
-        ctk.CTkButton(deslig_frame, text="Desligar Membro", fg_color="red", command=do_deactivate).pack(pady=20)
+        danger_button(deslig_frame, "Desligar Membro", do_deactivate).pack(pady=20)
 
         def load_deslig(member: dict[str, Any]):
             deslig_date.delete(0, "end")

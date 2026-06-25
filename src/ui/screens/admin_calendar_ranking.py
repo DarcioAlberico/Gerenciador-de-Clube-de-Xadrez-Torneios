@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from ..support import *
+from ..components import danger_button
 
 
 # Sub-mixin de Admin: calendario, ranking interno e comunicacoes.
@@ -746,7 +747,7 @@ class CalendarRankingMixin:
         btn_frame = ctk.CTkFrame(left_panel, fg_color="transparent")
         btn_frame.grid(row=2, column=0, padx=16, pady=(0, 16), sticky="ew")
         ctk.CTkButton(btn_frame, text="Novo Aviso", command=add_announcement).pack(side="left", padx=(0, 10))
-        ctk.CTkButton(btn_frame, text="Excluir Aviso", command=del_announcement, fg_color=THEME_DANGER, hover_color=THEME_DANGER_HOVER).pack(side="left")
+        danger_button(btn_frame, "Excluir Aviso", del_announcement).pack(side="left")
 
         # Painel Direito: Envio de Mensagens e Logs
         right_panel = self._make_panel(body)

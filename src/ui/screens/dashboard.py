@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from typing import Any
 
+from ..components import EmptyState
 from ..support import (
     AppError,
     SIZE_BODY,
@@ -125,9 +126,13 @@ class DashboardPagesMixin:
         ).pack(pady=(10, 5), padx=10, anchor="w")
         announcements = dashboard.get("active_announcements", [])
         if not announcements:
-            ctk.CTkLabel(
-                parent, text="Nenhum aviso ativo no momento.", text_color=THEME_TEXT_SUB
-            ).pack(pady=10, padx=10, anchor="w")
+            EmptyState(
+                parent,
+                title="Sem avisos ativos",
+                description="Os comunicados do clube aparecerao aqui.",
+                cta_text="Ir para Comunicacao",
+                cta_command=self.show_communication,
+            ).pack(fill="both", expand=True, padx=10, pady=10)
             return
 
         for a in announcements[:3]:
@@ -153,9 +158,13 @@ class DashboardPagesMixin:
         ).pack(pady=(10, 5), padx=10, anchor="w")
         events = dashboard.get("upcoming_events", [])
         if not events:
-            ctk.CTkLabel(
-                parent, text="Nenhum evento agendado.", text_color=THEME_TEXT_SUB
-            ).pack(pady=10, padx=10, anchor="w")
+            EmptyState(
+                parent,
+                title="Nenhum evento agendado",
+                description="Agende eventos no calendario para ve-los aqui.",
+                cta_text="Ir para Calendario",
+                cta_command=self.show_calendar,
+            ).pack(fill="both", expand=True, padx=10, pady=10)
             return
 
         for e in events:

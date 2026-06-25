@@ -1,9 +1,16 @@
 from __future__ import annotations
 
 from ..support import *
+from ..components import Tooltip, danger_button
 
 
 class PairingResultsMixin:
+    def _tip_btn(self, parent, text, command, tip, **kwargs):
+        """CTkButton com Tooltip explicativo; retorna o botao para encadear .grid()."""
+        btn = ctk.CTkButton(parent, text=text, command=command, **kwargs)
+        Tooltip(btn, tip)
+        return btn
+
     def show_pairings(self) -> None:
         if not self._require_tournament():
             return
@@ -88,7 +95,7 @@ class PairingResultsMixin:
                 padx=4,
                 sticky="ew",
             )
-            ctk.CTkButton(round_actions, text="Excluir rodada", command=self._delete_current_round).grid(
+            danger_button(round_actions, "Excluir rodada", self._delete_current_round).grid(
                 row=0,
                 column=3,
                 padx=4,
@@ -106,42 +113,42 @@ class PairingResultsMixin:
                 padx=(4, 0),
                 sticky="ew",
             )
-            ctk.CTkButton(round_actions, text="QR mesa", command=self._show_selected_pairing_qr_link).grid(
+            self._tip_btn(round_actions, "QR mesa", self._show_selected_pairing_qr_link, "Gera um QR/link para a mesa selecionada lancar o resultado pelo celular.").grid(
                 row=1,
                 column=0,
                 padx=(0, 4),
                 pady=(8, 0),
                 sticky="ew",
             )
-            ctk.CTkButton(round_actions, text="Submissoes QR", command=self._open_qr_submissions_queue).grid(
+            self._tip_btn(round_actions, "Submissoes QR", self._open_qr_submissions_queue, "Revisa e aprova os resultados enviados pelos jogadores via QR.").grid(
                 row=1,
                 column=1,
                 padx=4,
                 pady=(8, 0),
                 sticky="ew",
             )
-            ctk.CTkButton(round_actions, text="Servidor QR", command=self._start_qr_result_server).grid(
+            self._tip_btn(round_actions, "Servidor QR", self._start_qr_result_server, "Inicia o servidor local que recebe os resultados enviados por QR.").grid(
                 row=1,
                 column=2,
                 padx=4,
                 pady=(8, 0),
                 sticky="ew",
             )
-            ctk.CTkButton(round_actions, text="Exportar sumulas", command=self._export_current_round_scoresheets).grid(
+            self._tip_btn(round_actions, "Exportar sumulas", self._export_current_round_scoresheets, "Exporta as sumulas (folhas de resultado) da rodada em PDF.").grid(
                 row=1,
                 column=3,
                 padx=4,
                 pady=(8, 0),
                 sticky="ew",
             )
-            ctk.CTkButton(round_actions, text="Imprimir sumulas", command=self._print_current_round_scoresheets).grid(
+            self._tip_btn(round_actions, "Imprimir sumulas", self._print_current_round_scoresheets, "Envia as sumulas da rodada direto para a impressora.").grid(
                 row=1,
                 column=4,
                 padx=4,
                 pady=(8, 0),
                 sticky="ew",
             )
-            ctk.CTkButton(round_actions, text="Exportar cartoes", command=self._export_table_cards).grid(
+            self._tip_btn(round_actions, "Exportar cartoes", self._export_table_cards, "Exporta os cartoes de mesa (emparceiramento) da rodada.").grid(
                 row=1,
                 column=5,
                 padx=(4, 0),

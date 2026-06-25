@@ -82,7 +82,7 @@ class TiebreakSequenceEditor(ctk.CTkFrame):
             down = ctk.CTkButton(row, text="↓", width=34, command=lambda i=index: self._move(i, 1))
             down.grid(row=0, column=2, padx=2)
             remove = ctk.CTkButton(
-                row, text="✕", width=34, fg_color="#a3423c", hover_color="#822f2a",
+                row, text="✕", width=34, fg_color=THEME_DANGER, hover_color=THEME_DANGER_HOVER,
                 command=lambda i=index: self._remove(i),
             )
             remove.grid(row=0, column=3, padx=2)
@@ -203,7 +203,7 @@ class PrizeEditor(ctk.CTkFrame):
             amount.insert(0, data["amount"])
             amount.grid(row=0, column=5, padx=2)
             ctk.CTkButton(
-                row, text="✕", width=36, fg_color="#a3423c", hover_color="#822f2a",
+                row, text="✕", width=36, fg_color=THEME_DANGER, hover_color=THEME_DANGER_HOVER,
                 command=lambda i=index: self._remove(i),
             ).grid(row=0, column=6, padx=2)
             self._widgets.append(
@@ -311,7 +311,7 @@ class ColumnLayoutEditor(ctk.CTkFrame):
             down = ctk.CTkButton(row, text="↓", width=34, command=lambda i=index: self._move(i, 1))
             down.grid(row=0, column=3, padx=2)
             remove = ctk.CTkButton(
-                row, text="✕", width=34, fg_color="#a3423c", hover_color="#822f2a",
+                row, text="✕", width=34, fg_color=THEME_DANGER, hover_color=THEME_DANGER_HOVER,
                 command=lambda i=index: self._remove(i),
             )
             remove.grid(row=0, column=4, padx=2)
