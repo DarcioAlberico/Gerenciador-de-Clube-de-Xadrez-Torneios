@@ -361,8 +361,11 @@ class AlbericusApp(
         # 2. Treinamento
         training_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Treinamento", menu=training_menu)
-        training_menu.add_command(label="Aulas", command=self.show_training, image=get_ico("aulas"), compound="left")
-        training_menu.add_command(label="Exercícios", command=self.show_exercises, image=get_ico("biblioteca"), compound="left")
+        # Aulas e Exercícios temporariamente DESATIVADOS (não excluídos):
+        # itens visíveis porém acinzentados/não-clicáveis. Para reativar,
+        # remover state="disabled". Métodos/telas permanecem intactos.
+        training_menu.add_command(label="Aulas", command=self.show_training, image=get_ico("aulas"), compound="left", state="disabled")
+        training_menu.add_command(label="Exercícios", command=self.show_exercises, image=get_ico("biblioteca"), compound="left", state="disabled")
         training_menu.add_separator()
         training_menu.add_command(label="Torneio | Livre", command=self.show_free_tournament_mode, image=get_ico("torneios"), compound="left")
 
@@ -497,8 +500,10 @@ class AlbericusApp(
             ("Níveis de Aprendizagem", self.show_learning_levels, "niveis turmas", "aulas"),
             ("Responsáveis", self.show_guardians, "guardian pais", "membros"),
             # Treinamento
-            ("Aulas", self.show_training, "treinamento aula classe", "aulas"),
-            ("Exercícios", self.show_exercises, "treino problemas", "biblioteca"),
+            # Aulas e Exercícios DESATIVADOS (não excluídos): fora da paleta
+            # para não ficarem acessíveis pela busca. Para reativar, descomentar.
+            # ("Aulas", self.show_training, "treinamento aula classe", "aulas"),
+            # ("Exercícios", self.show_exercises, "treino problemas", "biblioteca"),
             ("Torneio | Livre", self.show_free_tournament_mode, "modo livre escolar casual amistoso bagunca", "torneios"),
             # Gestão
             ("Árbitros", self.show_referees, "arbitros juiz", "arbitros"),
