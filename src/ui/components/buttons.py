@@ -17,26 +17,38 @@ from typing import Any, Callable
 import customtkinter as ctk
 
 from ..support import THEME_DANGER, THEME_DANGER_HOVER, THEME_TEXT_MAIN
+from .tooltip import Tooltip
 
 _DEFAULT_HEIGHT = 36
+
+
+def _with_tip(button: ctk.CTkButton, tip: str | None) -> ctk.CTkButton:
+    """Anexa um ``Tooltip`` ao botão quando ``tip`` é informado e o devolve."""
+    if tip:
+        Tooltip(button, tip)
+    return button
 
 
 def primary_button(
     master: Any,
     text: str,
     command: Callable[[], None] | None = None,
+    *,
+    tip: str | None = None,
     **kwargs: Any,
 ) -> ctk.CTkButton:
     """Ação principal. Usa a cor de destaque do tema (fg_color padrão do CTkButton,
     já alinhado ao accent via ``apply_accent_preset``)."""
     kwargs.setdefault("height", _DEFAULT_HEIGHT)
-    return ctk.CTkButton(master, text=text, command=command, **kwargs)
+    return _with_tip(ctk.CTkButton(master, text=text, command=command, **kwargs), tip)
 
 
 def secondary_button(
     master: Any,
     text: str,
     command: Callable[[], None] | None = None,
+    *,
+    tip: str | None = None,
     **kwargs: Any,
 ) -> ctk.CTkButton:
     """Ação de apoio: contorno discreto, fundo transparente, texto na cor principal."""
@@ -44,13 +56,15 @@ def secondary_button(
     kwargs.setdefault("fg_color", "transparent")
     kwargs.setdefault("border_width", 1)
     kwargs.setdefault("text_color", THEME_TEXT_MAIN)
-    return ctk.CTkButton(master, text=text, command=command, **kwargs)
+    return _with_tip(ctk.CTkButton(master, text=text, command=command, **kwargs), tip)
 
 
 def danger_button(
     master: Any,
     text: str,
     command: Callable[[], None] | None = None,
+    *,
+    tip: str | None = None,
     **kwargs: Any,
 ) -> ctk.CTkButton:
     """Ação destrutiva (excluir/restaurar): cor de perigo do tema. Posicione-a
@@ -58,4 +72,4 @@ def danger_button(
     kwargs.setdefault("height", _DEFAULT_HEIGHT)
     kwargs.setdefault("fg_color", THEME_DANGER)
     kwargs.setdefault("hover_color", THEME_DANGER_HOVER)
-    return ctk.CTkButton(master, text=text, command=command, **kwargs)
+    return _with_tip(ctk.CTkButton(master, text=text, command=command, **kwargs), tip)

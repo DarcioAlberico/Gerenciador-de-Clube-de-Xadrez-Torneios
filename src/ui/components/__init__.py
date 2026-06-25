@@ -9,12 +9,14 @@ from __future__ import annotations
 from .buttons import danger_button, primary_button, secondary_button
 from .donation import show_donation_modal
 from .empty_state import EmptyState
+from .menu_button import menu_button
 from .tooltip import Tooltip
 
 __all__ = [
     "primary_button",
     "secondary_button",
     "danger_button",
+    "menu_button",
     "Tooltip",
     "EmptyState",
     "show_donation_modal",

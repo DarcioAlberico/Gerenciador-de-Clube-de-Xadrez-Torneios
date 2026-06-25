@@ -657,7 +657,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.app._on_pairing_select()
         self.app.result_option.set("0-1")
         self._click_button("Salvar resultado")
-        self._click_button("Fechar rodada")
+        self._invoke_menu_item("Fechar rodada")
         self.app.update()
 
         updated_match = self.db.list_team_matches_for_round(self.app.current_round_id)[0]
@@ -697,7 +697,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.app._on_pairing_select()
         self.app.result_option.set("1-0")
         self._click_button("Salvar resultado")
-        self._click_button("Fechar rodada")
+        self._invoke_menu_item("Fechar rodada")
         self.app.update()
 
         rounds = self.db.list_rounds(self.tournament_id)
@@ -1114,7 +1114,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.app.show_pairings()
         self.app.update()
         with mock.patch("src.ui.screens.pairings.filedialog.asksaveasfilename", return_value=str(output_path)):
-            self._click_button("Exportar sumulas")
+            self._invoke_menu_item("Exportar sumulas")
 
         self.assertEqual(output_path.read_bytes()[:4], b"%PDF")
         self.assertIn("Sumulas exportadas", self.messages[-1])
@@ -1128,7 +1128,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.app.show_pairings()
         self.app.update()
         with mock.patch("src.ui.screens.pairings.filedialog.asksaveasfilename", return_value=str(output_path)):
-            self._click_button("Exportar rodada")
+            self._invoke_menu_item("Exportar rodada")
 
         from pypdf import PdfReader
 
@@ -1150,7 +1150,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
             mock.patch("src.ui.screens.pairings.messagebox.askyesno", return_value=False),
             mock.patch("src.ui.screens.pairings.filedialog.asksaveasfilename", return_value=str(output_path)),
         ):
-            self._click_button("Exportar cartoes")
+            self._invoke_menu_item("Exportar cartoes de mesa")
 
         from pypdf import PdfReader
 
@@ -1407,6 +1407,16 @@ class UiLayoutSmokeTest(unittest.TestCase):
                 widget.invoke()
                 return
         self.fail(f"Botao {text!r} nao encontrado")
+
+    def _invoke_menu_item(self, label: str) -> None:
+        """Aciona um item recolhido em um menu_button (ex.: 'Exportar'/'Mais') pelo
+        rotulo, invocando o mesmo comando que o tk.Menu dispararia no clique."""
+        for widget in reversed(list(self._walk(self.app.content))):
+            for item in getattr(widget, "_menu_items", None) or ():
+                if item and item[0] == label and item[1] is not None:
+                    item[1]()
+                    return
+        self.fail(f"Item de menu {label!r} nao encontrado")
 
     def _first_tree(self) -> ttk.Treeview:
         for widget in self._walk(self.app.content):

@@ -1,15 +1,124 @@
 from __future__ import annotations
 
 from ..support import *
-from ..components import Tooltip, danger_button
+from ..components import Tooltip, danger_button, menu_button, primary_button, secondary_button
 
 
 class PairingResultsMixin:
-    def _tip_btn(self, parent, text, command, tip, **kwargs):
-        """CTkButton com Tooltip explicativo; retorna o botao para encadear .grid()."""
-        btn = ctk.CTkButton(parent, text=text, command=command, **kwargs)
-        Tooltip(btn, tip)
-        return btn
+    def _round_export_menu_items(self):
+        """Itens do menu 'Exportar' da rodada (exportacao/impressao)."""
+        return [
+            ("Exportar rodada", self._export_current_round_pairings),
+            ("Imprimir rodada", self._print_current_round_pairings),
+            None,
+            ("Exportar sumulas", self._export_current_round_scoresheets),
+            ("Imprimir sumulas", self._print_current_round_scoresheets),
+            None,
+            ("Exportar cartoes de mesa", self._export_table_cards),
+        ]
+
+    def _round_more_menu_items(self):
+        """Itens do menu 'Mais' da rodada (pre-visualizacao, ajustes de mesa e QR)."""
+        items = [
+            ("Pre-visualizar proxima rodada", self._preview_next_round),
+            ("Fechar rodada", self._close_current_round),
+            None,
+            ("Trocar cores da mesa", self._swap_selected_colors),
+            ("Trocar jogador da mesa", self._open_player_swap_dialog),
+            None,
+            ("QR da mesa selecionada", self._show_selected_pairing_qr_link),
+            ("Submissoes via QR", self._open_qr_submissions_queue),
+            ("Servidor de resultados QR", self._start_qr_result_server),
+        ]
+        if self._is_free_mode():
+            items += [None, ("Re-emparceirar (Modo Livre)", self.free_mode_repair_round)]
+        return items
+
+    def _build_round_toolbar(self, toolbar) -> None:
+        """Barra de acoes hierarquica da tela de Rodadas (P1-1 / F2.1): primarias
+        preenchidas, secundarias recolhidas em 'Exportar'/'Mais' e destrutiva isolada."""
+        # Linha 1 - acao principal + menus de secundarias + destrutiva isolada a direita.
+        actions = ctk.CTkFrame(toolbar, fg_color="transparent")
+        actions.grid(row=0, column=0, padx=SPACE_MD, pady=(SPACE_MD, SPACE_SM), sticky="ew")
+        actions.grid_columnconfigure(3, weight=1)  # espaco flexivel isola a acao destrutiva
+        primary_button(
+            actions,
+            "Gerar proxima rodada",
+            self._generate_round,
+            tip="Emparceira a proxima rodada a partir dos resultados ja lancados.",
+        ).grid(row=0, column=0, padx=(0, SPACE_SM))
+        menu_button(
+            actions,
+            "Exportar",
+            self._round_export_menu_items(),
+            tip="Exportar/imprimir a rodada, as sumulas e os cartoes de mesa.",
+        ).grid(row=0, column=1, padx=(0, SPACE_SM))
+        menu_button(
+            actions,
+            "Mais",
+            self._round_more_menu_items(),
+            tip="Pre-visualizar, fechar rodada, ajustes de mesa e ferramentas de QR.",
+        ).grid(row=0, column=2, padx=(0, SPACE_SM))
+        danger_button(
+            actions,
+            "Excluir rodada",
+            self._delete_current_round,
+            tip="Apaga a rodada selecionada e todos os resultados lancados nela.",
+        ).grid(row=0, column=4, sticky="e")
+
+        # Linha 2 - lancamento de resultados (fluxo mais frequente do dia a dia).
+        entry = ctk.CTkFrame(toolbar, fg_color="transparent")
+        entry.grid(row=1, column=0, padx=SPACE_MD, pady=(0, SPACE_SM), sticky="ew")
+        entry.grid_columnconfigure(4, weight=1)
+        self.round_option = ctk.CTkOptionMenu(
+            entry,
+            values=["Sem rodadas"],
+            command=lambda _value: self._load_selected_round_pairings(),
+            width=190,
+        )
+        self.round_option.grid(row=0, column=0, padx=(0, SPACE_SM))
+        Tooltip(self.round_option, "Escolhe qual rodada visualizar/editar.")
+        self.result_option = ctk.CTkOptionMenu(entry, values=RESULTS, width=130)
+        self.result_option.grid(row=0, column=1, padx=(0, SPACE_SM))
+        Tooltip(self.result_option, "Resultado a aplicar na mesa selecionada ao salvar.")
+        primary_button(
+            entry,
+            "Salvar resultado",
+            self._save_selected_result,
+            tip="Grava o resultado escolhido na mesa selecionada.",
+        ).grid(row=0, column=2, padx=(0, SPACE_MD))
+        quick_results = ctk.CTkFrame(entry, fg_color="transparent")
+        quick_results.grid(row=0, column=3, sticky="w")
+        quick_tips = {
+            "1-0": "Lanca vitoria das brancas na mesa selecionada.",
+            "1/2-1/2": "Lanca empate na mesa selecionada.",
+            "0-1": "Lanca vitoria das pretas na mesa selecionada.",
+            "": "Limpa o resultado lancado na mesa selecionada.",
+        }
+        for label, result in [("1-0", "1-0"), ("1/2", "1/2-1/2"), ("0-1", "0-1"), ("Limpar", "")]:
+            quick = ctk.CTkButton(
+                quick_results,
+                text=label,
+                width=64,
+                command=lambda value=result: self._quick_save_result(value),
+            )
+            quick.pack(side="left", padx=(0, SPACE_XS))
+            Tooltip(quick, quick_tips[result])
+
+        # Linha 3 - modo apresentacao (destaque proprio, cor ambar dedicada).
+        projector = ctk.CTkButton(
+            toolbar,
+            text="  📽  Modo Projetor",
+            command=self._open_projector_mode,
+            fg_color=("#B45309", "#F59E0B"),
+            hover_color=("#92400E", "#D97706"),
+            text_color=("#FFFFFF", "#000000"),
+            font=ctk.CTkFont(family="Segoe UI", size=15, weight="bold"),
+            height=44,
+            corner_radius=8,
+        )
+        projector.grid(row=2, column=0, padx=SPACE_MD, pady=(0, SPACE_MD), sticky="ew")
+        Tooltip(projector, "Abre a rodada atual em tela cheia para projecao na sala.")
 
     def show_pairings(self) -> None:
         if not self._require_tournament():
@@ -32,159 +141,26 @@ class PairingResultsMixin:
 
         toolbar = self._make_panel(body)
         toolbar.grid(row=0, column=0, sticky="ew", pady=(0, 12))
-        toolbar.grid_columnconfigure(1, weight=1)
+        toolbar.grid_columnconfigure(0, weight=1)
 
-        ctk.CTkButton(toolbar, text="Gerar proxima rodada", command=self._generate_round).grid(
-            row=0,
-            column=0,
-            padx=12,
-            pady=12,
-        )
-        ctk.CTkButton(toolbar, text="Pre-visualizar rodada", command=self._preview_next_round).grid(
-            row=0,
-            column=1,
-            padx=(0, 8),
-            pady=12,
-        )
-
-        if not show_initial_call:
-            self.round_option = ctk.CTkOptionMenu(
-                toolbar,
-                values=["Sem rodadas"],
-                command=lambda _value: self._load_selected_round_pairings(),
-                width=190,
-            )
-            self.round_option.grid(row=0, column=2, padx=8, pady=12, sticky="w")
-
-            self.result_option = ctk.CTkOptionMenu(toolbar, values=RESULTS, width=130)
-            self.result_option.grid(row=0, column=3, padx=8, pady=12)
-            ctk.CTkButton(toolbar, text="Salvar resultado", command=self._save_selected_result).grid(
-                row=0,
-                column=4,
-                padx=8,
-                pady=12,
-            )
-            quick_results = ctk.CTkFrame(toolbar, fg_color="transparent")
-            quick_results.grid(row=0, column=5, padx=(4, 12), pady=12, sticky="e")
-            for label, result in [("1-0", "1-0"), ("1/2", "1/2-1/2"), ("0-1", "0-1"), ("Limpar", "")]:
-                ctk.CTkButton(
-                    quick_results,
-                    text=label,
-                    width=64,
-                    command=lambda value=result: self._quick_save_result(value),
-                ).pack(side="left", padx=(0, 6))
-            round_actions = ctk.CTkFrame(toolbar, fg_color="transparent")
-            round_actions.grid(row=1, column=0, columnspan=6, padx=12, pady=(0, 12), sticky="ew")
-            for column in range(6):
-                round_actions.grid_columnconfigure(column, weight=1)
-            ctk.CTkButton(round_actions, text="Trocar cores", command=self._swap_selected_colors).grid(
-                row=0,
-                column=0,
-                padx=(0, 4),
-                sticky="ew",
-            )
-            ctk.CTkButton(round_actions, text="Trocar jogador", command=self._open_player_swap_dialog).grid(
-                row=0,
-                column=1,
-                padx=4,
-                sticky="ew",
-            )
-            ctk.CTkButton(round_actions, text="Fechar rodada", command=self._close_current_round).grid(
-                row=0,
-                column=2,
-                padx=4,
-                sticky="ew",
-            )
-            danger_button(round_actions, "Excluir rodada", self._delete_current_round).grid(
-                row=0,
-                column=3,
-                padx=4,
-                sticky="ew",
-            )
-            ctk.CTkButton(round_actions, text="Exportar rodada", command=self._export_current_round_pairings).grid(
-                row=0,
-                column=4,
-                padx=4,
-                sticky="ew",
-            )
-            ctk.CTkButton(round_actions, text="Imprimir rodada", command=self._print_current_round_pairings).grid(
-                row=0,
-                column=5,
-                padx=(4, 0),
-                sticky="ew",
-            )
-            self._tip_btn(round_actions, "QR mesa", self._show_selected_pairing_qr_link, "Gera um QR/link para a mesa selecionada lancar o resultado pelo celular.").grid(
-                row=1,
-                column=0,
-                padx=(0, 4),
-                pady=(8, 0),
-                sticky="ew",
-            )
-            self._tip_btn(round_actions, "Submissoes QR", self._open_qr_submissions_queue, "Revisa e aprova os resultados enviados pelos jogadores via QR.").grid(
-                row=1,
-                column=1,
-                padx=4,
-                pady=(8, 0),
-                sticky="ew",
-            )
-            self._tip_btn(round_actions, "Servidor QR", self._start_qr_result_server, "Inicia o servidor local que recebe os resultados enviados por QR.").grid(
-                row=1,
-                column=2,
-                padx=4,
-                pady=(8, 0),
-                sticky="ew",
-            )
-            self._tip_btn(round_actions, "Exportar sumulas", self._export_current_round_scoresheets, "Exporta as sumulas (folhas de resultado) da rodada em PDF.").grid(
-                row=1,
-                column=3,
-                padx=4,
-                pady=(8, 0),
-                sticky="ew",
-            )
-            self._tip_btn(round_actions, "Imprimir sumulas", self._print_current_round_scoresheets, "Envia as sumulas da rodada direto para a impressora.").grid(
-                row=1,
-                column=4,
-                padx=4,
-                pady=(8, 0),
-                sticky="ew",
-            )
-            self._tip_btn(round_actions, "Exportar cartoes", self._export_table_cards, "Exporta os cartoes de mesa (emparceiramento) da rodada.").grid(
-                row=1,
-                column=5,
-                padx=(4, 0),
-                pady=(8, 0),
-                sticky="ew",
-            )
-            ctk.CTkButton(
-                round_actions,
-                text="  📽  Modo Projetor",
-                command=self._open_projector_mode,
-                fg_color=("#B45309", "#F59E0B"),
-                hover_color=("#92400E", "#D97706"),
-                text_color=("#FFFFFF", "#000000"),
-                font=ctk.CTkFont(family="Segoe UI", size=15, weight="bold"),
-                height=44,
-                corner_radius=8,
-            ).grid(
-                row=2,
-                column=0,
-                columnspan=6,
-                padx=0,
-                pady=(10, 0),
-                sticky="ew",
-            )
-
-            # Modo Livre: re-emparceirar (limpar + regerar) a rodada atual.
-            # So aparece no perfil Livre/Escolar; nao afeta torneios oficiais.
-            if self._is_free_mode():
-                ctk.CTkButton(
-                    round_actions,
-                    text="Re-emparceirar (Modo Livre)",
-                    command=self.free_mode_repair_round,
-                    fg_color=THEME_ACCENT,
-                    height=36,
-                    corner_radius=8,
-                ).grid(row=3, column=0, columnspan=6, padx=0, pady=(8, 0), sticky="ew")
+        if show_initial_call:
+            # Antes da 1a rodada nao ha rodada para editar/exportar: so gerar e pre-visualizar.
+            launch = ctk.CTkFrame(toolbar, fg_color="transparent")
+            launch.grid(row=0, column=0, padx=SPACE_MD, pady=SPACE_MD, sticky="w")
+            primary_button(
+                launch,
+                "Gerar proxima rodada",
+                self._generate_round,
+                tip="Emparceira a primeira rodada com os jogadores presentes na chamada inicial.",
+            ).pack(side="left", padx=(0, SPACE_SM))
+            secondary_button(
+                launch,
+                "Pre-visualizar rodada",
+                self._preview_next_round,
+                tip="Mostra como ficaria o emparceiramento da primeira rodada sem grava-lo.",
+            ).pack(side="left")
+        else:
+            self._build_round_toolbar(toolbar)
 
         if show_initial_call:
             roster_panel = self._make_panel(body)

@@ -113,10 +113,19 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 ### Fase 2 — UX e feedback (salto de percepção) · ~7 dias
 
 > O que mais muda a sensação de "profissional" no uso diário. Boa parte independe da Fase 1.
+>
+> **Status (2026-06-25): F2.1 CONCLUÍDA.** Toolbar de Rodadas hierarquizada — 1
+> ação primária preenchida (`Gerar próxima rodada`), `Exportar ▾`/`Mais ▾`
+> recolhem as 11 secundárias (exportar/imprimir/súmulas/cartões e
+> pré-visualizar/fechar/trocar cores·jogador/QR), `Excluir rodada` isolado à
+> direita e `Modo Projetor` com destaque próprio; tooltips em todas as ações
+> visíveis. Aceite atendido (≤6 ações visíveis; destrutivo separado). Novo
+> componente reutilizável [`menu_button`](src/ui/components/menu_button.py) +
+> `tip=` nas factories de botão. Restam F2.2–F2.5.
 
 | ID | Tarefa | Esforço | Impacto | Risco | Depende | Aceite |
 |----|--------|---------|---------|-------|---------|--------|
-| F2.1 | Hierarquizar a toolbar de Rodadas: primárias/`Exportar▾`/`Mais▾`/danger isolado (P1-1) | 2d | A | B | F0.2 | ≤6 ações visíveis; destrutivo separado |
+| ✅ F2.1 | Hierarquizar a toolbar de Rodadas: primárias/`Exportar▾`/`Mais▾`/danger isolado (P1-1) | 2d | A | B | F0.2 | ≤6 ações visíveis; destrutivo separado |
 | F2.2 | Confirmação CTk + toast de erro; remover `messagebox` (P1-4); unificar `_show_error` | 1,5d | A | B | F0.2 | Zero `messagebox` em telas migradas |
 | F2.3 | Progresso em ações longas + migrar 4 threads crus p/ `_run_background` (P1-3, P1-5) | 2d | A | M | — | Botão desabilita + spinner; erro vira toast |
 | F2.4 | Undo em exclusões via toast com ação (P1-6) | 1,5d | A | M | F2.2 | "Excluído · Desfazer" onde aplicável |
