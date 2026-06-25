@@ -31,3 +31,5 @@ tests/gacrux_crash_*.out.json
 tests/gacrux_pair_*.trf
 tests/gacrux_pair_*.out.json
 tests/stress_failures.jsonl
+tests/bench_*.log
+tests/*pyspy*.txt
