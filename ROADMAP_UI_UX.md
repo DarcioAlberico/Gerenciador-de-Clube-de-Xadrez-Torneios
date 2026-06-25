@@ -68,16 +68,30 @@ Cada tarefa: **esforço** · **impacto** · **risco** · **depende de** · **ace
 
 ### Fase 0 — Fundação de tokens e componentes (baixo risco) · ~5 dias
 
-> Cria a base reutilizável **sem** tocar na arquitetura. Pode começar hoje, em paralelo
-> a tudo. Destrava as fases seguintes e já melhora consistência.
+> **Status (2026-06-25): fundação CONCLUÍDA e validada** — app sobe sem crash, imports
+> OK. A _criação_ dos componentes/tokens está pronta; a _adoção ampla_ nas telas
+> (tooltip em todas as ações, danger nos formulários, empty states nas listagens) segue
+> como trabalho contínuo, entrelaçado com as Fases 2–3.
 
-| ID | Tarefa | Esforço | Impacto | Risco | Aceite |
-|----|--------|---------|---------|-------|--------|
-| F0.1 | Tokens `SPACE_*` + aplicar nas telas de maior uso (P2-4) | 1,5d | M | B | Nenhum `pady=(n,m)` mágico nas telas migradas |
-| F0.2 | _Factories_ de botão: `primary/secondary/danger_button` (P2-5) | 1d | A | B | Danger isolado e colorido por token em formulários |
-| F0.3 | Componente `Tooltip` próprio + adotar nos botões críticos (P1-2) | 1,5d | A | B | Tooltip em 100% das ações de Rodadas/Arbitragem |
-| F0.4 | `EmptyState(icon, título, desc, cta)` (P1-9) | 1d | M | B | 3 telas de lista usando EmptyState com CTA |
-| F0.5 | Remover temas JSON órfãos (P2-7) + modal de doação p/ módulo (P2-10) | 0,5d | B | B | `assets/themes/` limpo; `donation.py` separado |
+| ID | Tarefa | Status | Entregue |
+|----|--------|--------|----------|
+| F0.1 | Tokens `SPACE_*` na camada de tema (P2-4) | ✅ Criado | `SPACE_XS..XL` em [support.py](src/ui/support.py) |
+| F0.2 | _Factories_ `primary/secondary/danger_button` (P2-5) | ✅ Criado · adoção ⏳ | [components/buttons.py](src/ui/components/buttons.py) |
+| F0.3 | Componente `Tooltip` próprio (P1-2) | ✅ Criado · adoção ⏳ | [components/tooltip.py](src/ui/components/tooltip.py) |
+| F0.4 | `EmptyState` + CTA (P1-9) | ✅ Criado · 1 adoção | [components/empty_state.py](src/ui/components/empty_state.py); piloto em `_require_tournament` |
+| F0.5 | Remover temas órfãos + extrair modal (P2-7, P2-10) | ✅ Feito | 4 JSON removidos; [components/donation.py](src/ui/components/donation.py) |
+
+**Adoção concluída (2026-06-25):**
+- `danger_button` em **9 ações destrutivas / 6 telas** (tournaments, admin_calendar,
+  admin_training, settings_users, club_members, pairing_results "Excluir rodada") —
+  **eliminou todos os literais de cor** `#a3423c`/`#822f2a`/`"red"` (P2-3 e P2-1 parcial:
+  0 ocorrências restantes em `src/ui`). Confirmado visualmente: "Excluir rodada" destacado.
+- `Tooltip` (helper `_tip_btn`) nos botões crípticos da toolbar de Rodadas (QR, súmulas,
+  cartões). Cobertura total dos tooltips da toolbar converge com **F2.1**.
+- `EmptyState` (com CTA navegável) no Dashboard (avisos/eventos) e em `_require_tournament`
+  (~8 telas de torneio). Bônus: `text_color` do erro de login tokenizado (`THEME_DANGER`).
+
+A camada `src/ui/components/` é a fundação para as telas migradas.
 
 ### Fase 1 — Refatoração estrutural (incremental) · ~10–12 dias
 
