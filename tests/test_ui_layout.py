@@ -1398,6 +1398,55 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.assertEqual("viagem", restaurados[0]["reason"], "o motivo tem de voltar junto")
         self.assertEqual(1, restaurados[0]["round_number"])
 
+    def test_home_lista_pendencias_do_torneio_com_deep_link(self) -> None:
+        self.db.create_player(self.tournament_id, name="Ana", rating=1900)
+        self.db.create_player(self.tournament_id, name="Bruno", rating=1800)
+        self.app.pairing_service.generate_next_round(self.tournament_id)
+
+        self.app.show_home()
+        self.app.update()
+        rotulos = [
+            str(w.cget("text"))
+            for w in self._walk(self.app.content)
+            if isinstance(w, ctk.CTkLabel)
+        ]
+        self.assertTrue(
+            any("resultado" in texto and "lancar" in texto for texto in rotulos),
+            f"esperava pendencia de resultado; veio {rotulos}",
+        )
+
+        # o botao da pendencia leva para a tela onde ela se resolve
+        self._click_button("Lancar")
+        self.app.update()
+        self.assertEqual("show_pairings", self.app.navigator.current)
+
+    def test_home_sem_pendencia_mostra_tudo_em_dia(self) -> None:
+        self.app.current_tournament_id = None
+        self.app._home_snapshot = lambda: __import__(
+            "src.ui.home", fromlist=["HomeSnapshot"]
+        ).HomeSnapshot(has_tournament=True, rounds_count=1, generated_rounds=1, closed_rounds=0)
+        self.app.show_home()
+        self.app.update()
+        rotulos = [
+            str(w.cget("text"))
+            for w in self._walk(self.app.content)
+            if isinstance(w, ctk.CTkLabel)
+        ]
+        self.assertTrue(any("Tudo em dia" in texto for texto in rotulos), rotulos)
+
+    def test_home_e_a_tela_de_entrada_registrada(self) -> None:
+        """A entrada pos-login deixou de ser o cadastro do clube (P1-8)."""
+        import inspect as _inspect
+
+        from src.ui.navigation import find
+
+        destino = find("home")
+        self.assertIsNotNone(destino)
+        self.assertEqual("show_home", destino.method)
+        codigo = _inspect.getsource(type(self.app)._build_login_screen)
+        self.assertIn("self.show_home()", codigo)
+        self.assertNotIn("self.show_club()", codigo)
+
     def test_kpi_card_clicavel_realca_no_hover(self) -> None:
         from src.ui.support import THEME_ACCENT, THEME_PANEL_BG
 

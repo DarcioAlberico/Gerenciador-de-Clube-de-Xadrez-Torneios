@@ -238,9 +238,24 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 > `hidden` abaixo disso, quando o menu volta a ser a navegação. Registrado como
 > **B-8**: a tela Exportar merece um layout mais estreito — hoje é ela que
 > define o limiar.
+>
+> **Status (2026-07-25): F3.2 CONCLUÍDA.** O app deixa de abrir no cadastro
+> "Perfil do Clube" e passa a abrir em **Início**, com as pendências acionáveis
+> do momento e um botão que leva direto onde cada uma se resolve (*deep link*
+> pelo registro da F1.3). As regras ficam em [`home.py`](src/ui/home.py), **puras
+> e sem Tk** — `HomeSnapshot` é dado simples e `build_pendencies` decide o quê e
+> em que ordem; a tela ([`screens/home.py`](src/ui/screens/home.py)) só lê o banco
+> e desenha. Cobertas: arbitragem bloqueante, QR aguardando aprovação, resultados
+> a lançar, torneio sem rodadas (mandando **inscrever** quando nem jogador há —
+> gerar rodada não destravaria), torneio concluído → diplomas, mensalidades em
+> atraso e próximo evento. Sem nada pendente, a tela diz "Tudo em dia" em vez de
+> ficar vazia. Cada leitura do estado é isolada: um serviço com problema vira
+> ausência daquele dado, não tela em branco. Um teste garante que **todo destino
+> de pendência existe no registro** — deep link quebrado seria pior que pendência
+> nenhuma.
 |----|--------|---------|---------|-------|---------|--------|
 | ✅ F3.1 | Sidebar persistente com grupos + item ativo (P1-7) | 4d | A | M | F1.3 | Navegação primária visual; menu vira fallback |
-| F3.2 | Dashboard contextual pós-login (pendências acionáveis) (P1-8) | 3d | A | M | F1.3 | Abre em pendências com deep-link |
+| ✅ F3.2 | Dashboard contextual pós-login (pendências acionáveis) (P1-8) | 3d | A | M | F1.3 | Abre em pendências com deep-link |
 | F3.3 | Tokenizar cores/fonts: 58 hex + 23 fonts + `#a3423c` (P2-1,2,3) + lint CI | 2d | M | B | F1.1 | CI barra novos literais em `screens/` |
 | ✅ F3.4 | Modo Livre "não mostrar de novo" (P1-11); Aulas/Exercícios → "(em breve)" (P1-12) | 0,5d | M | B | — | Sem fricção repetida; rótulo claro |
 | ✅ F3.5 | Corrigir acentuação das labels visíveis (P2-8) | 0,5d | M | B | — | "Configurações/Aparência/Segurança" |
