@@ -911,7 +911,7 @@ class TrainingFinanceMixin:
                     raise AppError("Selecione um plano para gerar mensalidades.")
                 reference_period = payment_entries["reference_period"].get().strip()
                 due_date = payment_entries["due_date"].get().strip()
-                if not messagebox.askyesno(
+                if not self._confirm_action(
                     "Gerar mensalidades",
                     "Gerar mensalidades para todos os socios/alunos ativos? "
                     "Lancamentos ja existentes na mesma referencia serao pulados.",

@@ -715,7 +715,7 @@ class AlbericusApp(
         palette = {
             "info":    (THEME_ACCENT,  ("#FFFFFF", "#0B0F19")),
             "success": (THEME_SUCCESS, ("#FFFFFF", "#FFFFFF")),
-            "warning": (("#F59E0B", "#FBBF24"), ("#0B0F19", "#0B0F19")),
+            "warning": (THEME_WARNING,  ("#0B0F19", "#0B0F19")),
             "error":   (THEME_DANGER,  ("#FFFFFF", "#FFFFFF")),
         }
         bg, fg = palette.get(kind, palette["info"])
@@ -1101,57 +1101,6 @@ class AlbericusApp(
             fallback = default_export_dir()
             fallback.mkdir(parents=True, exist_ok=True)
             return fallback
-
-    def _show_error(self, error: Exception) -> None:
-        error_id = datetime.now().strftime("%Y%m%d-%H%M%S")
-        title, message, is_unexpected = self._error_dialog(error, error_id)
-        if is_unexpected:
-            logger.error(
-                "Erro inesperado [%s]",
-                error_id,
-                exc_info=(type(error), error, error.__traceback__),
-            )
-        else:
-            logger.warning("%s: %s", title, error)
-        messagebox.showerror(title, message)
-
-    @staticmethod
-    def _error_dialog(
-        error: Exception,
-        error_id: str,
-    ) -> tuple[str, str, bool]:
-        if isinstance(error, AppError):
-            return "Erro", str(error), False
-        if isinstance(error, PermissionError):
-            return (
-                "Erro de permissao",
-                f"Sem permissao para acessar o arquivo ou pasta.\n\n{error}",
-                False,
-            )
-        if isinstance(error, FileNotFoundError):
-            return (
-                "Arquivo nao encontrado",
-                f"O arquivo ou pasta informado nao foi encontrado.\n\n{error}",
-                False,
-            )
-        if isinstance(error, OSError):
-            return (
-                "Erro de arquivo",
-                f"Nao foi possivel acessar o arquivo ou pasta.\n\n{error}",
-                False,
-            )
-        if isinstance(error, ValueError):
-            return "Dados invalidos", str(error), False
-        return (
-            "Erro inesperado",
-            "Ocorreu uma falha inesperada.\n\n"
-            f"Codigo: {error_id}\n"
-            f"Consulte o log em: {current_log_path()}",
-            True,
-        )
-
-    def _show_info(self, message: str) -> None:
-        messagebox.showinfo("Albericus", message)
 
     def _run_background(
         self,

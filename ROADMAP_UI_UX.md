@@ -121,12 +121,34 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 > direita e `Modo Projetor` com destaque próprio; tooltips em todas as ações
 > visíveis. Aceite atendido (≤6 ações visíveis; destrutivo separado). Novo
 > componente reutilizável [`menu_button`](src/ui/components/menu_button.py) +
-> `tip=` nas factories de botão. Restam F2.2–F2.5.
+> `tip=` nas factories de botão. Restam F2.3–F2.5.
+>
+> **Status (2026-06-25): F2.2 CONCLUÍDA.** Eliminados os 26 `messagebox` nativos de
+> `src/ui` (0 chamadas restantes). Novo [`dialogs`](src/ui/components/dialogs.py)
+> temático: `confirm_dialog` (Sim/Não, `danger=` recolore), `tri_state_dialog`
+> (Sim/Não/Cancelar) e `alert_dialog` (OK) — bloqueantes, com `grab` salvo/restaurado
+> p/ abrir sobre outro modal. Helpers de feedback unificados em `ErrorCatchingMixin`:
+> info/aviso/erro recuperável viram **toast** (ou alerta bloqueante quando há modal
+> aberto, senão o toast ficaria escondido); erro inesperado vira modal com código+log.
+> `_show_error` agora é único (removidas as cópias de `app.py` e a antiga do mixin),
+> aceita `str|Exceção` via `_classify_error` puro — corrige bug latente em que
+> `_show_error("texto")` exibia "Erro inesperado". `_confirm_action` ganhou `danger=`.
+> **Revisão pós-implementação:** `Enter` ficou **inerte** em diálogo destrutivo (só
+> confirma no clique — evita exclusão por Enter reflexo, ESPEC §6); rótulos padrão
+> acentuados ("Não") já nascendo em conformidade com **F3.5**; novo token
+> `THEME_WARNING`/`THEME_WARNING_TEXT` eliminou as duas cores de aviso divergentes e
+> hardcoded (toast × diálogo — adianta parte de **P2-1**); cobertura em
+> [tests/test_ui_dialogs.py](tests/test_ui_dialogs.py) (11 testes: retorno de cada
+> botão, Esc/Enter, Enter inerte em destrutivo, modal-sobre-modal com `grab`
+> restaurado). Pendências conhecidas: `_show_toast` ainda vive em `app.py` e é
+> chamado por `hasattr` a partir do mixin (mover p/ `components/toast.py` destrava
+> **F2.4**); `support ↔ components` só não cicla por imports dentro de função —
+> resolve em **F1.1** (`theme.py`).
 
 | ID | Tarefa | Esforço | Impacto | Risco | Depende | Aceite |
 |----|--------|---------|---------|-------|---------|--------|
 | ✅ F2.1 | Hierarquizar a toolbar de Rodadas: primárias/`Exportar▾`/`Mais▾`/danger isolado (P1-1) | 2d | A | B | F0.2 | ≤6 ações visíveis; destrutivo separado |
-| F2.2 | Confirmação CTk + toast de erro; remover `messagebox` (P1-4); unificar `_show_error` | 1,5d | A | B | F0.2 | Zero `messagebox` em telas migradas |
+| ✅ F2.2 | Confirmação CTk + toast de erro; remover `messagebox` (P1-4); unificar `_show_error` | 1,5d | A | B | F0.2 | Zero `messagebox` em telas migradas |
 | F2.3 | Progresso em ações longas + migrar 4 threads crus p/ `_run_background` (P1-3, P1-5) | 2d | A | M | — | Botão desabilita + spinner; erro vira toast |
 | F2.4 | Undo em exclusões via toast com ação (P1-6) | 1,5d | A | M | F2.2 | "Excluído · Desfazer" onde aplicável |
 | F2.5 | Hover visual em KPI cards clicáveis (P1-10) | 0,5d | M | B | — | Cursor + realce no hover |

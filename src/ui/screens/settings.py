@@ -116,19 +116,18 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
 
         def download_fide() -> None:
             import threading
-            from tkinter import messagebox
 
             def worker():
                 try:
                     res = self.official_rating_service.import_fide_list_from_url()
                     msg = f"{res['imported']} jogadores da FIDE importados."
-                    self.after(0, lambda m=msg: messagebox.showinfo("Sucesso", m))
+                    self.after(0, lambda m=msg: self._show_info(m))
                 except Exception as exc:
                     err_msg = str(exc)
-                    self.after(0, lambda m=err_msg: messagebox.showerror("Erro", m))
+                    self.after(0, lambda m=err_msg: self._show_error(m))
 
             threading.Thread(target=worker, daemon=True).start()
-            messagebox.showinfo("Aviso", "Download da FIDE iniciado em segundo plano (pode levar alguns minutos).")
+            self._show_info("Download da FIDE iniciado em segundo plano (pode levar alguns minutos).")
 
         stack(
             tab_tools,
@@ -144,7 +143,7 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
         )
 
         def import_cbx() -> None:
-            from tkinter import filedialog, messagebox
+            from tkinter import filedialog
             path = filedialog.askopenfilename(filetypes=[("Excel", "*.xls;*.xlsx"), ("CSV", "*.csv"), ("XML", "*.xml"), ("Texto", "*.txt")])
             if not path:
                 return
@@ -156,9 +155,9 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
                     res = self.official_rating_service.import_official_excel(path, "CBX", "")
                 else:
                     res = self.official_rating_service.import_official_csv(path, "CBX", "")
-                messagebox.showinfo("Sucesso", f"{res['imported']} jogadores CBX importados!")
+                self._show_info(f"{res['imported']} jogadores CBX importados!")
             except Exception as exc:
-                messagebox.showerror("Erro", str(exc))
+                self._show_error(str(exc))
 
         stack(tab_tools, ctk.CTkButton(tab_tools, text="Importar Lista CBX (Excel / CSV / XML)", command=import_cbx))
 
@@ -363,9 +362,10 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
                 backup_path = backup_paths.get(selected[0])
                 if not backup_path:
                     raise AppError("Backup selecionado invalido.")
-                confirmed = messagebox.askyesno(
+                confirmed = self._confirm_action(
                     "Restaurar backup",
                     "A restauracao substitui o banco atual. Um backup de seguranca sera criado antes. Continuar?",
+                    danger=True,
                 )
                 if not confirmed:
                     return

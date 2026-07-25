@@ -593,7 +593,7 @@ class PairingResultsMixin:
             if len(parts) != 2:
                 raise AppError("Informe o intervalo no formato inicio-fim, por exemplo: 1-60.")
             start_board, end_board = (int(part) for part in parts)
-            include_qr = messagebox.askyesno(
+            include_qr = self._confirm_action(
                 "Cartoes de mesa",
                 "Incluir QR de envio de resultado para as mesas da rodada aberta?",
             )
@@ -1013,7 +1013,7 @@ class PairingResultsMixin:
         if players_count <= 2 or configured_rounds >= recommended_rounds:
             return True
 
-        choice = messagebox.askyesnocancel(
+        choice = self._confirm_or_cancel(
             "Rodadas abaixo do recomendado",
             "Este torneio tem {players_count} jogadores ativos.\n\n"
             "Para esse número de jogadores, o mínimo recomendado é {recommended_rounds} rodadas. "
@@ -1130,9 +1130,10 @@ class PairingResultsMixin:
                         raise AppError(
                             "Habilite mudancas perigosas nas configuracoes do torneio para alterar rodada fechada."
                         )
-                    confirmed = messagebox.askyesno(
+                    confirmed = self._confirm_action(
                         "Confirmar",
                         "Esta rodada ja esta fechada. Alterar o resultado mesmo assim?",
+                        danger=True,
                     )
                     if not confirmed:
                         return
@@ -1579,7 +1580,7 @@ class PairingResultsMixin:
             self.require_permission("tournament_write")
             if not self.current_round_id:
                 raise AppError("Selecione uma rodada.")
-            if not messagebox.askyesno("Confirmar", "Excluir a rodada selecionada?"):
+            if not self._confirm_action("Confirmar", "Excluir a rodada selecionada?", danger=True):
                 return
             self.pairing_service.delete_generated_round(self.current_round_id)
             self._load_round_options()

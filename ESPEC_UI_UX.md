@@ -258,9 +258,14 @@ sidebar + barra de ações hierárquica na tela de Rodadas).
 ### 5.1 Feedback
 
 - **Sucesso/info:** toast (já existe). **Erro recuperável:** toast de erro. **Erro
-  inesperado:** modal com código + caminho do log ([app.py:1143](src/ui/app.py:1143)
-  já faz isso bem — manter como única `_show_error`; remover a duplicata de
-  [support.py:440](src/ui/support.py:440)).
+  inesperado:** modal com código + caminho do log. **Implementado (F2.2):** a única
+  `_show_error` vive em `ErrorCatchingMixin`
+  ([support.py:511](src/ui/support.py:511)) — e não em `app.py`, como esta seção
+  previa: o mixin atende as ~25 telas, enquanto a cópia de `app.py` só servia a
+  janela principal. A classificação saiu para a função pura
+  [`_classify_error`](src/ui/support.py:442) (aceita `str` ou exceção). Quando há
+  modal com _grab_ aberto, o feedback vira alerta bloqueante em vez de toast —
+  senão ficaria escondido atrás do modal ([support.py:500](src/ui/support.py:500)).
 - **Destrutivo:** confirmação proporcional + **undo no toast** quando viável
   ("Torneio X excluído · Desfazer"). Para exclusões em cascata, manter confirmação
   explícita.

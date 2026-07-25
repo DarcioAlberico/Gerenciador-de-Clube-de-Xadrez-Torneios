@@ -281,9 +281,10 @@ class TournamentPagesMixin(TournamentPlayersMixin, TournamentSettingsMixin):
                     raise AppError("Selecione um torneio para excluir.")
                 tournament = self.db.get_tournament(tournament_id)
                 name = tournament["name"] if tournament else str(tournament_id)
-                confirmed = messagebox.askyesno(
+                confirmed = self._confirm_action(
                     "Excluir torneio",
                     f"Excluir o torneio '{name}' e todos os jogadores/rodadas vinculados?",
+                    danger=True,
                 )
                 if not confirmed:
                     return
@@ -780,9 +781,10 @@ class TournamentPagesMixin(TournamentPlayersMixin, TournamentSettingsMixin):
                 team_id = selected_team_id["value"]
                 if not team_id:
                     raise AppError("Selecione uma equipe.")
-                if not messagebox.askyesno(
+                if not self._confirm_action(
                     "Excluir equipe",
                     "Excluir esta equipe e sua escalacao? Equipes usadas em rodadas devem ser inativadas.",
+                    danger=True,
                 ):
                     return
                 self.team_service.delete_team(team_id)

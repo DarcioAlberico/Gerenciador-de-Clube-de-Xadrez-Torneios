@@ -487,10 +487,11 @@ class TournamentPlayersMixin:
                 player = selected_player()
                 if not player:
                     raise AppError("Selecione um jogador.")
-                confirmed = messagebox.askyesno(
+                confirmed = self._confirm_action(
                     "Excluir jogador",
                     "Excluir este jogador do torneio?\n\n"
                     "A exclusao so e permitida se ele ainda nao apareceu em nenhuma rodada.",
+                    danger=True,
                 )
                 if not confirmed:
                     return
@@ -810,13 +811,12 @@ class TournamentPlayersMixin:
 
                 if not self.google_forms_service.is_configured():
                     reason = self.google_forms_service.unavailable_reason()
-                    if not messagebox.askyesno(
+                    if not self._confirm_action(
                         "Criar formulario online",
                         "A criacao automatica no Google Forms ainda nao esta configurada.\n\n"
                         f"{reason}\n\n"
                         "Deseja gerar o script para criar o formulario manualmente "
                         "(cole 1x em script.google.com)?",
-                        parent=self,
                     ):
                         return
                     generate_form_script(tournament_id)
@@ -833,12 +833,11 @@ class TournamentPlayersMixin:
                     if result.get("mode") == "live":
                         show_form_link_dialog(result)
                         return
-                    if messagebox.askyesno(
+                    if self._confirm_action(
                         "Criar formulario online",
                         "Nao foi possivel criar o formulario no Google Forms agora.\n\n"
                         f"{result.get('reason', '')}\n\n"
                         "Deseja gerar o script para criar manualmente?",
-                        parent=self,
                     ):
                         generate_form_script(tournament_id)
 
@@ -965,10 +964,9 @@ class TournamentPlayersMixin:
                 try:
                     url = self.export_service.registration_prefill_url(tournament_id)
                 except AppError as exc:
-                    if messagebox.askyesno(
+                    if self._confirm_action(
                         "Formulario de inscricao",
                         f"{exc}\n\nDeseja configurar agora?",
-                        parent=self,
                     ):
                         configure_registration_form()
                     return
