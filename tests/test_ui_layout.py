@@ -12,7 +12,7 @@ from src.core.database import Database
 from src.core.services import AppError, TeamService, TournamentService
 from src.ui.app import AlbericusApp
 from src.ui.support import _classify_error
-from tests.support.ctk_cleanup import release_dead_ctk_windows
+from tests.support.ctk_cleanup import cancel_pending_callbacks, release_dead_ctk_windows
 
 
 class UiLayoutSmokeTest(unittest.TestCase):
@@ -1321,6 +1321,84 @@ class UiLayoutSmokeTest(unittest.TestCase):
         browser_open.assert_called_once_with(pdf_path.resolve().as_uri())
         self.assertIn("documento foi aberto", self.messages[-1])
 
+    def test_remover_bye_solicitado_oferece_desfazer_que_restaura(self) -> None:
+        player_id = self.db.create_player(self.tournament_id, name="Bye Undo", rating=1500)
+        self.db.add_requested_bye(self.tournament_id, player_id, 1, "H", reason="viagem")
+
+        self.app.show_requested_byes()
+        self.app.update()
+        tree = self._first_treeview()
+        linhas = tree.get_children()
+        self.assertEqual(1, len(linhas), "o bye cadastrado deveria aparecer na lista")
+        tree.selection_set(linhas[0])
+
+        acoes = self._capture_toast_actions()
+        with mock.patch("src.ui.components.dialogs.confirm_dialog", return_value=True):
+            self._click_button("Remover selecionado")
+        self.app.update()
+
+        self.assertEqual([], self.db.list_requested_byes(self.tournament_id))
+        self.assertTrue(acoes and acoes[-1] is not None, "exclusao deveria oferecer Desfazer")
+        rotulo, desfazer = acoes[-1]
+        self.assertEqual("Desfazer", rotulo)
+
+        desfazer()
+        restaurados = self.db.list_requested_byes(self.tournament_id)
+        self.assertEqual(1, len(restaurados))
+        self.assertEqual(player_id, restaurados[0]["player_id"])
+        self.assertEqual("H", restaurados[0]["bye_type"])
+        self.assertEqual("viagem", restaurados[0]["reason"], "o motivo tem de voltar junto")
+        self.assertEqual(1, restaurados[0]["round_number"])
+
+    def test_kpi_card_clicavel_realca_no_hover(self) -> None:
+        from src.ui.support import THEME_ACCENT, THEME_PANEL_BG
+
+        card = self.app._kpi_card(self.app.content, "Torneios", 3, command=lambda: None)
+        card.grid(row=9, column=0)  # content e gerenciado por grid
+        self.app.update()
+        self.assertEqual(1, card.cget("border_width"), "borda constante evita deslocar o layout")
+        self.assertEqual(THEME_PANEL_BG, card.cget("border_color"))
+
+        # when="now" despacha na hora. Um update() aqui processaria tambem os
+        # eventos reais de mouse — o ponteiro nao esta sobre o card durante o
+        # teste, e um <Leave> verdadeiro desfaria o realce antes da asercao.
+        alvo = self._hover_target(card)
+        alvo.event_generate("<Enter>", when="now")
+        self.assertEqual(THEME_ACCENT, card.cget("border_color"))
+
+        # Sair do canvas para um rotulo do proprio card ainda e "dentro": o
+        # realce nao pode piscar na travessia. Quem esta sob o ponteiro vem de
+        # winfo_containing, que depende do empilhamento real de janelas — aqui
+        # ele e forcado, para o teste nao depender do gerenciador de janelas.
+        rotulo = next(w for w in self._walk(card) if isinstance(w, ctk.CTkLabel))
+        card.winfo_containing = lambda _x, _y: rotulo
+        alvo.event_generate("<Leave>", when="now")
+        self.assertEqual(THEME_ACCENT, card.cget("border_color"))
+
+        # ponteiro fora do card: o realce sai
+        card.winfo_containing = lambda _x, _y: None
+        alvo.event_generate("<Leave>", when="now")
+        self.assertEqual(THEME_PANEL_BG, card.cget("border_color"))
+
+    def test_kpi_card_sem_command_nao_ganha_borda(self) -> None:
+        card = self.app._kpi_card(self.app.content, "Somente leitura", 7)
+        card.grid(row=9, column=0)
+        self.app.update()
+        self.assertEqual(0, card.cget("border_width"))
+
+    def test_exclusao_em_cascata_nao_oferece_desfazer(self) -> None:
+        """ESPEC §5.1: cascata fica só com confirmação explícita, sem undo."""
+        acoes = self._capture_toast_actions()
+        chamadas: list[str] = []
+        self.app._delete_with_undo(
+            lambda: chamadas.append("delete"),
+            None,
+            "Torneio excluido.",
+            lambda: chamadas.append("refresh"),
+        )
+        self.assertEqual(["delete", "refresh"], chamadas)
+        self.assertEqual([None], acoes, "sem restore, o toast nao pode ter acao")
+
     def test_error_dialogs_separate_expected_file_and_unexpected_errors(self) -> None:
         # mensagem pronta (str) e tratada como recuperavel -> vira toast, nao modal
         title, message, is_unexpected = _classify_error("Nome e obrigatorio.", "ERR-0")
@@ -1370,15 +1448,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
         return offenders
 
     def _cancel_pending_callbacks(self) -> None:
-        try:
-            jobs = self.app.tk.call("after", "info")
-        except TclError:
-            return
-        for job in jobs:
-            try:
-                self.app.after_cancel(job)
-            except TclError:
-                pass
+        cancel_pending_callbacks(self.app)
 
     @staticmethod
     def _raise_ui_error(error: Exception) -> None:
@@ -1414,6 +1484,38 @@ class UiLayoutSmokeTest(unittest.TestCase):
                 widget.invoke()
                 return
         self.fail(f"Botao {text!r} nao encontrado")
+
+    @staticmethod
+    def _hover_target(widget: object) -> object:
+        """Onde o evento de mouse realmente chega num widget CTk.
+
+        ``CTkFrame.bind()`` encaminha para o canvas interno, e ``winfo_children()``
+        do CTkFrame **esconde** esse canvas — daí a busca pelo caminho Tk cru.
+        Um evento sintético no frame não dispararia o binding.
+        """
+        caminhos = widget.tk.splitlist(widget.tk.call("winfo", "children", str(widget)))
+        for caminho in caminhos:
+            child = widget.nametowidget(caminho)
+            if type(child).__name__ == "CTkCanvas":
+                return child
+        return widget
+
+    def _first_treeview(self) -> ttk.Treeview:
+        for widget in self._walk(self.app.content):
+            if isinstance(widget, ttk.Treeview):
+                return widget
+        self.fail("Nenhuma Treeview na tela atual")
+
+    def _capture_toast_actions(self) -> list:
+        """Substitui o stub de toast por um que guarda a acao (ex.: Desfazer)."""
+        acoes: list = []
+
+        def fake_toast(message, *args, action=None, **kwargs) -> None:
+            self.messages.append(message)
+            acoes.append(action)
+
+        self.app._show_toast = fake_toast
+        return acoes
 
     def _invoke_menu_item(self, label: str) -> None:
         """Aciona um item recolhido em um menu_button (ex.: 'Exportar'/'Mais') pelo

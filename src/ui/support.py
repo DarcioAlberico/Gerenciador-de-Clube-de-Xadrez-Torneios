@@ -539,6 +539,38 @@ class ErrorCatchingMixin:
 
         return confirm_dialog(self, title, message, danger=danger)
 
+    def _delete_with_undo(
+        self,
+        delete: Callable[[], None],
+        restore: Callable[[], None] | None,
+        message: str,
+        refresh: Callable[[], None] | None = None,
+    ) -> None:
+        """Exclui e oferece **Desfazer** no toast (ESPEC_UI_UX §5.1 / P1-6).
+
+        ``restore`` recria o registro a partir de um retrato tirado **antes** da
+        exclusao — o id novo pode diferir do original, entao so serve para
+        registros sem dependentes. Em exclusao com cascata passe ``None``: o
+        toast sai sem acao e a confirmacao explicita segue sendo a protecao.
+        """
+        delete()
+        if refresh is not None:
+            refresh()
+        if restore is None:
+            self._show_toast(message, kind="success")
+            return
+
+        def undo() -> None:
+            try:
+                restore()
+                if refresh is not None:
+                    refresh()
+                self._show_toast("Exclusao desfeita.", kind="info")
+            except Exception as exc:
+                self._show_error(exc)
+
+        self._show_toast(message, kind="success", action=("Desfazer", undo))
+
     def _confirm_or_cancel(
         self,
         title: str,

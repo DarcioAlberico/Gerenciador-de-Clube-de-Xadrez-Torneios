@@ -20,7 +20,7 @@ from tkinter import TclError
 import customtkinter as ctk
 
 from src.ui.components.dialogs import alert_dialog, confirm_dialog, tri_state_dialog
-from tests.support.ctk_cleanup import release_dead_ctk_windows
+from tests.support.ctk_cleanup import cancel_pending_callbacks, release_dead_ctk_windows
 
 
 def _find_button(widget, text: str) -> ctk.CTkButton | None:
@@ -48,6 +48,7 @@ class DialogsTest(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls) -> None:
+        cancel_pending_callbacks(cls.root)
         try:
             cls.root.destroy()
         except TclError:  # pragma: no cover

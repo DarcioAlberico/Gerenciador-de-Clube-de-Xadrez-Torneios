@@ -991,9 +991,35 @@ class ArbitrationPagesMixin:
                     "Remover ajuste", "Confirma a remocao do ajuste selecionado?"
                 ):
                     return
-                self.db.delete_point_adjustment(row_by_iid[selected[0]])
-                self._show_toast("Ajuste removido.", kind="success")
-                refresh_tree()
+                adjustment_id = row_by_iid[selected[0]]
+                tournament_id = self.current_tournament_id
+                snapshot = next(
+                    (
+                        row
+                        for row in self.db.list_point_adjustments(tournament_id)
+                        if int(row["id"]) == int(adjustment_id)
+                    ),
+                    None,
+                )
+
+                def restore_adjustment(record=snapshot) -> None:
+                    self.db.add_point_adjustment(
+                        tournament_id,
+                        round_number=int(record.get("round_number") or 0),
+                        player_id=record.get("player_id"),
+                        team_id=record.get("team_id"),
+                        aat_type=str(record.get("aat_type") or ""),
+                        match_points=float(record.get("match_points") or 0.0),
+                        game_points=float(record.get("game_points") or 0.0),
+                        reason=str(record.get("reason") or ""),
+                    )
+
+                self._delete_with_undo(
+                    lambda: self.db.delete_point_adjustment(adjustment_id),
+                    restore_adjustment if snapshot else None,
+                    "Ajuste removido.",
+                    refresh_tree,
+                )
             except Exception as exc:
                 self._show_error(exc)
 
@@ -1180,9 +1206,33 @@ class ArbitrationPagesMixin:
                     "Remover bye", "Confirma a remocao do bye solicitado selecionado?"
                 ):
                     return
-                delete_fn(row_by_iid[selected[0]])
-                self._show_toast("Bye removido.", kind="success")
-                refresh_tree()
+                bye_id = row_by_iid[selected[0]]
+                tournament_id = self.current_tournament_id
+                entity_key = "team_id" if is_team else "player_id"
+                snapshot = next(
+                    (
+                        row
+                        for row in list_fn(tournament_id)
+                        if int(row["id"]) == int(bye_id)
+                    ),
+                    None,
+                )
+
+                def restore_bye(record=snapshot) -> None:
+                    add_fn(
+                        tournament_id,
+                        int(record[entity_key]),
+                        int(record.get("round_number") or 0),
+                        str(record.get("bye_type") or "H"),
+                        reason=str(record.get("reason") or ""),
+                    )
+
+                self._delete_with_undo(
+                    lambda: delete_fn(bye_id),
+                    restore_bye if snapshot else None,
+                    "Bye removido.",
+                    refresh_tree,
+                )
             except Exception as exc:
                 self._show_error(exc)
 
@@ -1384,9 +1434,33 @@ class ArbitrationPagesMixin:
                     "Remover proibicao", "Confirma a remocao da proibicao selecionada?"
                 ):
                     return
-                delete_fn(row_by_iid[selected[0]])
-                self._show_toast("Proibicao removida.", kind="success")
-                refresh_tree()
+                prohibition_id = row_by_iid[selected[0]]
+                tournament_id = self.current_tournament_id
+                snapshot = next(
+                    (
+                        row
+                        for row in list_fn(tournament_id)
+                        if int(row["id"]) == int(prohibition_id)
+                    ),
+                    None,
+                )
+
+                def restore_prohibition(record=snapshot) -> None:
+                    add_fn(
+                        tournament_id,
+                        int(record[key_a_id]),
+                        int(record[key_b_id]),
+                        first_round=int(record.get("first_round") or 1),
+                        last_round=int(record.get("last_round") or 0),
+                        reason=str(record.get("reason") or ""),
+                    )
+
+                self._delete_with_undo(
+                    lambda: delete_fn(prohibition_id),
+                    restore_prohibition if snapshot else None,
+                    "Proibicao removida.",
+                    refresh_tree,
+                )
             except Exception as exc:
                 self._show_error(exc)
 

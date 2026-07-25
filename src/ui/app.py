@@ -18,6 +18,7 @@ from .screens.referees import RefereePagesMixin
 from .screens.settings import SettingsPagesMixin
 from .support import *
 from .components import BusyIndicator, EmptyState, show_donation_modal
+from .components.toast import ToastAction, ToastStack
 from .screens.tournaments import TournamentPagesMixin
 from .screens.reports import ReportPagesMixin
 from .screens.audit import AuditPagesMixin
@@ -181,12 +182,7 @@ class AlbericusApp(
                 setattr(self, attr, None)
 
         # Remove toasts ativos (sao filhos diretos de self, nao do content)
-        for toast in list(getattr(self, "_active_toasts", [])):
-            try:
-                toast.destroy()
-            except Exception:
-                pass
-        self._active_toasts = []
+        self.toasts.clear()
 
         # Aplica os 3 presets de aparencia antes de recriar os widgets.
         _settings = self.db.get_app_settings()
@@ -700,66 +696,32 @@ class AlbericusApp(
     def show_reports(self) -> None:
         self.show_administrative_reports()
 
+    @property
+    def toasts(self) -> ToastStack:
+        """Pilha de toasts da janela (criada sob demanda)."""
+        if getattr(self, "_toast_stack", None) is None:
+            self._toast_stack = ToastStack(self)
+        return self._toast_stack
+
     def _show_toast(
         self,
         message: str,
         is_error: bool = False,
         *,
         kind: str | None = None,
-        duration_ms: int = 3500,
+        duration_ms: int | None = None,
+        action: ToastAction | None = None,
     ) -> None:
         """Notificação não-bloqueante no canto inferior-direito.
 
         kind ∈ {"info", "success", "warning", "error"}.
         is_error=True é mantido para compat e equivale a kind="error".
+        `action=("Desfazer", callback)` acrescenta um botão e estende a duração.
         Erros com stack-trace devem continuar usando _show_error (modal).
         """
         if kind is None:
             kind = "error" if is_error else "info"
-        palette = {
-            "info":    (THEME_ACCENT,  ("#FFFFFF", "#0B0F19")),
-            "success": (THEME_SUCCESS, ("#FFFFFF", "#FFFFFF")),
-            "warning": (THEME_WARNING,  ("#0B0F19", "#0B0F19")),
-            "error":   (THEME_DANGER,  ("#FFFFFF", "#FFFFFF")),
-        }
-        bg, fg = palette.get(kind, palette["info"])
-
-        if not hasattr(self, "_active_toasts"):
-            self._active_toasts: list[ctk.CTkFrame] = []
-
-        toast = ctk.CTkFrame(self, fg_color=bg, corner_radius=8)
-        ctk.CTkLabel(
-            toast, text=message, text_color=fg,
-            font=ctk.CTkFont(size=SIZE_BODY),
-            wraplength=320, justify="left",
-        ).pack(padx=14, pady=8)
-
-        self._active_toasts.append(toast)
-        self._restack_toasts()
-        toast.lift()
-
-        def dismiss() -> None:
-            if toast in self._active_toasts:
-                self._active_toasts.remove(toast)
-                try:
-                    toast.destroy()
-                except Exception:
-                    pass
-                self._restack_toasts()
-
-        self.after(duration_ms, dismiss)
-
-    def _restack_toasts(self) -> None:
-        """Reposiciona os toasts ativos empilhados acima da statusbar."""
-        offset = 40
-        for toast in reversed(getattr(self, "_active_toasts", [])):
-            try:
-                toast.update_idletasks()
-                height = toast.winfo_reqheight()
-                toast.place(relx=1.0, rely=1.0, x=-20, y=-offset, anchor="se")
-                offset += height + 8
-            except Exception:
-                pass
+        self.toasts.show(message, kind=kind, duration_ms=duration_ms, action=action)
 
     def _build_content(self) -> None:
         self.content = ctk.CTkFrame(self, corner_radius=0, fg_color=THEME_APP_BG)
@@ -888,9 +850,32 @@ class AlbericusApp(
                 anchor="w", padx=14, pady=(0, 12)
             )
         if command is not None:
+            # Borda sempre presente (na cor do painel, invisivel) para o realce do
+            # hover nao deslocar o conteudo em 1px ao entrar/sair (P1-10).
+            card.configure(border_width=1, border_color=THEME_PANEL_BG)
+
+            def highlight(active: bool) -> None:
+                try:
+                    card.configure(border_color=THEME_ACCENT if active else THEME_PANEL_BG)
+                except Exception:
+                    pass
+
+            def left_card(event: Any) -> None:
+                # Os rotulos cobrem o card: sair do rotulo para o card ainda e
+                # "dentro". Sem esta checagem o realce piscaria a cada travessia.
+                try:
+                    under = card.winfo_containing(event.x_root, event.y_root)
+                except Exception:
+                    under = None
+                if under is not None and str(under).startswith(str(card)):
+                    return
+                highlight(False)
+
             def bind_click(widget: ctk.CTkBaseClass) -> None:
                 widget.configure(cursor="hand2")
                 widget.bind("<Button-1>", lambda _event: command())
+                widget.bind("<Enter>", lambda _event: highlight(True))
+                widget.bind("<Leave>", left_card)
                 for child in widget.winfo_children():
                     bind_click(child)
 

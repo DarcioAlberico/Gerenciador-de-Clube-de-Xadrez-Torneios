@@ -39,6 +39,25 @@ def _callback_owner_dead(callback) -> bool:
     return _is_dead(owner)
 
 
+def cancel_pending_callbacks(window) -> None:
+    """Cancela todos os ``after`` pendentes de uma janela, antes do ``destroy()``.
+
+    Callbacks órfãos (a animação da barra de progresso, o ``check_dpi_scaling``
+    interno do customtkinter) continuam agendados no interpretador Tcl depois da
+    janela morrer e chegam a atrapalhar a criação da raiz seguinte. Tolerante a
+    falhas: nunca deve derrubar um ``tearDown``.
+    """
+    try:
+        jobs = window.tk.call("after", "info")
+    except Exception:
+        return
+    for job in jobs:
+        try:
+            window.after_cancel(job)
+        except Exception:
+            pass
+
+
 def release_dead_ctk_windows() -> None:
     """Remove dos trackers globais do customtkinter as janelas já destruídas.
 
