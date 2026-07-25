@@ -1,7 +1,10 @@
 import os
 import shutil
+
 from PIL import Image
-from scripts.icon_mcp_server import generate_ico, generate_icns, generate_placeholder_icon
+
+from scripts.icon_mcp_server import generate_icns, generate_ico, generate_placeholder_icon
+
 
 def test_generate_placeholder_and_conversions():
     # Define caminhos temporários de teste

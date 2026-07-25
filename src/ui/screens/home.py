@@ -12,7 +12,21 @@ from __future__ import annotations
 
 from ..components import EmptyState, primary_button
 from ..home import ATTENTION, URGENT, HomeSnapshot, Pendency, build_pendencies
-from ..support import *
+from datetime import datetime
+
+import customtkinter as ctk
+
+from ..support import logger
+from ..theme import (
+    SPACE_LG,
+    SPACE_SM,
+    SPACE_XL,
+    THEME_DANGER,
+    THEME_TEXT_MAIN,
+    THEME_TEXT_SUB,
+    THEME_WARNING_TEXT,
+    font_subsection,
+)
 
 _COR_SEVERIDADE = {
     URGENT: THEME_DANGER,

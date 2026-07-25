@@ -86,7 +86,7 @@ class FreeTournamentMixin:
             compound="left",
             anchor="w",
             text_color=THEME_ACCENT,
-            font=ctk.CTkFont(size=18, weight="bold"),
+            font=ctk.CTkFont(size=SIZE_MODAL_TITLE, weight="bold"),
         ).pack(fill="x", padx=4, pady=(4, 12))
 
         ctk.CTkLabel(

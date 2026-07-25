@@ -1119,7 +1119,7 @@ class TRF16ExporterDirectTest(CoreServiceTestCase):
 
         out = Path(self.temp_dir.name) / "order.trf"
         self._make_trf16().export(tid, out)
-        lines = [l for l in out.read_text(encoding="utf-8").splitlines() if l.startswith("001 ")]
+        lines = [linha for linha in out.read_text(encoding="utf-8").splitlines() if linha.startswith("001 ")]
 
         self.assertEqual(len(lines), 3)
         # Rank 1: Barbosa (maior rating)
@@ -1147,7 +1147,7 @@ class TRF16ExporterDirectTest(CoreServiceTestCase):
         # Deve exportar sem levantar exceção mesmo sem rodadas
         warnings = self._make_trf16().export(tid, out)
         content = out.read_text(encoding="utf-8")
-        lines_001 = [l for l in content.splitlines() if l.startswith("001 ")]
+        lines_001 = [linha for linha in content.splitlines() if linha.startswith("001 ")]
 
         self.assertEqual(len(lines_001), 2)
         # Arquivo deve ter o cabeçalho do torneio
@@ -1185,11 +1185,11 @@ class TRF16ExporterDirectTest(CoreServiceTestCase):
         out = Path(self.temp_dir.name) / "bye.trf"
         self._make_trf16().export(tid, out)
         content = out.read_text(encoding="utf-8")
-        lines_001 = [l for l in content.splitlines() if l.startswith("001 ")]
+        lines_001 = [linha for linha in content.splitlines() if linha.startswith("001 ")]
 
         # O jogador com bye deve ter "U" ou similar na coluna de resultado (formato TRF16)
         # A linha do jogador 3 (rank 3 = menor rating) deve ter o bye registrado
-        bye_line = next(l for l in lines_001 if "Jogador Tres" in l)
+        bye_line = next(linha for linha in lines_001 if "Jogador Tres" in linha)
         self.assertTrue(len(bye_line) > 50, "Linha 001 do bye deve ter colunas de resultado")
 
     # ------------------------------------------------------------------
@@ -1214,12 +1214,12 @@ class TRF16ExporterDirectTest(CoreServiceTestCase):
         out = Path(self.temp_dir.name) / "walkover.trf"
         self._make_trf16().export(tid, out)
         content = out.read_text(encoding="utf-8")
-        lines_001 = [l for l in content.splitlines() if l.startswith("001 ")]
+        lines_001 = [linha for linha in content.splitlines() if linha.startswith("001 ")]
 
         self.assertEqual(len(lines_001), 2)
         # Ambos os jogadores devem ter suas linhas 001 com resultado registrado
-        winner_line = next(l for l in lines_001 if "Vencedor WO" in l)
-        loser_line  = next(l for l in lines_001 if "Perdedor WO" in l)
+        winner_line = next(linha for linha in lines_001 if "Vencedor WO" in linha)
+        loser_line  = next(linha for linha in lines_001 if "Perdedor WO" in linha)
         # O vencedor por WO recebe "+" e o perdedor "-" no TRF16
         self.assertIn("+", winner_line)
         self.assertIn("-", loser_line)

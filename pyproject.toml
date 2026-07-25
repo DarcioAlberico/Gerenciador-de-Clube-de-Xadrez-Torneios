@@ -42,6 +42,9 @@ package = false
 testpaths = ["tests"]
 addopts = "-q"
 pythonpath = ["."]
+markers = [
+    "gui: abre janela de verdade (Tk mapeado); precisa de display. Roda no Windows, onde o app e entregue. Sem display, use -m 'not gui'.",
+]
 
 [tool.ruff]
 target-version = "py311"
@@ -62,6 +65,10 @@ exclude = [
     "scratch_*.py",
     "test_swiss.py",
     "unmangle.py",
+    # Motor Gacrux (Otto Milvang) — codigo de TERCEIRO, vendorizado. Reformatar
+    # para o nosso estilo dificultaria comparar com a origem e reaplicar os
+    # patches locais; o que e nosso (gacrux_engine.py) segue sob o lint.
+    "src/services/pairing/gacrux",
 ]
 
 [tool.ruff.lint]
@@ -83,6 +90,10 @@ ignore = ["E501"]
 "src/ui/support.py" = ["F401", "I001"]
 "src/database/migrations/legacy_migrations.py" = ["F401", "I001"]
 "tests/test_pairing.py" = ["E722", "I001"]
+# Bench de stress: estilo deliberadamente denso (`try: ... except: ...` em uma
+# linha) para caber o roteiro de 10k torneios, e imports depois do ajuste de
+# sys.path. Nao vale reescrever — o valor do arquivo esta em rodar, nao em ler.
+"tests/test_stress_10k_tournaments.py" = ["E402", "E701", "E702"]
 
 [tool.mypy]
 python_version = "3.11"

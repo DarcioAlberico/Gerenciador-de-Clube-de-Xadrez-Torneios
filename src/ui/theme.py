@@ -72,6 +72,7 @@ SIZE_PAGE_SUBTITLE = 14    # Subtítulo de página
 SIZE_SECTION = 15          # Cabeçalho de painel/seção
 SIZE_SUBSECTION = 13       # Mini-cabeçalho dentro de painel
 SIZE_KPI_VALUE = 22        # Valor numérico em card de KPI
+SIZE_MODAL_TITLE = 18      # Título dentro de modal (maior que seção, menor que página)
 SIZE_BODY = 12             # Texto corrido
 
 # Escala de espaçamento — use estes tokens em pady/padx no lugar de literais soltos.
@@ -108,6 +109,8 @@ THEME_STATUSBAR_BG = ColorToken("#E2E8F0", "#0F172A")
 THEME_TREE_BG      = ColorToken("#FFFFFF", "#1E293B")
 THEME_TREE_FG      = ColorToken("#0F172A", "#F1F5F9")
 THEME_ACCENT        = ColorToken("#3B82F6", "#38BDF8")
+# Texto POR CIMA do accent (botao ativo, faixa de marca do login).
+THEME_ON_ACCENT     = ColorToken("#FFFFFF", "#0B0F19")
 THEME_DANGER        = ColorToken("#EF4444", "#F87171")
 THEME_DANGER_HOVER  = ColorToken("#DC2626", "#B91C1C")
 THEME_INFO          = ColorToken("#10B981", "#34D399")
@@ -117,9 +120,55 @@ THEME_SUCCESS_HOVER = ColorToken("#047857", "#10B981")
 # e TEXTO sobre painel claro — o ambar de preenchimento nao atinge 4.5:1 como
 # texto no modo claro, por isso a variante escurecida (ver ESPEC_UI_UX §6).
 THEME_WARNING       = ColorToken("#D97706", "#FBBF24")
+THEME_WARNING_HOVER = ColorToken("#B45309", "#F59E0B")
 THEME_WARNING_TEXT  = ColorToken("#B45309", "#FBBF24")
+# Texto POR CIMA do preenchimento de aviso (claro sobre ambar escuro, escuro
+# sobre ambar claro) — o par inverso do THEME_WARNING.
+THEME_ON_WARNING    = ColorToken("#FFFFFF", "#0B0F19")
 THEME_NEUTRAL       = ColorToken("#64748B", "#475569")
 THEME_NEUTRAL_HOVER = ColorToken("#475569", "#334155")
+
+# ---------------------------------------------------------------------------
+# Tabelas (ttk.Treeview). O ttk NAO aceita par (claro, escuro): a cor tem de ser
+# resolvida com pick() no momento de configurar o estilo. Estes tokens existem
+# porque antes as tabelas eram pintadas com valores fixos de modo escuro — no
+# tema claro a tabela ficava escura no meio da tela clara.
+# ---------------------------------------------------------------------------
+THEME_TREE_ODD        = ColorToken("#FFFFFF", "#1E293B")
+THEME_TREE_EVEN       = ColorToken("#F1F5F9", "#172032")
+THEME_TREE_HEADING    = ColorToken("#CBD5E1", "#0F172A")
+THEME_TREE_SELECTED   = ColorToken("#3B82F6", "#334155")
+THEME_TREE_SELECTED_FG = ColorToken("#FFFFFF", "#F1F5F9")
+
+# Estado de um resultado na tabela de rodadas: (texto, fundo). Fundo None herda
+# a zebra. Semantica, nao decoracao — e por isso que mora aqui e nao na tela.
+RESULT_STATE_COLORS: dict[str, tuple[ColorToken, ColorToken | None]] = {
+    "vazio":         (ColorToken("#64748B", "#94A3B8"), None),
+    "registrado":    (ColorToken("#047857", "#86EFAC"), None),
+    "submetido_qr":  (ColorToken("#92400E", "#FCD34D"), ColorToken("#FEF9C3", "#1C1A0A")),
+    "aprovado_qr":   (ColorToken("#059669", "#34D399"), ColorToken("#ECFDF5", "#042010")),
+    "rejeitado_qr":  (ColorToken("#B91C1C", "#FCA5A5"), ColorToken("#FEF2F2", "#1C0505")),
+    "corrigido":     (ColorToken("#6D28D9", "#C4B5FD"), ColorToken("#F5F3FF", "#12080A")),
+    "anulado":       (ColorToken("#94A3B8", "#475569"), None),
+}
+
+# Resultado lancado (vitoria/empate/bye) — usado nas tags da mesma tabela.
+THEME_RESULT_WIN  = ColorToken("#B45309", "#FACC15")
+THEME_RESULT_DRAW = ColorToken("#64748B", "#94A3B8")
+THEME_RESULT_BYE  = ColorToken("#94A3B8", "#475569")
+
+
+def pick(token: Any, mode: str | None = None) -> str:
+    """Resolve um par ``(claro, escuro)`` para a aparencia atual.
+
+    Serve para quem so aceita **uma** cor: ``ttk.Style``, tags de ``Treeview``,
+    widgets Tk puros. Aceita tambem uma string, e devolve ela mesma — assim o
+    chamador nao precisa saber se recebeu token ou cor literal.
+    """
+    if isinstance(token, str):
+        return token
+    atual = mode or ctk.get_appearance_mode()
+    return token[1] if str(atual).lower().startswith("dark") else token[0]
 
 # ---------------------------------------------------------------------------
 # Presets de Cor de Destaque (Accent)

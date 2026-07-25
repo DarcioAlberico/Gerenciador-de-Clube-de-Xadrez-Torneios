@@ -4,7 +4,17 @@ import logging
 from typing import TYPE_CHECKING
 from pathlib import Path
 
-from ..support import *
+import customtkinter as ctk
+
+from ..theme import (
+    THEME_APP_BG,
+    THEME_DANGER,
+    THEME_INFO,
+    THEME_TEXT_MAIN,
+    THEME_TEXT_SUB,
+    font_kpi_value,
+    font_section,
+)
 
 if TYPE_CHECKING:
     from src.services.report_engine import ReportEngine

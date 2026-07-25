@@ -754,6 +754,6 @@ class CalendarRankingMixin:
         right_panel.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
         
         ctk.CTkLabel(right_panel, text="Envio de Mensagens (Logs)", font=("Inter", 16, "bold")).pack(pady=16, padx=16, anchor="w")
-        ctk.CTkLabel(right_panel, text="Em breve: Integração com Email e WhatsApp.\nAtualmente, os registros são feitos automaticamente pelas rotinas financeiras e de secretaria.", text_color="gray", justify="left").pack(padx=16, anchor="w")
+        ctk.CTkLabel(right_panel, text="Em breve: Integração com Email e WhatsApp.\nAtualmente, os registros são feitos automaticamente pelas rotinas financeiras e de secretaria.", text_color=THEME_TEXT_SUB, justify="left").pack(padx=16, anchor="w")
 
         load_announcements()

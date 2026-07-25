@@ -1,8 +1,10 @@
 import tempfile
 import unittest
 from pathlib import Path
+
 from src.core.database import Database
 from src.services.pairing_service import PairingService
+
 
 class TestPairingGacrux(unittest.TestCase):
     def setUp(self) -> None:
@@ -28,7 +30,7 @@ class TestPairingGacrux(unittest.TestCase):
     def tearDown(self) -> None:
         try:
             self.temp_dir.cleanup()
-        except:
+        except Exception:
             pass
 
     def create_players(self, num_players: int, ratings: list[int] = None) -> list[int]:

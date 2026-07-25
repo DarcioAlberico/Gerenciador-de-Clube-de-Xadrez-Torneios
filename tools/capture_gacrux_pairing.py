@@ -27,9 +27,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from tools.stress_runner import gen_params  # noqa: E402
-from tests.test_stress_10k_tournaments import _run_tournament  # noqa: E402
 import src.services.pairing.gacrux_engine as ge  # noqa: E402
+from tests.test_stress_10k_tournaments import _run_tournament  # noqa: E402
+from tools.stress_runner import gen_params  # noqa: E402
 
 
 def main() -> int:

@@ -1,0 +1,63 @@
+name: Qualidade
+
+# Mesmos passos de scripts/check_quality.ps1, com uma diferenca honesta: o
+# runner nao tem display, entao a suite marcada como `gui` (108 testes que
+# abrem janela de verdade) fica de fora e continua rodando no Windows, onde o
+# app e entregue. Os outros 644 rodam aqui a cada push.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  # Push novo na mesma branch cancela a execucao anterior.
+  group: qualidade-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Python 3.11
+        run: uv python install 3.11
+
+      # python3-tk: so para IMPORTAR customtkinter (nenhuma janela e aberta).
+      # libcairo2-dev/pkg-config: no Linux o pycairo (svglib -> rlpycairo)
+      # compila da fonte; no Windows vem wheel pronta e isto nao aparece.
+      - name: Bibliotecas do sistema
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-tk libcairo2-dev pkg-config
+
+      - name: Dependências
+        run: uv sync --extra dev
+
+      - name: Compilação
+        run: uv run python -m compileall -q ./src ./tests ./app.py
+
+      - name: Lint (ruff)
+        run: uv run ruff check .
+
+      - name: Tipos (mypy, src/core)
+        run: uv run mypy
+
+      # Regras que o ruff nao expressa: `import *` novo em src/ui (P0-4) e
+      # cor/fonte cravada em src/ui/screens (P2-1/P2-2). Linha de base que so encolhe.
+      - name: Convenções de UI (tokens e imports)
+        run: uv run python scripts/check_ui_conventions.py
+
+      - name: Testes sem janela
+        run: uv run pytest -m "not gui"
+        env:
+          PYTHONPATH: ${{ github.workspace }}

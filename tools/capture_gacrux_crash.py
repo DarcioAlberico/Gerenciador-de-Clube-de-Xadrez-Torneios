@@ -26,12 +26,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+import src.services.pairing.gacrux_engine as ge  # noqa: E402
 from tests.test_stress_10k_tournaments import (  # noqa: E402
     _num_rounds,
     _player_size,
     _run_tournament,
 )
-import src.services.pairing.gacrux_engine as ge  # noqa: E402
 
 
 def gen_params(total: int, seed: int) -> list[tuple[int, int, int, int]]:

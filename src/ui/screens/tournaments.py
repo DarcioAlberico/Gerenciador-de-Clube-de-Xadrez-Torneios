@@ -1134,7 +1134,7 @@ class TournamentPagesMixin(TournamentPlayersMixin, TournamentSettingsMixin):
             "• 90 min + 30 s (Clássico)\n"
             "• 90 min / 40 lances + 30 min + 30 s"
         )
-        help_label = ctk.CTkLabel(dialog, text=help_text, justify="left", text_color="gray", font=ctk.CTkFont(size=12))
+        help_label = ctk.CTkLabel(dialog, text=help_text, justify="left", text_color=THEME_TEXT_SUB, font=ctk.CTkFont(size=SIZE_BODY))
         help_label.grid(row=5, column=0, columnspan=2, padx=16, pady=(15, 0), sticky="w")
 
         def save() -> None:
@@ -1158,7 +1158,7 @@ class TournamentPagesMixin(TournamentPlayersMixin, TournamentSettingsMixin):
 
         btn_frame = ctk.CTkFrame(dialog, fg_color="transparent")
         btn_frame.grid(row=6, column=0, columnspan=2, pady=20)
-        ctk.CTkButton(btn_frame, text="Cancelar", command=dialog.destroy, width=100, fg_color="gray").pack(side="left", padx=10)
+        ctk.CTkButton(btn_frame, text="Cancelar", command=dialog.destroy, width=100, fg_color=THEME_NEUTRAL).pack(side="left", padx=10)
         ctk.CTkButton(btn_frame, text="Confirmar", command=save, width=100).pack(side="left", padx=10)
 
         dialog.wait_window()

@@ -4,6 +4,24 @@ from ..support import *
 from ..components import Tooltip, danger_button, menu_button, primary_button, secondary_button
 
 
+# ---------------------------------------------------------------------------
+# Modo Projetor: contraste FIXO, alheio ao tema. Quem ve e a sala, na parede —
+# nao faz sentido a projecao seguir a preferencia de cor de quem opera. Por
+# isso sao constantes nomeadas, e nao tokens do tema.
+# ---------------------------------------------------------------------------
+PROJETOR_FUNDO        = "#000000"
+PROJETOR_BARRA        = "#111111"
+PROJETOR_TEXTO        = "#FFFFFF"
+PROJETOR_TEXTO_SUAVE  = "#94A3B8"
+PROJETOR_DESTAQUE     = "#FBBF24"
+PROJETOR_MESA         = "#F59E0B"
+PROJETOR_LINHA_PAR    = "#1E293B"
+PROJETOR_LINHA_IMPAR  = "#0F172A"
+PROJETOR_BOTAO        = "#334155"
+PROJETOR_BOTAO_HOVER  = "#475569"
+PROJETOR_TABULEIRO    = "#D97706"
+
+
 class PairingResultsMixin:
     def _round_export_menu_items(self):
         """Itens do menu 'Exportar' da rodada (exportacao/impressao)."""
@@ -111,9 +129,9 @@ class PairingResultsMixin:
             toolbar,
             text="  📽  Modo Projetor",
             command=self._open_projector_mode,
-            fg_color=("#B45309", "#F59E0B"),
-            hover_color=("#92400E", "#D97706"),
-            text_color=("#FFFFFF", "#000000"),
+            fg_color=THEME_WARNING,
+            hover_color=THEME_WARNING_HOVER,
+            text_color=THEME_ON_WARNING,
             font=ctk.CTkFont(family="Segoe UI", size=15, weight="bold"),
             height=44,
             corner_radius=8,
@@ -857,60 +875,36 @@ class PairingResultsMixin:
 
     @staticmethod
     def _configure_result_state_tags(tree: ttk.Treeview) -> None:
+        """Pinta as tags da tabela na aparencia atual.
+
+        As cores vem de RESULT_STATE_COLORS (theme.py) e passam por pick(): o
+        ttk aceita uma cor so, e antes isto era um bloco de literais de modo
+        escuro — no tema claro a tabela ficava escura no meio da tela clara.
+        """
         import platform
-        _bold = ("Segoe UI", 10, "bold") if platform.system() == "Windows" else ("Helvetica", 10, "bold")
-        _normal = ("Segoe UI", 10) if platform.system() == "Windows" else ("Helvetica", 10)
+        familia = "Segoe UI" if platform.system() == "Windows" else "Helvetica"
+        _bold = (familia, 10, "bold")
+        _normal = (familia, 10)
 
-        # Linhas alternadas (zebra striping)
-        tree.tag_configure("oddrow",  background="#1E293B", font=_normal)
-        tree.tag_configure("evenrow", background="#172032", font=_normal)
+        # Linhas alternadas (zebra)
+        tree.tag_configure("oddrow", background=pick(THEME_TREE_ODD), font=_normal)
+        tree.tag_configure("evenrow", background=pick(THEME_TREE_EVEN), font=_normal)
 
-        # Estados de resultado — fonte em negrito + cor de fundo sutil
-        tree.tag_configure(
-            "result_state_vazio",
-            foreground="#94A3B8",
-            font=_normal,
-        )
-        tree.tag_configure(
-            "result_state_registrado",
-            foreground="#86EFAC",   # verde brilhante (modo escuro)
-            font=_bold,
-        )
-        tree.tag_configure(
-            "result_state_submetido_qr",
-            foreground="#FCD34D",   # amarelo âmbar
-            background="#1C1A0A",
-            font=_bold,
-        )
-        tree.tag_configure(
-            "result_state_aprovado_qr",
-            foreground="#34D399",   # esmeralda
-            background="#042010",
-            font=_bold,
-        )
-        tree.tag_configure(
-            "result_state_rejeitado_qr",
-            foreground="#FCA5A5",   # vermelho claro
-            background="#1C0505",
-            font=_bold,
-        )
-        tree.tag_configure(
-            "result_state_corrigido",
-            foreground="#C4B5FD",   # lilas
-            background="#12080A",
-            font=_bold,
-        )
-        tree.tag_configure(
-            "result_state_bloqueado",
-            foreground="#475569",   # cinza azulado apagado
-            font=_normal,
-        )
+        # Estados do resultado — negrito, menos o "vazio" e o "anulado"
+        for estado, (texto, fundo) in RESULT_STATE_COLORS.items():
+            opcoes = {
+                "foreground": pick(texto),
+                "font": _normal if estado in ("vazio", "anulado") else _bold,
+            }
+            if fundo is not None:
+                opcoes["background"] = pick(fundo)
+            tree.tag_configure(f"result_state_{estado}", **opcoes)
 
-        # Tags de resultado (para destacar o placar)
-        tree.tag_configure("result_win_white", foreground="#FACC15", font=_bold)
-        tree.tag_configure("result_win_black", foreground="#FACC15", font=_bold)
-        tree.tag_configure("result_draw",      foreground="#94A3B8", font=_bold)
-        tree.tag_configure("result_bye",       foreground="#475569", font=_normal)
+        # Resultado lancado
+        tree.tag_configure("result_win_white", foreground=pick(THEME_RESULT_WIN), font=_bold)
+        tree.tag_configure("result_win_black", foreground=pick(THEME_RESULT_WIN), font=_bold)
+        tree.tag_configure("result_draw", foreground=pick(THEME_RESULT_DRAW), font=_bold)
+        tree.tag_configure("result_bye", foreground=pick(THEME_RESULT_BYE), font=_normal)
 
     def _select_first_pending_pairing(self) -> None:
         if not hasattr(self, "pairing_tree"):
@@ -1212,8 +1206,8 @@ class PairingResultsMixin:
             actions,
             text="Voltar ao Padrão",
             command=lambda: set_choice("restore"),
-            fg_color="#10B981",
-            hover_color="#059669",
+            fg_color=THEME_SUCCESS,
+            hover_color=THEME_SUCCESS_HOVER,
         )
         btn_restore.grid(row=0, column=0, padx=(0, 6), sticky="ew")
         
@@ -1221,8 +1215,8 @@ class PairingResultsMixin:
             actions,
             text="Realmente Editar",
             command=lambda: set_choice("edit"),
-            fg_color="#EF4444",
-            hover_color="#DC2626",
+            fg_color=THEME_DANGER,
+            hover_color=THEME_DANGER_HOVER,
         )
         btn_edit.grid(row=0, column=1, padx=6, sticky="ew")
         
@@ -1230,8 +1224,8 @@ class PairingResultsMixin:
             actions,
             text="Cancelar",
             command=lambda: set_choice("cancel"),
-            fg_color="#4B5563",
-            hover_color="#374151",
+            fg_color=THEME_NEUTRAL,
+            hover_color=THEME_NEUTRAL_HOVER,
         )
         btn_cancel.grid(row=0, column=2, padx=(6, 0), sticky="ew")
         
@@ -1663,7 +1657,7 @@ class PairingResultsMixin:
             
         dialog = ctk.CTkToplevel(self)
         dialog.title("Modo Projetor - Albericus")
-        dialog.configure(fg_color="#000000") # Fundo preto para alto contraste
+        dialog.configure(fg_color=PROJETOR_FUNDO) # Fundo preto para alto contraste
         dialog.transient(self)
         dialog.grab_set()
         # Abre maximizado por padrão
@@ -1682,11 +1676,11 @@ class PairingResultsMixin:
         }
         
         # Frame de Controle Superior (Fundo escuro discreto)
-        controls_frame = ctk.CTkFrame(dialog, fg_color="#111111", corner_radius=0, height=60)
+        controls_frame = ctk.CTkFrame(dialog, fg_color=PROJETOR_BARRA, corner_radius=0, height=60)
         controls_frame.pack(fill="x", side="top", padx=0, pady=0)
         
         # Frame de Conteúdo (Totalmente preto)
-        content_frame = ctk.CTkFrame(dialog, fg_color="#000000", corner_radius=0)
+        content_frame = ctk.CTkFrame(dialog, fg_color=PROJETOR_FUNDO, corner_radius=0)
         content_frame.pack(fill="both", expand=True, padx=20, pady=20)
         
         # Funções de Atualização
@@ -1779,17 +1773,17 @@ class PairingResultsMixin:
                 
         # Configurar Controles
         # Fonte controls
-        lbl_font = ctk.CTkLabel(controls_frame, text="Fonte:", text_color="#FFFFFF", font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"))
+        lbl_font = ctk.CTkLabel(controls_frame, text="Fonte:", text_color=PROJETOR_TEXTO, font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"))
         lbl_font.pack(side="left", padx=(15, 5))
         
-        btn_font_dec = ctk.CTkButton(controls_frame, text="-", width=30, height=28, font=ctk.CTkFont(size=14, weight="bold"), command=lambda: change_font_size(-2))
+        btn_font_dec = ctk.CTkButton(controls_frame, text="-", width=30, height=28, font=ctk.CTkFont(size=SIZE_PAGE_SUBTITLE, weight="bold"), command=lambda: change_font_size(-2))
         btn_font_dec.pack(side="left", padx=2)
         
-        btn_font_inc = ctk.CTkButton(controls_frame, text="+", width=30, height=28, font=ctk.CTkFont(size=14, weight="bold"), command=lambda: change_font_size(2))
+        btn_font_inc = ctk.CTkButton(controls_frame, text="+", width=30, height=28, font=ctk.CTkFont(size=SIZE_PAGE_SUBTITLE, weight="bold"), command=lambda: change_font_size(2))
         btn_font_inc.pack(side="left", padx=2)
         
         # Colunas controls
-        lbl_cols = ctk.CTkLabel(controls_frame, text="Colunas:", text_color="#FFFFFF", font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"))
+        lbl_cols = ctk.CTkLabel(controls_frame, text="Colunas:", text_color=PROJETOR_TEXTO, font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"))
         lbl_cols.pack(side="left", padx=(15, 5))
         
         cols_menu = ctk.CTkOptionMenu(controls_frame, values=["1 Coluna", "2 Colunas", "3 Colunas", "4 Colunas"], width=110, height=28, command=on_columns_change)
@@ -1797,7 +1791,7 @@ class PairingResultsMixin:
         cols_menu.set("2 Colunas")
         
         # Linhas controls
-        lbl_rows = ctk.CTkLabel(controls_frame, text="Linhas:", text_color="#FFFFFF", font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"))
+        lbl_rows = ctk.CTkLabel(controls_frame, text="Linhas:", text_color=PROJETOR_TEXTO, font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"))
         lbl_rows.pack(side="left", padx=(15, 5))
         
         rows_menu = ctk.CTkOptionMenu(controls_frame, values=["10", "15", "20", "25", "30"], width=80, height=28, command=on_rows_change)
@@ -1805,7 +1799,7 @@ class PairingResultsMixin:
         rows_menu.set("15")
         
         # Slideshow controls
-        lbl_slide = ctk.CTkLabel(controls_frame, text="Slideshow:", text_color="#FFFFFF", font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"))
+        lbl_slide = ctk.CTkLabel(controls_frame, text="Slideshow:", text_color=PROJETOR_TEXTO, font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"))
         lbl_slide.pack(side="left", padx=(15, 5))
         
         btn_prev = ctk.CTkButton(controls_frame, text="◀", width=35, height=28, command=prev_page)
@@ -1822,11 +1816,11 @@ class PairingResultsMixin:
         interval_menu.set("10s")
         
         # Pagina indicator
-        lbl_page = ctk.CTkLabel(controls_frame, text="Pág: 1/1 (Slide)", text_color="#FBBF24", font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"))
+        lbl_page = ctk.CTkLabel(controls_frame, text="Pág: 1/1 (Slide)", text_color=PROJETOR_DESTAQUE, font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"))
         lbl_page.pack(side="left", padx=(15, 10))
         
         # Tela cheia button
-        btn_fs = ctk.CTkButton(controls_frame, text="Tela Cheia [F11]", width=120, height=28, fg_color="#334155", hover_color="#475569", command=toggle_fullscreen)
+        btn_fs = ctk.CTkButton(controls_frame, text="Tela Cheia [F11]", width=120, height=28, fg_color=PROJETOR_BOTAO, hover_color=PROJETOR_BOTAO_HOVER, command=toggle_fullscreen)
         btn_fs.pack(side="right", padx=15)
         
         # Atalhos
@@ -1872,28 +1866,28 @@ class PairingResultsMixin:
                 col_frame.grid_columnconfigure(0, weight=1)
                 
                 # Cabeçalho da coluna
-                header_row = ctk.CTkFrame(col_frame, fg_color="#1E293B", corner_radius=4)
+                header_row = ctk.CTkFrame(col_frame, fg_color=PROJETOR_LINHA_PAR, corner_radius=4)
                 header_row.grid(row=0, column=0, sticky="ew", pady=(0, 6))
                 header_row.grid_columnconfigure(0, weight=1)
                 header_row.grid_columnconfigure(1, weight=3)
                 header_row.grid_columnconfigure(2, weight=3)
                 
-                ctk.CTkLabel(header_row, text="Mesa", font=header_font, text_color="#F59E0B").grid(row=0, column=0, padx=8, pady=8)
-                ctk.CTkLabel(header_row, text="Brancas", font=header_font, text_color="#FFFFFF").grid(row=0, column=1, padx=8, pady=8, sticky="w")
-                ctk.CTkLabel(header_row, text="Pretas", font=header_font, text_color="#FFFFFF").grid(row=0, column=2, padx=8, pady=8, sticky="w")
+                ctk.CTkLabel(header_row, text="Mesa", font=header_font, text_color=PROJETOR_MESA).grid(row=0, column=0, padx=8, pady=8)
+                ctk.CTkLabel(header_row, text="Brancas", font=header_font, text_color=PROJETOR_TEXTO).grid(row=0, column=1, padx=8, pady=8, sticky="w")
+                ctk.CTkLabel(header_row, text="Pretas", font=header_font, text_color=PROJETOR_TEXTO).grid(row=0, column=2, padx=8, pady=8, sticky="w")
                 
                 # Linhas da tabela
                 for r, pairing in enumerate(col_pairings):
                     is_bye = pairing["black"] == "BYE" or pairing["white"] == "BYE"
                     
                     if is_bye:
-                        bg_color = "#1E293B" if r % 2 == 0 else "#0F172A"
-                        text_color = "#94A3B8"
-                        board_color = "#D97706"
+                        bg_color = PROJETOR_LINHA_PAR if r % 2 == 0 else PROJETOR_LINHA_IMPAR
+                        text_color = PROJETOR_TEXTO_SUAVE
+                        board_color = PROJETOR_TABULEIRO
                     else:
-                        bg_color = "#1E293B" if r % 2 == 0 else "#0F172A"
-                        text_color = "#FFFFFF"
-                        board_color = "#FBBF24"
+                        bg_color = PROJETOR_LINHA_PAR if r % 2 == 0 else PROJETOR_LINHA_IMPAR
+                        text_color = PROJETOR_TEXTO
+                        board_color = PROJETOR_DESTAQUE
                         
                     row_frame = ctk.CTkFrame(col_frame, fg_color=bg_color, corner_radius=4)
                     row_frame.grid(row=r + 1, column=0, sticky="ew", pady=2)

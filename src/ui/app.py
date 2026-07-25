@@ -16,13 +16,15 @@ from .screens.pairings import PairingPagesMixin
 from .screens.referees import RefereePagesMixin
 from .screens.settings import SettingsPagesMixin
 from .support import *
-from .components import EmptyState, show_donation_modal
+from .components import EmptyState, primary_button, secondary_button, show_donation_modal
+from .components.dialogs import alert_dialog
 from .shell import AppShell
 from .screens.tournaments import TournamentPagesMixin
 from .screens.reports import ReportPagesMixin
 from .screens.audit import AuditPagesMixin
 from .screens.communication import CommunicationPagesMixin
 from .screens.integrations import IntegrationPagesMixin
+from src.core.version import APP_NAME, APP_SITE, APP_TAGLINE, app_title, version_label
 from src.services.message_service import MessageService
 from src.services.report_engine import ReportEngine
 
@@ -53,10 +55,10 @@ class AlbericusApp(
         ctk.set_appearance_mode("System")
         ctk.set_default_color_theme("blue")
 
-        self.title("Albericus - Emparceiramento de Xadrez v1.0")
+        self.title(app_title())
         # Janela começa pequena e centralizada para a tela de login.
         # Apos o login bem-sucedido e maximizada automaticamente.
-        _lw, _lh = 420, 400
+        _lw, _lh = self.LOGIN_LARGURA, self.LOGIN_ALTURA
         self.update_idletasks()
         _sw = self.winfo_screenwidth()
         _sh = self.winfo_screenheight()
@@ -220,61 +222,141 @@ class AlbericusApp(
         except Exception as exc:
             logger.error("Falha no despacho de mensagens agendadas: %s", exc)
 
-    def _build_login_screen(self) -> None:
-        self.login_frame = ctk.CTkFrame(self, corner_radius=12, width=320)
-        self.login_frame.place(relx=0.5, rely=0.5, anchor="center")
-        self.login_frame.grid_propagate(False)
+    # Login em duas faixas: marca a esquerda, formulario a direita (P2-6). A
+    # janela antiga era 420x400 — o formulario ficava espremido e nao sobrava
+    # lugar para versao nem para orientar quem entra pela primeira vez.
+    LOGIN_LARGURA = 900
+    LOGIN_ALTURA = 540
 
-        # Logotipo de Login
+    def _build_login_screen(self) -> None:
+        self.login_frame = ctk.CTkFrame(self, corner_radius=0, fg_color=THEME_APP_BG)
+        self.login_frame.place(relx=0, rely=0, relwidth=1, relheight=1)
+        self.login_frame.grid_columnconfigure(0, weight=4, uniform="login")
+        self.login_frame.grid_columnconfigure(1, weight=5, uniform="login")
+        self.login_frame.grid_rowconfigure(0, weight=1)
+
+        self._build_login_brand(self.login_frame)
+        self._build_login_form(self.login_frame)
+        self.username_entry.focus()
+
+    def _build_login_brand(self, parent: ctk.CTkFrame) -> None:
+        """Faixa de marca: logo, nome, proposito e versao."""
+        marca = ctk.CTkFrame(parent, corner_radius=0, fg_color=THEME_ACCENT)
+        marca.grid(row=0, column=0, sticky="nsew")
+        marca.grid_columnconfigure(0, weight=1)
+        marca.grid_rowconfigure(0, weight=1)
+        marca.grid_rowconfigure(3, weight=1)
+
         try:
             logo_path = resource_path("assets/icons/64/16-login.png")
             if logo_path.exists():
-                img_pil = Image.open(logo_path)
-                logo_img = ctk.CTkImage(light_image=img_pil, dark_image=img_pil, size=(64, 64))
-                logo_label = ctk.CTkLabel(self.login_frame, image=logo_img, text="")
-                logo_label.pack(pady=(20, 0))
-                self._login_logo = logo_img
-        except Exception as exc:
-            logger.error("Erro ao carregar logotipo de login: %s", exc)
+                imagem = Image.open(logo_path)
+                self._login_logo = ctk.CTkImage(light_image=imagem, dark_image=imagem, size=(96, 96))
+                ctk.CTkLabel(marca, image=self._login_logo, text="").grid(
+                    row=0, column=0, padx=SPACE_XL, pady=(SPACE_XL, 0), sticky="s"
+                )
+        except Exception:
+            logger.exception("Falha ao carregar o logotipo do login")
 
-        ctk.CTkLabel(self.login_frame, text="Albericus", font=ctk.CTkFont(size=24, weight="bold")).pack(pady=(10, 10))
-        ctk.CTkLabel(self.login_frame, text="Acesso Restrito", font=ctk.CTkFont(size=14)).pack(pady=(0, 20))
+        ctk.CTkLabel(
+            marca,
+            text=APP_NAME,
+            text_color=THEME_ON_ACCENT,
+            font=ctk.CTkFont(size=SIZE_PAGE_TITLE + 6, weight="bold"),
+        ).grid(row=1, column=0, padx=SPACE_XL, pady=(SPACE_LG, 0))
+        ctk.CTkLabel(
+            marca,
+            text=APP_TAGLINE,
+            text_color=THEME_ON_ACCENT,
+            wraplength=260,
+            justify="center",
+            font=ctk.CTkFont(size=SIZE_PAGE_SUBTITLE),
+        ).grid(row=2, column=0, padx=SPACE_XL, pady=(SPACE_SM, 0))
 
-        self.username_entry = ctk.CTkEntry(self.login_frame, placeholder_text="Usuário", width=200)
-        self.username_entry.pack(pady=10, padx=20)
+        try:
+            rodape = version_label(self.db.SCHEMA_VERSION)
+        except Exception:
+            rodape = version_label()
+        ctk.CTkLabel(
+            marca,
+            text=f"{rodape}\n{APP_SITE}",
+            text_color=THEME_ON_ACCENT,
+            justify="center",
+            font=ctk.CTkFont(size=SIZE_BODY),
+        ).grid(row=3, column=0, padx=SPACE_XL, pady=(0, SPACE_LG), sticky="s")
 
-        self.password_entry = ctk.CTkEntry(self.login_frame, placeholder_text="Senha", show="*", width=200)
-        self.password_entry.pack(pady=10, padx=20)
-        
-        self.login_error_label = ctk.CTkLabel(self.login_frame, text="", text_color=THEME_DANGER)
-        self.login_error_label.pack()
+    def _build_login_form(self, parent: ctk.CTkFrame) -> None:
+        """Faixa do formulario: entrar, erro e ajuda de primeiro acesso."""
+        area = ctk.CTkFrame(parent, corner_radius=0, fg_color="transparent")
+        area.grid(row=0, column=1, sticky="nsew")
+        area.grid_columnconfigure(0, weight=1)
+        area.grid_rowconfigure(0, weight=1)
+        area.grid_rowconfigure(7, weight=1)
 
-        def try_login(event=None):
-            user = self.username_entry.get().strip()
-            pwd = self.password_entry.get().strip()
-            if not user or not pwd:
-                self.login_error_label.configure(text="Preencha usuário e senha.")
-                return
-            if self.security_service.login(user, pwd):
-                self.login_frame.destroy()
-                # Maximiza a janela principal apos o login.
-                self.resizable(True, True)
-                self.minsize(980, 640)
-                self.state("zoomed")
-                self._build_menu()
-                self._build_statusbar()
-                self._build_content()
-                self._register_shortcuts()
-                # Abre nas pendencias, nao no cadastro do clube (P1-8 / F3.2).
-                self.show_home()
-                self._refresh_statusbar()
-                self._start_scheduled_dispatch()
-            else:
-                self.login_error_label.configure(text="Credenciais inválidas.")
+        ctk.CTkLabel(
+            area, text="Acesso restrito", font=ctk.CTkFont(size=SIZE_PAGE_TITLE, weight="bold")
+        ).grid(row=1, column=0, padx=SPACE_XL, pady=(0, SPACE_XS), sticky="w")
+        ctk.CTkLabel(
+            area,
+            text="Entre com as suas credenciais de operador.",
+            text_color=THEME_TEXT_SUB,
+        ).grid(row=2, column=0, padx=SPACE_XL, pady=(0, SPACE_LG), sticky="w")
 
-        self.password_entry.bind("<Return>", try_login)
-        ctk.CTkButton(self.login_frame, text="Entrar", command=try_login, width=200).pack(pady=(10, 20), padx=20)
-        self.username_entry.focus()
+        self.username_entry = ctk.CTkEntry(area, placeholder_text="Usuário", height=38)
+        self.username_entry.grid(row=3, column=0, padx=SPACE_XL, pady=(0, SPACE_SM), sticky="ew")
+        self.password_entry = ctk.CTkEntry(area, placeholder_text="Senha", show="*", height=38)
+        self.password_entry.grid(row=4, column=0, padx=SPACE_XL, pady=(0, SPACE_XS), sticky="ew")
+
+        self.login_error_label = ctk.CTkLabel(area, text="", text_color=THEME_DANGER, anchor="w")
+        self.login_error_label.grid(row=5, column=0, padx=SPACE_XL, sticky="ew")
+
+        entrar = primary_button(area, "Entrar", self._try_login, height=40)
+        entrar.grid(row=6, column=0, padx=SPACE_XL, pady=(SPACE_SM, SPACE_LG), sticky="ew")
+
+        ajuda = secondary_button(area, "Primeiro acesso?", self._show_first_access_help, height=32)
+        ajuda.grid(row=7, column=0, padx=SPACE_XL, pady=(0, SPACE_XL), sticky="n")
+
+        self.username_entry.bind("<Return>", lambda _e: self.password_entry.focus())
+        self.password_entry.bind("<Return>", lambda _e: self._try_login())
+
+    def _show_first_access_help(self) -> None:
+        """Orienta sem entregar credencial: senha na tela de login seria um
+        convite a nunca troca-la."""
+        alert_dialog(
+            self,
+            "Primeiro acesso",
+            "O usuário administrador é criado na instalação do Albericus.\n\n"
+            "Se você ainda não tem credenciais, peça ao responsável pelo clube: "
+            "ele cadastra operadores em Configurações › Segurança e dados › "
+            "Gerenciar Usuários do Sistema.",
+            kind="info",
+        )
+
+    def _try_login(self, event: Any = None) -> None:
+        usuario = self.username_entry.get().strip()
+        senha = self.password_entry.get().strip()
+        if not usuario or not senha:
+            self.login_error_label.configure(text="Preencha usuário e senha.")
+            return
+        if not self.security_service.login(usuario, senha):
+            self.login_error_label.configure(text="Credenciais inválidas.")
+            self.password_entry.delete(0, "end")
+            self.password_entry.focus()
+            return
+
+        self.login_frame.destroy()
+        # Maximiza a janela principal apos o login.
+        self.resizable(True, True)
+        self.minsize(980, 640)
+        self.state("zoomed")
+        self._build_menu()
+        self._build_statusbar()
+        self._build_content()
+        self._register_shortcuts()
+        # Abre nas pendencias, nao no cadastro do clube (P1-8 / F3.2).
+        self.show_home()
+        self._refresh_statusbar()
+        self._start_scheduled_dispatch()
 
     def _configure_tree_style(self, register_callback: bool = True) -> None:
         style = ttk.Style(self)
@@ -299,8 +381,8 @@ class AlbericusApp(
         )
         style.map(
             "Treeview",
-            background=[("selected", "#334155")],
-            foreground=[("selected", "#F1F5F9")],
+            background=[("selected", pick(THEME_TREE_SELECTED))],
+            foreground=[("selected", pick(THEME_TREE_SELECTED_FG))],
         )
         self._update_tree_colors(style)
         if register_callback:
@@ -311,14 +393,19 @@ class AlbericusApp(
         self._update_tree_colors(style)
 
     def _update_tree_colors(self, style: ttk.Style) -> None:
-        mode = ctk.get_appearance_mode()
-        bg = THEME_TREE_BG[0] if mode == "Light" else THEME_TREE_BG[1]
-        fg = THEME_TREE_FG[0] if mode == "Light" else THEME_TREE_FG[1]
+        """Cores da tabela na aparencia atual. O ttk so aceita uma cor por vez,
+        entao cada token passa por pick() (ver theme.py)."""
+        bg = pick(THEME_TREE_BG)
+        fg = pick(THEME_TREE_FG)
         style.configure("Treeview", background=bg, fieldbackground=bg, foreground=fg)
-        # Cabecalho: fundo ligeiramente mais escuro, texto branco em negrito
-        hdr_bg = "#0F172A" if mode == "Dark" else "#CBD5E1"
-        style.configure("Treeview.Heading", background=hdr_bg, foreground=fg)
-        style.map("Treeview.Heading", background=[("active", hdr_bg)])
+        cabecalho = pick(THEME_TREE_HEADING)
+        style.configure("Treeview.Heading", background=cabecalho, foreground=fg)
+        style.map("Treeview.Heading", background=[("active", cabecalho)])
+        style.map(
+            "Treeview",
+            background=[("selected", pick(THEME_TREE_SELECTED))],
+            foreground=[("selected", pick(THEME_TREE_SELECTED_FG))],
+        )
 
 
     def _build_menu(self) -> None:
@@ -465,7 +552,7 @@ class AlbericusApp(
                 height=32,
                 fg_color=THEME_ACCENT if is_active else "transparent",
                 border_width=0 if is_active else 1,
-                text_color=("#FFFFFF", "#0B0F19") if is_active else THEME_TEXT_MAIN,
+                text_color=THEME_ON_ACCENT if is_active else THEME_TEXT_MAIN,
             )
             button.grid(row=0, column=index, padx=(6, 0), pady=(0, 6), sticky="e")
             if permission:

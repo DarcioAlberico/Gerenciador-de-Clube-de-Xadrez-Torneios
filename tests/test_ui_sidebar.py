@@ -10,6 +10,7 @@ import unittest
 from tkinter import TclError
 
 import customtkinter as ctk
+import pytest
 
 from src.ui.components.sidebar import MODE_FULL, MODE_HIDDEN, MODE_RAIL, Sidebar
 from src.ui.navigation import DESTINATIONS, Navigator
@@ -19,6 +20,9 @@ from tests.support.ctk_cleanup import (
     release_dead_ctk_windows,
 )
 
+# Esta suite abre janela: precisa de display real. Ver o marcador 'gui'
+# no pyproject — o gate sem display roda com -m 'not gui'.
+pytestmark = pytest.mark.gui
 
 class HostFalso:
     """Aplicação de mentira: registra as telas abertas."""

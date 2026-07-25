@@ -13,8 +13,6 @@ from pathlib import Path
 from unittest import mock
 
 from src.core.database import Database
-from src.services.pairing_service import PairingService
-from src.services.tournament_service import TeamService, TournamentService
 from src.services.pairing.gacrux_tiebreak_engine import GacruxTiebreakEngine
 from src.services.pairing.gacrux_tiebreak_map import (
     POINTS_CODE,
@@ -23,6 +21,8 @@ from src.services.pairing.gacrux_tiebreak_map import (
     build_tiebreak_plan,
     parse_competitors,
 )
+from src.services.pairing_service import PairingService
+from src.services.tournament_service import TeamService, TournamentService
 
 
 class TestGacruxTiebreakMap(unittest.TestCase):

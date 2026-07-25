@@ -145,11 +145,54 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 | ✅ F1.2 | Tema sem destroy/rebuild: `restyle()` por `configure()` (P0-6) | 3d | A | **M-A** | F1.1 | Trocar tema preserva foco/scroll/seleção |
 | ✅ F1.3 | `Navigator` + registro único de destinos (de `_command_palette_actions`) (P0-1) | 2d | A | M | — | Navegação central; F5 via `refresh_current()` |
 | ✅ F1.4 | `AppShell` (casca fina) coexistindo com mixins legados (P0-1) | 2d | A | M | F1.3 | App sobe via shell; mixins ainda funcionam |
-| F1.5 | **Piloto**: migrar 1 tela para View/Controller/State + `dataclass` (P0-2, P0-3) | 3d | A | M | F1.4 | Tela testável sem subir app; zero `{"value":None}` |
-| F1.6 | Imports explícitos na tela-piloto + 2 telas; lint anti-wildcard no CI (P0-4) | 1,5d | M | B | F1.5 | CI falha em novo `import *` |
+| ✅ F1.5 | **Piloto**: migrar 1 tela para View/Controller/State + `dataclass` (P0-2, P0-3) | 3d | A | M | F1.4 | Tela testável sem subir app; zero `{"value":None}` |
+| ✅ F1.6 | Imports explícitos na tela-piloto + 2 telas; lint anti-wildcard no CI (P0-4) | 1,5d | M | B | F1.5 | CI falha em novo `import *` |
 
 > Após o piloto, cada tela-monstro migrada vira um épico próprio no backlog
 > (`pairing_results_ui` → `screens/pairings/{view,controller,state}.py`, etc.).
+
+> **Status (2026-07-25): F1.6 e F3.3 CONCLUÍDAS — com o gate de pé antes.**
+> O `ruff check .` acusava **193 erros** e não havia CI: as duas tarefas pediam
+> "lint no CI" que não existia. Primeiro o gate ficou verde (motor Gacrux
+> vendorizado excluído do lint — é código de terceiro; bench de stress com
+> per-file-ignore justificado; o resto corrigido de fato), depois veio
+> [`.github/workflows/quality.yml`](.github/workflows/quality.yml): compilação,
+> ruff, mypy, convenções de UI e os **644 testes sem janela** a cada push. As 108
+> asserções que abrem janela ganharam o marcador `gui` e seguem rodando no
+> Windows, onde o app é entregue.
+>
+> **F1.6:** `audit.py`, `home.py` e `reports.py` migradas para imports
+> explícitos; as demais 21 ficam numa **linha de base que só encolhe** — um
+> `import *` novo reprova, e uma tela migrada que sair da lista também reprova
+> (a base não envelhece sozinha).
+>
+> **F3.3:** zero cor ou fonte cravada em `src/ui/screens`. A regra adotada é
+> **nomear é permitido, embutir não**: as cores do Modo Projetor viraram uma
+> paleta nomeada (contraste fixo, alheio ao tema — quem vê é a sala), o verde do
+> WhatsApp virou constante de marca, e as cores-padrão do diploma viraram
+> constante de **dado**. O resto virou token. Junto veio o gap que a F1.2 tinha
+> exposto: as tabelas eram pintadas com valores fixos de modo escuro — agora há
+> tokens de `Treeview` e `RESULT_STATE_COLORS`, resolvidos por `pick()`, e a
+> tabela finalmente acompanha o tema claro.
+>
+> O lint tem [testes próprios](tests/test_ui_conventions_lint.py) que o fazem
+> **reprovar de propósito**: um lint que nunca falha é decoração.
+
+> **Status (2026-07-25): F1.5 CONCLUÍDA — o padrão está provado.**
+> A tela de **Árbitros** virou pacote
+> [`screens/referees/`](src/ui/screens/referees/): `state.py` (dado puro),
+> `controller.py` (decide e fala com o serviço) e `view.py` (monta widgets e faz
+> a ponte). Nem o estado nem o controlador importam Tk — os **18 testes** da
+> tela rodam em milissegundos, sem abrir janela, que é o aceite da tarefa.
+> O `{"value": None}` sumiu: o formulário é um `dataclass` congelado, e a view
+> guarda a versão corrente por `nonlocal`. Detalhe que o próprio teste pegou: na
+> primeira tentativa eu havia trocado o dicionário de estado por **outro
+> dicionário** — a asserção reprovou e o `nonlocal` entrou no lugar.
+> Ganhos que a fatia expôs de graça: campo nulo virava a palavra "None" no
+> formulário, e o payload agora manda `active` como 0/1 (o banco guarda inteiro).
+> Import externo intacto: `from .screens.referees import RefereePagesMixin`.
+>
+> **Próximo passo é o B-6**: cada tela-monstro migra seguindo este molde.
 
 ### Fase 2 — UX e feedback (salto de percepção) · ~7 dias
 
@@ -271,10 +314,10 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 |----|--------|---------|---------|-------|---------|--------|
 | ✅ F3.1 | Sidebar persistente com grupos + item ativo (P1-7) | 4d | A | M | F1.3 | Navegação primária visual; menu vira fallback |
 | ✅ F3.2 | Dashboard contextual pós-login (pendências acionáveis) (P1-8) | 3d | A | M | F1.3 | Abre em pendências com deep-link |
-| F3.3 | Tokenizar cores/fonts: 58 hex + 23 fonts + `#a3423c` (P2-1,2,3) + lint CI | 2d | M | B | F1.1 | CI barra novos literais em `screens/` |
+| ✅ F3.3 | Tokenizar cores/fonts: 58 hex + 23 fonts + `#a3423c` (P2-1,2,3) + lint CI | 2d | M | B | F1.1 | CI barra novos literais em `screens/` |
 | ✅ F3.4 | Modo Livre "não mostrar de novo" (P1-11); Aulas/Exercícios → "(em breve)" (P1-12) | 0,5d | M | B | — | Sem fricção repetida; rótulo claro |
 | ✅ F3.5 | Corrigir acentuação das labels visíveis (P2-8) | 0,5d | M | B | — | "Configurações/Aparência/Segurança" |
-| F3.6 | Login com split layout + branding + versão (P2-6) | 1d | B | B | — | Layout dividido; espaço p/ "primeiro acesso" |
+| ✅ F3.6 | Login com split layout + branding + versão (P2-6) | 1d | B | B | — | Layout dividido; espaço p/ "primeiro acesso" |
 
 > **Status (2026-07-25): F3.4 e F3.5 CONCLUÍDAS.** O aviso do Modo Livre ganhou
 > "Não mostrar novamente" (persistido em `free_mode_notice_hidden`); marcada a
@@ -288,6 +331,18 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 > **Divergência conhecida:** cabeçalhos de exportação em `src/services/export_*`
 > seguem sem acento (ver **B-7**) — mexer neles altera arquivo entregue e
 > formato consumido por terceiros, o que não cabe nesta tarefa.
+
+> **Status (2026-07-25): F3.6 CONCLUÍDA — Fases 0 a 3 encerradas.** O login era
+> uma caixa de 420×400 sem espaço para nada. Agora são duas faixas: marca à
+> esquerda (logo, nome, propósito) e formulário à direita, com um botão
+> **"Primeiro acesso?"** que explica onde se cadastra um operador — **sem
+> revelar credencial**, porque senha na tela de login é convite a nunca trocá-la
+> (há teste guardando isso). A versão saiu do título cravado e ganhou fonte
+> única em [`src/core/version.py`](src/core/version.py); o rodapé mostra
+> `v1.0 · banco v43`, e a versão do schema encurta muito o diagnóstico de um
+> chamado. Divergência a resolver quando for publicar: o `pyproject.toml` diz
+> `0.1.0` (versão de empacotamento) — os dois números precisam contar a mesma
+> história.
 
 ### Backlog (não priorizar agora)
 

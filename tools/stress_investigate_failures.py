@@ -46,15 +46,15 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from tools.stress_runner import gen_params  # noqa: E402
+from src.core.database import Database  # noqa: E402
+from src.core.services import PairingService, TournamentService  # noqa: E402
 from tests.test_stress_10k_tournaments import (  # noqa: E402
     REPORT_DIR,
     _create_players,
     _fill_results,
     _run_tournament,
 )
-from src.core.database import Database  # noqa: E402
-from src.core.services import PairingService, TournamentService  # noqa: E402
+from tools.stress_runner import gen_params  # noqa: E402
 
 SEED          = int(os.environ.get("STRESS_SEED", 42))
 FAILURES_PATH = REPORT_DIR / "stress_failures.jsonl"

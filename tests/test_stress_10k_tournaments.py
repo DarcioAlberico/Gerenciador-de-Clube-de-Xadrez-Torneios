@@ -132,7 +132,7 @@ def _num_rounds(n: int, rng: random.Random) -> int:
 def _birth_date(age: int) -> str:
     today = date.today()
     try:    return today.replace(year=today.year - age).isoformat()
-    except: return today.replace(month=3, day=1, year=today.year - age).isoformat()
+    except Exception: return today.replace(month=3, day=1, year=today.year - age).isoformat()
 
 
 def _random_result(wr: int, br: int, rng: random.Random) -> str:
@@ -171,11 +171,11 @@ def _fill_results(db, svc, tid, round_id, ratings, rng) -> None:
             who = p.get("white_player_id") or p.get("black_player_id")
             if who:
                 try: db.set_player_status(int(who), "withdrawn")
-                except: pass
+                except Exception: pass
         wr = ratings.get(int(p.get("white_player_id") or 0), 1200)
         br = ratings.get(int(p.get("black_player_id") or 0), 1200)
         try: svc.update_result(tid, int(p["id"]), _random_result(wr, br, rng))
-        except: pass
+        except Exception: pass
 
 
 # ---------------------------------------------------------------------------
@@ -479,17 +479,17 @@ class StressEdgeCasesTest(unittest.TestCase):
 
     def test_edge_100j_2r(self):
         r = self._r(100, 2, seed=100_002)
-        if r.timed_out: self.fail(f"100j/2r: timeout")
+        if r.timed_out: self.fail("100j/2r: timeout")
         self.assertTrue(r.success, f"100j/2r: {r.failure_detail}")
 
     def test_edge_200j_1r(self):
         r = self._r(200, 1, seed=200_001)
-        if r.timed_out: self.fail(f"200j/1r: timeout")
+        if r.timed_out: self.fail("200j/1r: timeout")
         self.assertTrue(r.success, f"200j/1r: {r.failure_detail}")
 
     def test_edge_501j_1r(self):
         r = _run_tournament(0, 501, 1, seed=501_001)
-        if r.timed_out: self.fail(f"501j/1r: timeout — motor Gacrux travou")
+        if r.timed_out: self.fail("501j/1r: timeout — motor Gacrux travou")
         self.assertTrue(r.success, f"501j/1r: {r.failure_detail}")
 
 
