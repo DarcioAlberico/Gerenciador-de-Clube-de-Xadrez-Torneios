@@ -159,13 +159,41 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 > unificado da F2.2, ou seja, vira toast. Cobertura em
 > [tests/test_ui_busy.py](tests/test_ui_busy.py).
 
+> **Status (2026-07-25): F2.4 e F2.5 CONCLUÍDAS — Fase 2 fechada.** O toast saiu de
+> `app.py` para [`components/toast.py`](src/ui/components/toast.py) (`ToastStack`) e
+> ganhou **botão de ação**; `_show_toast` virou delegador fino, então os 60+
+> call-sites e os stubs de teste seguem intactos. Isso resolve também a inversão de
+> camada apontada na revisão da F2.2. Novo helper `_delete_with_undo` no mixin:
+> exclui, oferece "Desfazer" e recria o registro a partir de um retrato tirado
+> **antes** da exclusão. Aplicado nas três exclusões sem dependentes do painel de
+> arbitragem (ajuste de pontos, bye solicitado, proibição de emparceiramento),
+> individual e equipes. **Exclusão com cascata continua sem undo**, por decisão da
+> ESPEC §5.1 — passar `restore=None` mantém só a confirmação explícita; o id
+> recriado difere do original, então o retrato só serve para registros folha.
+> F2.5: KPI clicável ganhou realce de borda no hover, com a borda sempre presente
+> (na cor do painel) para o realce não deslocar o layout em 1px, e uma checagem de
+> `winfo_containing` para o realce não piscar ao passar do card para os rótulos.
+>
+> **Achado de infraestrutura de teste.** Ao rodar os arquivos de UI juntos, a suíte
+> de toast era **inteiramente pulada** (7 `skipTest` silenciosos): `after` órfãos de
+> uma raiz Tk destruída atrapalham a criação da raiz do arquivo seguinte, que falha
+> com `couldn't read init.tcl`. `cancel_pending_callbacks` foi extraído de
+> `test_ui_layout` para [tests/support/ctk_cleanup.py](tests/support/ctk_cleanup.py)
+> e agora é usado por todos os arquivos de UI antes do `destroy()` — era por ter
+> esse cancelamento que `test_ui_layout` nunca falhava. **Resolvido o pulo em
+> massa**; restam ~2 skips intermitentes (de ~640 testes) na criação da raiz
+> dentro do próprio `test_ui_layout`, que já existiam antes. Uma "âncora" de raiz
+> Tk na sessão foi testada e **não** serve: ela vira o `_default_root` do tkinter
+> e os menus da `AlbericusApp` passam para o interpretador errado, quebrando ~6
+> testes (registrado em `tests/conftest.py` para ninguém repetir a tentativa).
+
 | ID | Tarefa | Esforço | Impacto | Risco | Depende | Aceite |
 |----|--------|---------|---------|-------|---------|--------|
 | ✅ F2.1 | Hierarquizar a toolbar de Rodadas: primárias/`Exportar▾`/`Mais▾`/danger isolado (P1-1) | 2d | A | B | F0.2 | ≤6 ações visíveis; destrutivo separado |
 | ✅ F2.2 | Confirmação CTk + toast de erro; remover `messagebox` (P1-4); unificar `_show_error` | 1,5d | A | B | F0.2 | Zero `messagebox` em telas migradas |
 | ✅ F2.3 | Progresso em ações longas + migrar 4 threads crus p/ `_run_background` (P1-3, P1-5) | 2d | A | M | — | Botão desabilita + spinner; erro vira toast |
-| F2.4 | Undo em exclusões via toast com ação (P1-6) | 1,5d | A | M | F2.2 | "Excluído · Desfazer" onde aplicável |
-| F2.5 | Hover visual em KPI cards clicáveis (P1-10) | 0,5d | M | B | — | Cursor + realce no hover |
+| ✅ F2.4 | Undo em exclusões via toast com ação (P1-6) | 1,5d | A | M | F2.2 | "Excluído · Desfazer" onde aplicável |
+| ✅ F2.5 | Hover visual em KPI cards clicáveis (P1-10) | 0,5d | M | B | — | Cursor + realce no hover |
 
 ### Fase 3 — Navegação e polish (diferenciação) · ~8 dias
 

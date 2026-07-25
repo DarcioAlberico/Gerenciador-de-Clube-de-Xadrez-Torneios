@@ -12,6 +12,7 @@ from .dialogs import alert_dialog, confirm_dialog, tri_state_dialog
 from .donation import show_donation_modal
 from .empty_state import EmptyState
 from .menu_button import menu_button
+from .toast import ToastStack
 from .tooltip import Tooltip
 
 __all__ = [
@@ -25,5 +26,6 @@ __all__ = [
     "Tooltip",
     "EmptyState",
     "BusyIndicator",
+    "ToastStack",
     "show_donation_modal",
 ]

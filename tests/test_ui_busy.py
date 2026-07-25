@@ -12,7 +12,7 @@ from tkinter import TclError
 import customtkinter as ctk
 
 from src.ui.components.busy import BusyIndicator
-from tests.support.ctk_cleanup import release_dead_ctk_windows
+from tests.support.ctk_cleanup import cancel_pending_callbacks, release_dead_ctk_windows
 
 
 class BusyIndicatorTest(unittest.TestCase):
@@ -28,6 +28,9 @@ class BusyIndicatorTest(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls) -> None:
+        # Cancelar os after pendentes ANTES de destruir: a animacao da barra
+        # continua agendada e atrapalha a criacao da raiz do proximo arquivo.
+        cancel_pending_callbacks(cls.root)
         try:
             cls.root.destroy()
         except TclError:  # pragma: no cover
