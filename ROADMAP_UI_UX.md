@@ -145,7 +145,7 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 | ✅ F1.2 | Tema sem destroy/rebuild: `restyle()` por `configure()` (P0-6) | 3d | A | **M-A** | F1.1 | Trocar tema preserva foco/scroll/seleção |
 | ✅ F1.3 | `Navigator` + registro único de destinos (de `_command_palette_actions`) (P0-1) | 2d | A | M | — | Navegação central; F5 via `refresh_current()` |
 | ✅ F1.4 | `AppShell` (casca fina) coexistindo com mixins legados (P0-1) | 2d | A | M | F1.3 | App sobe via shell; mixins ainda funcionam |
-| F1.5 | **Piloto**: migrar 1 tela para View/Controller/State + `dataclass` (P0-2, P0-3) | 3d | A | M | F1.4 | Tela testável sem subir app; zero `{"value":None}` |
+| ✅ F1.5 | **Piloto**: migrar 1 tela para View/Controller/State + `dataclass` (P0-2, P0-3) | 3d | A | M | F1.4 | Tela testável sem subir app; zero `{"value":None}` |
 | ✅ F1.6 | Imports explícitos na tela-piloto + 2 telas; lint anti-wildcard no CI (P0-4) | 1,5d | M | B | F1.5 | CI falha em novo `import *` |
 
 > Após o piloto, cada tela-monstro migrada vira um épico próprio no backlog
@@ -177,6 +177,22 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 >
 > O lint tem [testes próprios](tests/test_ui_conventions_lint.py) que o fazem
 > **reprovar de propósito**: um lint que nunca falha é decoração.
+
+> **Status (2026-07-25): F1.5 CONCLUÍDA — o padrão está provado.**
+> A tela de **Árbitros** virou pacote
+> [`screens/referees/`](src/ui/screens/referees/): `state.py` (dado puro),
+> `controller.py` (decide e fala com o serviço) e `view.py` (monta widgets e faz
+> a ponte). Nem o estado nem o controlador importam Tk — os **18 testes** da
+> tela rodam em milissegundos, sem abrir janela, que é o aceite da tarefa.
+> O `{"value": None}` sumiu: o formulário é um `dataclass` congelado, e a view
+> guarda a versão corrente por `nonlocal`. Detalhe que o próprio teste pegou: na
+> primeira tentativa eu havia trocado o dicionário de estado por **outro
+> dicionário** — a asserção reprovou e o `nonlocal` entrou no lugar.
+> Ganhos que a fatia expôs de graça: campo nulo virava a palavra "None" no
+> formulário, e o payload agora manda `active` como 0/1 (o banco guarda inteiro).
+> Import externo intacto: `from .screens.referees import RefereePagesMixin`.
+>
+> **Próximo passo é o B-6**: cada tela-monstro migra seguindo este molde.
 
 ### Fase 2 — UX e feedback (salto de percepção) · ~7 dias
 
