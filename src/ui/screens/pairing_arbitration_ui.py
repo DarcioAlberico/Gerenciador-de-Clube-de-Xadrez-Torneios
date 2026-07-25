@@ -679,8 +679,8 @@ class ArbitrationPagesMixin:
         self.arbitration_issue_filter_option = issue_filter_option
         self.arbitration_issue_search_entry = issue_search_entry
         self.arbitration_issue_count_label = issue_count_label
-        tree.tag_configure("decision", foreground="#991B1B")
-        tree.tag_configure("attention", foreground="#B45309")
+        tree.tag_configure("decision", foreground=pick(THEME_DANGER))
+        tree.tag_configure("attention", foreground=pick(THEME_WARNING_TEXT))
 
         def load_filtered_issues(_event: Any = None) -> None:
             tree.delete(*tree.get_children())

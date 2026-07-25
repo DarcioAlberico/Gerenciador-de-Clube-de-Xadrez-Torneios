@@ -4,6 +4,11 @@ from ..support import *
 from ..components import danger_button
 
 
+# Verde da marca WhatsApp: nao acompanha o tema — e identidade de terceiro.
+WHATSAPP_VERDE = "#25D366"
+WHATSAPP_VERDE_HOVER = "#128C7E"
+
+
 class ClubMembersMixin:
     def show_members(self, initial_class_id: int | None = None) -> None:
         self._clear_content()
@@ -35,7 +40,7 @@ class ClubMembersMixin:
             form, 
             text="", 
             text_color=THEME_DANGER,
-            font=ctk.CTkFont(size=14, weight="bold")
+            font=ctk.CTkFont(size=SIZE_PAGE_SUBTITLE, weight="bold")
         )
         financial_alert_label.grid(row=0, column=0, columnspan=2, padx=16, pady=(10, 0), sticky="ew")
         financial_alert_label.grid_remove()  # Oculta por padrao
@@ -381,7 +386,7 @@ class ClubMembersMixin:
             import webbrowser
             webbrowser.open(f"mailto:{email}")
 
-        ctk.CTkButton(contato_frame, text=" Abrir WhatsApp", command=open_whatsapp, fg_color="#25D366", hover_color="#128C7E").grid(
+        ctk.CTkButton(contato_frame, text=" Abrir WhatsApp", command=open_whatsapp, fg_color=WHATSAPP_VERDE, hover_color=WHATSAPP_VERDE_HOVER).grid(
             row=1, column=0, padx=16, pady=8, sticky="ew"
         )
         ctk.CTkButton(contato_frame, text=" Enviar E-mail", command=open_email).grid(

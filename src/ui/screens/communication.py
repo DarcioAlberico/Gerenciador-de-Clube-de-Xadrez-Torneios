@@ -124,7 +124,7 @@ class CommunicationPagesMixin:
         ctk.CTkLabel(
             parent,
             text="Agendados so disparam com o app aberto (a fila e salva).",
-            text_color="gray",
+            text_color=THEME_TEXT_SUB,
         ).grid(row=9, column=0, padx=16, pady=(0, 8), sticky="w")
 
         # Lista de agendamentos pendentes, com cancelamento.
@@ -137,7 +137,7 @@ class CommunicationPagesMixin:
                 child.destroy()
             pending = self.communication_service.list_scheduled_messages(status="pending")
             if not pending:
-                ctk.CTkLabel(pending_holder, text="Nenhum agendamento pendente.", text_color="gray").grid(
+                ctk.CTkLabel(pending_holder, text="Nenhum agendamento pendente.", text_color=THEME_TEXT_SUB).grid(
                     row=0, column=0, sticky="w", padx=4, pady=4
                 )
                 return

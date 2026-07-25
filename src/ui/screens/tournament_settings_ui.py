@@ -61,7 +61,7 @@ class TournamentSettingsMixin:
             lbl.grid(row=row, column=0, padx=16, pady=((16 if row == 0 else 12) if section else (8 if row else 16), 0), sticky="w")
             row += 1
         if help_text:
-            ctk.CTkLabel(panel, text=help_text, justify="left", text_color="gray").grid(
+            ctk.CTkLabel(panel, text=help_text, justify="left", text_color=THEME_TEXT_SUB).grid(
                 row=row, column=0, padx=16, pady=(0, 2), sticky="w"
             )
             row += 1
@@ -597,7 +597,7 @@ class TournamentSettingsMixin:
 
             def _flag_invalid(entry: Any, message: str) -> None:
                 try:
-                    entry.configure(border_color="#d9534f")
+                    entry.configure(border_color=THEME_DANGER)
                 except Exception:
                     pass
                 raise AppError(message)
@@ -630,7 +630,7 @@ class TournamentSettingsMixin:
             _rounds_int = int(rounds_raw)
             if _pairing_method == "swiss" and _n_active >= 2 and _rounds_int > _n_active - 1:
                 try:
-                    tournament_entries["rounds_count"].configure(border_color="#e6a817")
+                    tournament_entries["rounds_count"].configure(border_color=THEME_WARNING)
                 except Exception:
                     pass
                 self._show_toast(

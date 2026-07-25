@@ -256,7 +256,7 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
 
             def _flag_field(entry: Any, message: str) -> None:
                 try:
-                    entry.configure(border_color="#d9534f")
+                    entry.configure(border_color=THEME_DANGER)
                 except Exception:
                     pass
                 raise AppError(message)
@@ -575,7 +575,7 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
         mini = ctk.CTkFrame(prev, fg_color=sw["panel"], corner_radius=4)
         mini.grid(row=1, column=0, sticky="nsew", padx=6, pady=(4, 6))
         ctk.CTkLabel(
-            mini, text="24", font=ctk.CTkFont(size=13, weight="bold"), text_color=sw["text"]
+            mini, text="24", font=ctk.CTkFont(size=SIZE_SUBSECTION, weight="bold"), text_color=sw["text"]
         ).pack(anchor="w", padx=8, pady=(5, 0))
         ctk.CTkFrame(mini, height=7, width=32, fg_color=sw["accent"], corner_radius=3).pack(
             anchor="w", padx=8, pady=(3, 0)

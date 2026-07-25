@@ -54,6 +54,7 @@ function Invoke-Step {
 Invoke-Step "Compilacao" { uv run --extra dev python -m compileall -q .\src .\tests .\app.py }
 Invoke-Step "Lint (ruff)" { uv run --extra dev ruff check . }
 Invoke-Step "Tipos (mypy, src/core)" { uv run --extra dev mypy }
+Invoke-Step "Convencoes de UI (tokens e imports)" { uv run --extra dev python scripts/check_ui_conventions.py }
 
 if (-not $Fast) {
     if ($NoGui) {

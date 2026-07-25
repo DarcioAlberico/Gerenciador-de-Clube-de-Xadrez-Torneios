@@ -146,10 +146,37 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 | ✅ F1.3 | `Navigator` + registro único de destinos (de `_command_palette_actions`) (P0-1) | 2d | A | M | — | Navegação central; F5 via `refresh_current()` |
 | ✅ F1.4 | `AppShell` (casca fina) coexistindo com mixins legados (P0-1) | 2d | A | M | F1.3 | App sobe via shell; mixins ainda funcionam |
 | F1.5 | **Piloto**: migrar 1 tela para View/Controller/State + `dataclass` (P0-2, P0-3) | 3d | A | M | F1.4 | Tela testável sem subir app; zero `{"value":None}` |
-| F1.6 | Imports explícitos na tela-piloto + 2 telas; lint anti-wildcard no CI (P0-4) | 1,5d | M | B | F1.5 | CI falha em novo `import *` |
+| ✅ F1.6 | Imports explícitos na tela-piloto + 2 telas; lint anti-wildcard no CI (P0-4) | 1,5d | M | B | F1.5 | CI falha em novo `import *` |
 
 > Após o piloto, cada tela-monstro migrada vira um épico próprio no backlog
 > (`pairing_results_ui` → `screens/pairings/{view,controller,state}.py`, etc.).
+
+> **Status (2026-07-25): F1.6 e F3.3 CONCLUÍDAS — com o gate de pé antes.**
+> O `ruff check .` acusava **193 erros** e não havia CI: as duas tarefas pediam
+> "lint no CI" que não existia. Primeiro o gate ficou verde (motor Gacrux
+> vendorizado excluído do lint — é código de terceiro; bench de stress com
+> per-file-ignore justificado; o resto corrigido de fato), depois veio
+> [`.github/workflows/quality.yml`](.github/workflows/quality.yml): compilação,
+> ruff, mypy, convenções de UI e os **644 testes sem janela** a cada push. As 108
+> asserções que abrem janela ganharam o marcador `gui` e seguem rodando no
+> Windows, onde o app é entregue.
+>
+> **F1.6:** `audit.py`, `home.py` e `reports.py` migradas para imports
+> explícitos; as demais 21 ficam numa **linha de base que só encolhe** — um
+> `import *` novo reprova, e uma tela migrada que sair da lista também reprova
+> (a base não envelhece sozinha).
+>
+> **F3.3:** zero cor ou fonte cravada em `src/ui/screens`. A regra adotada é
+> **nomear é permitido, embutir não**: as cores do Modo Projetor viraram uma
+> paleta nomeada (contraste fixo, alheio ao tema — quem vê é a sala), o verde do
+> WhatsApp virou constante de marca, e as cores-padrão do diploma viraram
+> constante de **dado**. O resto virou token. Junto veio o gap que a F1.2 tinha
+> exposto: as tabelas eram pintadas com valores fixos de modo escuro — agora há
+> tokens de `Treeview` e `RESULT_STATE_COLORS`, resolvidos por `pick()`, e a
+> tabela finalmente acompanha o tema claro.
+>
+> O lint tem [testes próprios](tests/test_ui_conventions_lint.py) que o fazem
+> **reprovar de propósito**: um lint que nunca falha é decoração.
 
 ### Fase 2 — UX e feedback (salto de percepção) · ~7 dias
 
@@ -271,7 +298,7 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 |----|--------|---------|---------|-------|---------|--------|
 | ✅ F3.1 | Sidebar persistente com grupos + item ativo (P1-7) | 4d | A | M | F1.3 | Navegação primária visual; menu vira fallback |
 | ✅ F3.2 | Dashboard contextual pós-login (pendências acionáveis) (P1-8) | 3d | A | M | F1.3 | Abre em pendências com deep-link |
-| F3.3 | Tokenizar cores/fonts: 58 hex + 23 fonts + `#a3423c` (P2-1,2,3) + lint CI | 2d | M | B | F1.1 | CI barra novos literais em `screens/` |
+| ✅ F3.3 | Tokenizar cores/fonts: 58 hex + 23 fonts + `#a3423c` (P2-1,2,3) + lint CI | 2d | M | B | F1.1 | CI barra novos literais em `screens/` |
 | ✅ F3.4 | Modo Livre "não mostrar de novo" (P1-11); Aulas/Exercícios → "(em breve)" (P1-12) | 0,5d | M | B | — | Sem fricção repetida; rótulo claro |
 | ✅ F3.5 | Corrigir acentuação das labels visíveis (P2-8) | 0,5d | M | B | — | "Configurações/Aparência/Segurança" |
 | F3.6 | Login com split layout + branding + versão (P2-6) | 1d | B | B | — | Layout dividido; espaço p/ "primeiro acesso" |

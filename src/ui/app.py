@@ -299,8 +299,8 @@ class AlbericusApp(
         )
         style.map(
             "Treeview",
-            background=[("selected", "#334155")],
-            foreground=[("selected", "#F1F5F9")],
+            background=[("selected", pick(THEME_TREE_SELECTED))],
+            foreground=[("selected", pick(THEME_TREE_SELECTED_FG))],
         )
         self._update_tree_colors(style)
         if register_callback:
@@ -311,14 +311,19 @@ class AlbericusApp(
         self._update_tree_colors(style)
 
     def _update_tree_colors(self, style: ttk.Style) -> None:
-        mode = ctk.get_appearance_mode()
-        bg = THEME_TREE_BG[0] if mode == "Light" else THEME_TREE_BG[1]
-        fg = THEME_TREE_FG[0] if mode == "Light" else THEME_TREE_FG[1]
+        """Cores da tabela na aparencia atual. O ttk so aceita uma cor por vez,
+        entao cada token passa por pick() (ver theme.py)."""
+        bg = pick(THEME_TREE_BG)
+        fg = pick(THEME_TREE_FG)
         style.configure("Treeview", background=bg, fieldbackground=bg, foreground=fg)
-        # Cabecalho: fundo ligeiramente mais escuro, texto branco em negrito
-        hdr_bg = "#0F172A" if mode == "Dark" else "#CBD5E1"
-        style.configure("Treeview.Heading", background=hdr_bg, foreground=fg)
-        style.map("Treeview.Heading", background=[("active", hdr_bg)])
+        cabecalho = pick(THEME_TREE_HEADING)
+        style.configure("Treeview.Heading", background=cabecalho, foreground=fg)
+        style.map("Treeview.Heading", background=[("active", cabecalho)])
+        style.map(
+            "Treeview",
+            background=[("selected", pick(THEME_TREE_SELECTED))],
+            foreground=[("selected", pick(THEME_TREE_SELECTED_FG))],
+        )
 
 
     def _build_menu(self) -> None:

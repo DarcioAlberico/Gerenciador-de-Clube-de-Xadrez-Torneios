@@ -3,6 +3,12 @@ from __future__ import annotations
 from ..support import *
 
 
+# Cores PADRAO do modelo de diploma: sao DADO do template (vao para o banco e
+# para o PDF), nao cor da interface — por isso nao seguem o tema.
+DIPLOMA_COR_PRIMARIA_PADRAO = "#1E3A8A"
+DIPLOMA_COR_DESTAQUE_PADRAO = "#93C5FD"
+
+
 class SettingsCertificatesMixin:
     def _build_certificate_style_controls(self, parent: Any) -> tuple[Any, Any, Any]:
         """Cria o frame de controles de estilo/marca d'agua dos diplomas.
@@ -446,8 +452,8 @@ class SettingsCertificatesMixin:
             set_entry(background_image_entry, template.get("background_image_path", ""))
             set_entry(background_opacity_entry, template.get("background_opacity", 0.18))
             set_entry(secondary_logo_entry, template.get("secondary_logo_path", ""))
-            set_entry(primary_color_entry, template.get("primary_color", "#1E3A8A"))
-            set_entry(accent_color_entry, template.get("accent_color", "#93C5FD"))
+            set_entry(primary_color_entry, template.get("primary_color", DIPLOMA_COR_PRIMARIA_PADRAO))
+            set_entry(accent_color_entry, template.get("accent_color", DIPLOMA_COR_DESTAQUE_PADRAO))
             set_entry(title_font_entry, template.get("title_font_size", 32))
             set_entry(body_font_entry, template.get("body_font_size", 18))
             set_entry(footer_font_entry, template.get("footer_font_size", 10))

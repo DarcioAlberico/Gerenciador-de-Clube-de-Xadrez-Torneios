@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 from typing import Any
-from ..support import *
+
+import customtkinter as ctk
+
 from src.services.constants import OPERATOR_ROLES
 
 class AuditPagesMixin:

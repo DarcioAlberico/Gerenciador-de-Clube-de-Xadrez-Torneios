@@ -6,13 +6,18 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from typing import Any
 
 from ..components import EmptyState
-from ..support import (
-    AppError,
+from ..support import AppError
+from ..theme import (
     SIZE_BODY,
+    THEME_ACCENT,
+    THEME_DANGER,
     THEME_PANEL_BG,
+    THEME_SUCCESS,
     THEME_TEXT_MAIN,
     THEME_TEXT_SUB,
+    THEME_WARNING,
     font_section,
+    pick,
 )
 
 
@@ -61,8 +66,7 @@ class DashboardPagesMixin:
         Le a face clara/escura ativa para que os graficos matplotlib acompanhem
         o tema em vez de ficarem sempre com fundo branco.
         """
-        face = 1 if ctk.get_appearance_mode() == "Dark" else 0
-        return THEME_PANEL_BG[face], THEME_TEXT_MAIN[face], THEME_TEXT_SUB[face]
+        return pick(THEME_PANEL_BG), pick(THEME_TEXT_MAIN), pick(THEME_TEXT_SUB)
 
     @staticmethod
     def _embed_chart(fig: Any, parent: ctk.CTkFrame) -> None:
@@ -86,7 +90,7 @@ class DashboardPagesMixin:
                 [active, inactive],
                 labels=["Ativos", "Inativos"],
                 autopct="%1.1f%%",
-                colors=["#3B82F6", "#94A3B8"],
+                colors=[pick(THEME_ACCENT), pick(THEME_TEXT_SUB)],
                 textprops={"color": text},
             )
         else:
@@ -112,7 +116,7 @@ class DashboardPagesMixin:
             finance.get("late_amount", 0),
         ]
 
-        ax.bar(labels, values, color=["#10B981", "#F59E0B", "#EF4444"])
+        ax.bar(labels, values, color=[pick(THEME_SUCCESS), pick(THEME_WARNING), pick(THEME_DANGER)])
         ax.set_title("Status Financeiro", color=text)
         ax.tick_params(colors=sub)
         for spine in ax.spines.values():

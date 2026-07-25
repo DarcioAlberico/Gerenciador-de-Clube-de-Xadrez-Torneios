@@ -52,6 +52,11 @@ jobs:
       - name: Tipos (mypy, src/core)
         run: uv run mypy
 
+      # Regras que o ruff nao expressa: `import *` novo em src/ui (P0-4) e
+      # cor/fonte cravada em src/ui/screens (P2-1/P2-2). Linha de base que so encolhe.
+      - name: Convenções de UI (tokens e imports)
+        run: uv run python scripts/check_ui_conventions.py
+
       - name: Testes sem janela
         run: uv run pytest -m "not gui"
         env:
