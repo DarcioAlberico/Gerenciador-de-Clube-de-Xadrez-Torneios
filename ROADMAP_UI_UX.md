@@ -223,9 +223,23 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 
 ### Fase 3 — Navegação e polish (diferenciação) · ~8 dias
 
-| ID | Tarefa | Esforço | Impacto | Risco | Depende | Aceite |
+> **Status (2026-07-25): F3.1 CONCLUÍDA.** Sidebar persistente em
+> [`components/sidebar.py`](src/ui/components/sidebar.py), espelhando o registro
+> da F1.3 — acrescentar destino em `DESTINATIONS` o faz aparecer na barra, sem
+> lista paralela. Grupos (Clube · Treinamento · Gestão · Torneio · Ferramentas ·
+> Configurações), ícones e **item ativo destacado**, inclusive quando a tela é
+> aberta por atalho, pela paleta ou por um botão da própria tela (a barra assina
+> `Navigator.subscribe`). O `tk.Menu` permanece como fallback.
+>
+> **A barra é responsiva, e não por enfeite:** a suíte reprovou a primeira versão
+> — com 235px à esquerda, telas densas empurravam botão para fora da janela. A
+> medição mostrou que a **Exportar** sozinha pede ~1.375px de conteúdo. Daí os
+> três modos: `full` (≥1500px reais), `rail` só com ícones e tooltip (≥1440) e
+> `hidden` abaixo disso, quando o menu volta a ser a navegação. Registrado como
+> **B-8**: a tela Exportar merece um layout mais estreito — hoje é ela que
+> define o limiar.
 |----|--------|---------|---------|-------|---------|--------|
-| F3.1 | Sidebar persistente com grupos + item ativo (P1-7) | 4d | A | M | F1.3 | Navegação primária visual; menu vira fallback |
+| ✅ F3.1 | Sidebar persistente com grupos + item ativo (P1-7) | 4d | A | M | F1.3 | Navegação primária visual; menu vira fallback |
 | F3.2 | Dashboard contextual pós-login (pendências acionáveis) (P1-8) | 3d | A | M | F1.3 | Abre em pendências com deep-link |
 | F3.3 | Tokenizar cores/fonts: 58 hex + 23 fonts + `#a3423c` (P2-1,2,3) + lint CI | 2d | M | B | F1.1 | CI barra novos literais em `screens/` |
 | ✅ F3.4 | Modo Livre "não mostrar de novo" (P1-11); Aulas/Exercícios → "(em breve)" (P1-12) | 0,5d | M | B | — | Sem fricção repetida; rótulo claro |
@@ -253,6 +267,9 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 - **B-4** Virtualização/paginação de `Treeview` (P2-13) — antes da base crescer.
 - **B-5** Cache de figuras matplotlib quando dados não mudam (P2-14).
 - **B-6** Migrar telas-monstro restantes para 3 camadas (continuação de F1.5).
+- **B-8** Estreitar o layout da tela **Exportar** (e revisar as densas: Rodadas,
+  Jogadores). Hoje ela pede ~1.375px de conteúdo e é o que obriga a sidebar a
+  sumir em janelas médias (F3.1). Ganho direto: sidebar visível em mais telas.
 - **B-7** Acentuar cabeçalhos/títulos de `src/services/export_*` para casar com a UI
   (F3.5). Fica fora da F3.5 porque altera **arquivo entregue** (PDF/CSV/HTML) e
   formato que terceiros consomem — precisa de decisão sobre compatibilidade.

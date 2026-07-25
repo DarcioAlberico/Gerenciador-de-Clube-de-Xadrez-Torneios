@@ -17,7 +17,7 @@ from __future__ import annotations
 import logging
 import unicodedata
 from dataclasses import dataclass
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 logger = logging.getLogger("src.ui.navigation")
 
@@ -118,6 +118,28 @@ class Navigator:
     def __init__(self, host: Any) -> None:
         self._host = host
         self._current: str | None = None
+        self._subscribers: list[Callable[[str | None], None]] = []
+
+    def subscribe(self, callback: Callable[[str | None], None]) -> None:
+        """Registra quem quer saber da tela ativa (a sidebar destaca o item).
+
+        Chamado na hora com o valor corrente, para o inscrito já nascer em dia.
+        """
+        if callback not in self._subscribers:
+            self._subscribers.append(callback)
+        self._announce(callback)
+
+    def clear_subscribers(self) -> None:
+        """Esquece os inscritos. A janela e reconstruída em algumas situações
+        (troca de tema), e um inscrito preso a widget morto só acumula erro."""
+        self._subscribers.clear()
+
+    def _announce(self, only: Callable[[str | None], None] | None = None) -> None:
+        for callback in ([only] if only else list(self._subscribers)):
+            try:
+                callback(self._current)
+            except Exception:
+                logger.exception("Falha ao avisar inscrito da navegacao")
 
     @property
     def current(self) -> str | None:
@@ -132,8 +154,9 @@ class Navigator:
         """Anota a tela atual. Chamado ao limpar o conteúdo, então vale também
         para telas abertas por caminhos que não passam por ``go`` (um botão que
         chama ``show_pairings`` direto, por exemplo)."""
-        if method_name.startswith("show_"):
+        if method_name.startswith("show_") and method_name != self._current:
             self._current = method_name
+            self._announce()
 
     def go(self, key_or_method: str) -> bool:
         """Abre um destino. Devolve ``False`` se não existe ou não é chamável —
@@ -145,7 +168,9 @@ class Navigator:
             logger.warning("Destino desconhecido na navegacao: %s", key_or_method)
             return False
         method()
-        self._current = method_name
+        if method_name != self._current:
+            self._current = method_name
+        self._announce()
         return True
 
     def refresh_current(self) -> bool:

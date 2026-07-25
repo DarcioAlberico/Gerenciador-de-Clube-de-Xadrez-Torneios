@@ -23,6 +23,18 @@ import customtkinter as ctk
 from src.core.database import default_backup_dir
 
 from .components import BusyIndicator
+from .components.sidebar import (
+    MODE_FULL as SIDEBAR_FULL,
+)
+from .components.sidebar import (
+    MODE_HIDDEN as SIDEBAR_HIDDEN,
+)
+from .components.sidebar import (
+    MODE_RAIL as SIDEBAR_RAIL,
+)
+from .components.sidebar import (
+    Sidebar,
+)
 from .components.toast import ToastAction, ToastStack
 from .navigation import DESTINATIONS, Navigator
 from .theme import (
@@ -45,7 +57,8 @@ class AppShell:
         return self.navigator
 
     def _configure_grid(self) -> None:
-        self.grid_columnconfigure(0, weight=1)
+        self.grid_columnconfigure(0, weight=0)  # sidebar: largura fixa
+        self.grid_columnconfigure(1, weight=1)  # conteudo: ocupa o resto
         self.grid_rowconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=0)
 
@@ -212,7 +225,7 @@ class AppShell:
 
     def _build_statusbar(self) -> None:
         self.statusbar = ctk.CTkFrame(self, height=28, corner_radius=0, fg_color=THEME_STATUSBAR_BG)
-        self.statusbar.grid(row=1, column=0, sticky="ew")
+        self.statusbar.grid(row=1, column=0, columnspan=2, sticky="ew")
         self.statusbar.grid_columnconfigure(0, weight=2)
         self.statusbar.grid_columnconfigure(1, weight=1)
         self.statusbar.grid_columnconfigure(2, weight=2)
@@ -323,10 +336,64 @@ class AppShell:
         self.toasts.show(message, kind=kind, duration_ms=duration_ms, action=action)
 
     def _build_content(self) -> None:
+        """Monta o corpo da janela: sidebar (coluna 0) + área de conteúdo (1).
+
+        A sidebar entra aqui, e não num passo separado, porque é o mesmo ponto
+        que o login e a reconstrução por troca de tema já chamam — um caminho só
+        para montar o corpo.
+        """
+        self._build_sidebar()
         self.content = ctk.CTkFrame(self, corner_radius=0, fg_color=THEME_APP_BG)
-        self.content.grid(row=0, column=0, sticky="nsew")
+        self.content.grid(row=0, column=1, sticky="nsew")
         self.content.grid_columnconfigure(0, weight=1)
         self.content.grid_rowconfigure(1, weight=1)
+
+    def _build_sidebar(self) -> None:
+        """Navegação primária persistente (P1-7). O `tk.Menu` segue como fallback."""
+        anterior = getattr(self, "sidebar", None)
+        if anterior is not None:
+            try:
+                anterior.frame.destroy()
+            except Exception:
+                pass
+        # A janela e reconstruida na troca de tema: os inscritos antigos apontam
+        # para widgets mortos e precisam sair antes de a nova barra assinar.
+        self.navigator.clear_subscribers()
+        self.sidebar = Sidebar(
+            self,
+            navigator=self.navigator,
+            icons=getattr(self, "_ctk_menu_icons", None),
+        )
+        self.sidebar.frame.grid(row=0, column=0, sticky="nsw")
+        self.navigator.subscribe(self.sidebar.highlight)
+        self.bind("<Configure>", self._sync_sidebar_mode, add="+")
+        self._sync_sidebar_mode()
+
+    # Limiares medidos, nao chutados: com a escala de UI padrao a barra completa
+    # custa ~235px e o rail ~62px, e a tela Exportar sozinha ja pede ~1.375px de
+    # conteudo. Abaixo destes tamanhos a barra some e o menu nativo volta a ser a
+    # navegacao (P1-7) — melhor perder a barra do que empurrar botao para fora da
+    # janela. Ver B-8 no ROADMAP: a Exportar merece um layout mais estreito.
+    # Os valores sao pixels REAIS: o CTk multiplica a geometria pela escala de UI
+    # (120% por padrao aqui), entao uma janela pedida em 1200 mede 1440 na tela.
+    _SIDEBAR_FULL_FROM = 1500
+    _SIDEBAR_RAIL_FROM = 1440
+
+    def _sync_sidebar_mode(self, event: Any = None) -> None:
+        sidebar = getattr(self, "sidebar", None)
+        if sidebar is None:
+            return
+        if event is not None and getattr(event, "widget", self) is not self:
+            return  # <Configure> de widget filho: nao interessa
+        # Dentro do <Configure>, winfo_width() ainda devolve a largura ANTIGA:
+        # a nova vem no proprio evento.
+        largura = getattr(event, "width", 0) or self.winfo_width()
+        if largura >= self._SIDEBAR_FULL_FROM:
+            sidebar.set_mode(SIDEBAR_FULL)
+        elif largura >= self._SIDEBAR_RAIL_FROM:
+            sidebar.set_mode(SIDEBAR_RAIL)
+        else:
+            sidebar.set_mode(SIDEBAR_HIDDEN)
 
     def _clear_content(self) -> None:
         self._pairing_shortcuts_enabled = False
