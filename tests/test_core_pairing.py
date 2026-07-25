@@ -14,6 +14,13 @@ from src.core.services import (
 from tests.fixtures import load_tournament_fixture
 from tests.support.core_service_base import CoreServiceTestCase
 
+# Fixtures de referencia do bbpPairings: a distribuicao NAO esta no repositorio
+# (ver .gitignore). Sem ela os testes que a usam sao pulados com motivo, em vez
+# de falharem — e o que acontecia em qualquer maquina/CI sem o download.
+BBP_FIXTURE_DIR = Path(__file__).resolve().parents[1] / "bbpPairings-6.0.0" / "test" / "tests"
+BBP_DISPONIVEL = BBP_FIXTURE_DIR.is_dir()
+BBP_MOTIVO = f"fixtures do bbpPairings ausentes ({BBP_FIXTURE_DIR}); baixe a distribuicao para rodar"
+
 
 class TournamentFixtureTest(unittest.TestCase):
     """Smoke da pasta tests/fixtures/tournaments/ — garante que o cenário
@@ -1083,18 +1090,21 @@ class PairingRulesTest(CoreServiceTestCase):
                 self.service.update_result(tid, int(pairing["id"]), result)
             self.service.close_round(tid, int(rd["id"]))
 
+    @unittest.skipUnless(BBP_DISPONIVEL, BBP_MOTIVO)
     def test_bbp_dutch_2025_c5_fixture_matches_reference(self) -> None:
         self.assertEqual(
             self._bbp_fixture_next_pairs("dutch_2025_C5"),
             self._bbp_expected_pairs("dutch_2025_C5"),
         )
 
+    @unittest.skipUnless(BBP_DISPONIVEL, BBP_MOTIVO)
     def test_bbp_dutch_2025_c9_fixture_matches_reference(self) -> None:
         self.assertEqual(
             self._bbp_fixture_next_pairs("dutch_2025_C9"),
             self._bbp_expected_pairs("dutch_2025_C9"),
         )
 
+    @unittest.skipUnless(BBP_DISPONIVEL, BBP_MOTIVO)
     def test_bbp_issue_7_large_fixture_generates_valid_pairing(self) -> None:
         summary = self._bbp_fixture_next_summary("issue_7")
 
@@ -1143,7 +1153,7 @@ class PairingRulesTest(CoreServiceTestCase):
     def _bbp_fixture_next_summary(self, case_name: str) -> dict[str, Any]:
         from src.services.trf_import import build_trf_rounds, parse_trf
 
-        fixture_dir = Path(__file__).resolve().parents[1] / "bbpPairings-6.0.0" / "test" / "tests"
+        fixture_dir = BBP_FIXTURE_DIR
         parsed = parse_trf((fixture_dir / f"{case_name}.input").read_text(encoding="utf-8"))
         identity = {int(player["start_rank"]): int(player["start_rank"]) for player in parsed["players"]}
         played_rounds = max((number for number, _pairings in build_trf_rounds(parsed["players"], identity)), default=0)
@@ -1242,7 +1252,7 @@ class PairingRulesTest(CoreServiceTestCase):
 
     @staticmethod
     def _bbp_expected_pairs(case_name: str) -> list[tuple[int, int]]:
-        fixture_dir = Path(__file__).resolve().parents[1] / "bbpPairings-6.0.0" / "test" / "tests"
+        fixture_dir = BBP_FIXTURE_DIR
         lines = (fixture_dir / f"{case_name}.output.expected").read_text(encoding="utf-8").splitlines()
         return [tuple(map(int, line.split())) for line in lines[1:]]
 
