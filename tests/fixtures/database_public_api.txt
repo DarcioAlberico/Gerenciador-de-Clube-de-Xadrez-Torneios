@@ -12,6 +12,7 @@ add_requested_team_bye
 assign_tournament_referee
 backup
 backup_before
+clear_column_layouts
 close_round
 club_summary
 connect
@@ -82,6 +83,7 @@ get_class
 get_club
 get_club_event
 get_club_event_by_tournament
+get_column_layout
 get_exercise
 get_fide_rating_report
 get_financial_transaction
@@ -205,6 +207,7 @@ rows_to_dicts
 save_app_settings
 save_attendance
 save_club
+save_column_layout
 save_fide_rating_report
 save_report_layout
 save_round_schedule

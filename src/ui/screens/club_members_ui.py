@@ -118,6 +118,7 @@ class ClubMembersMixin:
         freq_tree.column("id", width=30)
         freq_tree.column("data", width=80)
         freq_tree.column("evento", width=120)
+        self._remember_column_widths(freq_tree)
         freq_tree.pack(fill="x", pady=5)
 
         freq_date_entry = self._make_date_entry(freq_frame, width=200)
@@ -166,6 +167,7 @@ class ClubMembersMixin:
         titles_tree.column("id", width=30)
         titles_tree.column("titulo", width=120)
         titles_tree.column("data", width=80)
+        self._remember_column_widths(titles_tree)
         titles_tree.pack(fill="x", pady=5)
 
         title_name_entry = ctk.CTkEntry(titles_frame, placeholder_text="Título", width=200)

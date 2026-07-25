@@ -25,6 +25,7 @@ from .database_referees import RefereesMixin
 from .database_schema import CREATE_INDEXES_SQL, CREATE_TABLES_SQL
 from .database_sync_audit import SyncAuditMixin
 from .database_tournament_core import TournamentCoreMixin
+from .database_ui_prefs import UiPrefsMixin
 
 logger = logging.getLogger(__name__)
 
@@ -385,8 +386,9 @@ class Database(
     LearningLevelMixin,
     InventoryMixin,
     RefereesMixin,
+    UiPrefsMixin,
 ):
-    SCHEMA_VERSION = 43
+    SCHEMA_VERSION = 44
 
     def __init__(
         self,

@@ -56,6 +56,7 @@ from src.core.services import (
     CertificateService,
     ChessResultsService,
     ClockIntegrationService,
+    ColumnLayoutService,
     LibraryService,
     ClubService,
     CommunicationService,

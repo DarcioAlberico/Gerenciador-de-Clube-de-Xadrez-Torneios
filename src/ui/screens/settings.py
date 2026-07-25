@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from ..support import *
+from ..components import secondary_button
 
 from .settings_certificates_ui import SettingsCertificatesMixin
 from .settings_reports_ui import SettingsReportsMixin
@@ -529,6 +530,23 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
         stack(tab, ui_scale_entry, label="Tamanho da fonte/interface (%)")
         ui_scale_entry.insert(0, str(settings.get("ui_scale_percent") or "120"))
 
+        # --- Largura das colunas (B-1): a saida de quem se perdeu arrastando ---
+        # Arrastar largura nao tem "desfazer" proprio, e o usuario pode espremer
+        # uma coluna ate ela sumir. Este botao e a volta ao estado conhecido.
+        stack(
+            tab,
+            secondary_button(
+                tab,
+                text="Restaurar largura das colunas",
+                command=self._reset_column_widths,
+                width=260,
+                tip="Volta todas as tabelas a largura padrao (so para o seu usuario).",
+            ),
+            label="Tabelas",
+            section=True,
+            help_text="As larguras que voce ajusta arrastando ficam guardadas por usuario.",
+        )
+
         # --- Selecao inicial: tema curado correspondente, senao modo avancado ---
         saved_curated = settings.get("curated_theme") or ""
         initial = saved_curated if saved_curated in CURATED_THEMES else match_curated_theme(
@@ -551,6 +569,22 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
             "ui_scale_entry": ui_scale_entry,
             "get_curated": lambda: state["theme"],
         }
+
+    def _reset_column_widths(self) -> None:
+        """Devolve todas as tabelas do usuário à largura padrão (B-1).
+
+        Só vale a partir da próxima vez que cada tela for aberta — a tabela que
+        está montada agora continua como está, e o toast diz isso em vez de
+        deixar o usuário achando que o botão não funcionou.
+        """
+        removidos = self.column_layout_service.reset(self.security_service.current_user_id())
+        if not removidos:
+            self._show_toast("Nenhuma tabela tinha largura personalizada.")
+            return
+        self._show_toast(
+            f"Largura padrão restaurada em {removidos} tabela(s). "
+            "Vale ao abrir a tela de novo."
+        )
 
     def _curated_theme_card(self, parent: Any, key: str, on_click: Callable[[], None]) -> ctk.CTkFrame:
         """Cartao clicavel de tema curado: mini-preview + nome + modo."""

@@ -109,6 +109,7 @@ class AlbericusApp(
         self.norm_assistant_service = NormAssistantService(self.db)
         self.prize_service = PrizeService(self.db)
         self.list_layout_service = ListLayoutService(self.db)
+        self.column_layout_service = ColumnLayoutService(self.db)
         self.export_service = ExportService(self.db, self.pairing_service)
         self.chess_results_service = ChessResultsService(self.db, self.export_service)
         self.photo_album_service = PhotoAlbumService(self.db)
@@ -673,7 +674,51 @@ class AlbericusApp(
         tree.grid(row=0, column=0, sticky="nsew")
         y_scrollbar.grid(row=0, column=1, sticky="ns")
         x_scrollbar.grid(row=1, column=0, sticky="ew")
+        self._remember_column_widths(tree)
         return tree
+
+    def _remember_column_widths(self, tree: ttk.Treeview) -> None:
+        """Aplica a largura que o usuario escolheu e passa a guardar o arrasto (B-1).
+
+        Recebe a tabela **pronta** e le dela tudo de que precisa: colunas,
+        titulos e a largura que o codigo pediu (que e o padrao). Por isso serve
+        tanto ao _make_tree quanto as tabelas montadas a mao — e foi assim que
+        as tres tabelas fora do helper entraram sem virar excecao.
+
+        A identidade da tabela sai das proprias colunas (ver column_layouts):
+        sao ~59 chamadas de _make_tree, e exigir uma chave em cada uma seriam
+        59 chances de errar.
+        """
+        columns = [str(column) for column in tree["columns"]]
+        if not columns:
+            return
+        headings = {column: str(tree.heading(column, "text")) for column in columns}
+        defaults = {column: int(tree.column(column, "width") or 0) for column in columns}
+        key = ColumnLayoutService.key_for(columns, headings)
+        user_id = self.security_service.current_user_id()
+
+        for column, width in self.column_layout_service.widths_for(
+            user_id, key, columns, defaults
+        ).items():
+            tree.column(column, width=width)
+
+        # Grava no soltar do botao, e nao a cada pixel: o ttk nao avisa que uma
+        # coluna mudou de tamanho, entao a alternativa seria vigiar o <Motion> —
+        # uma escrita em banco por pixel arrastado.
+        state = {"dragging": False}
+
+        def on_press(event: Any) -> None:
+            state["dragging"] = tree.identify_region(event.x, event.y) == "separator"
+
+        def on_release(_event: Any) -> None:
+            if not state["dragging"]:
+                return
+            state["dragging"] = False
+            current = {column: int(tree.column(column, "width") or 0) for column in columns}
+            self.column_layout_service.remember(user_id, key, defaults, current)
+
+        tree.bind("<ButtonPress-1>", on_press, add="+")
+        tree.bind("<ButtonRelease-1>", on_release, add="+")
 
     @staticmethod
     def _member_display_name(member: dict[str, Any]) -> str:
