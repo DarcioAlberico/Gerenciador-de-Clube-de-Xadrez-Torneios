@@ -90,8 +90,43 @@ class UiLayoutSmokeTest(unittest.TestCase):
             release_dead_ctk_windows()
         self.temp_dir.cleanup()
 
+    def test_barra_do_torneio_quebra_linha_em_janela_estreita(self) -> None:
+        """B-8: os 8 itens numa linha so custam ~950px e era o UNICO widget que
+        saía da janela em todas as telas de torneio — sempre o ultimo ("Diplomas").
+
+        Quebrar custa ~38px de altura, que sobra; insistir numa linha custa um
+        botao inacessivel, que nao tem substituto visivel.
+        """
+        self.app.geometry("1600x900+0+0")
+        self.app.update()
+        self.app.show_players()
+        self.app.update()
+        linhas_largo = {b.grid_info()["row"] for b in self.app._tournament_nav_buttons}
+        self.assertEqual({0}, linhas_largo, "em janela larga a barra fica em uma linha")
+
+        self.app.geometry("1050x700+0+0")
+        self.app.update()
+        self.app.show_players()
+        self.app.update()
+        linhas_estreito = {b.grid_info()["row"] for b in self.app._tournament_nav_buttons}
+        self.assertGreater(len(linhas_estreito), 1, "em janela estreita a barra quebra")
+        self.assertEqual([], self._widgets_past_right_edge())
+
+    def test_sidebar_sobrevive_a_janela_media(self) -> None:
+        """O ganho direto da B-8: a barra some 300px depois do que sumia antes.
+
+        Nesta largura (1.260px reais) a sidebar ficava **escondida** — o limiar
+        do rail era 1.440, ditado pela tela Exportar e pela barra do torneio.
+        """
+        self.app.geometry("1050x700+0+0")
+        self.app.update()
+        self.app.show_players()
+        self.app.update()
+        self.assertIsNotNone(getattr(self.app, "sidebar", None))
+        self.assertNotEqual("hidden", self.app.sidebar.mode)
+
     def test_main_pages_keep_controls_inside_window_at_supported_sizes(self) -> None:
-        for width, height in [(1360, 720), (1180, 640)]:
+        for width, height in [(1360, 720), (1180, 640), (1050, 700)]:
             with self.subTest(size=f"{width}x{height}"):
                 self.app.geometry(f"{width}x{height}+0+0")
                 self.app.update()

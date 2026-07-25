@@ -352,9 +352,10 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 - **B-4** Virtualização/paginação de `Treeview` (P2-13) — antes da base crescer.
 - ✅ **B-5** Cache de figuras matplotlib quando dados não mudam (P2-14).
 - **B-6** Migrar telas-monstro restantes para 3 camadas (continuação de F1.5).
-- **B-8** Estreitar o layout da tela **Exportar** (e revisar as densas: Rodadas,
-  Jogadores). Hoje ela pede ~1.375px de conteúdo e é o que obriga a sidebar a
-  sumir em janelas médias (F3.1). Ganho direto: sidebar visível em mais telas.
+- ✅ **B-8** Estreitar o layout da tela **Exportar** — feito; o gargalo mudou de
+  dono (ver o status abaixo). **Continuação:** as cinco telas administrativas
+  densas (Ranking interno, Financeiro, Calendário, Exercícios, Relatórios) são
+  quem define o limiar agora.
 - **B-7** Acentuar cabeçalhos/títulos de `src/services/export_*` para casar com a UI
   (F3.5). Fica fora da F3.5 porque altera **arquivo entregue** (PDF/CSV/HTML) e
   formato que terceiros consomem — precisa de decisão sobre compatibilidade.
@@ -389,6 +390,35 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 > (7:1)** nas superfícies (pior par: 12,77:1); para isso, `apply_bg_preset`
 > passou a aceitar override de cor de texto, e a devolvê-la ao sair — senão o
 > preto puro grudaria no tema seguinte. 21 testes, nenhum abre janela.
+
+> **Status (2026-07-25): B-8 CONCLUÍDA — e o gargalo mudou de dono.** A tela
+> **Exportar** punha os três seletores e as três ações numa linha só e pedia
+> **1.360px**; empilhar as ações numa linha própria derrubou a exigência dela
+> para **menos de 1.000px**. Mas a medição seguinte mostrou que ela nem era o
+> problema inteiro: em **toda** tela de torneio, o único widget fora da janela
+> era sempre o mesmo — o último item ("Diplomas") da **barra do torneio**, oito
+> botões de 112px numa linha rígida de ~950px. Agora ela quebra em quantas
+> linhas couberem, recalculando na mesma carona do `<Configure>` que a sidebar
+> já usa. Quebrar custa ~38px de altura, que sobra; insistir numa linha custa um
+> botão inacessível, que não tem substituto visível.
+>
+> **Limiares remedidos com as 23 telas do smoke**, e não só com as de torneio —
+> foi aí que apareceu o novo dono do gargalo: as telas **administrativas
+> densas** (Ranking interno, Financeiro, Calendário, Exercícios, Relatórios).
+>
+> | modo da sidebar | antes | depois |
+> |---|---|---|
+> | completa | 1.500px | **1.416px** |
+> | rail (só ícones) | 1.440px | **1.260px** |
+>
+> Ou seja: **a navegação sobrevive a 180px a menos de janela**. O ganho não é
+> maior porque a Exportar deixou de ser o limite e outras cinco telas assumiram
+> — registrado como continuação da B-8, com nome e número, em vez de virar
+> dívida anônima.
+>
+> Um detalhe que o teste pegou: medir a largura pelo **cabeçalho** não funciona
+> (ele nasce junto com a tela e ainda mede 1px); pelo `content`, que sobrevive à
+> troca de tela, funciona.
 
 > **Status (2026-07-25): B-1 CONCLUÍDA — com uma divergência deliberada.**
 > O backlog dizia "reaproveitar `ColumnLayoutEditor`", e **não foi isso**. Aquele
