@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from .busy import BusyIndicator
 from .buttons import danger_button, primary_button, secondary_button
+from .debounce import Debounced, debounce
 from .dialogs import alert_dialog, confirm_dialog, tri_state_dialog
 from .donation import show_donation_modal
 from .empty_state import EmptyState
@@ -25,6 +26,8 @@ __all__ = [
     "alert_dialog",
     "Tooltip",
     "EmptyState",
+    "Debounced",
+    "debounce",
     "BusyIndicator",
     "ToastStack",
     "show_donation_modal",

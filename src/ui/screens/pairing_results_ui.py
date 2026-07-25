@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from ..support import *
-from ..components import Tooltip, danger_button, menu_button, primary_button, secondary_button
+from ..components import Tooltip, danger_button, debounce, menu_button, primary_button, secondary_button
 
 
 # ---------------------------------------------------------------------------
@@ -213,7 +213,12 @@ class PairingResultsMixin:
                 placeholder_text="Buscar jogador, clube ou categoria",
             )
             self.initial_player_search_entry.grid(row=2, column=0, pady=(8, 0), sticky="w")
-            self.initial_player_search_entry.bind("<KeyRelease>", lambda _event: self._load_initial_players())
+            self.initial_player_search_debounced = debounce(
+                self.initial_player_search_entry, self._load_initial_players
+            )
+            self.initial_player_search_entry.bind(
+                "<KeyRelease>", self.initial_player_search_debounced
+            )
             ctk.CTkButton(
                 roster_header,
                 text="Exportar lista",

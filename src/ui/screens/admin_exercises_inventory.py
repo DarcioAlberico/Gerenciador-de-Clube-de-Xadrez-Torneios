@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from ..support import *
+from ..components import debounce
 
 
 # Sub-mixin de Admin: exercicios e inventario.
@@ -550,7 +551,7 @@ class ExercisesInventoryMixin:
 
         exercises_tree.bind("<<TreeviewSelect>>", on_exercise_select)
         lists_tree.bind("<<TreeviewSelect>>", on_list_select)
-        search_entry.bind("<KeyRelease>", lambda _event: refresh_all())
+        search_entry.bind("<KeyRelease>", debounce(search_entry, refresh_all))
         difficulty_filter.configure(command=lambda _value: refresh_all())
         active_filter.configure(command=lambda _value: refresh_all())
         list_club_option.configure(command=on_list_club_change)
@@ -1117,7 +1118,7 @@ class ExercisesInventoryMixin:
         items_tree.bind("<<TreeviewSelect>>", on_item_select)
         loans_tree.bind("<<TreeviewSelect>>", on_loan_select)
         maintenance_tree.bind("<<TreeviewSelect>>", on_maintenance_select)
-        search_entry.bind("<KeyRelease>", lambda _event: refresh_all())
+        search_entry.bind("<KeyRelease>", debounce(search_entry, refresh_all))
         type_filter.configure(command=lambda _value: refresh_all())
         active_filter.configure(command=lambda _value: refresh_all())
 

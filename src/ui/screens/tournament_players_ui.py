@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from ..support import *
+from ..components import debounce
 
 from src.services.pairing.acceleration import acceleration_spec
 from src.services.pairing import (
@@ -1576,7 +1577,7 @@ class TournamentPlayersMixin:
                 self._show_error(exc)
 
         tree.bind("<<TreeviewSelect>>", on_select)
-        search_entry.bind("<KeyRelease>", lambda _event: load_players())
+        search_entry.bind("<KeyRelease>", debounce(search_entry, load_players))
         include_out_of_scope_check.configure(command=load_member_options)
 
         button_specs = [

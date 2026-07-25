@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from ..support import *
-from ..components import danger_button
+from ..components import danger_button, debounce
 
 
 # Sub-mixin de Admin: treinos e financeiro.
@@ -482,9 +482,9 @@ class TrainingFinanceMixin:
 
         sessions_tree.bind("<<TreeviewSelect>>", on_session_select)
         attendance_tree.bind("<<TreeviewSelect>>", on_attendance_select)
-        search_entry.bind("<KeyRelease>", lambda _event: load_sessions())
-        start_filter.bind("<KeyRelease>", lambda _event: load_sessions())
-        end_filter.bind("<KeyRelease>", lambda _event: load_sessions())
+        search_entry.bind("<KeyRelease>", debounce(search_entry, load_sessions))
+        start_filter.bind("<KeyRelease>", debounce(start_filter, load_sessions))
+        end_filter.bind("<KeyRelease>", debounce(end_filter, load_sessions))
         club_option.configure(command=on_club_change)
         class_option.configure(command=on_class_change)
 
@@ -1004,9 +1004,9 @@ class TrainingFinanceMixin:
         ctk.CTkButton(controls, text="Filtrar", command=load_payments).grid(row=0, column=4, padx=(8, 0))
         plans_tree.bind("<<TreeviewSelect>>", on_plan_select)
         payments_tree.bind("<<TreeviewSelect>>", on_payment_select)
-        search_entry.bind("<KeyRelease>", lambda _event: load_payments())
-        start_filter.bind("<KeyRelease>", lambda _event: load_payments())
-        end_filter.bind("<KeyRelease>", lambda _event: load_payments())
+        search_entry.bind("<KeyRelease>", debounce(search_entry, load_payments))
+        start_filter.bind("<KeyRelease>", debounce(start_filter, load_payments))
+        end_filter.bind("<KeyRelease>", debounce(end_filter, load_payments))
         status_filter.configure(command=lambda _value: load_payments())
 
         load_member_options()

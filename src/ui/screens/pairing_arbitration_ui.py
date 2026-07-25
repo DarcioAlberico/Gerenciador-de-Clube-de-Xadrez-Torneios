@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from ..support import *
+from ..components import debounce
 
 
 class ArbitrationPagesMixin:
@@ -716,7 +717,12 @@ class ArbitrationPagesMixin:
                 tree.see(first_issue[0])
 
         issue_filter_option.configure(command=load_filtered_issues)
-        issue_search_entry.bind("<KeyRelease>", load_filtered_issues)
+        # Guardado na instancia: quem precisa do resultado agora (Enter, teste)
+        # chama flush() em vez de esperar o intervalo.
+        self.arbitration_issue_search_debounced = debounce(
+            issue_search_entry, load_filtered_issues
+        )
+        issue_search_entry.bind("<KeyRelease>", self.arbitration_issue_search_debounced)
         load_filtered_issues()
 
         def show_issue_detail(_event: Any = None) -> None:
