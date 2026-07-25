@@ -12,6 +12,7 @@ from src.services.photo_album_service import PhotoAlbumService
 from src.services.finance_service import FinanceService
 from src.services.inventory_service import InventoryService
 from src.services.member_service import GuardianService, MemberService
+from src.services.column_layout_service import ColumnLayoutService
 from src.services.list_layout_service import ListLayoutService
 from src.services.pairing_service import PairingService
 from src.services.prize_service import PrizeService

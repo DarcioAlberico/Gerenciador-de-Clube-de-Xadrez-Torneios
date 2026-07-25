@@ -115,6 +115,7 @@ class SettingsUsersMixin:
         self.plans_tree.column("ciclo", width=100, anchor="center")
         self.plans_tree.column("status", width=100, anchor="center")
 
+        self._remember_column_widths(self.plans_tree)
         self.plans_tree.pack(fill="both", expand=True)
         self.plans_tree.bind("<Double-1>", lambda e: self._on_plan_double_click())
 

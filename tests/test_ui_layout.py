@@ -1532,6 +1532,89 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.app.update()
         self.assertEqual(0, card.cget("border_width"))
 
+    def _arrastar_separador(self, tree: ttk.Treeview, coluna: str, largura: int) -> None:
+        """Simula o fim de um arrasto no separador da coluna.
+
+        O ttk nao expoe "coluna redimensionada": quem observa e o proprio
+        _make_tree, no par ButtonPress (estava no separador?) / ButtonRelease.
+        identify_region depende de coordenada real dentro do cabecalho, que num
+        teste headless nao e confiavel — entao ela e forcada, e o que se testa e
+        a reacao, nao a leitura do mouse.
+        """
+        tree.column(coluna, width=largura)
+        original = tree.identify_region
+        tree.identify_region = lambda _x, _y: "separator"  # type: ignore[method-assign]
+        try:
+            tree.event_generate("<ButtonPress-1>", x=5, y=5, when="now")
+            tree.event_generate("<ButtonRelease-1>", x=5, y=5, when="now")
+        finally:
+            tree.identify_region = original  # type: ignore[method-assign]
+
+    def test_largura_de_coluna_arrastada_volta_na_proxima_visita(self) -> None:
+        """B-1/P2-9: o arrasto fica guardado por usuario e sobrevive a navegacao."""
+        self.app.show_members()
+        self.app.update()
+        tree = next(w for w in self._walk(self.app.content) if isinstance(w, ttk.Treeview))
+        coluna = tree["columns"][1]
+        padrao = int(tree.column(coluna, "width"))
+
+        self._arrastar_separador(tree, coluna, padrao + 90)
+
+        self.app.show_club()
+        self.app.update()
+        self.app.show_members()
+        self.app.update()
+        tree2 = next(w for w in self._walk(self.app.content) if isinstance(w, ttk.Treeview))
+        self.assertEqual(padrao + 90, int(tree2.column(coluna, "width")))
+
+    def test_largura_de_coluna_e_por_usuario(self) -> None:
+        self.app.show_members()
+        self.app.update()
+        tree = next(w for w in self._walk(self.app.content) if isinstance(w, ttk.Treeview))
+        coluna = tree["columns"][1]
+        padrao = int(tree.column(coluna, "width"))
+        self._arrastar_separador(tree, coluna, padrao + 90)
+
+        # Outro operador na mesma maquina abre a mesma tela.
+        self.app.security_service._current_user = {"id": "999", "username": "outro", "role": "arbiter"}
+        self.app.show_members()
+        self.app.update()
+        outra = next(w for w in self._walk(self.app.content) if isinstance(w, ttk.Treeview))
+        self.assertEqual(padrao, int(outra.column(coluna, "width")))
+
+    def test_restaurar_largura_padrao_limpa_o_que_foi_arrastado(self) -> None:
+        self.app.show_members()
+        self.app.update()
+        tree = next(w for w in self._walk(self.app.content) if isinstance(w, ttk.Treeview))
+        coluna = tree["columns"][1]
+        padrao = int(tree.column(coluna, "width"))
+        self._arrastar_separador(tree, coluna, padrao + 90)
+
+        self.app._reset_column_widths()
+
+        self.app.show_members()
+        self.app.update()
+        tree2 = next(w for w in self._walk(self.app.content) if isinstance(w, ttk.Treeview))
+        self.assertEqual(padrao, int(tree2.column(coluna, "width")))
+        self.assertIn("padrão restaurada", self.messages[-1])
+
+    def test_clique_fora_do_separador_nao_guarda_largura(self) -> None:
+        """Selecionar uma linha nao pode ser confundido com redimensionar."""
+        self.app.show_members()
+        self.app.update()
+        tree = next(w for w in self._walk(self.app.content) if isinstance(w, ttk.Treeview))
+        coluna = tree["columns"][1]
+        tree.column(coluna, width=int(tree.column(coluna, "width")) + 70)
+        tree.identify_region = lambda _x, _y: "cell"  # type: ignore[method-assign]
+        tree.event_generate("<ButtonPress-1>", x=5, y=30, when="now")
+        tree.event_generate("<ButtonRelease-1>", x=5, y=30, when="now")
+
+        usuario = self.app.security_service.current_user_id()
+        chave = self.app.column_layout_service.key_for(
+            list(tree["columns"]), {c: tree.heading(c, "text") for c in tree["columns"]}
+        )
+        self.assertEqual("", self.db.get_column_layout(usuario, chave))
+
     def _dashboard_fixo(self, total: int = 10, ativos: int = 8) -> dict:
         return {
             "summary": {"total_members": total, "active_members": ativos},

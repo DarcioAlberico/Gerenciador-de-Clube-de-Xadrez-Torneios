@@ -107,6 +107,20 @@ class SecurityService:
             conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
         self.audit("user_deleted", entity_id=user_id, description="Usuário deletado.")
 
+    def current_user_id(self) -> int:
+        """Id do usuário logado, ou 0 para o operador padrão (sem login).
+
+        Zero é um id de verdade aqui, não "ausente": é a identidade de quem usa
+        o app sem sessão iniciada, e é sob ele que preferências de interface
+        (largura de coluna, por exemplo) ficam guardadas.
+        """
+        if not self._current_user:
+            return 0
+        try:
+            return int(self._current_user["id"])
+        except (KeyError, TypeError, ValueError):
+            return 0
+
     def current_operator(self) -> dict[str, str]:
         if self._current_user:
             role = self._current_user["role"]

@@ -55,6 +55,7 @@ class LegacyMigrations:
             41: self._migrate_to_v41,
             42: self._migrate_to_v42,
             43: self._migrate_to_v43,
+            44: self._migrate_to_v44,
         }
 
     def _run_schema_migrations(self, connection: sqlite3.Connection) -> None:
@@ -159,6 +160,8 @@ class LegacyMigrations:
             self._migrate_to_v42(connection)
         if self.db.SCHEMA_VERSION >= 43:
             self._migrate_to_v43(connection)
+        if self.db.SCHEMA_VERSION >= 44:
+            self._migrate_to_v44(connection)
 
     def _migrate_to_v1(self, connection: sqlite3.Connection) -> None:
         now = self.db.now()
@@ -1829,3 +1832,35 @@ class LegacyMigrations:
         for column, definition in additions.items():
             if column not in columns:
                 connection.execute(f"ALTER TABLE certificate_templates ADD COLUMN {column} {definition}")
+
+    def _migrate_to_v44(self, connection: sqlite3.Connection) -> None:
+        """Largura das colunas das tabelas de tela, por usuário (B-1 / P2-9).
+
+        Tabela nova em vez de chave em ``app_settings`` por dois motivos: o
+        conjunto de tabelas é aberto (não cabe numa lista fixa de chaves
+        permitidas) e a preferência é **de quem usa**, não do aplicativo — dois
+        operadores no mesmo computador têm larguras diferentes.
+
+        Sem chave estrangeira para ``users`` de propósito: ``user_id = 0`` é o
+        operador padrão (o app roda sem login em algumas rotinas e nos testes),
+        e esse id não existe na tabela de usuários. Preferência de largura não
+        vale uma restrição que impediria o app de guardar o que o usuário fez.
+        """
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS ui_column_layouts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                table_key TEXT NOT NULL,
+                widths_json TEXT NOT NULL DEFAULT '',
+                updated_at TEXT NOT NULL,
+                UNIQUE (user_id, table_key)
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_ui_column_layouts_user
+                ON ui_column_layouts(user_id, table_key)
+            """
+        )

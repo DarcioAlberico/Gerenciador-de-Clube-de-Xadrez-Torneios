@@ -346,7 +346,7 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 
 ### Fase 4 — Backlog em execução
 
-- **B-1** Persistência de layout de colunas por usuário (P2-9) — reaproveitar `ColumnLayoutEditor`.
+- ✅ **B-1** Persistência de layout de colunas por usuário (P2-9).
 - **B-2** Auditoria de contraste WCAG AA + preset alto contraste (P2-11).
 - **B-3** i18n: extrair strings para `i18n/pt_BR.json`, manter só PT-BR (P2-12).
 - **B-4** Virtualização/paginação de `Treeview` (P2-13) — antes da base crescer.
@@ -358,6 +358,35 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 - **B-7** Acentuar cabeçalhos/títulos de `src/services/export_*` para casar com a UI
   (F3.5). Fica fora da F3.5 porque altera **arquivo entregue** (PDF/CSV/HTML) e
   formato que terceiros consomem — precisa de decisão sobre compatibilidade.
+
+> **Status (2026-07-25): B-1 CONCLUÍDA — com uma divergência deliberada.**
+> O backlog dizia "reaproveitar `ColumnLayoutEditor`", e **não foi isso**. Aquele
+> editor escolhe *quais* colunas e em que ordem saem no **relatório de
+> classificação**, por torneio, e seu registro (`LAYOUT_REGISTRIES`) só conhece
+> `standings`. O achado do P2-9 é outro: as ~59 tabelas de tela nascem com
+> `widths={...}` cravado e o usuário não consegue guardar um ajuste. Levar o
+> editor para lá significaria abrir um diálogo para cada tabela; a interação
+> natural é arrastar o separador, que já existe no ttk e ninguém escutava.
+>
+> Então: arrastou, ficou guardado — por **usuário** (dois operadores na mesma
+> máquina não disputam largura), em tabela nova (`ui_column_layouts`, schema
+> **v44**) e não em `app_settings`, cuja lista fixa de chaves permitidas não
+> comporta um conjunto aberto de tabelas.
+>
+> Três decisões que o código registra: **a identidade da tabela sai dos dados**
+> (hash de colunas + títulos), porque exigir uma chave em 59 chamadas seriam 59
+> chances de errar; **guarda-se o desvio, não a largura**, para que mudar um
+> padrão amanhã alcance quem nunca arrastou aquela coluna; e **largura tem piso**
+> (40px), senão o arrasto consegue esconder dado sem o usuário perceber.
+>
+> O teste na janela real expôs o furo do primeiro desenho: **três tabelas são
+> montadas à mão, fora do `_make_tree`** (frequência e títulos em Sócios, planos
+> em Usuários) — o teste pegou justamente uma delas e a largura não voltava.
+> Daí `_remember_column_widths(tree)` receber a tabela **pronta** e ler dela
+> colunas, títulos e padrões, em vez de depender do helper: as três entraram com
+> uma linha cada, sem virar exceção. Saída de emergência em Configurações →
+> Aparência ("Restaurar largura das colunas"), porque arrastar não tem desfazer.
+> 33 testes sem janela + 4 na janela.
 
 > **Status (2026-07-25): B-5 CONCLUÍDA.** O achado ao medir foi outro: o caro
 > não era montar a figura, era o `pyplot`. Por gráfico, no backend TkAgg —
