@@ -11,6 +11,7 @@ import unittest
 from tkinter import TclError
 
 import customtkinter as ctk
+import pytest
 
 from src.ui.components.toast import DURATION_MS, UNDO_DURATION_MS, ToastStack
 from tests.support.ctk_cleanup import (
@@ -19,6 +20,9 @@ from tests.support.ctk_cleanup import (
     release_dead_ctk_windows,
 )
 
+# Esta suite abre janela: precisa de display real. Ver o marcador 'gui'
+# no pyproject — o gate sem display roda com -m 'not gui'.
+pytestmark = pytest.mark.gui
 
 def _find_button(widget, text: str) -> ctk.CTkButton | None:
     for child in widget.winfo_children():

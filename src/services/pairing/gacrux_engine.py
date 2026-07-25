@@ -50,8 +50,7 @@ class GacruxEngine:
             ),
         )
         
-        # Create bidirectional mapping between player ID and FIDE TRF 1-based rank
-        player_id_to_rank = {int(p["id"]): index for index, p in enumerate(all_players, start=1)}
+        # Map FIDE TRF 1-based rank back to the player ID
         rank_to_player_id = {index: int(p["id"]) for index, p in enumerate(all_players, start=1)}
 
         # Determine which players are NOT to be paired in this round (inactive or requested byes)
@@ -145,7 +144,6 @@ class GacruxEngine:
             pairs = pairing_res.get("pairs", [])
             
             # Map Gacrux pairs back to Albericus database structure
-            pairings = []
             board_number = 1
             normal_pairings = []
             bye_pairings = []

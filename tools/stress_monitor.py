@@ -19,15 +19,16 @@ Uso:
 from __future__ import annotations
 
 import json
+
+# Bandeja do sistema (opcional): minimizar para a tray em vez da barra de tarefas.
+# Degrada para minimização normal se as libs não estiverem disponíveis.
+import threading
 import time
 from pathlib import Path
 from typing import Any
 
 import customtkinter as ctk
 
-# Bandeja do sistema (opcional): minimizar para a tray em vez da barra de tarefas.
-# Degrada para minimização normal se as libs não estiverem disponíveis.
-import threading
 try:
     import pystray
     from PIL import Image, ImageDraw

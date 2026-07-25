@@ -48,6 +48,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 # Reusa a lógica PURA do teste oficial (sem duplicar geração/execução).
+import random  # noqa: E402  (após o ajuste de sys.path)
+
 import tests.test_stress_10k_tournaments as stress_mod  # noqa: E402  (ajuste de PROFILES)
 from tests.test_stress_10k_tournaments import (  # noqa: E402
     MAX_WORKERS,
@@ -60,8 +62,6 @@ from tests.test_stress_10k_tournaments import (  # noqa: E402
     _run_tournament,
     _write_txt,
 )
-
-import random  # noqa: E402  (após o ajuste de sys.path)
 
 # ---------------------------------------------------------------------------
 # Caminhos e parâmetros de I/O

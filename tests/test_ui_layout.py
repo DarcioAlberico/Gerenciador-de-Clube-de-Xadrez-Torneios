@@ -7,6 +7,7 @@ from tkinter import TclError, ttk
 from unittest import mock
 
 import customtkinter as ctk
+import pytest
 
 from src.core.database import Database
 from src.core.services import AppError, TeamService, TournamentService
@@ -18,6 +19,9 @@ from tests.support.ctk_cleanup import (
     release_dead_ctk_windows,
 )
 
+# Esta suite abre janela: precisa de display real. Ver o marcador 'gui'
+# no pyproject — o gate sem display roda com -m 'not gui'.
+pytestmark = pytest.mark.gui
 
 class UiLayoutSmokeTest(unittest.TestCase):
     PAGES = [

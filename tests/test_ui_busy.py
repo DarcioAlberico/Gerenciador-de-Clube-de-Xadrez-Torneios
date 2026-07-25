@@ -10,6 +10,7 @@ import unittest
 from tkinter import TclError
 
 import customtkinter as ctk
+import pytest
 
 from src.ui.components.busy import BusyIndicator
 from tests.support.ctk_cleanup import (
@@ -18,6 +19,9 @@ from tests.support.ctk_cleanup import (
     release_dead_ctk_windows,
 )
 
+# Esta suite abre janela: precisa de display real. Ver o marcador 'gui'
+# no pyproject — o gate sem display roda com -m 'not gui'.
+pytestmark = pytest.mark.gui
 
 class BusyIndicatorTest(unittest.TestCase):
     root: ctk.CTk

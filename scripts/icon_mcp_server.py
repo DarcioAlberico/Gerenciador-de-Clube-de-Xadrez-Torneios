@@ -1,9 +1,10 @@
+import logging
 import os
 import sys
-import logging
 from typing import List, Optional
-from PIL import Image, ImageDraw, ImageFont
+
 from mcp.server.fastmcp import FastMCP
+from PIL import Image, ImageDraw, ImageFont
 
 # Configura o logger para escrever no stderr para não interferir com a comunicação stdio
 logging.basicConfig(level=logging.INFO, stream=sys.stderr)

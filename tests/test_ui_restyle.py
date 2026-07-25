@@ -10,6 +10,7 @@ import unittest
 from tkinter import TclError
 
 import customtkinter as ctk
+import pytest
 
 from src.ui.components.buttons import danger_button
 from src.ui.restyle import COLOR_OPTIONS, restyle, snapshot_defaults
@@ -26,6 +27,9 @@ from tests.support.ctk_cleanup import (
     release_dead_ctk_windows,
 )
 
+# Esta suite abre janela: precisa de display real. Ver o marcador 'gui'
+# no pyproject — o gate sem display roda com -m 'not gui'.
+pytestmark = pytest.mark.gui
 
 def cor_desenhada(widget) -> str:
     """Cor efetivamente pintada — cget diria o que foi pedido, não o que apareceu."""
