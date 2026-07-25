@@ -1398,6 +1398,50 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.assertEqual("viagem", restaurados[0]["reason"], "o motivo tem de voltar junto")
         self.assertEqual(1, restaurados[0]["round_number"])
 
+    def test_troca_de_tema_preserva_tela_selecao_scroll_e_foco(self) -> None:
+        """Aceite da F1.2: aplicar tema nao pode reconstruir a UI (P0-6)."""
+        for indice in range(12):
+            self.db.create_player(self.tournament_id, name=f"Jogador {indice:02d}", rating=1500 + indice)
+        self.app.show_players()
+        self.app.update()
+
+        tree = self._first_treeview()
+        linhas = tree.get_children()
+        self.assertGreaterEqual(len(linhas), 6, "precisa de linhas para testar selecao/scroll")
+        alvo = linhas[4]
+        tree.selection_set(alvo)
+        tree.yview_moveto(0.5)
+        self.app.update()
+        scroll_antes = tree.yview()[0]
+
+        entrada = next(w for w in self._walk(self.app.content) if isinstance(w, ctk.CTkEntry))
+        entrada.insert(0, "rascunho")
+        self.app.focus_force()
+        entrada.focus_set()
+        self.app.update()
+
+        identidade_tree = id(tree)
+        identidade_content = id(self.app.content)
+        foco_antes = self.app.focus_get()
+        # O formulario reage a selecao da tabela, entao o texto e lido aqui, ja
+        # depois disso: o que importa e ele atravessar a troca de tema intacto.
+        texto_antes = entrada.get()
+
+        self.db.save_app_settings({"accent_preset": "emerald", "frame_bg_preset": "carbon"})
+        self.app._rebuild_ui_after_theme_change()
+        self.app.update()
+
+        self.assertEqual("show_players", self.app.navigator.current, "a tela nao pode trocar")
+        self.assertEqual(identidade_content, id(self.app.content), "content nao pode ser recriado")
+        self.assertEqual(identidade_tree, id(self._first_treeview()), "a tabela nao pode ser recriada")
+        self.assertEqual((alvo,), self._first_treeview().selection(), "a selecao tem de sobreviver")
+        self.assertAlmostEqual(
+            scroll_antes, self._first_treeview().yview()[0], places=2,
+            msg="o scroll tem de ficar onde estava",
+        )
+        self.assertEqual(texto_antes, entrada.get(), "o que estava no campo nao pode sumir")
+        self.assertIs(foco_antes, self.app.focus_get(), "o foco tem de continuar no mesmo campo")
+
     def test_home_lista_pendencias_do_torneio_com_deep_link(self) -> None:
         self.db.create_player(self.tournament_id, name="Ana", rating=1900)
         self.db.create_player(self.tournament_id, name="Bruno", rating=1800)

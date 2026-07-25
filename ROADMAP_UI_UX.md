@@ -111,6 +111,21 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 > Cobertura em [tests/test_ui_theme.py](tests/test_ui_theme.py), incluindo a
 > garantia de que o hack não volta.
 
+> **Status (2026-07-25): F1.2 CONCLUÍDA.** Aplicar tema deixou de **destruir e
+> recriar** `statusbar` e `content` (P0-6): agora é `configure()` widget a
+> widget, em [`restyle.py`](src/ui/restyle.py). Como nada é recriado, foco,
+> scroll e seleção continuam onde estavam — por construção, não por esforço.
+> O ponto delicado eram as duas origens de cor: **token** (já mutado pela F1.1,
+> bastava repintar) e **padrão do `ThemeManager`** (copiado para dentro do widget
+> quando ele nasceu). Para o segundo, `snapshot_defaults()` tira um retrato
+> **antes** da troca e só acompanha quem ainda seguia o padrão antigo — um botão
+> de perigo mantém o vermelho, em vez de virar accent. Verificado medindo a cor
+> **desenhada** no canvas, não a pedida via `cget`.
+>
+> **Gap adjacente, agora mais visível:** a cor de seleção da `ttk.Treeview` é
+> `#334155` fixo e não acompanha o tema — a linha selecionada fica azul-ardósia
+> sobre um tema verde. É dívida pré-existente (P2-1) e cabe na **F3.3**.
+
 > **Status (2026-07-25): F1.3 e F1.4 CONCLUÍDAS.** [`navigation.py`](src/ui/navigation.py)
 > passa a ser o **registro único** de destinos (`Destination` como dado puro,
 > antes duplicado entre o `tk.Menu` e o command palette) mais o `Navigator`
@@ -127,7 +142,7 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 | ID | Tarefa | Esforço | Impacto | Risco | Depende | Aceite |
 |----|--------|---------|---------|-------|---------|--------|
 | ✅ F1.1 | `theme.py` (tokens + `on_change` listener); matar `_propagate_theme_globals` (P0-5) | 2d | A | M | — | Tokens importados de `theme`; sem `sys.modules` hack |
-| F1.2 | Tema sem destroy/rebuild: `restyle()` por `configure()` (P0-6) | 3d | A | **M-A** | F1.1 | Trocar tema preserva foco/scroll/seleção |
+| ✅ F1.2 | Tema sem destroy/rebuild: `restyle()` por `configure()` (P0-6) | 3d | A | **M-A** | F1.1 | Trocar tema preserva foco/scroll/seleção |
 | ✅ F1.3 | `Navigator` + registro único de destinos (de `_command_palette_actions`) (P0-1) | 2d | A | M | — | Navegação central; F5 via `refresh_current()` |
 | ✅ F1.4 | `AppShell` (casca fina) coexistindo com mixins legados (P0-1) | 2d | A | M | F1.3 | App sobe via shell; mixins ainda funcionam |
 | F1.5 | **Piloto**: migrar 1 tela para View/Controller/State + `dataclass` (P0-2, P0-3) | 3d | A | M | F1.4 | Tela testável sem subir app; zero `{"value":None}` |

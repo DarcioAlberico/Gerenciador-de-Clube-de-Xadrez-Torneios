@@ -319,9 +319,9 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
                 or settings.get("appearance_mode", "System") != appearance_values[appearance_option.get()]
             )
             if _needs_rebuild:
-                # Qualquer preset de cor mudou: recria toda a UI.
-                self.after(100, self._rebuild_ui_after_theme_change)
-                return  # Nao tenta atualizar widgets que serao destruidos.
+                # Algum preset de cor mudou: reestiliza o que ja esta na tela.
+                # Nada e destruido, entao a tela continua onde estava (F1.2).
+                self._rebuild_ui_after_theme_change()
 
             self.status_label.configure(text=f"Banco: {Path(self.db.db_path).name}")
             load_backups()
