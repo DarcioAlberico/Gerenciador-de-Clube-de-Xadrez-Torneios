@@ -486,7 +486,7 @@ class IntegrationPagesMixin:
         fields = [
             ("Host", host_entry, config.get("host", "")),
             ("Porta", port_entry, str(config.get("port", 21))),
-            ("Usuario", user_entry, config.get("user", "")),
+            ("Usuário", user_entry, config.get("user", "")),
             ("Senha", pass_entry, config.get("password", "")),
             ("Pasta remota", remote_entry, config.get("remote_dir", "")),
         ]

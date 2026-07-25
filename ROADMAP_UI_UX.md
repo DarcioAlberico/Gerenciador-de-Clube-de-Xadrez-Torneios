@@ -98,12 +98,38 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 > **Sem _big-bang_.** Extrai serviços de tema/navegação, depois migra **uma tela-piloto**
 > e valida o padrão antes de propagar.
 
+> **Status (2026-07-25): F1.1 CONCLUÍDA.** Nova camada
+> [`src/ui/theme.py`](src/ui/theme.py): tokens de cor/tipografia/espaçamento,
+> presets, temas curados e um registro de listeners (`on_theme_change` /
+> `notify_theme_change`). O `_propagate_theme_globals` **morreu** — não há mais
+> reescrita de `sys.modules`. A troca de preset alcança quem já importou o token
+> porque `ColorToken` é uma lista de dois elementos **mutada no lugar**: quem fez
+> `from ..support import *` guarda a referência ao mesmo objeto. O customtkinter
+> aceita lista de cores nativamente (é como os temas JSON dele já vêm), então não
+> houve adaptação nas telas. `support.py` re-exporta os nomes só enquanto as telas
+> usam `import *` (some na F1.6); `components/` e `app.py` já importam de `theme`.
+> Cobertura em [tests/test_ui_theme.py](tests/test_ui_theme.py), incluindo a
+> garantia de que o hack não volta.
+
+> **Status (2026-07-25): F1.3 e F1.4 CONCLUÍDAS.** [`navigation.py`](src/ui/navigation.py)
+> passa a ser o **registro único** de destinos (`Destination` como dado puro,
+> antes duplicado entre o `tk.Menu` e o command palette) mais o `Navigator`
+> (`go` / `refresh_current` / `record`). O F5 virou `refresh_current()`; a paleta
+> deriva do registro; `_current_view_method` continua legível pelas telas legadas
+> como propriedade. O módulo **não importa Tk**, então navegação e busca (que
+> ignora acento e caixa) são testáveis sem abrir janela.
+> [`shell.py`](src/ui/shell.py) recebeu a casca — conteúdo, statusbar, toasts,
+> progresso, atalhos, command palette e a ligação com o `Navigator` —, e
+> `AlbericusApp` herda dela **coexistindo com os 14 mixins**, sem _big-bang_.
+> `app.py` caiu de ~1.200 para ~800 linhas. Um teste garante o arranjo: a casca é
+> dona da cromagem, não conhece nenhuma tela e não importa `screens/`.
+
 | ID | Tarefa | Esforço | Impacto | Risco | Depende | Aceite |
 |----|--------|---------|---------|-------|---------|--------|
-| F1.1 | `theme.py` (tokens + `on_change` listener); matar `_propagate_theme_globals` (P0-5) | 2d | A | M | — | Tokens importados de `theme`; sem `sys.modules` hack |
+| ✅ F1.1 | `theme.py` (tokens + `on_change` listener); matar `_propagate_theme_globals` (P0-5) | 2d | A | M | — | Tokens importados de `theme`; sem `sys.modules` hack |
 | F1.2 | Tema sem destroy/rebuild: `restyle()` por `configure()` (P0-6) | 3d | A | **M-A** | F1.1 | Trocar tema preserva foco/scroll/seleção |
-| F1.3 | `Navigator` + registro único de destinos (de `_command_palette_actions`) (P0-1) | 2d | A | M | — | Navegação central; F5 via `refresh_current()` |
-| F1.4 | `AppShell` (casca fina) coexistindo com mixins legados (P0-1) | 2d | A | M | F1.3 | App sobe via shell; mixins ainda funcionam |
+| ✅ F1.3 | `Navigator` + registro único de destinos (de `_command_palette_actions`) (P0-1) | 2d | A | M | — | Navegação central; F5 via `refresh_current()` |
+| ✅ F1.4 | `AppShell` (casca fina) coexistindo com mixins legados (P0-1) | 2d | A | M | F1.3 | App sobe via shell; mixins ainda funcionam |
 | F1.5 | **Piloto**: migrar 1 tela para View/Controller/State + `dataclass` (P0-2, P0-3) | 3d | A | M | F1.4 | Tela testável sem subir app; zero `{"value":None}` |
 | F1.6 | Imports explícitos na tela-piloto + 2 telas; lint anti-wildcard no CI (P0-4) | 1,5d | M | B | F1.5 | CI falha em novo `import *` |
 
@@ -197,14 +223,56 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 
 ### Fase 3 — Navegação e polish (diferenciação) · ~8 dias
 
-| ID | Tarefa | Esforço | Impacto | Risco | Depende | Aceite |
+> **Status (2026-07-25): F3.1 CONCLUÍDA.** Sidebar persistente em
+> [`components/sidebar.py`](src/ui/components/sidebar.py), espelhando o registro
+> da F1.3 — acrescentar destino em `DESTINATIONS` o faz aparecer na barra, sem
+> lista paralela. Grupos (Clube · Treinamento · Gestão · Torneio · Ferramentas ·
+> Configurações), ícones e **item ativo destacado**, inclusive quando a tela é
+> aberta por atalho, pela paleta ou por um botão da própria tela (a barra assina
+> `Navigator.subscribe`). O `tk.Menu` permanece como fallback.
+>
+> **A barra é responsiva, e não por enfeite:** a suíte reprovou a primeira versão
+> — com 235px à esquerda, telas densas empurravam botão para fora da janela. A
+> medição mostrou que a **Exportar** sozinha pede ~1.375px de conteúdo. Daí os
+> três modos: `full` (≥1500px reais), `rail` só com ícones e tooltip (≥1440) e
+> `hidden` abaixo disso, quando o menu volta a ser a navegação. Registrado como
+> **B-8**: a tela Exportar merece um layout mais estreito — hoje é ela que
+> define o limiar.
+>
+> **Status (2026-07-25): F3.2 CONCLUÍDA.** O app deixa de abrir no cadastro
+> "Perfil do Clube" e passa a abrir em **Início**, com as pendências acionáveis
+> do momento e um botão que leva direto onde cada uma se resolve (*deep link*
+> pelo registro da F1.3). As regras ficam em [`home.py`](src/ui/home.py), **puras
+> e sem Tk** — `HomeSnapshot` é dado simples e `build_pendencies` decide o quê e
+> em que ordem; a tela ([`screens/home.py`](src/ui/screens/home.py)) só lê o banco
+> e desenha. Cobertas: arbitragem bloqueante, QR aguardando aprovação, resultados
+> a lançar, torneio sem rodadas (mandando **inscrever** quando nem jogador há —
+> gerar rodada não destravaria), torneio concluído → diplomas, mensalidades em
+> atraso e próximo evento. Sem nada pendente, a tela diz "Tudo em dia" em vez de
+> ficar vazia. Cada leitura do estado é isolada: um serviço com problema vira
+> ausência daquele dado, não tela em branco. Um teste garante que **todo destino
+> de pendência existe no registro** — deep link quebrado seria pior que pendência
+> nenhuma.
 |----|--------|---------|---------|-------|---------|--------|
-| F3.1 | Sidebar persistente com grupos + item ativo (P1-7) | 4d | A | M | F1.3 | Navegação primária visual; menu vira fallback |
-| F3.2 | Dashboard contextual pós-login (pendências acionáveis) (P1-8) | 3d | A | M | F1.3 | Abre em pendências com deep-link |
+| ✅ F3.1 | Sidebar persistente com grupos + item ativo (P1-7) | 4d | A | M | F1.3 | Navegação primária visual; menu vira fallback |
+| ✅ F3.2 | Dashboard contextual pós-login (pendências acionáveis) (P1-8) | 3d | A | M | F1.3 | Abre em pendências com deep-link |
 | F3.3 | Tokenizar cores/fonts: 58 hex + 23 fonts + `#a3423c` (P2-1,2,3) + lint CI | 2d | M | B | F1.1 | CI barra novos literais em `screens/` |
-| F3.4 | Modo Livre "não mostrar de novo" (P1-11); Aulas/Exercícios → "(em breve)" (P1-12) | 0,5d | M | B | — | Sem fricção repetida; rótulo claro |
-| F3.5 | Corrigir acentuação das labels visíveis (P2-8) | 0,5d | M | B | — | "Configurações/Aparência/Segurança" |
+| ✅ F3.4 | Modo Livre "não mostrar de novo" (P1-11); Aulas/Exercícios → "(em breve)" (P1-12) | 0,5d | M | B | — | Sem fricção repetida; rótulo claro |
+| ✅ F3.5 | Corrigir acentuação das labels visíveis (P2-8) | 0,5d | M | B | — | "Configurações/Aparência/Segurança" |
 | F3.6 | Login com split layout + branding + versão (P2-6) | 1d | B | B | — | Layout dividido; espaço p/ "primeiro acesso" |
+
+> **Status (2026-07-25): F3.4 e F3.5 CONCLUÍDAS.** O aviso do Modo Livre ganhou
+> "Não mostrar novamente" (persistido em `free_mode_notice_hidden`); marcada a
+> caixa, o menu passa direto à criação — que **continua pedindo o nome**, então
+> nada é criado sem confirmação. A escolha vale nos dois caminhos de saída
+> (Iniciar e Cancelar). Aulas/Exercícios viraram "Aulas (em breve)" —
+> desabilitado sem explicação lê como quebrado, não como escopo. F3.5 acentuou
+> **93 rótulos curtos** em `src/ui` (incluindo Configurações/Aparência/Segurança
+> do critério de aceite). Fronteira deliberada: só rótulos, não frases de
+> diálogo — reescrever mensagens inteiras é trabalho do catálogo i18n (**B-3**).
+> **Divergência conhecida:** cabeçalhos de exportação em `src/services/export_*`
+> seguem sem acento (ver **B-7**) — mexer neles altera arquivo entregue e
+> formato consumido por terceiros, o que não cabe nesta tarefa.
 
 ### Backlog (não priorizar agora)
 
@@ -214,6 +282,12 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 - **B-4** Virtualização/paginação de `Treeview` (P2-13) — antes da base crescer.
 - **B-5** Cache de figuras matplotlib quando dados não mudam (P2-14).
 - **B-6** Migrar telas-monstro restantes para 3 camadas (continuação de F1.5).
+- **B-8** Estreitar o layout da tela **Exportar** (e revisar as densas: Rodadas,
+  Jogadores). Hoje ela pede ~1.375px de conteúdo e é o que obriga a sidebar a
+  sumir em janelas médias (F3.1). Ganho direto: sidebar visível em mais telas.
+- **B-7** Acentuar cabeçalhos/títulos de `src/services/export_*` para casar com a UI
+  (F3.5). Fica fora da F3.5 porque altera **arquivo entregue** (PDF/CSV/HTML) e
+  formato que terceiros consomem — precisa de decisão sobre compatibilidade.
 
 ---
 

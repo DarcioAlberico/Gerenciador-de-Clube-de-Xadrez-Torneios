@@ -25,7 +25,7 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
     def show_app_settings(self) -> None:
         self._clear_content()
         self._page_title(
-            "Configuracoes do aplicativo",
+            "Configurações do aplicativo",
             "Ajuste preferencias locais, pasta de exportacao e rotinas de backup.",
         )
 
@@ -38,9 +38,9 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
 
         settings_tabs = ctk.CTkTabview(body)
         settings_tabs.grid(row=0, column=0, padx=(0, 16), sticky="nsew")
-        tab_appearance = self._settings_tab(settings_tabs, "Aparencia")
+        tab_appearance = self._settings_tab(settings_tabs, "Aparência")
         tab_folders = self._settings_tab(settings_tabs, "Pastas e backup")
-        tab_tools = self._settings_tab(settings_tabs, "Seguranca e dados")
+        tab_tools = self._settings_tab(settings_tabs, "Segurança e dados")
         stack = self._settings_stack
 
         # --- Aba: Aparencia ---
@@ -55,19 +55,19 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
 
         # --- Aba: Pastas e backup ---
         export_dir_entry = ctk.CTkEntry(tab_folders, width=320)
-        stack(tab_folders, export_dir_entry, label="Pasta de exportacao")
+        stack(tab_folders, export_dir_entry, label="Pasta de exportação")
         export_dir_entry.insert(0, str(settings.get("default_export_dir") or default_export_dir()))
 
         def choose_export_dir() -> None:
             directory = filedialog.askdirectory(
-                title="Escolha a pasta de exportacao",
+                title="Escolha a pasta de exportação",
                 initialdir=str(self._default_export_dir()),
             )
             if directory:
                 export_dir_entry.delete(0, "end")
                 export_dir_entry.insert(0, directory)
 
-        stack(tab_folders, ctk.CTkButton(tab_folders, text="Escolher exportacao", command=choose_export_dir))
+        stack(tab_folders, ctk.CTkButton(tab_folders, text="Escolher exportação", command=choose_export_dir))
 
         backup_dir_entry = ctk.CTkEntry(tab_folders, width=320)
         stack(tab_folders, backup_dir_entry, label="Pasta de backups")
@@ -100,7 +100,7 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
         stack(tab_folders, ctk.CTkButton(tab_folders, text="Escolher nuvem", command=choose_cloud_dir))
 
         retention_entry = ctk.CTkEntry(tab_folders, width=120)
-        stack(tab_folders, retention_entry, label="Manter ultimos backups")
+        stack(tab_folders, retention_entry, label="Manter últimos backups")
         retention_entry.insert(0, str(settings.get("backup_retention_count") or "10"))
 
         # --- Aba: Seguranca e dados ---
@@ -109,8 +109,8 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
 
         stack(
             tab_tools,
-            ctk.CTkButton(tab_tools, text="Gerenciar Usuarios do Sistema", command=open_users_manager),
-            label="Seguranca operacional",
+            ctk.CTkButton(tab_tools, text="Gerenciar Usuários do Sistema", command=open_users_manager),
+            label="Segurança operacional",
             section=True,
         )
 
@@ -134,7 +134,7 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
             fg_color=THEME_SUCCESS,
             hover_color=THEME_SUCCESS_HOVER,
         )
-        stack(tab_tools, fide_button, label="Sincronizacao de Ratings", section=True)
+        stack(tab_tools, fide_button, label="Sincronização de Ratings", section=True)
 
         def _import_cbx_file(path: str) -> dict:
             """Parte pesada da importacao CBX — roda fora da thread da UI."""
@@ -207,7 +207,7 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
                 "actor": "Operador",
                 "role": "Perfil",
                 "action": "Acao",
-                "description": "Descricao",
+                "description": "Descrição",
             },
             {"created": 145, "actor": 120, "role": 100, "action": 140, "description": 260},
             visible_rows=6,
@@ -462,7 +462,7 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
         bg_option = ctk.CTkOptionMenu(advanced, values=list(BG_COLOR_PRESET_LABELS.values()), width=240)
         frame_bg_option = ctk.CTkOptionMenu(advanced, values=list(FRAME_BG_PRESET_LABELS.values()), width=240)
         for idx, (lbl, opt) in enumerate([
-            ("Aparencia (claro / escuro)", appearance_option),
+            ("Aparência (claro / escuro)", appearance_option),
             ("Cor de destaque (botoes, links)", accent_option),
             ("Cor de fundo (janela)", bg_option),
             ("Cor dos frames (cards, paineis)", frame_bg_option),

@@ -23,7 +23,7 @@ class TrainingFinanceMixin:
 
         entries: dict[str, ctk.CTkEntry] = {}
         fields = [
-            ("title", "Titulo"),
+            ("title", "Título"),
             ("session_date", "Data"),
             ("start_time", "Inicio"),
             ("end_time", "Fim"),
@@ -32,7 +32,7 @@ class TrainingFinanceMixin:
             ("objective", "Objetivo"),
             ("content", "Conteudo"),
             ("homework", "Tarefa"),
-            ("notes", "Observacoes"),
+            ("notes", "Observações"),
         ]
         for index, (key, label) in enumerate(fields):
             ctk.CTkLabel(form, text=label).grid(row=index * 2, column=0, padx=16, pady=(8, 0), sticky="w")
@@ -60,7 +60,7 @@ class TrainingFinanceMixin:
         class_option = ctk.CTkOptionMenu(form, values=["Sem turma"], width=260)
         class_option.grid(row=option_row + 7, column=0, padx=16, pady=(2, 0), sticky="ew")
 
-        ctk.CTkLabel(form, text="Nivel pedagogico").grid(
+        ctk.CTkLabel(form, text="Nível pedagogico").grid(
             row=option_row + 8,
             column=0,
             padx=16,
@@ -130,7 +130,7 @@ class TrainingFinanceMixin:
                 "time": "Horario",
                 "club": "Clube/Escola",
                 "class": "Turma",
-                "level": "Nivel",
+                "level": "Nível",
                 "training_list": "Lista",
                 "type": "Tipo",
                 "status": "Status",
@@ -163,7 +163,7 @@ class TrainingFinanceMixin:
             width=150,
         )
         attendance_status_option.grid(row=1, column=0, padx=12, pady=(0, 10), sticky="w")
-        ctk.CTkLabel(attendance_controls, text="Observacoes").grid(row=0, column=1, padx=8, pady=(10, 2), sticky="w")
+        ctk.CTkLabel(attendance_controls, text="Observações").grid(row=0, column=1, padx=8, pady=(10, 2), sticky="w")
         attendance_notes_entry = ctk.CTkEntry(attendance_controls, width=240)
         attendance_notes_entry.grid(row=1, column=1, padx=8, pady=(0, 10), sticky="ew")
         attendance_actions = ctk.CTkFrame(attendance_controls, fg_color="transparent")
@@ -527,7 +527,7 @@ class TrainingFinanceMixin:
         plan_fields = [
             ("name", "Nome"),
             ("amount", "Valor"),
-            ("notes", "Observacoes"),
+            ("notes", "Observações"),
         ]
         for index, (key, label) in enumerate(plan_fields, start=1):
             ctk.CTkLabel(form, text=label).grid(row=index * 2 - 1, column=0, padx=16, pady=(6, 0), sticky="w")
@@ -557,13 +557,13 @@ class TrainingFinanceMixin:
 
         payment_entries: dict[str, ctk.CTkEntry] = {}
         payment_fields = [
-            ("description", "Descricao"),
+            ("description", "Descrição"),
             ("reference_period", "Referencia"),
             ("due_date", "Vencimento"),
             ("payment_date", "Pagamento"),
             ("amount", "Valor"),
             ("method", "Metodo"),
-            ("notes", "Observacoes"),
+            ("notes", "Observações"),
         ]
         base_row = 18
         for index, (key, label) in enumerate(payment_fields):
@@ -633,7 +633,7 @@ class TrainingFinanceMixin:
             {
                 "id": "ID",
                 "member": "Membro",
-                "description": "Descricao",
+                "description": "Descrição",
                 "reference": "Ref.",
                 "due": "Venc.",
                 "paid": "Pago em",
@@ -1034,12 +1034,12 @@ class TrainingFinanceMixin:
 
         trans_entries: dict[str, ctk.CTkEntry] = {}
         trans_fields = [
-            ("description", "Descricao"),
+            ("description", "Descrição"),
             ("amount", "Valor"),
             ("transaction_date", "Data (AAAA-MM-DD)"),
             ("category", "Categoria"),
             ("payment_method", "Metodo"),
-            ("notes", "Observacoes"),
+            ("notes", "Observações"),
         ]
         
         ctk.CTkLabel(caixa_form, text="Tipo").grid(row=1, column=0, padx=16, pady=(6, 0), sticky="w")
@@ -1069,7 +1069,7 @@ class TrainingFinanceMixin:
             trans_holder,
             ["id", "date", "type", "description", "category", "amount", "method"],
             {
-                "id": "ID", "date": "Data", "type": "Tipo", "description": "Descricao",
+                "id": "ID", "date": "Data", "type": "Tipo", "description": "Descrição",
                 "category": "Categoria", "amount": "Valor", "method": "Metodo"
             },
             {"id": 55, "date": 90, "type": 80, "description": 250, "category": 120, "amount": 80, "method": 100}

@@ -12,7 +12,11 @@ from tkinter import TclError
 import customtkinter as ctk
 
 from src.ui.components.busy import BusyIndicator
-from tests.support.ctk_cleanup import cancel_pending_callbacks, release_dead_ctk_windows
+from tests.support.ctk_cleanup import (
+    cancel_pending_callbacks,
+    create_tk_window,
+    release_dead_ctk_windows,
+)
 
 
 class BusyIndicatorTest(unittest.TestCase):
@@ -21,7 +25,7 @@ class BusyIndicatorTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         try:
-            cls.root = ctk.CTk()
+            cls.root = create_tk_window(ctk.CTk)
         except TclError as exc:  # pragma: no cover - ambiente sem display
             raise unittest.SkipTest(f"Tk indisponivel: {exc}") from exc
         cls.root.update()

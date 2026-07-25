@@ -81,7 +81,7 @@ class TournamentSettingsMixin:
 
         self._clear_content()
         self._page_title(
-            "Configuracao do torneio",
+            "Configuração do torneio",
             f"Torneio: {tournament['name']} - {self._tournament_scope_text(tournament)}",
         )
         self._build_tournament_nav("settings")
@@ -96,8 +96,8 @@ class TournamentSettingsMixin:
         tab_general = self._settings_tab(tabview, "Dados gerais")
         tab_official = self._settings_tab(tabview, "Dados oficiais")
         tab_rules = self._settings_tab(tabview, "Regras e desempates")
-        tab_prizes = self._settings_tab(tabview, "Premiacao")
-        tab_reports = self._settings_tab(tabview, "Classificacao e agenda")
+        tab_prizes = self._settings_tab(tabview, "Premiação")
+        tab_reports = self._settings_tab(tabview, "Classificação e agenda")
 
         stack = self._settings_stack
 
@@ -203,12 +203,12 @@ class TournamentSettingsMixin:
         setting_fields = [
             ("fide_event_id", "FIDE Event-ID"),
             ("organizer", "Organizador"),
-            ("website", "Pagina web"),
+            ("website", "Página web"),
             ("contact_email", "E-mail"),
             ("director", "Diretor do torneio"),
-            ("chief_arbiter", "Arbitro principal"),
-            ("arbiters", "Arbitros auxiliares"),
-            ("federation", "Federacao"),
+            ("chief_arbiter", "Árbitro principal"),
+            ("arbiters", "Árbitros auxiliares"),
+            ("federation", "Federação"),
             ("state", "Estado"),
             ("categories", "Categorias"),
             ("cutoff_date", "Data de corte"),
@@ -301,7 +301,7 @@ class TournamentSettingsMixin:
         )
 
         team_primary_option = ctk.CTkOptionMenu(tab_rules, values=list(team_criterion_by_label.keys()), width=350)
-        stack(tab_rules, team_primary_option, label="Criterio principal por equipes")
+        stack(tab_rules, team_primary_option, label="Critério principal por equipes")
         team_primary_option.set(
             TEAM_STANDING_CRITERIA.get(
                 settings.get("team_standing_primary", "match_points"),
@@ -310,7 +310,7 @@ class TournamentSettingsMixin:
         )
 
         team_secondary_option = ctk.CTkOptionMenu(tab_rules, values=list(team_criterion_by_label.keys()), width=350)
-        stack(tab_rules, team_secondary_option, label="Criterio secundario por equipes")
+        stack(tab_rules, team_secondary_option, label="Critério secundario por equipes")
         team_secondary_option.set(
             TEAM_STANDING_CRITERIA.get(
                 settings.get("team_standing_secondary", "game_points"),
@@ -442,7 +442,7 @@ class TournamentSettingsMixin:
         # Aba 4 - Premiacao
         # ------------------------------------------------------------------ #
         prize_text_entry = ctk.CTkEntry(tab_prizes, width=350)
-        stack(tab_prizes, prize_text_entry, label="Premiacao (texto livre)")
+        stack(tab_prizes, prize_text_entry, label="Premiação (texto livre)")
         prize_text_value = settings.get("prizes")
         prize_text_entry.insert(0, "" if prize_text_value is None else str(prize_text_value))
         setting_entries["prizes"] = prize_text_entry
@@ -503,7 +503,7 @@ class TournamentSettingsMixin:
             ("start_date", "Data inicial", str(tournament.get("start_date") or first_schedule_date or Database.now()[:10]), 130),
             ("first_time", "Hora inicial", first_schedule_time or "08:00", 95),
             ("rounds_per_day", "Rodadas/dia", str(tournament.get("rounds_count") or len(existing_schedule) or 1), 100),
-            ("duration", "Duracao min", "45", 95),
+            ("duration", "Duração min", "45", 95),
             ("break", "Intervalo min", "15", 95),
         ]
         auto_entries: dict[str, ctk.CTkEntry] = {}

@@ -25,7 +25,7 @@ class ClubMembersMixin:
         tab_titles = tabview.add("Títulos")
         tab_deslig = tabview.add("Desligamentos")
         tab_patrimonio = tabview.add("Patrimônio (Empréstimos)")
-        tab_integracao = tabview.add("Integracao")
+        tab_integracao = tabview.add("Integração")
         tab_contato = tabview.add("Contato")
 
         form = self._make_scrollable_panel(tab_dados, width=300)
@@ -51,9 +51,9 @@ class ClubMembersMixin:
             ("email", "E-mail"),
             ("document", "Documento"),
             ("birth_date", "Nascimento"),
-            ("guardian_name", "Responsavel"),
+            ("guardian_name", "Responsável"),
             ("guardian_phone", "Telefone resp."),
-            ("notes", "Observacoes"),
+            ("notes", "Observações"),
         ]
         for index, (key, label) in enumerate(fields):
             ctk.CTkLabel(form, text=label).grid(row=index * 2, column=0, padx=16, pady=(8, 0), sticky="w")
@@ -85,7 +85,7 @@ class ClubMembersMixin:
         class_option = ctk.CTkOptionMenu(form, values=["Sem turma"], width=250)
         class_option.grid(row=option_row + 7, column=0, padx=16, pady=(2, 0), sticky="ew")
 
-        ctk.CTkLabel(form, text="Nivel de aprendizagem").grid(
+        ctk.CTkLabel(form, text="Nível de aprendizagem").grid(
             row=option_row + 8,
             column=0,
             padx=16,
@@ -473,7 +473,7 @@ class ClubMembersMixin:
                 "surname": "Sobrenome",
                 "club": "Clube/Escola",
                 "class": "Turma",
-                "learning_level": "Nivel",
+                "learning_level": "Nível",
                 "type": "Tipo",
                 "status": "Status",
                 "rating": "Rating",

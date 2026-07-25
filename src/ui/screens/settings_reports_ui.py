@@ -7,7 +7,7 @@ class SettingsReportsMixin:
     def show_reports(self) -> None:
         self._clear_content()
         self._page_title(
-            "Relatorios",
+            "Relatórios",
             "Gere relatorios administrativos do clube, de membros e de torneios por periodo.",
         )
 
@@ -32,7 +32,7 @@ class SettingsReportsMixin:
         club_values = list(club_map.keys())
         class_map: dict[str, int | None] = {"Todas turmas": None}
 
-        ctk.CTkLabel(panel, text="Relatorio").grid(row=0, column=0, padx=16, pady=(16, 4), sticky="w")
+        ctk.CTkLabel(panel, text="Relatório").grid(row=0, column=0, padx=16, pady=(16, 4), sticky="w")
         report_option = ctk.CTkOptionMenu(
             panel,
             values=[
@@ -263,11 +263,11 @@ class SettingsReportsMixin:
 
         report_values = [
             "Completo",
-            "Classificacao",
+            "Classificação",
             "Tabela cruzada",
             "Taxas de rating",
             "Rating FIDE",
-            "Premiacao",
+            "Premiação",
             "Estatistica de federacoes",
             "Estatistica de partidas",
             "Fichas individuais",
@@ -292,7 +292,7 @@ class SettingsReportsMixin:
             report_values.insert(5, "Equipes")
             report_values.insert(6, "Escalacoes equipes")
 
-        ctk.CTkLabel(panel, text="Relatorio").grid(row=0, column=0, padx=16, pady=(16, 4), sticky="w")
+        ctk.CTkLabel(panel, text="Relatório").grid(row=0, column=0, padx=16, pady=(16, 4), sticky="w")
         report_option = ctk.CTkOptionMenu(
             panel,
             values=report_values,
@@ -349,11 +349,11 @@ class SettingsReportsMixin:
             safe_name = self._safe_filename(tournament_name, "torneio")
             names = {
                 "Completo": f"{safe_name}_completo",
-                "Classificacao": f"{safe_name}_classificacao",
+                "Classificação": f"{safe_name}_classificacao",
                 "Tabela cruzada": f"{safe_name}_tabela_cruzada",
                 "Taxas de rating": f"{safe_name}_taxas_rating",
                 "Rating FIDE": f"{safe_name}_rating_fide",
-                "Premiacao": f"{safe_name}_premiacao",
+                "Premiação": f"{safe_name}_premiacao",
                 "Estatistica de federacoes": f"{safe_name}_estatistica_federacoes",
                 "Estatistica de partidas": f"{safe_name}_estatistica_partidas",
                 "Fichas individuais": f"{safe_name}_fichas",
@@ -464,7 +464,7 @@ class SettingsReportsMixin:
                     return
 
                 file_path = filedialog.asksaveasfilename(
-                    title="Gerar exportacao",
+                    title="Gerar exportação",
                     initialdir=str(self._default_export_dir()),
                     initialfile=default_filename(report, extension),
                     defaultextension=f".{extension}",
@@ -484,7 +484,7 @@ class SettingsReportsMixin:
                 def write_export() -> object:
                     if report == "Completo":
                         self.export_service.export_complete(tournament_id, path)
-                    elif report == "Classificacao":
+                    elif report == "Classificação":
                         self.export_service.export_standings(tournament_id, path)
                     elif report == "Tabela cruzada":
                         self.export_service.export_crosstable(tournament_id, path)
@@ -492,7 +492,7 @@ class SettingsReportsMixin:
                         self.export_service.export_rating_fee_report(tournament_id, path)
                     elif report == "Rating FIDE":
                         self.export_service.export_fide_rating_report(tournament_id, path, "fide")
-                    elif report == "Premiacao":
+                    elif report == "Premiação":
                         self.export_service.export_prize_report(tournament_id, path)
                     elif report == "Estatistica de federacoes":
                         self.export_service.export_federation_statistics(tournament_id, path)
@@ -640,7 +640,7 @@ class SettingsReportsMixin:
             wraplength=520,
         ).grid(row=0, column=0, padx=16, pady=(16, 8), sticky="ew")
 
-        reports_frame = ctk.CTkScrollableFrame(dialog, label_text="Relatorios")
+        reports_frame = ctk.CTkScrollableFrame(dialog, label_text="Relatórios")
         reports_frame.grid(row=1, column=0, padx=16, pady=(0, 8), sticky="nsew")
         report_checks: dict[str, ctk.CTkCheckBox] = {}
         for spec in reports:

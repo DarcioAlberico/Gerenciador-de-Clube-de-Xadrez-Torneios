@@ -16,7 +16,7 @@ from typing import Any, Callable
 
 import customtkinter as ctk
 
-from ..support import THEME_DANGER, THEME_DANGER_HOVER, THEME_TEXT_MAIN
+from ..theme import THEME_DANGER, THEME_DANGER_HOVER, THEME_TEXT_MAIN
 from .tooltip import Tooltip
 
 _DEFAULT_HEIGHT = 36

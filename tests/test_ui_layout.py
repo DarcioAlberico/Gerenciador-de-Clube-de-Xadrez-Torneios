@@ -12,7 +12,11 @@ from src.core.database import Database
 from src.core.services import AppError, TeamService, TournamentService
 from src.ui.app import AlbericusApp
 from src.ui.support import _classify_error
-from tests.support.ctk_cleanup import cancel_pending_callbacks, release_dead_ctk_windows
+from tests.support.ctk_cleanup import (
+    cancel_pending_callbacks,
+    create_tk_window,
+    release_dead_ctk_windows,
+)
 
 
 class UiLayoutSmokeTest(unittest.TestCase):
@@ -53,7 +57,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
         # fluxo 'Torneio | Modo Livre'. Testes de Modo Oficial desmarcam.
         self.db.set_free_mode(self.tournament_id, True)
         try:
-            self.app = AlbericusApp(db=self.db)
+            self.app = create_tk_window(lambda: AlbericusApp(db=self.db))
         except TclError as exc:
             self.temp_dir.cleanup()
             self.skipTest(f"Tk indisponivel para teste de layout: {exc}")
@@ -128,6 +132,50 @@ class UiLayoutSmokeTest(unittest.TestCase):
         finally:
             if dialog.winfo_exists():
                 dialog.destroy()
+                self.app.update()
+
+    def test_free_tournament_mode_nao_mostrar_novamente_persiste_e_pula_o_aviso(self) -> None:
+        dialog = self.app.show_free_tournament_mode()
+        self.app.update()
+        try:
+            self.app.free_mode_hide_checkbox.select()
+            for widget in self._walk(dialog):
+                if isinstance(widget, ctk.CTkButton) and widget.cget("text") == "Cancelar":
+                    widget.invoke()
+                    break
+            self.app.update()
+        finally:
+            if dialog.winfo_exists():
+                dialog.destroy()
+                self.app.update()
+
+        # marcar no caminho "Cancelar" tambem tem de valer
+        self.assertEqual("1", self.db.get_app_settings().get("free_mode_notice_hidden"))
+
+        # e a partir dai o menu vai direto para a criacao (que ainda pede o nome)
+        pedidos: list[str] = []
+        self.app._ask_string = lambda *a, **kw: pedidos.append("nome") or None
+        self.assertIsNone(self.app.show_free_tournament_mode())
+        self.app.update()
+        self.assertEqual(["nome"], pedidos, "deveria ir direto ao prompt de nome")
+
+    def test_free_tournament_mode_sem_marcar_continua_mostrando_o_aviso(self) -> None:
+        dialog = self.app.show_free_tournament_mode()
+        self.app.update()
+        for widget in self._walk(dialog):
+            if isinstance(widget, ctk.CTkButton) and widget.cget("text") == "Cancelar":
+                widget.invoke()
+                break
+        self.app.update()
+        self.assertEqual("0", self.db.get_app_settings().get("free_mode_notice_hidden"))
+
+        segundo = self.app.show_free_tournament_mode()
+        self.app.update()
+        try:
+            self.assertIsInstance(segundo, ctk.CTkToplevel)
+        finally:
+            if segundo is not None and segundo.winfo_exists():
+                segundo.destroy()
                 self.app.update()
 
     def test_free_tournament_mode_iniciar_marca_modo_livre(self) -> None:
@@ -1289,7 +1337,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.app.update()
 
         self.assertEqual([], self.db.list_rounds(self.tournament_id))
-        self._label("Configuracao do torneio")
+        self._label("Configuração do torneio")
 
     def test_pairing_write_handlers_require_tournament_permission(self) -> None:
         self.db.create_player(self.tournament_id, name="Jogador A", rating=1800, club="Clube", category="ABS")
@@ -1349,6 +1397,55 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.assertEqual("H", restaurados[0]["bye_type"])
         self.assertEqual("viagem", restaurados[0]["reason"], "o motivo tem de voltar junto")
         self.assertEqual(1, restaurados[0]["round_number"])
+
+    def test_home_lista_pendencias_do_torneio_com_deep_link(self) -> None:
+        self.db.create_player(self.tournament_id, name="Ana", rating=1900)
+        self.db.create_player(self.tournament_id, name="Bruno", rating=1800)
+        self.app.pairing_service.generate_next_round(self.tournament_id)
+
+        self.app.show_home()
+        self.app.update()
+        rotulos = [
+            str(w.cget("text"))
+            for w in self._walk(self.app.content)
+            if isinstance(w, ctk.CTkLabel)
+        ]
+        self.assertTrue(
+            any("resultado" in texto and "lancar" in texto for texto in rotulos),
+            f"esperava pendencia de resultado; veio {rotulos}",
+        )
+
+        # o botao da pendencia leva para a tela onde ela se resolve
+        self._click_button("Lancar")
+        self.app.update()
+        self.assertEqual("show_pairings", self.app.navigator.current)
+
+    def test_home_sem_pendencia_mostra_tudo_em_dia(self) -> None:
+        self.app.current_tournament_id = None
+        self.app._home_snapshot = lambda: __import__(
+            "src.ui.home", fromlist=["HomeSnapshot"]
+        ).HomeSnapshot(has_tournament=True, rounds_count=1, generated_rounds=1, closed_rounds=0)
+        self.app.show_home()
+        self.app.update()
+        rotulos = [
+            str(w.cget("text"))
+            for w in self._walk(self.app.content)
+            if isinstance(w, ctk.CTkLabel)
+        ]
+        self.assertTrue(any("Tudo em dia" in texto for texto in rotulos), rotulos)
+
+    def test_home_e_a_tela_de_entrada_registrada(self) -> None:
+        """A entrada pos-login deixou de ser o cadastro do clube (P1-8)."""
+        import inspect as _inspect
+
+        from src.ui.navigation import find
+
+        destino = find("home")
+        self.assertIsNotNone(destino)
+        self.assertEqual("show_home", destino.method)
+        codigo = _inspect.getsource(type(self.app)._build_login_screen)
+        self.assertIn("self.show_home()", codigo)
+        self.assertNotIn("self.show_club()", codigo)
 
     def test_kpi_card_clicavel_realca_no_hover(self) -> None:
         from src.ui.support import THEME_ACCENT, THEME_PANEL_BG

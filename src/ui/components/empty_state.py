@@ -20,7 +20,7 @@ from typing import Any, Callable
 
 import customtkinter as ctk
 
-from ..support import THEME_TEXT_MAIN, THEME_TEXT_SUB, font_section
+from ..theme import THEME_TEXT_MAIN, THEME_TEXT_SUB, font_section
 
 
 class EmptyState(ctk.CTkFrame):
