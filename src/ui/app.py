@@ -17,7 +17,7 @@ from .screens.pairings import PairingPagesMixin
 from .screens.referees import RefereePagesMixin
 from .screens.settings import SettingsPagesMixin
 from .support import *
-from .components import EmptyState, show_donation_modal
+from .components import BusyIndicator, EmptyState, show_donation_modal
 from .screens.tournaments import TournamentPagesMixin
 from .screens.reports import ReportPagesMixin
 from .screens.audit import AuditPagesMixin
@@ -639,6 +639,10 @@ class AlbericusApp(
         )
         self.status_label.grid(row=0, column=2, padx=10, pady=2, sticky="e")
 
+        # Progresso de tarefas em background: some quando nao ha nada rodando.
+        self.busy_indicator = BusyIndicator(self.statusbar)
+        self.busy_indicator.grid_config(row=0, column=3, padx=(0, 12), pady=2, sticky="e")
+
     def _default_status_text(self) -> str:
         db_name = Path(self.db.db_path).name
         backup = self._last_backup_label()
@@ -715,7 +719,7 @@ class AlbericusApp(
         palette = {
             "info":    (THEME_ACCENT,  ("#FFFFFF", "#0B0F19")),
             "success": (THEME_SUCCESS, ("#FFFFFF", "#FFFFFF")),
-            "warning": (("#F59E0B", "#FBBF24"), ("#0B0F19", "#0B0F19")),
+            "warning": (THEME_WARNING,  ("#0B0F19", "#0B0F19")),
             "error":   (THEME_DANGER,  ("#FFFFFF", "#FFFFFF")),
         }
         bg, fg = palette.get(kind, palette["info"])
@@ -1102,57 +1106,6 @@ class AlbericusApp(
             fallback.mkdir(parents=True, exist_ok=True)
             return fallback
 
-    def _show_error(self, error: Exception) -> None:
-        error_id = datetime.now().strftime("%Y%m%d-%H%M%S")
-        title, message, is_unexpected = self._error_dialog(error, error_id)
-        if is_unexpected:
-            logger.error(
-                "Erro inesperado [%s]",
-                error_id,
-                exc_info=(type(error), error, error.__traceback__),
-            )
-        else:
-            logger.warning("%s: %s", title, error)
-        messagebox.showerror(title, message)
-
-    @staticmethod
-    def _error_dialog(
-        error: Exception,
-        error_id: str,
-    ) -> tuple[str, str, bool]:
-        if isinstance(error, AppError):
-            return "Erro", str(error), False
-        if isinstance(error, PermissionError):
-            return (
-                "Erro de permissao",
-                f"Sem permissao para acessar o arquivo ou pasta.\n\n{error}",
-                False,
-            )
-        if isinstance(error, FileNotFoundError):
-            return (
-                "Arquivo nao encontrado",
-                f"O arquivo ou pasta informado nao foi encontrado.\n\n{error}",
-                False,
-            )
-        if isinstance(error, OSError):
-            return (
-                "Erro de arquivo",
-                f"Nao foi possivel acessar o arquivo ou pasta.\n\n{error}",
-                False,
-            )
-        if isinstance(error, ValueError):
-            return "Dados invalidos", str(error), False
-        return (
-            "Erro inesperado",
-            "Ocorreu uma falha inesperada.\n\n"
-            f"Codigo: {error_id}\n"
-            f"Consulte o log em: {current_log_path()}",
-            True,
-        )
-
-    def _show_info(self, message: str) -> None:
-        messagebox.showinfo("Albericus", message)
-
     def _run_background(
         self,
         work: Callable[[], Any],
@@ -1167,6 +1120,9 @@ class AlbericusApp(
                 logger.exception("Falha ao desabilitar widget durante tarefa em background")
         if hasattr(self, "status_label") and busy_message:
             self.status_label.configure(text=busy_message)
+        indicator = getattr(self, "busy_indicator", None)
+        if indicator is not None:
+            indicator.start()
 
         def run() -> None:
             try:
@@ -1177,12 +1133,18 @@ class AlbericusApp(
             self.after(0, lambda: finish(result=result))
 
         def finish(result: Any = None, error: Exception | None = None) -> None:
+            if indicator is not None:
+                indicator.stop()
             if busy_widget is not None:
                 try:
                     busy_widget.configure(state="normal")
                 except Exception:
                     logger.exception("Falha ao reabilitar widget apos tarefa em background")
-            if hasattr(self, "status_label"):
+            # So volta ao texto padrao quando nao ha mais nada rodando: com duas
+            # tarefas simultaneas, a primeira a terminar limparia a mensagem da
+            # outra e a statusbar contradiria a barra de progresso (ainda visivel).
+            ocioso = indicator is None or not indicator.is_running
+            if hasattr(self, "status_label") and ocioso:
                 self.status_label.configure(text=self._default_status_text())
             if error:
                 self._show_error(error)

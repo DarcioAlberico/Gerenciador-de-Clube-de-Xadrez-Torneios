@@ -7,9 +7,9 @@ import shutil
 import subprocess
 import sys
 import webbrowser
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
-from tkinter import Toplevel, filedialog, messagebox, ttk
+from tkinter import Toplevel, filedialog, ttk
 from typing import Any, Callable
 
 import customtkinter as ctk
@@ -136,6 +136,11 @@ THEME_DANGER_HOVER  = ("#DC2626", "#B91C1C")
 THEME_INFO          = ("#10B981", "#34D399")
 THEME_SUCCESS       = ("#059669", "#34D399")
 THEME_SUCCESS_HOVER = ("#047857", "#10B981")
+# Aviso em dois papeis: PREENCHIMENTO (fundo de toast, com texto escuro por cima)
+# e TEXTO sobre painel claro — o ambar de preenchimento nao atinge 4.5:1 como
+# texto no modo claro, por isso a variante escurecida (ver ESPEC_UI_UX §6).
+THEME_WARNING       = ("#D97706", "#FBBF24")
+THEME_WARNING_TEXT  = ("#B45309", "#FBBF24")
 THEME_NEUTRAL       = ("#64748B", "#475569")
 THEME_NEUTRAL_HOVER = ("#475569", "#334155")
 
@@ -434,6 +439,46 @@ CLUB_KIND_VALUES = {label: value for value, label in CLUB_KIND_LABELS.items()}
 TOURNAMENT_SCOPE_VALUES = {label: value for value, label in TOURNAMENT_SCOPES.items()}
 PAIRING_METHOD_VALUES = {label: value for value, label in PAIRING_METHODS.items()}
 
+def _classify_error(error: str | Exception, error_id: str) -> tuple[str, str, bool]:
+    """Classifica um erro em ``(titulo, mensagem, inesperado)`` — puro e testavel.
+
+    Strings e excecoes de dominio/IO conhecidas sao "recuperaveis"
+    (``inesperado=False``) e viram toast; o resto vira modal com codigo e caminho
+    do log. Aceitar ``str`` e proposital: muitas telas chamam ``_show_error`` com
+    uma mensagem pronta (validacao de formulario, regra de negocio)."""
+    if isinstance(error, str):
+        return "Erro", error, False
+    if isinstance(error, AppError):
+        return "Erro", str(error), False
+    if isinstance(error, PermissionError):
+        return (
+            "Erro de permissao",
+            f"Sem permissao para acessar o arquivo ou pasta.\n\n{error}",
+            False,
+        )
+    if isinstance(error, FileNotFoundError):
+        return (
+            "Arquivo nao encontrado",
+            f"O arquivo ou pasta informado nao foi encontrado.\n\n{error}",
+            False,
+        )
+    if isinstance(error, OSError):
+        return (
+            "Erro de arquivo",
+            f"Nao foi possivel acessar o arquivo ou pasta.\n\n{error}",
+            False,
+        )
+    if isinstance(error, ValueError):
+        return "Dados invalidos", str(error), False
+    return (
+        "Erro inesperado",
+        "Ocorreu uma falha inesperada.\n\n"
+        f"Codigo: {error_id}\n"
+        f"Consulte o log em: {current_log_path()}",
+        True,
+    )
+
+
 class ErrorCatchingMixin:
     def _disable_if_unauthorized(self, widget: ctk.CTkBaseClass, action: str) -> None:
         """Verifica se o operador atual tem permissão, se não tiver, desabilita o botão/widget."""
@@ -445,19 +490,69 @@ class ErrorCatchingMixin:
                     except Exception:
                         pass
                         
+    def _modal_is_open(self) -> bool:
+        """True se ha um modal com grab ativo (um toast ficaria escondido atras)."""
+        try:
+            return bool(self.grab_current())
+        except Exception:
+            return False
+
+    def _feedback(self, message: str, kind: str, title: str) -> None:
+        """Feedback nao-bloqueante (toast); se ha um modal aberto por cima, usa um
+        alerta bloqueante -- senao o toast ficaria escondido atras do modal."""
+        if self._modal_is_open() or not hasattr(self, "_show_toast"):
+            from .components.dialogs import alert_dialog
+
+            alert_dialog(self, title, message, kind=kind)
+        else:
+            duration = 5000 if kind in ("error", "warning") else 3500
+            self._show_toast(message, kind=kind, duration_ms=duration)
+
     def _show_error(self, message_or_exception: str | Exception) -> None:
-        message = str(message_or_exception)
-        logger.error("Erro na interface: %s", message, exc_info=True)
-        messagebox.showerror("Erro", message)
+        error_id = datetime.now().strftime("%Y%m%d-%H%M%S")
+        title, message, is_unexpected = _classify_error(message_or_exception, error_id)
+        if is_unexpected:
+            logger.error(
+                "Erro inesperado [%s]",
+                error_id,
+                exc_info=(
+                    type(message_or_exception),
+                    message_or_exception,
+                    getattr(message_or_exception, "__traceback__", None),
+                ),
+            )
+            from .components.dialogs import alert_dialog
+
+            alert_dialog(self, title, message, kind="error")
+        else:
+            logger.warning("%s: %s", title, message_or_exception)
+            self._feedback(message, "error", title)
 
     def _show_info(self, message: str) -> None:
-        messagebox.showinfo("Sucesso", message)
+        self._feedback(message, "success", "Sucesso")
 
     def _show_warning(self, message: str) -> None:
-        messagebox.showwarning("Aviso", message)
+        self._feedback(message, "warning", "Aviso")
 
-    def _confirm_action(self, title: str, message: str) -> bool:
-        return messagebox.askyesno(title, message)
+    def _confirm_action(self, title: str, message: str, *, danger: bool = False) -> bool:
+        from .components.dialogs import confirm_dialog
+
+        return confirm_dialog(self, title, message, danger=danger)
+
+    def _confirm_or_cancel(
+        self,
+        title: str,
+        message: str,
+        *,
+        yes_text: str = "Sim",
+        no_text: str = "Não",
+        cancel_text: str = "Cancelar",
+    ) -> bool | None:
+        from .components.dialogs import tri_state_dialog
+
+        return tri_state_dialog(
+            self, title, message, yes_text=yes_text, no_text=no_text, cancel_text=cancel_text
+        )
 
     def _ask_string(self, title: str, prompt: str) -> str | None:
         dialog = ctk.CTkInputDialog(text=prompt, title=title)

@@ -11,6 +11,7 @@ import customtkinter as ctk
 from src.core.database import Database
 from src.core.services import AppError, TeamService, TournamentService
 from src.ui.app import AlbericusApp
+from src.ui.support import _classify_error
 from tests.support.ctk_cleanup import release_dead_ctk_windows
 
 
@@ -180,7 +181,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.app.pairing_service.delete_generated_round = lambda rid: chamadas["delete"].append(rid)
         self.app.pairing_service.generate_next_round = lambda tid: chamadas["generate"].append(tid)
         self.app._load_round_options = lambda: None
-        with mock.patch("src.ui.screens.free_tournament.messagebox.askyesno", return_value=True):
+        with mock.patch("src.ui.components.dialogs.confirm_dialog", return_value=True):
             self.app.free_mode_repair_round()
         self.assertEqual(chamadas["delete"], [777])
         self.assertEqual(chamadas["generate"], [self.tournament_id])
@@ -192,13 +193,13 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.app.pairing_service.delete_generated_round = lambda rid: chamadas.append(rid)
         erros: list[str] = []
         self.app._show_error = lambda exc: erros.append(str(exc))
-        with mock.patch("src.ui.screens.free_tournament.messagebox.askyesno", return_value=True):
+        with mock.patch("src.ui.components.dialogs.confirm_dialog", return_value=True):
             self.app.free_mode_repair_round()
         self.assertEqual(chamadas, [])  # fora do Modo Livre nao dispara re-pair
         self.assertTrue(any("Modo Livre" in erro for erro in erros))
 
     def test_late_entry_sem_rodadas_encerradas_usa_padrao(self) -> None:
-        with mock.patch("src.ui.screens.free_tournament.messagebox.askyesnocancel") as pergunta:
+        with mock.patch("src.ui.components.dialogs.tri_state_dialog") as pergunta:
             proceed, points = self.app.free_mode_late_entry_starting_points(self.tournament_id)
         self.assertTrue(proceed)
         self.assertIsNone(points)
@@ -207,7 +208,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
     def test_late_entry_meio_ponto_por_rodada_ausente(self) -> None:
         self.app.db.list_rounds = lambda _tid: [{"status": "closed"}, {"status": "closed"}]
         with mock.patch(
-            "src.ui.screens.free_tournament.messagebox.askyesnocancel", return_value=True
+            "src.ui.components.dialogs.tri_state_dialog", return_value=True
         ):
             proceed, points = self.app.free_mode_late_entry_starting_points(self.tournament_id)
         self.assertTrue(proceed)
@@ -216,7 +217,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
     def test_late_entry_zero_por_rodada_ausente(self) -> None:
         self.app.db.list_rounds = lambda _tid: [{"status": "closed"}, {"status": "open"}]
         with mock.patch(
-            "src.ui.screens.free_tournament.messagebox.askyesnocancel", return_value=False
+            "src.ui.components.dialogs.tri_state_dialog", return_value=False
         ):
             proceed, points = self.app.free_mode_late_entry_starting_points(self.tournament_id)
         self.assertTrue(proceed)
@@ -225,7 +226,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
     def test_late_entry_cancelar_aborta_adicao(self) -> None:
         self.app.db.list_rounds = lambda _tid: [{"status": "closed"}]
         with mock.patch(
-            "src.ui.screens.free_tournament.messagebox.askyesnocancel", return_value=None
+            "src.ui.components.dialogs.tri_state_dialog", return_value=None
         ):
             proceed, points = self.app.free_mode_late_entry_starting_points(self.tournament_id)
         self.assertFalse(proceed)
@@ -234,7 +235,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
     def test_late_entry_fora_do_modo_livre_nao_pergunta(self) -> None:
         self._set_free_mode(self.tournament_id, False)
         self.app.db.list_rounds = lambda _tid: [{"status": "closed"}]
-        with mock.patch("src.ui.screens.free_tournament.messagebox.askyesnocancel") as pergunta:
+        with mock.patch("src.ui.components.dialogs.tri_state_dialog") as pergunta:
             proceed, points = self.app.free_mode_late_entry_starting_points(self.tournament_id)
         self.assertTrue(proceed)
         self.assertIsNone(points)
@@ -248,7 +249,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
     def test_prepare_late_entry_modo_livre_delega_meio_ponto(self) -> None:
         self.app.db.list_rounds = lambda _tid: [{"status": "closed"}, {"status": "closed"}]
         with mock.patch(
-            "src.ui.screens.free_tournament.messagebox.askyesnocancel", return_value=True
+            "src.ui.components.dialogs.tri_state_dialog", return_value=True
         ):
             proceed, points = self.app.prepare_late_entry(self.tournament_id)
         self.assertTrue(proceed)
@@ -258,7 +259,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self._set_free_mode(self.tournament_id, False)
         self.app.db.list_rounds = lambda _tid: [{"status": "closed"}, {"status": "closed"}]
         with mock.patch(
-            "src.ui.screens.free_tournament.messagebox.askyesno", return_value=True
+            "src.ui.components.dialogs.confirm_dialog", return_value=True
         ) as aviso:
             proceed, points = self.app.prepare_late_entry(self.tournament_id)
         self.assertTrue(proceed)
@@ -269,7 +270,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self._set_free_mode(self.tournament_id, False)
         self.app.db.list_rounds = lambda _tid: [{"status": "closed"}, {"status": "closed"}]
         with mock.patch(
-            "src.ui.screens.free_tournament.messagebox.askyesno", return_value=False
+            "src.ui.components.dialogs.confirm_dialog", return_value=False
         ):
             proceed, points = self.app.prepare_late_entry(self.tournament_id)
         self.assertFalse(proceed)
@@ -278,7 +279,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
     def test_prepare_late_entry_oficial_sem_2_rodadas_nao_avisa(self) -> None:
         self._set_free_mode(self.tournament_id, False)
         self.app.db.list_rounds = lambda _tid: [{"status": "closed"}]
-        with mock.patch("src.ui.screens.free_tournament.messagebox.askyesno") as aviso:
+        with mock.patch("src.ui.components.dialogs.confirm_dialog") as aviso:
             proceed, points = self.app.prepare_late_entry(self.tournament_id)
         self.assertTrue(proceed)
         self.assertIsNone(points)
@@ -1147,7 +1148,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.app.update()
         with (
             mock.patch.object(self.app, "_ask_string", return_value="1-4"),
-            mock.patch("src.ui.screens.pairings.messagebox.askyesno", return_value=False),
+            mock.patch("src.ui.components.dialogs.confirm_dialog", return_value=False),
             mock.patch("src.ui.screens.pairings.filedialog.asksaveasfilename", return_value=str(output_path)),
         ):
             self._invoke_menu_item("Exportar cartoes de mesa")
@@ -1263,13 +1264,13 @@ class UiLayoutSmokeTest(unittest.TestCase):
 
         self.app.show_pairings()
         self.app.update()
-        with mock.patch("src.ui.screens.pairings.messagebox.askyesnocancel", return_value=True) as confirm:
+        with mock.patch("src.ui.components.dialogs.tri_state_dialog", return_value=True) as confirm:
             self._click_button("Gerar proxima rodada")
         self.app.update()
 
         self.assertEqual(1, len(self.db.list_rounds(self.tournament_id)))
         confirm.assert_called_once()
-        self.assertIn("mínimo recomendado é 4 rodadas", confirm.call_args.args[1])
+        self.assertIn("mínimo recomendado é 4 rodadas", confirm.call_args.args[2])
 
     def test_generate_round_warning_can_open_tournament_settings(self) -> None:
         for index in range(9):
@@ -1283,7 +1284,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
 
         self.app.show_pairings()
         self.app.update()
-        with mock.patch("src.ui.screens.pairings.messagebox.askyesnocancel", return_value=False):
+        with mock.patch("src.ui.components.dialogs.tri_state_dialog", return_value=False):
             self._click_button("Gerar proxima rodada")
         self.app.update()
 
@@ -1321,7 +1322,13 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.assertIn("documento foi aberto", self.messages[-1])
 
     def test_error_dialogs_separate_expected_file_and_unexpected_errors(self) -> None:
-        title, message, is_unexpected = AlbericusApp._error_dialog(
+        # mensagem pronta (str) e tratada como recuperavel -> vira toast, nao modal
+        title, message, is_unexpected = _classify_error("Nome e obrigatorio.", "ERR-0")
+        self.assertEqual("Erro", title)
+        self.assertEqual("Nome e obrigatorio.", message)
+        self.assertFalse(is_unexpected)
+
+        title, message, is_unexpected = _classify_error(
             AppError("Informe o nome do jogador."),
             "ERR-1",
         )
@@ -1329,7 +1336,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.assertEqual("Informe o nome do jogador.", message)
         self.assertFalse(is_unexpected)
 
-        title, message, is_unexpected = AlbericusApp._error_dialog(
+        title, message, is_unexpected = _classify_error(
             PermissionError(13, "Acesso negado", "torneio.csv"),
             "ERR-2",
         )
@@ -1338,7 +1345,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.assertIn("torneio.csv", message)
         self.assertFalse(is_unexpected)
 
-        title, message, is_unexpected = AlbericusApp._error_dialog(
+        title, message, is_unexpected = _classify_error(
             RuntimeError("detalhe interno sensivel"),
             "ERR-3",
         )

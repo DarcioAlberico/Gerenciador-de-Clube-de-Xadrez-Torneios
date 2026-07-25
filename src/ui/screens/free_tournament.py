@@ -176,10 +176,11 @@ class FreeTournamentMixin:
             round_id = getattr(self, "current_round_id", None)
             if not round_id:
                 raise AppError("Selecione uma rodada para re-emparceirar.")
-            if not messagebox.askyesno(
+            if not self._confirm_action(
                 "Re-emparceirar (Modo Livre)",
                 "Isto vai limpar o emparceiramento desta rodada e gerar um novo, "
                 "considerando apenas os jogadores ativos no momento.\n\nContinuar?",
+                danger=True,
             ):
                 return
             self.pairing_service.delete_generated_round(int(round_id))
@@ -216,7 +217,7 @@ class FreeTournamentMixin:
         closed = self._closed_rounds_count(int(tid))
         if closed <= 0:
             return True, None
-        choice = messagebox.askyesnocancel(
+        choice = self._confirm_or_cancel(
             "Entrada tardia (Modo Livre)",
             f"Este jogador esta entrando apos {closed} rodada(s) ja encerrada(s).\n\n"
             "Ele deve herdar meio-ponto pedagogico (0,5) por rodada ausente?\n\n"
@@ -245,7 +246,7 @@ class FreeTournamentMixin:
         if self._is_free_mode(tid):
             return self.free_mode_late_entry_starting_points(tid)
         if self._closed_rounds_count(int(tid)) >= 2:
-            confirmar = messagebox.askyesno(
+            confirmar = self._confirm_action(
                 "Entrada tardia (Modo Oficial)",
                 "Ja ha 2 ou mais rodadas encerradas. Em torneios oficiais "
                 "(FIDE/CBX), a inscricao tardia apos a 2a rodada foge ao "

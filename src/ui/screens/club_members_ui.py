@@ -311,39 +311,45 @@ class ClubMembersMixin:
                 self._show_info("Informe pelo menos um username (Lichess ou Chess.com).")
                 return
             
-            self._show_toast("Iniciando sincronizacao com plataformas...", kind="info")
-            
-            def run_sync():
+            def fetch_ratings() -> tuple[int, int]:
+                """Consulta as plataformas (rede) — fora da thread da UI."""
                 from src.services.integration_service import IntegrationService
                 service = IntegrationService()
-                
+
                 blitz_max = 0
                 rapid_max = 0
-                
                 if lichess_user:
                     l_ratings = service.fetch_lichess_ratings(lichess_user)
                     blitz_max = max(blitz_max, l_ratings["blitz"])
                     rapid_max = max(rapid_max, l_ratings["rapid"])
-                
                 if chesscom_user:
                     c_ratings = service.fetch_chesscom_ratings(chesscom_user)
                     blitz_max = max(blitz_max, c_ratings["blitz"])
                     rapid_max = max(rapid_max, c_ratings["rapid"])
-                    
-                def apply_ratings(result=None):
-                    blitz_entry.delete(0, "end")
-                    blitz_entry.insert(0, str(blitz_max))
-                    rapid_entry.delete(0, "end")
-                    rapid_entry.insert(0, str(rapid_max))
-                    self._show_info(f"Sincronizacao concluida!\nBlitz: {blitz_max} | Rapid: {rapid_max}\n(Clique em Salvar para persistir)")
-                self.after(0, apply_ratings)
+                return blitz_max, rapid_max
 
-            import threading
-            threading.Thread(target=run_sync, daemon=True).start()
+            def apply_ratings(ratings: tuple[int, int]) -> None:
+                blitz_max, rapid_max = ratings
+                blitz_entry.delete(0, "end")
+                blitz_entry.insert(0, str(blitz_max))
+                rapid_entry.delete(0, "end")
+                rapid_entry.insert(0, str(rapid_max))
+                self._show_info(
+                    f"Sincronizacao concluida!\nBlitz: {blitz_max} | Rapid: {rapid_max}\n"
+                    "(Clique em Salvar para persistir)"
+                )
 
-        ctk.CTkButton(integracao_frame, text="Sincronizar Rating Online", command=sync_online_ratings, fg_color=THEME_ACCENT).grid(
-            row=8, column=0, padx=16, pady=16, sticky="ew"
+            self._run_background(
+                fetch_ratings,
+                on_success=apply_ratings,
+                busy_message="Consultando Lichess/Chess.com...",
+                busy_widget=sync_button,
+            )
+
+        sync_button = ctk.CTkButton(
+            integracao_frame, text="Sincronizar Rating Online", command=sync_online_ratings, fg_color=THEME_ACCENT
         )
+        sync_button.grid(row=8, column=0, padx=16, pady=16, sticky="ew")
 
         # Contato Tab
         contato_frame = self._make_scrollable_panel(tab_contato, width=300)

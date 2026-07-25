@@ -6,7 +6,9 @@ de UI — telas migradas passam a montar a interface a partir daqui.
 """
 from __future__ import annotations
 
+from .busy import BusyIndicator
 from .buttons import danger_button, primary_button, secondary_button
+from .dialogs import alert_dialog, confirm_dialog, tri_state_dialog
 from .donation import show_donation_modal
 from .empty_state import EmptyState
 from .menu_button import menu_button
@@ -17,7 +19,11 @@ __all__ = [
     "secondary_button",
     "danger_button",
     "menu_button",
+    "confirm_dialog",
+    "tri_state_dialog",
+    "alert_dialog",
     "Tooltip",
     "EmptyState",
+    "BusyIndicator",
     "show_donation_modal",
 ]
