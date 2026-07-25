@@ -117,6 +117,7 @@ from .theme import (  # noqa: F401
     SPACE_XL,
     SPACE_XS,
     THEME_ACCENT,
+    THEME_ON_ACCENT,
     THEME_APP_BG,
     THEME_DANGER,
     THEME_DANGER_HOVER,

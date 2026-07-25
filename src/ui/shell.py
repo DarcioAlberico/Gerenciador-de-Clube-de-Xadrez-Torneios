@@ -41,6 +41,7 @@ from .theme import (
     SIZE_BODY,
     THEME_ACCENT,
     THEME_APP_BG,
+    THEME_ON_ACCENT,
     THEME_PANEL_BG,
     THEME_STATUSBAR_BG,
     THEME_TEXT_MAIN,
@@ -175,7 +176,7 @@ class AppShell:
                     compound="left",
                     anchor="w",
                     fg_color=THEME_ACCENT if is_selected else "transparent",
-                    text_color=("#FFFFFF", "#0B0F19") if is_selected else THEME_TEXT_MAIN,
+                    text_color=THEME_ON_ACCENT if is_selected else THEME_TEXT_MAIN,
                     corner_radius=4,
                 )
                 row.grid(row=index, column=0, sticky="ew", padx=4, pady=1, ipadx=8, ipady=4)

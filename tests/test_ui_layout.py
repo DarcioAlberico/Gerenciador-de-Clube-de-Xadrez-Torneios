@@ -1483,17 +1483,18 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.assertTrue(any("Tudo em dia" in texto for texto in rotulos), rotulos)
 
     def test_home_e_a_tela_de_entrada_registrada(self) -> None:
-        """A entrada pos-login deixou de ser o cadastro do clube (P1-8)."""
-        import inspect as _inspect
+        """A entrada pos-login deixou de ser o cadastro do clube (P1-8).
 
+        Aqui so o registro: que o login REALMENTE abre nela e verificado por
+        comportamento em test_ui_login.test_login_valido_entra_e_abre_a_tela_inicial
+        — inspecionar o codigo-fonte do login quebrava a cada refatoracao dele.
+        """
         from src.ui.navigation import find
 
         destino = find("home")
         self.assertIsNotNone(destino)
         self.assertEqual("show_home", destino.method)
-        codigo = _inspect.getsource(type(self.app)._build_login_screen)
-        self.assertIn("self.show_home()", codigo)
-        self.assertNotIn("self.show_club()", codigo)
+        self.assertTrue(hasattr(self.app, "show_home"))
 
     def test_kpi_card_clicavel_realca_no_hover(self) -> None:
         from src.ui.support import THEME_ACCENT, THEME_PANEL_BG

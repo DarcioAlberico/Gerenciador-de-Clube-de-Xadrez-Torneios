@@ -109,6 +109,8 @@ THEME_STATUSBAR_BG = ColorToken("#E2E8F0", "#0F172A")
 THEME_TREE_BG      = ColorToken("#FFFFFF", "#1E293B")
 THEME_TREE_FG      = ColorToken("#0F172A", "#F1F5F9")
 THEME_ACCENT        = ColorToken("#3B82F6", "#38BDF8")
+# Texto POR CIMA do accent (botao ativo, faixa de marca do login).
+THEME_ON_ACCENT     = ColorToken("#FFFFFF", "#0B0F19")
 THEME_DANGER        = ColorToken("#EF4444", "#F87171")
 THEME_DANGER_HOVER  = ColorToken("#DC2626", "#B91C1C")
 THEME_INFO          = ColorToken("#10B981", "#34D399")

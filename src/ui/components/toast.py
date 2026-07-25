@@ -22,6 +22,7 @@ from ..theme import (
     SPACE_SM,
     THEME_ACCENT,
     THEME_DANGER,
+    THEME_ON_ACCENT,
     THEME_SUCCESS,
     THEME_WARNING,
 )
@@ -34,7 +35,7 @@ UNDO_DURATION_MS = 8000
 # são literais porque dependem do fundo do próprio toast, não do tema da janela;
 # viram token na F3.3, junto com o resto da tokenização de cores.
 _PALETTE: dict[str, tuple[Any, Any]] = {
-    "info":    (THEME_ACCENT,  ("#FFFFFF", "#0B0F19")),
+    "info":    (THEME_ACCENT,  THEME_ON_ACCENT),
     "success": (THEME_SUCCESS, ("#FFFFFF", "#FFFFFF")),
     "warning": (THEME_WARNING, ("#0B0F19", "#0B0F19")),
     "error":   (THEME_DANGER,  ("#FFFFFF", "#FFFFFF")),

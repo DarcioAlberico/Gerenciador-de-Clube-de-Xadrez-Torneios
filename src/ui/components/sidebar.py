@@ -33,6 +33,7 @@ from ..theme import (
     SPACE_SM,
     SPACE_XS,
     THEME_ACCENT,
+    THEME_ON_ACCENT,
     THEME_PANEL_BG,
     THEME_STATUSBAR_BG,
     THEME_TEXT_MAIN,
@@ -176,7 +177,7 @@ class Sidebar:
             try:
                 botao.configure(
                     fg_color=THEME_ACCENT if ativo else "transparent",
-                    text_color=("#FFFFFF", "#0B0F19") if ativo else THEME_TEXT_MAIN,
+                    text_color=THEME_ON_ACCENT if ativo else THEME_TEXT_MAIN,
                 )
             except Exception:
                 pass  # janela em destruicao

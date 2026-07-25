@@ -317,7 +317,7 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 | ✅ F3.3 | Tokenizar cores/fonts: 58 hex + 23 fonts + `#a3423c` (P2-1,2,3) + lint CI | 2d | M | B | F1.1 | CI barra novos literais em `screens/` |
 | ✅ F3.4 | Modo Livre "não mostrar de novo" (P1-11); Aulas/Exercícios → "(em breve)" (P1-12) | 0,5d | M | B | — | Sem fricção repetida; rótulo claro |
 | ✅ F3.5 | Corrigir acentuação das labels visíveis (P2-8) | 0,5d | M | B | — | "Configurações/Aparência/Segurança" |
-| F3.6 | Login com split layout + branding + versão (P2-6) | 1d | B | B | — | Layout dividido; espaço p/ "primeiro acesso" |
+| ✅ F3.6 | Login com split layout + branding + versão (P2-6) | 1d | B | B | — | Layout dividido; espaço p/ "primeiro acesso" |
 
 > **Status (2026-07-25): F3.4 e F3.5 CONCLUÍDAS.** O aviso do Modo Livre ganhou
 > "Não mostrar novamente" (persistido em `free_mode_notice_hidden`); marcada a
@@ -331,6 +331,18 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 > **Divergência conhecida:** cabeçalhos de exportação em `src/services/export_*`
 > seguem sem acento (ver **B-7**) — mexer neles altera arquivo entregue e
 > formato consumido por terceiros, o que não cabe nesta tarefa.
+
+> **Status (2026-07-25): F3.6 CONCLUÍDA — Fases 0 a 3 encerradas.** O login era
+> uma caixa de 420×400 sem espaço para nada. Agora são duas faixas: marca à
+> esquerda (logo, nome, propósito) e formulário à direita, com um botão
+> **"Primeiro acesso?"** que explica onde se cadastra um operador — **sem
+> revelar credencial**, porque senha na tela de login é convite a nunca trocá-la
+> (há teste guardando isso). A versão saiu do título cravado e ganhou fonte
+> única em [`src/core/version.py`](src/core/version.py); o rodapé mostra
+> `v1.0 · banco v43`, e a versão do schema encurta muito o diagnóstico de um
+> chamado. Divergência a resolver quando for publicar: o `pyproject.toml` diz
+> `0.1.0` (versão de empacotamento) — os dois números precisam contar a mesma
+> história.
 
 ### Backlog (não priorizar agora)
 
