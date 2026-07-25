@@ -32,8 +32,13 @@ jobs:
       - name: Python 3.11
         run: uv python install 3.11
 
-      - name: Tk (só para importar customtkinter; não abre janela)
-        run: sudo apt-get update && sudo apt-get install -y python3-tk
+      # python3-tk: so para IMPORTAR customtkinter (nenhuma janela e aberta).
+      # libcairo2-dev/pkg-config: no Linux o pycairo (svglib -> rlpycairo)
+      # compila da fonte; no Windows vem wheel pronta e isto nao aparece.
+      - name: Bibliotecas do sistema
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-tk libcairo2-dev pkg-config
 
       - name: Dependências
         run: uv sync --extra dev
