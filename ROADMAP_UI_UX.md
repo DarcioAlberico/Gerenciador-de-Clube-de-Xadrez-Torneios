@@ -111,12 +111,25 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 > Cobertura em [tests/test_ui_theme.py](tests/test_ui_theme.py), incluindo a
 > garantia de que o hack não volta.
 
+> **Status (2026-07-25): F1.3 e F1.4 CONCLUÍDAS.** [`navigation.py`](src/ui/navigation.py)
+> passa a ser o **registro único** de destinos (`Destination` como dado puro,
+> antes duplicado entre o `tk.Menu` e o command palette) mais o `Navigator`
+> (`go` / `refresh_current` / `record`). O F5 virou `refresh_current()`; a paleta
+> deriva do registro; `_current_view_method` continua legível pelas telas legadas
+> como propriedade. O módulo **não importa Tk**, então navegação e busca (que
+> ignora acento e caixa) são testáveis sem abrir janela.
+> [`shell.py`](src/ui/shell.py) recebeu a casca — conteúdo, statusbar, toasts,
+> progresso, atalhos, command palette e a ligação com o `Navigator` —, e
+> `AlbericusApp` herda dela **coexistindo com os 14 mixins**, sem _big-bang_.
+> `app.py` caiu de ~1.200 para ~800 linhas. Um teste garante o arranjo: a casca é
+> dona da cromagem, não conhece nenhuma tela e não importa `screens/`.
+
 | ID | Tarefa | Esforço | Impacto | Risco | Depende | Aceite |
 |----|--------|---------|---------|-------|---------|--------|
 | ✅ F1.1 | `theme.py` (tokens + `on_change` listener); matar `_propagate_theme_globals` (P0-5) | 2d | A | M | — | Tokens importados de `theme`; sem `sys.modules` hack |
 | F1.2 | Tema sem destroy/rebuild: `restyle()` por `configure()` (P0-6) | 3d | A | **M-A** | F1.1 | Trocar tema preserva foco/scroll/seleção |
-| F1.3 | `Navigator` + registro único de destinos (de `_command_palette_actions`) (P0-1) | 2d | A | M | — | Navegação central; F5 via `refresh_current()` |
-| F1.4 | `AppShell` (casca fina) coexistindo com mixins legados (P0-1) | 2d | A | M | F1.3 | App sobe via shell; mixins ainda funcionam |
+| ✅ F1.3 | `Navigator` + registro único de destinos (de `_command_palette_actions`) (P0-1) | 2d | A | M | — | Navegação central; F5 via `refresh_current()` |
+| ✅ F1.4 | `AppShell` (casca fina) coexistindo com mixins legados (P0-1) | 2d | A | M | F1.3 | App sobe via shell; mixins ainda funcionam |
 | F1.5 | **Piloto**: migrar 1 tela para View/Controller/State + `dataclass` (P0-2, P0-3) | 3d | A | M | F1.4 | Tela testável sem subir app; zero `{"value":None}` |
 | F1.6 | Imports explícitos na tela-piloto + 2 telas; lint anti-wildcard no CI (P0-4) | 1,5d | M | B | F1.5 | CI falha em novo `import *` |
 
