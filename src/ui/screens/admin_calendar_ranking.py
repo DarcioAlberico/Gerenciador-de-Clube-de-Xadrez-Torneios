@@ -23,12 +23,12 @@ class CalendarRankingMixin:
 
         entries: dict[str, ctk.CTkEntry] = {}
         fields = [
-            ("title", "Titulo"),
+            ("title", "Título"),
             ("event_date", "Data"),
             ("start_time", "Inicio"),
             ("end_time", "Fim"),
             ("location", "Local"),
-            ("notes", "Observacoes"),
+            ("notes", "Observações"),
         ]
         for index, (key, label) in enumerate(fields):
             ctk.CTkLabel(form, text=label).grid(row=index * 2, column=0, padx=16, pady=(8, 0), sticky="w")
@@ -613,7 +613,7 @@ class CalendarRankingMixin:
             pady=(0, 12),
             sticky="w",
         )
-        ctk.CTkButton(toolbar, text="Historico", command=show_rating_history).grid(
+        ctk.CTkButton(toolbar, text="Histórico", command=show_rating_history).grid(
             row=2,
             column=2,
             padx=(0, 8),

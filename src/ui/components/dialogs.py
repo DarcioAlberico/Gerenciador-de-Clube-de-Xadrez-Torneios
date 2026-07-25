@@ -18,7 +18,7 @@ from typing import Any, Sequence
 
 import customtkinter as ctk
 
-from ..support import (
+from ..theme import (
     SPACE_LG,
     SPACE_SM,
     SPACE_XL,

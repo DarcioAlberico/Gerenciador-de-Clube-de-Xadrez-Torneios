@@ -30,7 +30,7 @@ from typing import Any, Callable, Optional, Sequence, Tuple
 
 import customtkinter as ctk
 
-from ..support import (
+from ..theme import (
     THEME_ACCENT,
     THEME_PANEL_BG,
     THEME_TEXT_MAIN,

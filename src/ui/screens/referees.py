@@ -9,7 +9,7 @@ class RefereePagesMixin:
     def show_referees(self) -> None:
         self._clear_content()
         self._page_title(
-            "Arbitros",
+            "Árbitros",
             "Gerenciamento da equipe de arbitragem.",
         )
 
@@ -26,12 +26,12 @@ class RefereePagesMixin:
         
         fields = [
             ("name", "Nome"),
-            ("federation_id", "ID Federacao"),
+            ("federation_id", "ID Federação"),
             ("fide_id", "FIDE ID"),
             ("cbx_id", "CBX ID"),
             ("phone", "Telefone"),
             ("email", "E-mail"),
-            ("notes", "Observacoes")
+            ("notes", "Observações")
         ]
         
         for index, (key, label) in enumerate(fields):

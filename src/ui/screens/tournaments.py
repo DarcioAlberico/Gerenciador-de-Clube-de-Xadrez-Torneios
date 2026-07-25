@@ -476,7 +476,7 @@ class TournamentPagesMixin(TournamentPlayersMixin, TournamentSettingsMixin):
             ("name", "Nome da equipe"),
             ("club", "Clube/Cidade"),
             ("captain", "Capitao"),
-            ("notes", "Observacoes"),
+            ("notes", "Observações"),
         ]
         for index, (key, label) in enumerate(team_fields):
             ctk.CTkLabel(form, text=label).grid(row=index * 2, column=0, padx=16, pady=(12, 0), sticky="w")

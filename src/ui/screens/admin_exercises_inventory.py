@@ -8,7 +8,7 @@ class ExercisesInventoryMixin:
     def show_exercises(self) -> None:
         self._clear_content()
         self._page_title(
-            "Exercicios e listas",
+            "Exercícios e listas",
             "Cadastre posicoes, temas taticos e listas de treino para aulas ou turmas.",
         )
 
@@ -30,7 +30,7 @@ class ExercisesInventoryMixin:
 
         entries: dict[str, ctk.CTkEntry] = {}
         fields = [
-            ("title", "Titulo"),
+            ("title", "Título"),
             ("theme", "Tema"),
             ("source", "Fonte"),
             ("fen", "FEN"),
@@ -38,7 +38,7 @@ class ExercisesInventoryMixin:
             ("solution", "Solucao"),
             ("objective", "Objetivo"),
             ("tags", "Tags"),
-            ("notes", "Observacoes"),
+            ("notes", "Observações"),
         ]
         for index, (key, label) in enumerate(fields):
             ctk.CTkLabel(form, text=label).grid(row=index * 2, column=0, padx=16, pady=(8, 0), sticky="w")
@@ -63,7 +63,7 @@ class ExercisesInventoryMixin:
         exercise_club_option = ctk.CTkOptionMenu(form, values=[""], width=260)
         exercise_club_option.grid(row=option_row + 5, column=0, padx=16, pady=(2, 0), sticky="ew")
 
-        ctk.CTkLabel(form, text="Nivel pedagogico").grid(
+        ctk.CTkLabel(form, text="Nível pedagogico").grid(
             row=option_row + 6,
             column=0,
             padx=16,
@@ -106,7 +106,7 @@ class ExercisesInventoryMixin:
                 "title": "Exercicio",
                 "theme": "Tema",
                 "difficulty": "Dif.",
-                "level": "Nivel",
+                "level": "Nível",
                 "active": "Ativo",
                 "lists": "Listas",
                 "attempts": "Tent.",
@@ -144,7 +144,7 @@ class ExercisesInventoryMixin:
         list_class_option.grid(row=1, column=1, padx=4, pady=4)
         list_level_option = ctk.CTkOptionMenu(list_form, values=["Sem nivel"], width=150)
         list_level_option.grid(row=1, column=2, padx=4, pady=4)
-        list_description_entry = ctk.CTkEntry(list_form, placeholder_text="Descricao da lista")
+        list_description_entry = ctk.CTkEntry(list_form, placeholder_text="Descrição da lista")
         list_description_entry.grid(row=2, column=0, columnspan=4, padx=12, pady=(4, 10), sticky="ew")
 
         lists_holder = self._make_panel(right_panel)
@@ -159,7 +159,7 @@ class ExercisesInventoryMixin:
                 "name": "Lista",
                 "club": "Clube",
                 "class": "Turma",
-                "level": "Nivel",
+                "level": "Nível",
                 "date": "Data",
                 "status": "Status",
                 "items": "Ex.",
@@ -207,7 +207,7 @@ class ExercisesInventoryMixin:
                 "title": "Exercicio na lista",
                 "theme": "Tema",
                 "difficulty": "Dif.",
-                "level": "Nivel",
+                "level": "Nível",
             },
             {
                 "order": 45,
@@ -582,13 +582,13 @@ class ExercisesInventoryMixin:
 
         entries: dict[str, ctk.CTkEntry] = {}
         fields = [
-            ("code", "Codigo"),
+            ("code", "Código"),
             ("name", "Nome"),
             ("quantity_total", "Quantidade"),
             ("storage_location", "Local"),
             ("acquisition_date", "Aquisicao"),
             ("acquisition_value", "Valor"),
-            ("notes", "Observacoes"),
+            ("notes", "Observações"),
         ]
         for index, (key, label) in enumerate(fields):
             ctk.CTkLabel(form, text=label).grid(row=index * 2, column=0, padx=16, pady=(8, 0), sticky="w")
@@ -631,7 +631,7 @@ class ExercisesInventoryMixin:
             ("available_quantity", "Disponivel"),
             ("borrowed_quantity", "Emprestado"),
             ("open_loans", "Em aberto"),
-            ("open_maintenance", "Manutencao"),
+            ("open_maintenance", "Manutenção"),
         ]
         for index, (key, label) in enumerate(summary_items):
             card = ctk.CTkFrame(summary_panel, fg_color=THEME_APP_BG, corner_radius=8)
@@ -660,7 +660,7 @@ class ExercisesInventoryMixin:
             ["id", "code", "name", "type", "total", "available", "condition", "location", "club"],
             {
                 "id": "ID",
-                "code": "Codigo",
+                "code": "Código",
                 "name": "Item",
                 "type": "Tipo",
                 "total": "Total",
@@ -708,7 +708,7 @@ class ExercisesInventoryMixin:
             width=120,
         )
         loan_status_option.grid(row=1, column=3, padx=(4, 0), pady=(8, 4))
-        loan_notes_entry = ctk.CTkEntry(loan_box, placeholder_text="Observacoes")
+        loan_notes_entry = ctk.CTkEntry(loan_box, placeholder_text="Observações")
         loan_notes_entry.grid(row=2, column=0, columnspan=2, padx=(0, 6), pady=4, sticky="ew")
         loan_actions = ctk.CTkFrame(loan_box, fg_color="transparent")
         loan_actions.grid(row=2, column=2, columnspan=2, pady=4, sticky="e")
@@ -716,13 +716,13 @@ class ExercisesInventoryMixin:
         maintenance_box = ctk.CTkFrame(detail_form, fg_color="transparent")
         maintenance_box.grid(row=1, column=0, columnspan=2, padx=12, pady=(4, 10), sticky="ew")
         maintenance_box.grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(maintenance_box, text="Manutencao", font=font_subsection()).grid(
+        ctk.CTkLabel(maintenance_box, text="Manutenção", font=font_subsection()).grid(
             row=0,
             column=0,
             columnspan=4,
             sticky="w",
         )
-        maintenance_description_entry = ctk.CTkEntry(maintenance_box, placeholder_text="Descricao")
+        maintenance_description_entry = ctk.CTkEntry(maintenance_box, placeholder_text="Descrição")
         maintenance_description_entry.grid(row=1, column=0, padx=(0, 6), pady=(8, 4), sticky="ew")
         maintenance_cost_entry = ctk.CTkEntry(maintenance_box, placeholder_text="Custo", width=80)
         maintenance_cost_entry.grid(row=1, column=1, padx=4, pady=(8, 4))
@@ -734,7 +734,7 @@ class ExercisesInventoryMixin:
         maintenance_status_option.grid(row=1, column=2, padx=4, pady=(8, 4))
         maintenance_vendor_entry = ctk.CTkEntry(maintenance_box, placeholder_text="Fornecedor")
         maintenance_vendor_entry.grid(row=2, column=0, padx=(0, 6), pady=4, sticky="ew")
-        maintenance_notes_entry = ctk.CTkEntry(maintenance_box, placeholder_text="Observacoes")
+        maintenance_notes_entry = ctk.CTkEntry(maintenance_box, placeholder_text="Observações")
         maintenance_notes_entry.grid(row=2, column=1, padx=4, pady=4, sticky="ew")
         maintenance_actions = ctk.CTkFrame(maintenance_box, fg_color="transparent")
         maintenance_actions.grid(row=2, column=2, pady=4, sticky="e")
@@ -781,7 +781,7 @@ class ExercisesInventoryMixin:
             ["id", "description", "opened", "resolved", "cost", "status"],
             {
                 "id": "ID",
-                "description": "Manutencao",
+                "description": "Manutenção",
                 "opened": "Aberta",
                 "resolved": "Concl.",
                 "cost": "Custo",

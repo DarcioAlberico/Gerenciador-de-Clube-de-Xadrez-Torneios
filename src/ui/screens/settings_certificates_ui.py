@@ -21,7 +21,7 @@ class SettingsCertificatesMixin:
             palette_by_label[palette.name] = palette.key
         label_by_palette = {key: label for label, key in palette_by_label.items()}
         wm_by_label = {
-            "Padrao do estilo": "", "Peca de xadrez": "piece", "Tabuleiro": "board",
+            "Padrão do estilo": "", "Peca de xadrez": "piece", "Tabuleiro": "board",
             "Numeral": "numeral", "Imagem importada": "image", "Nenhuma": "none",
         }
         label_by_wm = {key: label for label, key in wm_by_label.items()}
@@ -85,7 +85,7 @@ class SettingsCertificatesMixin:
         def load_style(template: dict[str, Any]) -> None:
             style_option.set(label_by_style.get(str(template.get("style_preset") or "classic"), "Clássico"))
             palette_option.set(label_by_palette.get(str(template.get("palette_key") or ""), "Automatica (cores acima)"))
-            watermark_kind_option.set(label_by_wm.get(str(template.get("watermark_kind") or ""), "Padrao do estilo"))
+            watermark_kind_option.set(label_by_wm.get(str(template.get("watermark_kind") or ""), "Padrão do estilo"))
             watermark_piece_option.set(label_by_piece.get(str(template.get("watermark_piece") or "rook"), "Cavalo"))
             watermark_image_entry.delete(0, "end")
             watermark_image_entry.insert(0, str(template.get("watermark_image_path") or ""))
@@ -274,7 +274,7 @@ class SettingsCertificatesMixin:
         footer_font_entry = ctk.CTkEntry(form_panel, width=80)
         footer_font_entry.grid(row=24, column=0, padx=16, pady=(0, 10), sticky="w")
 
-        ctk.CTkLabel(form_panel, text="Titulo").grid(row=25, column=0, padx=16, pady=(2, 4), sticky="w")
+        ctk.CTkLabel(form_panel, text="Título").grid(row=25, column=0, padx=16, pady=(2, 4), sticky="w")
         title_entry = ctk.CTkEntry(form_panel, width=290)
         title_entry.grid(row=26, column=0, padx=16, pady=(0, 10), sticky="ew")
 
@@ -313,7 +313,7 @@ class SettingsCertificatesMixin:
         style_frame, style_payload, load_style = self._build_certificate_style_controls(form_panel)
         style_frame.grid(row=42, column=0, padx=16, pady=(2, 10), sticky="ew")
 
-        ctk.CTkLabel(form_panel, text="Codigo de verificacao").grid(row=43, column=0, padx=16, pady=(2, 4), sticky="w")
+        ctk.CTkLabel(form_panel, text="Código de verificacao").grid(row=43, column=0, padx=16, pady=(2, 4), sticky="w")
         verification_code_entry = ctk.CTkEntry(form_panel, width=250)
         verification_code_entry.grid(row=44, column=0, padx=16, pady=(0, 8), sticky="ew")
 
@@ -351,7 +351,7 @@ class SettingsCertificatesMixin:
 
         ctk.CTkLabel(
             table_panel,
-            text="Historico recente de emissoes",
+            text="Histórico recente de emissoes",
             text_color=THEME_TEXT_SUB,
         ).grid(row=2, column=0, padx=16, pady=(0, 8), sticky="w")
 
@@ -366,7 +366,7 @@ class SettingsCertificatesMixin:
                 "issued_at": "Emissao",
                 "recipient": "Destinatario",
                 "context": "Contexto",
-                "code": "Codigo",
+                "code": "Código",
                 "status": "Status",
             },
             {

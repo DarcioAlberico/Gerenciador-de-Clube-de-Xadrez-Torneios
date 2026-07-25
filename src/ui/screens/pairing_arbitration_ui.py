@@ -95,7 +95,7 @@ class ArbitrationPagesMixin:
         else:
             next_label = "Abrir chamada inicial"
             next_command = self.show_pairings
-        ctk.CTkLabel(alerts_panel, text="Proximo passo recomendado", text_color=THEME_TEXT_SUB).grid(
+        ctk.CTkLabel(alerts_panel, text="Próximo passo recomendado", text_color=THEME_TEXT_SUB).grid(
             row=0, column=1, padx=(8, 14), pady=(14, 2), sticky="e"
         )
         ctk.CTkButton(
@@ -171,7 +171,7 @@ class ArbitrationPagesMixin:
                 ("Checklist de fechamento", self._open_closing_checklist_dialog),
                 ("Fechar rodada atual", self._close_current_round_from_panel),
             ]),
-            ("Configuracao arbitral", [
+            ("Configuração arbitral", [
                 ("Ajustes de pontos (TRF25)", self.show_point_adjustments),
                 ("Proibicoes (TRF25)", self.show_prohibited_pairings),
                 ("Byes solicitados (TRF25)", self.show_requested_byes),
@@ -664,7 +664,7 @@ class ArbitrationPagesMixin:
             table_panel,
             ["severity", "source", "kind", "title", "detail", "round", "created"],
             {
-                "severity": "Nivel",
+                "severity": "Nível",
                 "source": "Origem",
                 "kind": "Tipo",
                 "title": "Pendencia",
