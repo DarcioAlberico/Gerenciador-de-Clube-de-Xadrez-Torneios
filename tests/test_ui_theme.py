@@ -44,7 +44,8 @@ class TemaPropagaTest(unittest.TestCase):
         # simula o `from ..support import *` que as telas fazem na importacao
         token_importado = support.THEME_ACCENT
         theme.apply_accent_preset("emerald")
-        self.assertEqual(["#059669", "#34D399"], list(token_importado))
+        esperado = theme.ACCENT_PRESETS["emerald"]
+        self.assertEqual([esperado["l"], esperado["d"]], list(token_importado))
 
     def test_trocar_fundo_de_frame_alcanca_painel_e_tree(self) -> None:
         painel, tree = support.THEME_PANEL_BG, support.THEME_TREE_BG
@@ -54,7 +55,8 @@ class TemaPropagaTest(unittest.TestCase):
 
     def test_preset_desconhecido_cai_no_padrao(self) -> None:
         theme.apply_accent_preset("nao-existe")
-        self.assertEqual(["#3B82F6", "#38BDF8"], list(theme.THEME_ACCENT))
+        padrao = theme.ACCENT_PRESETS["blue"]
+        self.assertEqual([padrao["l"], padrao["d"]], list(theme.THEME_ACCENT))
 
     def test_listeners_sao_avisados_em_cada_troca(self) -> None:
         avisos: list[str] = []
@@ -96,7 +98,8 @@ class TemaPropagaTest(unittest.TestCase):
         theme.on_theme_change(lambda: ok.append("segundo"))
         theme.apply_accent_preset("teal")  # nao pode levantar
         self.assertEqual(["segundo"], ok, "o listener seguinte ainda roda")
-        self.assertEqual(["#14B8A6", "#2DD4BF"], list(theme.THEME_ACCENT))
+        teal = theme.ACCENT_PRESETS["teal"]
+        self.assertEqual([teal["l"], teal["d"]], list(theme.THEME_ACCENT))
 
 
 class SemHackDeGlobaisTest(unittest.TestCase):

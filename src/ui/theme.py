@@ -20,6 +20,8 @@ from typing import Any, Callable
 
 import customtkinter as ctk
 
+from .contrast import best_ink
+
 logger = logging.getLogger("src.ui.theme")
 
 
@@ -104,29 +106,53 @@ def font_kpi_value() -> ctk.CTkFont:
 THEME_APP_BG       = ColorToken("#F8FAFC", "#0B0F19")
 THEME_PANEL_BG     = ColorToken("#FFFFFF", "#1E293B")
 THEME_TEXT_MAIN    = ColorToken("#0F172A", "#F1F5F9")
-THEME_TEXT_SUB     = ColorToken("#64748B", "#94A3B8")
+# Escurecido na face clara pela auditoria da B-2: #64748B dava 4.33:1 sobre os
+# paineis mais claros (forest, sepia) — reprovava AA por pouco, justamente no
+# texto de ajuda, que e onde o usuario menos consegue "chutar" o que esta escrito.
+THEME_TEXT_SUB     = ColorToken("#526070", "#94A3B8")
 THEME_STATUSBAR_BG = ColorToken("#E2E8F0", "#0F172A")
 THEME_TREE_BG      = ColorToken("#FFFFFF", "#1E293B")
 THEME_TREE_FG      = ColorToken("#0F172A", "#F1F5F9")
-THEME_ACCENT        = ColorToken("#3B82F6", "#38BDF8")
-# Texto POR CIMA do accent (botao ativo, faixa de marca do login).
+THEME_ACCENT        = ColorToken("#2563EB", "#38BDF8")
+# Texto POR CIMA do accent (botao primario, toast, faixa de marca do login).
+# Valor inicial so para o caso de ninguem aplicar preset; apply_accent_preset
+# recalcula com best_ink — ver a nota sobre tinta calculada, mais abaixo.
 THEME_ON_ACCENT     = ColorToken("#FFFFFF", "#0B0F19")
-THEME_DANGER        = ColorToken("#EF4444", "#F87171")
-THEME_DANGER_HOVER  = ColorToken("#DC2626", "#B91C1C")
-THEME_INFO          = ColorToken("#10B981", "#34D399")
-THEME_SUCCESS       = ColorToken("#059669", "#34D399")
-THEME_SUCCESS_HOVER = ColorToken("#047857", "#10B981")
-# Aviso em dois papeis: PREENCHIMENTO (fundo de toast, com texto escuro por cima)
-# e TEXTO sobre painel claro — o ambar de preenchimento nao atinge 4.5:1 como
-# texto no modo claro, por isso a variante escurecida (ver ESPEC_UI_UX §6).
+# Perigo e sucesso escurecidos na face clara (B-2): com os valores 500 do
+# Tailwind, texto branco por cima ficava em 3.7:1 — o botao de excluir era o
+# menos legivel da tela, que e o oposto do que ele precisa ser.
+THEME_DANGER        = ColorToken("#C81E1E", "#F87171")
+THEME_DANGER_HOVER  = ColorToken("#B91C1C", "#DC2626")
+THEME_INFO          = ColorToken("#047857", "#34D399")
+THEME_SUCCESS       = ColorToken("#047857", "#34D399")
+THEME_SUCCESS_HOVER = ColorToken("#065F46", "#10B981")
+# Aviso em dois papeis: PREENCHIMENTO (fundo de toast) e TEXTO sobre painel.
 THEME_WARNING       = ColorToken("#D97706", "#FBBF24")
 THEME_WARNING_HOVER = ColorToken("#B45309", "#F59E0B")
-THEME_WARNING_TEXT  = ColorToken("#B45309", "#FBBF24")
-# Texto POR CIMA do preenchimento de aviso (claro sobre ambar escuro, escuro
-# sobre ambar claro) — o par inverso do THEME_WARNING.
-THEME_ON_WARNING    = ColorToken("#FFFFFF", "#0B0F19")
-THEME_NEUTRAL       = ColorToken("#64748B", "#475569")
+# Aviso COMO TEXTO precisa ser mais escuro que o aviso como preenchimento:
+# #B45309 dava 4.27:1 sobre o painel sépia (B-2).
+THEME_WARNING_TEXT  = ColorToken("#92400E", "#FBBF24")
+THEME_NEUTRAL       = ColorToken("#526070", "#475569")
 THEME_NEUTRAL_HOVER = ColorToken("#475569", "#334155")
+
+# ---------------------------------------------------------------------------
+# Tinta sobre preenchimento — CALCULADA, nunca escolhida a mao (B-2 / P2-11).
+#
+# A auditoria mostrou que o texto branco cravado reprovava em massa: sobre o
+# ambar do toast de aviso dava 3.19:1, e o rotulo padrao do customtkinter
+# (#DCE4EE) sobre o accent amarelo dava 1.30:1 — praticamente invisivel.
+# best_ink escolhe entre tinta clara e escura pela razao de contraste, entao
+# botao amarelo nasce com texto escuro e botao indigo com texto claro sem que
+# ninguem precise manter uma tabela de excecoes.
+# ---------------------------------------------------------------------------
+def _ink_token(fill: ColorToken) -> ColorToken:
+    """Par de tintas legiveis sobre as duas faces de ``fill``."""
+    return ColorToken(best_ink(fill[0]), best_ink(fill[1]))
+
+
+THEME_ON_DANGER  = _ink_token(THEME_DANGER)
+THEME_ON_SUCCESS = _ink_token(THEME_SUCCESS)
+THEME_ON_WARNING = _ink_token(THEME_WARNING)
 
 # ---------------------------------------------------------------------------
 # Tabelas (ttk.Treeview). O ttk NAO aceita par (claro, escuro): a cor tem de ser
@@ -137,25 +163,32 @@ THEME_NEUTRAL_HOVER = ColorToken("#475569", "#334155")
 THEME_TREE_ODD        = ColorToken("#FFFFFF", "#1E293B")
 THEME_TREE_EVEN       = ColorToken("#F1F5F9", "#172032")
 THEME_TREE_HEADING    = ColorToken("#CBD5E1", "#0F172A")
-THEME_TREE_SELECTED   = ColorToken("#3B82F6", "#334155")
+# Selecao escurecida na face clara (B-2): o azul 500 dava 3.68:1 com texto
+# branco. A linha selecionada e a que o operador esta lendo para digitar o
+# resultado — ela nao pode ser a menos legivel da tabela.
+THEME_TREE_SELECTED   = ColorToken("#1D4ED8", "#334155")
 THEME_TREE_SELECTED_FG = ColorToken("#FFFFFF", "#F1F5F9")
 
 # Estado de um resultado na tabela de rodadas: (texto, fundo). Fundo None herda
 # a zebra. Semantica, nao decoracao — e por isso que mora aqui e nao na tela.
+# Os cinzas "apagados" (vazio/anulado/bye) foram os piores achados da B-2:
+# #94A3B8 sobre linha clara dava 2.34:1. Um estado discreto continua discreto
+# em #5C6B80 — o que ele nao pode e ser ilegivel, porque "anulado" e "bye"
+# mudam o que o arbitro faz com aquela mesa.
 RESULT_STATE_COLORS: dict[str, tuple[ColorToken, ColorToken | None]] = {
-    "vazio":         (ColorToken("#64748B", "#94A3B8"), None),
+    "vazio":         (ColorToken("#5A6678", "#94A3B8"), None),
     "registrado":    (ColorToken("#047857", "#86EFAC"), None),
     "submetido_qr":  (ColorToken("#92400E", "#FCD34D"), ColorToken("#FEF9C3", "#1C1A0A")),
-    "aprovado_qr":   (ColorToken("#059669", "#34D399"), ColorToken("#ECFDF5", "#042010")),
+    "aprovado_qr":   (ColorToken("#047857", "#34D399"), ColorToken("#ECFDF5", "#042010")),
     "rejeitado_qr":  (ColorToken("#B91C1C", "#FCA5A5"), ColorToken("#FEF2F2", "#1C0505")),
     "corrigido":     (ColorToken("#6D28D9", "#C4B5FD"), ColorToken("#F5F3FF", "#12080A")),
-    "anulado":       (ColorToken("#94A3B8", "#475569"), None),
+    "anulado":       (ColorToken("#5C6B80", "#8A97A8"), None),
 }
 
 # Resultado lancado (vitoria/empate/bye) — usado nas tags da mesma tabela.
 THEME_RESULT_WIN  = ColorToken("#B45309", "#FACC15")
-THEME_RESULT_DRAW = ColorToken("#64748B", "#94A3B8")
-THEME_RESULT_BYE  = ColorToken("#94A3B8", "#475569")
+THEME_RESULT_DRAW = ColorToken("#5A6678", "#94A3B8")
+THEME_RESULT_BYE  = ColorToken("#5C6B80", "#8A97A8")
 
 
 def pick(token: Any, mode: str | None = None) -> str:
@@ -174,22 +207,27 @@ def pick(token: Any, mode: str | None = None) -> str:
 # Presets de Cor de Destaque (Accent)
 # Cada preset: light (modo claro), dark (modo escuro), hover_l, hover_d
 # ---------------------------------------------------------------------------
+# A face CLARA usa a faixa 600/700; a ESCURA, a faixa 300/400 (B-2 / P2-11).
+# Nao e capricho de paleta: os tons 500 nascem para viver sobre fundo escuro, e
+# sobre painel claro nenhum deles alcancava os 3:1 que um componente de
+# interface precisa — nem mesmo o azul padrao (2.99:1). Com a faixa escura, os
+# quinze presets passam como componente E como preenchimento de botao.
 ACCENT_PRESETS: dict[str, dict[str, str]] = {
-    "blue":      {"label": "Azul",          "l": "#3B82F6", "d": "#38BDF8", "hl": "#2563EB", "hd": "#0EA5E9"},
-    "indigo":    {"label": "Indigo",         "l": "#6366F1", "d": "#818CF8", "hl": "#4F46E5", "hd": "#6366F1"},
-    "violet":    {"label": "Violeta",        "l": "#8B5CF6", "d": "#A78BFA", "hl": "#7C3AED", "hd": "#8B5CF6"},
-    "purple":    {"label": "Roxo",           "l": "#A855F7", "d": "#C084FC", "hl": "#9333EA", "hd": "#A855F7"},
-    "pink":      {"label": "Rosa",           "l": "#EC4899", "d": "#F472B6", "hl": "#DB2777", "hd": "#EC4899"},
-    "rose":      {"label": "Rosa Choque",    "l": "#F43F5E", "d": "#FB7185", "hl": "#E11D48", "hd": "#F43F5E"},
-    "red":       {"label": "Vermelho",       "l": "#EF4444", "d": "#F87171", "hl": "#DC2626", "hd": "#EF4444"},
-    "orange":    {"label": "Laranja",        "l": "#F97316", "d": "#FB923C", "hl": "#EA580C", "hd": "#F97316"},
-    "amber":     {"label": "Ambar",          "l": "#F59E0B", "d": "#FBBF24", "hl": "#D97706", "hd": "#F59E0B"},
-    "yellow":    {"label": "Amarelo",        "l": "#EAB308", "d": "#FACC15", "hl": "#CA8A04", "hd": "#EAB308"},
-    "lime":      {"label": "Lima",           "l": "#84CC16", "d": "#A3E635", "hl": "#65A30D", "hd": "#84CC16"},
-    "emerald":   {"label": "Esmeralda",      "l": "#059669", "d": "#34D399", "hl": "#047857", "hd": "#059669"},
-    "teal":      {"label": "Verde-Agua",     "l": "#14B8A6", "d": "#2DD4BF", "hl": "#0D9488", "hd": "#14B8A6"},
-    "cyan":      {"label": "Ciano",          "l": "#06B6D4", "d": "#22D3EE", "hl": "#0891B2", "hd": "#06B6D4"},
-    "sky":       {"label": "Ceu",            "l": "#0EA5E9", "d": "#38BDF8", "hl": "#0284C7", "hd": "#0EA5E9"},
+    "blue":      {"label": "Azul",          "l": "#2563EB", "d": "#38BDF8", "hl": "#1D4ED8", "hd": "#0EA5E9"},
+    "indigo":    {"label": "Indigo",         "l": "#4F46E5", "d": "#818CF8", "hl": "#4338CA", "hd": "#6366F1"},
+    "violet":    {"label": "Violeta",        "l": "#7C3AED", "d": "#A78BFA", "hl": "#6D28D9", "hd": "#8B5CF6"},
+    "purple":    {"label": "Roxo",           "l": "#9333EA", "d": "#C084FC", "hl": "#7E22CE", "hd": "#A855F7"},
+    "pink":      {"label": "Rosa",           "l": "#DB2777", "d": "#F472B6", "hl": "#BE185D", "hd": "#EC4899"},
+    "rose":      {"label": "Rosa Choque",    "l": "#E11D48", "d": "#FB7185", "hl": "#BE123C", "hd": "#F43F5E"},
+    "red":       {"label": "Vermelho",       "l": "#DC2626", "d": "#F87171", "hl": "#B91C1C", "hd": "#EF4444"},
+    "orange":    {"label": "Laranja",        "l": "#C2410C", "d": "#FB923C", "hl": "#9A3412", "hd": "#F97316"},
+    "amber":     {"label": "Ambar",          "l": "#B45309", "d": "#FBBF24", "hl": "#92400E", "hd": "#F59E0B"},
+    "yellow":    {"label": "Amarelo",        "l": "#A16207", "d": "#FACC15", "hl": "#854D0E", "hd": "#EAB308"},
+    "lime":      {"label": "Lima",           "l": "#4D7C0F", "d": "#A3E635", "hl": "#3F6212", "hd": "#84CC16"},
+    "emerald":   {"label": "Esmeralda",      "l": "#047857", "d": "#34D399", "hl": "#065F46", "hd": "#059669"},
+    "teal":      {"label": "Verde-Agua",     "l": "#0F766E", "d": "#2DD4BF", "hl": "#115E59", "hd": "#14B8A6"},
+    "cyan":      {"label": "Ciano",          "l": "#0E7490", "d": "#22D3EE", "hl": "#155E75", "hd": "#06B6D4"},
+    "sky":       {"label": "Ceu",            "l": "#0369A1", "d": "#38BDF8", "hl": "#075985", "hd": "#0EA5E9"},
 }
 ACCENT_PRESET_LABELS: dict[str, str] = {k: v["label"] for k, v in ACCENT_PRESETS.items()}
 
@@ -209,6 +247,15 @@ BG_COLOR_PRESETS: dict[str, dict[str, tuple[str, str]]] = {
     "rose_bg":    {"app": ("#FFF1F2", "#1A0510"), "statusbar": ("#FECDD3", "#14040D")},
     "teal_bg":    {"app": ("#F0FDFA", "#042018"), "statusbar": ("#CCFBF1", "#031510")},
     "indigo_bg":  {"app": ("#EEF2FF", "#0E0B27"), "statusbar": ("#E0E7FF", "#09071E")},
+    # Alto contraste (B-2 / ESPEC §6). Unico preset que tambem troca o TEXTO:
+    # o ganho de acessibilidade mora justamente no cinza de apoio, que nos
+    # outros temas fica em ~6:1 e aqui sobe para AAA. Ver _TEXT_DEFAULTS.
+    "contrast":   {
+        "app": ("#FFFFFF", "#000000"),
+        "statusbar": ("#DDDDDD", "#000000"),
+        "text": ("#000000", "#FFFFFF"),
+        "sub": ("#1F2937", "#E5E7EB"),
+    },
 }
 BG_COLOR_PRESET_LABELS: dict[str, str] = {
     "slate":      "Slate (Padrão)",
@@ -223,6 +270,7 @@ BG_COLOR_PRESET_LABELS: dict[str, str] = {
     "rose_bg":    "Rosa",
     "teal_bg":    "Verde-Agua",
     "indigo_bg":  "Indigo",
+    "contrast":   "Alto Contraste",
 }
 # Alias de compatibilidade (settings antigos usavam 'bg_preset')
 BG_PRESETS = BG_COLOR_PRESETS
@@ -244,6 +292,10 @@ FRAME_BG_PRESETS: dict[str, dict[str, tuple[str, str]]] = {
     "rose_f":     {"panel": ("#FFE4E6", "#2D0A18"), "tree": ("#FFE4E6", "#2D0A18")},
     "teal_f":     {"panel": ("#CCFBF1", "#0A2A24"), "tree": ("#CCFBF1", "#0A2A24")},
     "indigo_f":   {"panel": ("#E0E7FF", "#1A1A3A"), "tree": ("#E0E7FF", "#1A1A3A")},
+    # Painel levemente destacado do fundo: em alto contraste a estrutura da
+    # tela nao pode depender so de sombra, que e o que some quando o usuario
+    # aumenta o contraste do sistema operacional.
+    "contrast":   {"panel": ("#EFEFEF", "#141414"), "tree": ("#FFFFFF", "#000000")},
 }
 FRAME_BG_PRESET_LABELS: dict[str, str] = {
     "slate":      "Slate (Padrão)",
@@ -258,6 +310,7 @@ FRAME_BG_PRESET_LABELS: dict[str, str] = {
     "rose_f":     "Rosa",
     "teal_f":     "Verde-Agua",
     "indigo_f":   "Indigo",
+    "contrast":   "Alto Contraste",
 }
 
 # ---------------------------------------------------------------------------
@@ -272,7 +325,13 @@ CURATED_THEMES: dict[str, dict[str, Any]] = {
     "carbon_cyan":     {"label": "Carbono & Ciano",       "accent": "cyan",    "bg": "carbon", "frame": "carbon", "appearance": "Dark"},
     "sepia_wood":      {"label": "Sepia & Madeira",       "accent": "amber",   "bg": "sepia",  "frame": "sepia",  "appearance": "Light"},
     "forest_emerald":  {"label": "Floresta & Esmeralda",  "accent": "emerald", "bg": "forest", "frame": "forest", "appearance": "Light"},
+    "alto_contraste":  {"label": "Alto Contraste",        "accent": "blue",    "bg": "contrast", "frame": "contrast", "appearance": "Light"},
 }
+
+# Temas que a auditoria de contraste (B-2) cobra em nível AAA (7:1) no texto,
+# e não apenas AA. Existe um só: prometer "alto contraste" e entregar o mesmo
+# 4.5:1 dos outros seria vender o nome sem o conteúdo.
+HIGH_CONTRAST_THEMES = {"alto_contraste"}
 
 
 def curated_theme_swatches(theme_key: str) -> dict[str, str]:
@@ -287,8 +346,10 @@ def curated_theme_swatches(theme_key: str) -> dict[str, str]:
         "statusbar": bg["statusbar"][face],
         "panel":     frame["panel"][face],
         "accent":    accent["d"] if face else accent["l"],
-        "text":      THEME_TEXT_MAIN[face],
-        "sub":       THEME_TEXT_SUB[face],
+        # O preset pode trazer o proprio texto (alto contraste): o cartao tem de
+        # mostrar o tema que sera aplicado, nao o texto do tema em vigor.
+        "text":      bg.get("text", tuple(THEME_TEXT_MAIN))[face],
+        "sub":       bg.get("sub", tuple(THEME_TEXT_SUB))[face],
     }
 
 
@@ -308,13 +369,18 @@ def apply_accent_preset(preset_key: str) -> None:
     preset = ACCENT_PRESETS.get(preset_key, ACCENT_PRESETS["blue"])
     l_color, d_color = preset["l"], preset["d"]
     hl_color, hd_color = preset["hl"], preset["hd"]
+    # Tinta do rotulo calculada a partir do proprio accent (B-2). O padrao do
+    # customtkinter e um cinza-claro fixo (#DCE4EE) que sobre o accent amarelo
+    # dava 1.30:1 — texto que so existe no codigo, nao na tela.
+    on_light, on_dark = best_ink(l_color), best_ink(d_color)
+    THEME_ON_ACCENT.set(on_light, on_dark)
 
     # Patch no ThemeManager — afeta todos os widgets criados apos esta chamada
     try:
         import customtkinter as ctk
         tm = ctk.ThemeManager.theme
         for widget_cls, overrides in {
-            "CTkButton":         {"fg_color": [l_color, d_color], "hover_color": [hl_color, hd_color]},
+            "CTkButton":         {"fg_color": [l_color, d_color], "hover_color": [hl_color, hd_color], "text_color": [on_light, on_dark]},
             "CTkCheckBox":       {"fg_color": [l_color, d_color], "hover_color": [hl_color, hd_color]},
             "CTkRadioButton":    {"fg_color": [l_color, d_color], "hover_color": [hl_color, hd_color]},
             "CTkSwitch":         {"progress_color": [l_color, d_color]},
@@ -334,11 +400,23 @@ def apply_accent_preset(preset_key: str) -> None:
     notify_theme_change()
 
 
+# Cor de texto de todos os presets menos o de alto contraste. Guardada aqui
+# para que sair do alto contraste seja tao simples quanto entrar — sem isso, o
+# preto puro ficaria grudado no tema seguinte.
+_TEXT_DEFAULTS = {"text": ("#0F172A", "#F1F5F9"), "sub": ("#526070", "#94A3B8")}
+
+
 def apply_bg_preset(preset_key: str) -> None:
-    """Atualiza THEME_APP_BG e THEME_STATUSBAR_BG para o preset de fundo principal."""
+    """Atualiza THEME_APP_BG e THEME_STATUSBAR_BG para o preset de fundo principal.
+
+    O preset pode ainda trazer ``text``/``sub`` (hoje só o de alto contraste);
+    quem não traz recebe de volta o texto padrão.
+    """
     preset = BG_COLOR_PRESETS.get(preset_key, BG_COLOR_PRESETS["slate"])
     THEME_APP_BG.set(*preset["app"])
     THEME_STATUSBAR_BG.set(*preset["statusbar"])
+    THEME_TEXT_MAIN.set(*preset.get("text", _TEXT_DEFAULTS["text"]))
+    THEME_TEXT_SUB.set(*preset.get("sub", _TEXT_DEFAULTS["sub"]))
     notify_theme_change()
 
 

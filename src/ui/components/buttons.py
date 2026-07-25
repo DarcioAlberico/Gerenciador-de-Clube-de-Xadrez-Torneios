@@ -16,7 +16,13 @@ from typing import Any, Callable
 
 import customtkinter as ctk
 
-from ..theme import THEME_DANGER, THEME_DANGER_HOVER, THEME_TEXT_MAIN
+from ..theme import (
+    THEME_DANGER,
+    THEME_DANGER_HOVER,
+    THEME_ON_ACCENT,
+    THEME_ON_DANGER,
+    THEME_TEXT_MAIN,
+)
 from .tooltip import Tooltip
 
 _DEFAULT_HEIGHT = 36
@@ -38,8 +44,14 @@ def primary_button(
     **kwargs: Any,
 ) -> ctk.CTkButton:
     """Ação principal. Usa a cor de destaque do tema (fg_color padrão do CTkButton,
-    já alinhado ao accent via ``apply_accent_preset``)."""
+    já alinhado ao accent via ``apply_accent_preset``).
+
+    O ``text_color`` vem de ``THEME_ON_ACCENT``, que é **calculado** a partir do
+    accent (B-2): o padrão do customtkinter é um cinza-claro fixo que sobre um
+    accent amarelo dava 1.30:1.
+    """
     kwargs.setdefault("height", _DEFAULT_HEIGHT)
+    kwargs.setdefault("text_color", THEME_ON_ACCENT)
     return _with_tip(ctk.CTkButton(master, text=text, command=command, **kwargs), tip)
 
 
@@ -72,4 +84,5 @@ def danger_button(
     kwargs.setdefault("height", _DEFAULT_HEIGHT)
     kwargs.setdefault("fg_color", THEME_DANGER)
     kwargs.setdefault("hover_color", THEME_DANGER_HOVER)
+    kwargs.setdefault("text_color", THEME_ON_DANGER)
     return _with_tip(ctk.CTkButton(master, text=text, command=command, **kwargs), tip)
