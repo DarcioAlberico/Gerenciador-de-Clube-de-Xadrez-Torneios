@@ -145,11 +145,25 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 > **F2.4**); `support ↔ components` só não cicla por imports dentro de função —
 > resolve em **F1.1** (`theme.py`).
 
+> **Status (2026-07-25): F2.3 CONCLUÍDA.** Zero `threading.Thread` cru em `src/ui` —
+> os 4 restantes (sync de ratings online, envio simples e disparo em massa de e-mail,
+> download da lista FIDE) passaram pelo helper único `_run_background`, junto com a
+> importação CBX, que era **síncrona** e travava a janela. `_generate_round` e
+> `_preview_next_round` também saíram da thread da UI: permissão e confirmações
+> continuam no laço principal (abrem modal), só o emparceiramento vai para o
+> background — era o congelamento mais visível do dia a dia (P1-3). Novo
+> [`BusyIndicator`](src/ui/components/busy.py): barra indeterminada na statusbar,
+> **com contagem de tarefas** (N ações simultâneas → uma barra; só o fim da última
+> a esconde), ligada/desligada dentro do próprio `_run_background` — nenhuma tela
+> precisa saber que ela existe. Erro em background já cai no `_show_error`
+> unificado da F2.2, ou seja, vira toast. Cobertura em
+> [tests/test_ui_busy.py](tests/test_ui_busy.py).
+
 | ID | Tarefa | Esforço | Impacto | Risco | Depende | Aceite |
 |----|--------|---------|---------|-------|---------|--------|
 | ✅ F2.1 | Hierarquizar a toolbar de Rodadas: primárias/`Exportar▾`/`Mais▾`/danger isolado (P1-1) | 2d | A | B | F0.2 | ≤6 ações visíveis; destrutivo separado |
 | ✅ F2.2 | Confirmação CTk + toast de erro; remover `messagebox` (P1-4); unificar `_show_error` | 1,5d | A | B | F0.2 | Zero `messagebox` em telas migradas |
-| F2.3 | Progresso em ações longas + migrar 4 threads crus p/ `_run_background` (P1-3, P1-5) | 2d | A | M | — | Botão desabilita + spinner; erro vira toast |
+| ✅ F2.3 | Progresso em ações longas + migrar 4 threads crus p/ `_run_background` (P1-3, P1-5) | 2d | A | M | — | Botão desabilita + spinner; erro vira toast |
 | F2.4 | Undo em exclusões via toast com ação (P1-6) | 1,5d | A | M | F2.2 | "Excluído · Desfazer" onde aplicável |
 | F2.5 | Hover visual em KPI cards clicáveis (P1-10) | 0,5d | M | B | — | Cursor + realce no hover |
 

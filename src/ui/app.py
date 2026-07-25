@@ -17,7 +17,7 @@ from .screens.pairings import PairingPagesMixin
 from .screens.referees import RefereePagesMixin
 from .screens.settings import SettingsPagesMixin
 from .support import *
-from .components import EmptyState, show_donation_modal
+from .components import BusyIndicator, EmptyState, show_donation_modal
 from .screens.tournaments import TournamentPagesMixin
 from .screens.reports import ReportPagesMixin
 from .screens.audit import AuditPagesMixin
@@ -639,6 +639,10 @@ class AlbericusApp(
         )
         self.status_label.grid(row=0, column=2, padx=10, pady=2, sticky="e")
 
+        # Progresso de tarefas em background: some quando nao ha nada rodando.
+        self.busy_indicator = BusyIndicator(self.statusbar)
+        self.busy_indicator.grid_config(row=0, column=3, padx=(0, 12), pady=2, sticky="e")
+
     def _default_status_text(self) -> str:
         db_name = Path(self.db.db_path).name
         backup = self._last_backup_label()
@@ -1116,6 +1120,9 @@ class AlbericusApp(
                 logger.exception("Falha ao desabilitar widget durante tarefa em background")
         if hasattr(self, "status_label") and busy_message:
             self.status_label.configure(text=busy_message)
+        indicator = getattr(self, "busy_indicator", None)
+        if indicator is not None:
+            indicator.start()
 
         def run() -> None:
             try:
@@ -1126,12 +1133,18 @@ class AlbericusApp(
             self.after(0, lambda: finish(result=result))
 
         def finish(result: Any = None, error: Exception | None = None) -> None:
+            if indicator is not None:
+                indicator.stop()
             if busy_widget is not None:
                 try:
                     busy_widget.configure(state="normal")
                 except Exception:
                     logger.exception("Falha ao reabilitar widget apos tarefa em background")
-            if hasattr(self, "status_label"):
+            # So volta ao texto padrao quando nao ha mais nada rodando: com duas
+            # tarefas simultaneas, a primeira a terminar limparia a mensagem da
+            # outra e a statusbar contradiria a barra de progresso (ainda visivel).
+            ocioso = indicator is None or not indicator.is_running
+            if hasattr(self, "status_label") and ocioso:
                 self.status_label.configure(text=self._default_status_text())
             if error:
                 self._show_error(error)
