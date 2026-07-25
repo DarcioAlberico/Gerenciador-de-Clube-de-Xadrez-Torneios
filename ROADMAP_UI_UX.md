@@ -347,7 +347,7 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 ### Fase 4 — Backlog em execução
 
 - ✅ **B-1** Persistência de layout de colunas por usuário (P2-9).
-- **B-2** Auditoria de contraste WCAG AA + preset alto contraste (P2-11).
+- ✅ **B-2** Auditoria de contraste WCAG AA + preset alto contraste (P2-11).
 - **B-3** i18n: extrair strings para `i18n/pt_BR.json`, manter só PT-BR (P2-12).
 - **B-4** Virtualização/paginação de `Treeview` (P2-13) — antes da base crescer.
 - ✅ **B-5** Cache de figuras matplotlib quando dados não mudam (P2-14).
@@ -358,6 +358,37 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 - **B-7** Acentuar cabeçalhos/títulos de `src/services/export_*` para casar com a UI
   (F3.5). Fica fora da F3.5 porque altera **arquivo entregue** (PDF/CSV/HTML) e
   formato que terceiros consomem — precisa de decisão sobre compatibilidade.
+
+> **Status (2026-07-25): B-2 CONCLUÍDA — 77 reprovações viraram zero.**
+> A auditoria foi escrita antes das correções, e o número dizia tudo: **77
+> pares abaixo de AA nos 6 temas curados**. O pior deles era o rótulo do botão
+> primário com accent âmbar no modo escuro — **1,30:1**, texto que só existia
+> no código.
+>
+> A parte difícil não é a conta (dez linhas de WCAG em
+> [`contrast.py`](src/ui/contrast.py)), é o **contrato**: saber que o texto de
+> ajuda cai sobre o painel, e que o painel muda com o preset de frames.
+> [`theme_audit.py`](src/ui/theme_audit.py) declara os 33 encontros de cor que
+> a tela produz; par que existe e não está lá é ponto cego.
+>
+> Três causas explicaram quase tudo:
+> 1. **Tinta cravada.** O branco fixo do toast e o cinza padrão do customtkinter
+>    (`#DCE4EE`) não sabem sobre o que estão. Agora a tinta é **calculada**
+>    (`best_ink`): botão amarelo nasce com texto escuro, botão índigo com texto
+>    claro, sem tabela de exceções para alguém esquecer de atualizar.
+> 2. **Accents na faixa errada.** Os tons 500 nascem para fundo escuro; sobre
+>    painel claro nenhum dos 15 alcançava os 3:1 de componente — nem o azul
+>    padrão (2,99:1). A face clara foi para a faixa 600/700.
+> 3. **Cinzas apagados demais.** `#94A3B8` em "bye"/"anulado" dava 2,34:1 sobre
+>    linha clara. Discreto continua discreto em `#5C6B80`; o que ele não pode é
+>    ser ilegível, porque "anulado" muda o que o árbitro faz com aquela mesa.
+>
+> Resultado: **0 reprovações** nos temas curados e — efeito colateral do item 2
+> — nas **5.070 combinações** que o modo avançado permite montar. O preset
+> **Alto Contraste** entrou como tema curado e é o único cobrado em **AAA
+> (7:1)** nas superfícies (pior par: 12,77:1); para isso, `apply_bg_preset`
+> passou a aceitar override de cor de texto, e a devolvê-la ao sair — senão o
+> preto puro grudaria no tema seguinte. 21 testes, nenhum abre janela.
 
 > **Status (2026-07-25): B-1 CONCLUÍDA — com uma divergência deliberada.**
 > O backlog dizia "reaproveitar `ColumnLayoutEditor`", e **não foi isso**. Aquele
