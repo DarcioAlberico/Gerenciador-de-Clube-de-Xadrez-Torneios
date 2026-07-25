@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import threading
 from ..support import *
 from src.services.message_service import MessageService
 
@@ -64,14 +63,12 @@ class CommunicationPagesMixin:
                 self._show_error("Preencha todos os campos do e-mail.")
                 return
 
-            def task():
-                try:
-                    msg_service.send_email(to_email, subject, body_text)
-                    self.after(0, lambda: self._show_toast("E-mail enviado com sucesso!", kind="success"))
-                except Exception as exc:
-                    self.after(0, lambda error=exc: self._show_error(f"Falha ao enviar: {error}"))
-
-            threading.Thread(target=task, daemon=True).start()
+            self._run_background(
+                lambda: msg_service.send_email(to_email, subject, body_text),
+                on_success=lambda _result: self._show_toast("E-mail enviado com sucesso!", kind="success"),
+                busy_message="Enviando e-mail...",
+                busy_widget=btn,
+            )
 
         btn = ctk.CTkButton(parent, text="Enviar E-mail", command=do_send_email)
         btn.grid(row=6, column=0, padx=16, pady=(0, 16), sticky="w")
@@ -207,25 +204,22 @@ class CommunicationPagesMixin:
             ):
                 return
 
-            def task() -> None:
-                try:
-                    summary = self.communication_service.bulk_email_members(
-                        msg_service, subject, body_text, **kwargs
-                    )
-                    self.after(0, lambda s=summary: self._show_info(
-                        "Disparo concluido.\n\n"
-                        f"Enviados: {s['sent_count']}\n"
-                        f"Falhas: {s['failed_count']}\n"
-                        f"Sem e-mail (ignorados): {s['skipped_no_email']}"
-                    ))
-                except Exception as exc:
-                    self.after(0, lambda error=exc: self._show_error(f"Falha no disparo: {error}"))
+            self._run_background(
+                lambda: self.communication_service.bulk_email_members(
+                    msg_service, subject, body_text, **kwargs
+                ),
+                on_success=lambda summary: self._show_info(
+                    "Disparo concluido.\n\n"
+                    f"Enviados: {summary['sent_count']}\n"
+                    f"Falhas: {summary['failed_count']}\n"
+                    f"Sem e-mail (ignorados): {summary['skipped_no_email']}"
+                ),
+                busy_message="Disparando e-mails...",
+                busy_widget=bulk_button,
+            )
 
-            threading.Thread(target=task, daemon=True).start()
-
-        ctk.CTkButton(parent, text="Enviar / Agendar", command=do_send_bulk).grid(
-            row=10, column=0, padx=16, pady=(0, 8), sticky="w"
-        )
+        bulk_button = ctk.CTkButton(parent, text="Enviar / Agendar", command=do_send_bulk)
+        bulk_button.grid(row=10, column=0, padx=16, pady=(0, 8), sticky="w")
         load_pending()
 
     def _build_whatsapp_tab(self, parent: ctk.CTkFrame, msg_service: MessageService) -> None:

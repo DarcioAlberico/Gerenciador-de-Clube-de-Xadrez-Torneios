@@ -41,12 +41,13 @@ class PairingResultsMixin:
         actions = ctk.CTkFrame(toolbar, fg_color="transparent")
         actions.grid(row=0, column=0, padx=SPACE_MD, pady=(SPACE_MD, SPACE_SM), sticky="ew")
         actions.grid_columnconfigure(3, weight=1)  # espaco flexivel isola a acao destrutiva
-        primary_button(
+        self._generate_round_button = primary_button(
             actions,
             "Gerar proxima rodada",
             self._generate_round,
             tip="Emparceira a proxima rodada a partir dos resultados ja lancados.",
-        ).grid(row=0, column=0, padx=(0, SPACE_SM))
+        )
+        self._generate_round_button.grid(row=0, column=0, padx=(0, SPACE_SM))
         menu_button(
             actions,
             "Exportar",
@@ -143,22 +144,29 @@ class PairingResultsMixin:
         toolbar.grid(row=0, column=0, sticky="ew", pady=(0, 12))
         toolbar.grid_columnconfigure(0, weight=1)
 
+        # Zerados a cada montagem: a tela e reconstruida e os botoes antigos morrem —
+        # sem isto, _run_background tentaria reabilitar um widget destruido.
+        self._generate_round_button = None
+        self._preview_round_button = None
+
         if show_initial_call:
             # Antes da 1a rodada nao ha rodada para editar/exportar: so gerar e pre-visualizar.
             launch = ctk.CTkFrame(toolbar, fg_color="transparent")
             launch.grid(row=0, column=0, padx=SPACE_MD, pady=SPACE_MD, sticky="w")
-            primary_button(
+            self._generate_round_button = primary_button(
                 launch,
                 "Gerar proxima rodada",
                 self._generate_round,
                 tip="Emparceira a primeira rodada com os jogadores presentes na chamada inicial.",
-            ).pack(side="left", padx=(0, SPACE_SM))
-            secondary_button(
+            )
+            self._generate_round_button.pack(side="left", padx=(0, SPACE_SM))
+            self._preview_round_button = secondary_button(
                 launch,
                 "Pre-visualizar rodada",
                 self._preview_next_round,
                 tip="Mostra como ficaria o emparceiramento da primeira rodada sem grava-lo.",
-            ).pack(side="left")
+            )
+            self._preview_round_button.pack(side="left")
         else:
             self._build_round_toolbar(toolbar)
 
@@ -1034,21 +1042,32 @@ class PairingResultsMixin:
         return True
 
     def _generate_round(self) -> None:
+        # Permissao e confirmacoes ficam na thread da UI (abrem modal); so o
+        # emparceiramento em si vai para background — antes ele congelava a
+        # janela por segundos em torneios grandes (P1-3 / ESPEC_UI_UX §5.2).
         try:
             self.require_permission("tournament_write")
             if not self._confirm_short_tournament_round_count():
                 return
-            self.pairing_service.generate_next_round(self.current_tournament_id)
-            self.show_pairings()
         except Exception as exc:
             self._show_error(exc)
+            return
+        tournament_id = self.current_tournament_id
+        self._run_background(
+            lambda: self.pairing_service.generate_next_round(tournament_id),
+            on_success=lambda _result: self.show_pairings(),
+            busy_message="Gerando emparceiramento...",
+            busy_widget=getattr(self, "_generate_round_button", None),
+        )
 
     def _preview_next_round(self) -> None:
-        try:
-            preview = self.pairing_service.preview_next_round(self.current_tournament_id)
-            self._show_info(self._format_pairing_preview(preview))
-        except Exception as exc:
-            self._show_error(exc)
+        tournament_id = self.current_tournament_id
+        self._run_background(
+            lambda: self.pairing_service.preview_next_round(tournament_id),
+            on_success=lambda preview: self._show_info(self._format_pairing_preview(preview)),
+            busy_message="Simulando emparceiramento...",
+            busy_widget=getattr(self, "_preview_round_button", None),
+        )
 
     def _format_pairing_preview(self, preview: dict[str, Any]) -> str:
         header = [

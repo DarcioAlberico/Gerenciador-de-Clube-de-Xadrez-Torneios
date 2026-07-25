@@ -115,51 +115,50 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
         )
 
         def download_fide() -> None:
-            import threading
+            # Download longo (minutos): vai para o helper unico de background, que
+            # desabilita o botao, liga o indicador de progresso e manda erro p/ toast.
+            self._run_background(
+                self.official_rating_service.import_fide_list_from_url,
+                on_success=lambda res: self._show_info(
+                    f"{res['imported']} jogadores da FIDE importados."
+                ),
+                busy_message="Baixando lista da FIDE...",
+                busy_widget=fide_button,
+            )
+            self._show_info("Download da FIDE iniciado — pode levar alguns minutos.")
 
-            def worker():
-                try:
-                    res = self.official_rating_service.import_fide_list_from_url()
-                    msg = f"{res['imported']} jogadores da FIDE importados."
-                    self.after(0, lambda m=msg: self._show_info(m))
-                except Exception as exc:
-                    err_msg = str(exc)
-                    self.after(0, lambda m=err_msg: self._show_error(m))
-
-            threading.Thread(target=worker, daemon=True).start()
-            self._show_info("Download da FIDE iniciado em segundo plano (pode levar alguns minutos).")
-
-        stack(
+        fide_button = ctk.CTkButton(
             tab_tools,
-            ctk.CTkButton(
-                tab_tools,
-                text="Baixar e Sincronizar FIDE",
-                command=download_fide,
-                fg_color=THEME_SUCCESS,
-                hover_color=THEME_SUCCESS_HOVER,
-            ),
-            label="Sincronizacao de Ratings",
-            section=True,
+            text="Baixar e Sincronizar FIDE",
+            command=download_fide,
+            fg_color=THEME_SUCCESS,
+            hover_color=THEME_SUCCESS_HOVER,
         )
+        stack(tab_tools, fide_button, label="Sincronizacao de Ratings", section=True)
+
+        def _import_cbx_file(path: str) -> dict:
+            """Parte pesada da importacao CBX — roda fora da thread da UI."""
+            suffix = str(path).lower()
+            if suffix.endswith(".xml"):
+                return self.official_rating_service.import_official_xml(path, "CBX", "")
+            if suffix.endswith(".xls") or suffix.endswith(".xlsx"):
+                return self.official_rating_service.import_official_excel(path, "CBX", "")
+            return self.official_rating_service.import_official_csv(path, "CBX", "")
 
         def import_cbx() -> None:
             from tkinter import filedialog
             path = filedialog.askopenfilename(filetypes=[("Excel", "*.xls;*.xlsx"), ("CSV", "*.csv"), ("XML", "*.xml"), ("Texto", "*.txt")])
             if not path:
                 return
-            try:
-                suffix = str(path).lower()
-                if suffix.endswith(".xml"):
-                    res = self.official_rating_service.import_official_xml(path, "CBX", "")
-                elif suffix.endswith(".xls") or suffix.endswith(".xlsx"):
-                    res = self.official_rating_service.import_official_excel(path, "CBX", "")
-                else:
-                    res = self.official_rating_service.import_official_csv(path, "CBX", "")
-                self._show_info(f"{res['imported']} jogadores CBX importados!")
-            except Exception as exc:
-                self._show_error(str(exc))
+            self._run_background(
+                lambda: _import_cbx_file(path),
+                on_success=lambda res: self._show_info(f"{res['imported']} jogadores CBX importados!"),
+                busy_message="Importando lista CBX...",
+                busy_widget=cbx_button,
+            )
 
-        stack(tab_tools, ctk.CTkButton(tab_tools, text="Importar Lista CBX (Excel / CSV / XML)", command=import_cbx))
+        cbx_button = ctk.CTkButton(tab_tools, text="Importar Lista CBX (Excel / CSV / XML)", command=import_cbx)
+        stack(tab_tools, cbx_button)
 
         backup_panel = self._make_panel(body)
         backup_panel.grid(row=0, column=1, sticky="nsew")
