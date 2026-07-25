@@ -10,6 +10,7 @@ from .screens.admin import AdminPagesMixin
 from .screens.club import ClubPagesMixin
 from .screens.dashboard import DashboardPagesMixin
 from .screens.free_tournament import FreeTournamentMixin
+from .screens.home import HomePagesMixin
 from .screens.library import LibraryMixin
 from .screens.pairings import PairingPagesMixin
 from .screens.referees import RefereePagesMixin
@@ -29,6 +30,7 @@ from src.services.report_engine import ReportEngine
 class AlbericusApp(
     AppShell,
     UIBuilderMixin,
+    HomePagesMixin,
     ClubPagesMixin,
     DashboardPagesMixin,
     AdminPagesMixin,
@@ -281,7 +283,8 @@ class AlbericusApp(
                 self._build_statusbar()
                 self._build_content()
                 self._register_shortcuts()
-                self.show_club()
+                # Abre nas pendencias, nao no cadastro do clube (P1-8 / F3.2).
+                self.show_home()
                 self._refresh_statusbar()
                 self._start_scheduled_dispatch()
             else:
