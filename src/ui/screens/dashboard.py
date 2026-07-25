@@ -1,24 +1,29 @@
 from __future__ import annotations
 
 import customtkinter as ctk
-import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from typing import Any
 
+from ..charts import FigureCache, finance_chart_key, members_chart_key
 from ..components import EmptyState
 from ..support import AppError
 from ..theme import (
     SIZE_BODY,
-    THEME_ACCENT,
-    THEME_DANGER,
-    THEME_PANEL_BG,
-    THEME_SUCCESS,
     THEME_TEXT_MAIN,
     THEME_TEXT_SUB,
-    THEME_WARNING,
     font_section,
-    pick,
+    on_theme_change,
 )
+from .dashboard_figures import build_finance_figure, build_members_figure, current_palette
+
+# Cache das figuras (P2-14). Vive no módulo, e não na instância, porque a tela é
+# um mixin recriado a cada navegação — guardá-lo na instância seria guardá-lo em
+# quem morre justamente na hora em que o cache serviria.
+DASHBOARD_FIGURES = FigureCache()
+
+# Trocar de tema não invalida chave nenhuma (a paleta faz parte dela), mas deixa
+# no cache figuras de um tema que ninguém mais vai ver: solta a memória.
+on_theme_change(DASHBOARD_FIGURES.clear)
 
 
 class DashboardPagesMixin:
@@ -60,69 +65,35 @@ class DashboardPagesMixin:
         self._draw_upcoming_events(info2_frame, dashboard)
 
     @staticmethod
-    def _chart_palette() -> tuple[str, str, str]:
-        """(fundo, texto, texto-secundario) do tema atual, para os graficos.
-
-        Le a face clara/escura ativa para que os graficos matplotlib acompanhem
-        o tema em vez de ficarem sempre com fundo branco.
-        """
-        return pick(THEME_PANEL_BG), pick(THEME_TEXT_MAIN), pick(THEME_TEXT_SUB)
-
-    @staticmethod
     def _embed_chart(fig: Any, parent: ctk.CTkFrame) -> None:
+        """Embute a figura num canvas novo — a figura pode vir do cache.
+
+        Cada visita destrói o conteúdo antigo, então o canvas é sempre novo; a
+        figura é que sobrevive. Reaproveitá-la é seguro porque o
+        ``FigureCanvasTkAgg`` assume a figura ao nascer (``fig.canvas`` passa a
+        apontar para o canvas atual). Por isso a figura **não** é fechada aqui:
+        fechá-la esvaziaria o cache no primeiro uso.
+        """
         fig.tight_layout()
         canvas = FigureCanvasTkAgg(fig, master=parent)
         canvas.draw()
         canvas.get_tk_widget().pack(fill="both", expand=True, padx=10, pady=10)
-        plt.close(fig)
 
     def _draw_members_chart(self, parent: ctk.CTkFrame, dashboard: dict[str, Any]) -> None:
-        panel, text, sub = self._chart_palette()
-        summary = dashboard.get("summary", {})
-        active = summary.get("active_members", 0)
-        inactive = summary.get("total_members", 0) - active
-        defaulters = dashboard.get("defaulters_count", 0)
-
-        fig, ax = plt.subplots(figsize=(5, 3), facecolor=panel)
-        ax.set_facecolor(panel)
-        if summary.get("total_members", 0) > 0:
-            ax.pie(
-                [active, inactive],
-                labels=["Ativos", "Inativos"],
-                autopct="%1.1f%%",
-                colors=[pick(THEME_ACCENT), pick(THEME_TEXT_SUB)],
-                textprops={"color": text},
-            )
-        else:
-            ax.text(0.5, 0.5, "Sem dados", ha="center", va="center", color=sub)
-
-        title = "Status dos Membros"
-        if defaulters > 0:
-            title += f"\n(Atenção: {defaulters} inadimplentes)"
-        ax.set_title(title, color=text)
-
-        self._embed_chart(fig, parent)
+        palette = current_palette()
+        figure = DASHBOARD_FIGURES.get_or_build(
+            members_chart_key(dashboard, palette),
+            lambda: build_members_figure(dashboard, palette),
+        )
+        self._embed_chart(figure, parent)
 
     def _draw_finance_chart(self, parent: ctk.CTkFrame, dashboard: dict[str, Any]) -> None:
-        panel, text, sub = self._chart_palette()
-        finance = dashboard.get("finance_summary", {})
-
-        fig, ax = plt.subplots(figsize=(5, 3), facecolor=panel)
-        ax.set_facecolor(panel)
-        labels = ["Recebido", "Pendente", "Atrasado"]
-        values = [
-            finance.get("paid_amount", 0),
-            finance.get("pending_amount", 0),
-            finance.get("late_amount", 0),
-        ]
-
-        ax.bar(labels, values, color=[pick(THEME_SUCCESS), pick(THEME_WARNING), pick(THEME_DANGER)])
-        ax.set_title("Status Financeiro", color=text)
-        ax.tick_params(colors=sub)
-        for spine in ax.spines.values():
-            spine.set_color(sub)
-
-        self._embed_chart(fig, parent)
+        palette = current_palette()
+        figure = DASHBOARD_FIGURES.get_or_build(
+            finance_chart_key(dashboard, palette),
+            lambda: build_finance_figure(dashboard, palette),
+        )
+        self._embed_chart(figure, parent)
 
     def _draw_announcements(self, parent: ctk.CTkFrame, dashboard: dict[str, Any]) -> None:
         ctk.CTkLabel(

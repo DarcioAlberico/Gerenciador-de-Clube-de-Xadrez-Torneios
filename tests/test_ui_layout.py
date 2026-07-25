@@ -1532,6 +1532,58 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.app.update()
         self.assertEqual(0, card.cget("border_width"))
 
+    def _dashboard_fixo(self, total: int = 10, ativos: int = 8) -> dict:
+        return {
+            "summary": {"total_members": total, "active_members": ativos},
+            "defaulters_count": 0,
+            "finance_summary": {"paid_amount": 100, "pending_amount": 0, "late_amount": 0},
+            "active_announcements": [],
+            "upcoming_events": [],
+        }
+
+    def test_dashboard_visual_reaproveita_a_figura_na_segunda_visita(self) -> None:
+        """B-5/P2-14: sem mudanca de dado, a segunda visita nao remonta nada.
+
+        O que este teste garante e o que o teste puro NAO alcanca: que a figura
+        cacheada sobrevive a **troca de canvas**. Cada visita destroi o conteudo
+        e cria um FigureCanvasTkAgg novo em cima da mesma figura — se isso nao
+        funcionasse, o cache seria uma otimizacao que quebra a tela.
+        """
+        from src.ui.screens.dashboard import DASHBOARD_FIGURES
+
+        self.app.dashboard_service.overview = lambda: self._dashboard_fixo()
+        DASHBOARD_FIGURES.clear()
+        DASHBOARD_FIGURES.reset_stats()
+
+        self.app.show_visual_dashboard()
+        self.app.update()
+        self.assertEqual((0, 2), (DASHBOARD_FIGURES.hits, DASHBOARD_FIGURES.misses))
+
+        self.app.show_visual_dashboard()
+        self.app.update()
+        self.assertEqual((2, 2), (DASHBOARD_FIGURES.hits, DASHBOARD_FIGURES.misses))
+
+        # A tela continua de pe: os dois graficos desenhados, nao um frame vazio.
+        telas = [w for w in self._walk(self.app.content) if w.winfo_class() == "Canvas"]
+        self.assertGreaterEqual(len(telas), 2)
+
+    def test_dashboard_visual_remonta_quando_o_numero_muda(self) -> None:
+        from src.ui.screens.dashboard import DASHBOARD_FIGURES
+
+        self.app.dashboard_service.overview = lambda: self._dashboard_fixo()
+        DASHBOARD_FIGURES.clear()
+        DASHBOARD_FIGURES.reset_stats()
+        self.app.show_visual_dashboard()
+        self.app.update()
+
+        self.app.dashboard_service.overview = lambda: self._dashboard_fixo(total=11, ativos=9)
+        self.app.show_visual_dashboard()
+        self.app.update()
+
+        # O financeiro nao mudou (acerto); a pizza de membros sim (nova montagem).
+        self.assertEqual(1, DASHBOARD_FIGURES.hits)
+        self.assertEqual(3, DASHBOARD_FIGURES.misses)
+
     def test_exclusao_em_cascata_nao_oferece_desfazer(self) -> None:
         """ESPEC §5.1: cascata fica só com confirmação explícita, sem undo."""
         acoes = self._capture_toast_actions()

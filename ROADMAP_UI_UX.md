@@ -344,13 +344,13 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 > `0.1.0` (versão de empacotamento) — os dois números precisam contar a mesma
 > história.
 
-### Backlog (não priorizar agora)
+### Fase 4 — Backlog em execução
 
 - **B-1** Persistência de layout de colunas por usuário (P2-9) — reaproveitar `ColumnLayoutEditor`.
 - **B-2** Auditoria de contraste WCAG AA + preset alto contraste (P2-11).
 - **B-3** i18n: extrair strings para `i18n/pt_BR.json`, manter só PT-BR (P2-12).
 - **B-4** Virtualização/paginação de `Treeview` (P2-13) — antes da base crescer.
-- **B-5** Cache de figuras matplotlib quando dados não mudam (P2-14).
+- ✅ **B-5** Cache de figuras matplotlib quando dados não mudam (P2-14).
 - **B-6** Migrar telas-monstro restantes para 3 camadas (continuação de F1.5).
 - **B-8** Estreitar o layout da tela **Exportar** (e revisar as densas: Rodadas,
   Jogadores). Hoje ela pede ~1.375px de conteúdo e é o que obriga a sidebar a
@@ -358,6 +358,29 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 - **B-7** Acentuar cabeçalhos/títulos de `src/services/export_*` para casar com a UI
   (F3.5). Fica fora da F3.5 porque altera **arquivo entregue** (PDF/CSV/HTML) e
   formato que terceiros consomem — precisa de decisão sobre compatibilidade.
+
+> **Status (2026-07-25): B-5 CONCLUÍDA.** O achado ao medir foi outro: o caro
+> não era montar a figura, era o `pyplot`. Por gráfico, no backend TkAgg —
+> `plt.subplots` + embutir: **321 ms**; a mesma coisa com `Figure()` direto,
+> sem o manager global: **76 ms**; vinda do cache: **55 ms**. Então a tarefa
+> virou duas: o Dashboard deixou de passar pelo `pyplot` (o que já resolve 3/4
+> do custo e dispensa o `plt.close()` para não vazar) e ganhou um cache de
+> figuras. Visita repetida com dois gráficos: ~640 ms → ~110 ms.
+>
+> A separação segue o molde da F1.5: [`charts.py`](src/ui/charts.py) é puro
+> (cache e chaves, sem Tk **nem matplotlib**),
+> [`dashboard_figures.py`](src/ui/screens/dashboard_figures.py) monta as figuras
+> sem Tk, e a tela ficou só com painéis e embutir.
+>
+> **O risco de um cache é mostrar número velho**, então o contrato é a chave:
+> tudo que entra no desenho entra nela. A paleta virou um `dataclass` congelado
+> com as **sete** cores usadas — a tela antes lia três e usava sete, e uma cor
+> fora da chave devolveria o gráfico do tema anterior. Coberto em
+> [tests/test_ui_charts.py](tests/test_ui_charts.py) (20 casos, nenhum abre
+> janela). O que só a janela real prova ganhou dois testes em
+> `test_ui_layout`: a figura cacheada **sobrevive à troca de canvas** — cada
+> visita destrói o conteúdo e cria um `FigureCanvasTkAgg` novo sobre a mesma
+> figura, inclusive entre raízes Tk destruídas (verificado à parte).
 
 ---
 
