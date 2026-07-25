@@ -169,50 +169,32 @@ class AlbericusApp(
         )
 
     def _rebuild_ui_after_theme_change(self) -> None:
-        """Reconstroi toda a UI com o novo tema de cores, sem reiniciar o processo.
+        """Aplica o tema **na hora**, reestilizando o que ja esta na tela (P0-6).
 
-        O CTk aplica set_default_color_theme apenas em widgets criados APOS a
-        chamada. Por isso, destruimos os frames principais e os recriamos para
-        que o novo tema seja aplicado a todos os elementos.
+        Antes isto destruia `statusbar` e `content` e remontava tudo: a tela
+        voltava ao inicio, a selecao da tabela sumia, o scroll ia ao topo e o
+        foco se perdia. Agora a troca e `configure()` widget a widget — como
+        nada e recriado, foco, scroll e selecao ficam onde estavam.
+
+        O nome antigo foi mantido porque a tela de configuracoes o chama; o que
+        mudou e a estrategia, nao o contrato.
         """
-        # Cancela jobs de background para evitar callbacks em widgets destruidos.
-        for attr in ("_arbitration_refresh_job", "_scheduled_dispatch_job"):
-            job = getattr(self, attr, None)
-            if job is not None:
-                try:
-                    self.after_cancel(job)
-                except Exception:
-                    pass
-                setattr(self, attr, None)
-
-        # Remove toasts ativos (sao filhos diretos de self, nao do content)
-        self.toasts.clear()
-
-        # Aplica os 3 presets de aparencia antes de recriar os widgets.
-        _settings = self.db.get_app_settings()
+        from src.ui.restyle import restyle, snapshot_defaults
         from src.ui.theme import apply_accent_preset, apply_bg_preset, apply_frame_bg_preset
-        apply_bg_preset(str(_settings.get("bg_preset") or "slate"))
-        apply_frame_bg_preset(str(_settings.get("frame_bg_preset") or "slate"))
-        apply_accent_preset(str(_settings.get("accent_preset") or "blue"))
+
+        settings = self.db.get_app_settings()
+        # Retrato ANTES: e ele que diz quem seguia o padrao do tema e deve
+        # acompanhar a troca, sem repintar quem tem cor propria (danger, etc.).
+        padroes_antes = snapshot_defaults()
+
+        apply_bg_preset(str(settings.get("bg_preset") or "slate"))
+        apply_frame_bg_preset(str(settings.get("frame_bg_preset") or "slate"))
+        apply_accent_preset(str(settings.get("accent_preset") or "blue"))
         self._apply_app_settings()
 
-        # Destroi os frames principals — novos widgets usarao o tema atualizado.
-        for attr in ("statusbar", "content"):
-            frame = getattr(self, attr, None)
-            if frame is not None:
-                try:
-                    frame.destroy()
-                except Exception:
-                    pass
-
-        # Reconstroi a interface.
-        self._build_menu()
-        self._build_statusbar()
-        self._build_content()
+        restyle(self, padroes_antes)
         self._configure_tree_style(register_callback=False)
-        self.show_app_settings()
         self._refresh_statusbar()
-        self._start_scheduled_dispatch()
         self._show_toast("Tema aplicado com sucesso.", kind="success")
 
     def _scheduled_dispatch_tick(self) -> None:
