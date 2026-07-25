@@ -39,6 +39,30 @@ def _callback_owner_dead(callback) -> bool:
     return _is_dead(owner)
 
 
+def create_tk_window(factory, attempts: int = 3, wait_seconds: float = 0.4):
+    """Cria uma janela Tk com retentativa, devolvendo-a.
+
+    Criar uma raiz logo depois de outra ter sido destruída falha de vez em
+    quando no Windows (``Can't find a usable tk.tcl`` / ``invalid command name
+    tcl_findLibrary``): o interpretador Tcl anterior ainda está sendo desmontado.
+    Pular o teste nessa hora esconde a perda de cobertura — uma classe inteira
+    já sumiu assim. Uma pausa curta costuma bastar; se não bastar, o erro sobe
+    para o chamador decidir (aí sim, pular é legítimo).
+    """
+    import gc
+    import time
+
+    ultimo_erro = None
+    for tentativa in range(attempts):
+        try:
+            return factory()
+        except Exception as exc:  # TclError e variantes
+            ultimo_erro = exc
+            gc.collect()  # ajuda a concluir o desmonte da raiz anterior
+            time.sleep(wait_seconds * (tentativa + 1))
+    raise ultimo_erro
+
+
 def cancel_pending_callbacks(window) -> None:
     """Cancela todos os ``after`` pendentes de uma janela, antes do ``destroy()``.
 

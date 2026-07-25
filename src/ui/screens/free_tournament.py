@@ -9,8 +9,24 @@ from ..support import *
 # extensao para o backlog do "Modo Escolar Amistoso" (entrada tardia, re-pair
 # manual, pontuacao retroativa) sem tocar no emparceiramento oficial vigente.
 class FreeTournamentMixin:
-    def show_free_tournament_mode(self) -> ctk.CTkToplevel:
-        """Abre o aviso modal do Modo Livre e devolve a janela criada."""
+    def _free_mode_notice_hidden(self) -> bool:
+        """True se o operador pediu para nao ver mais o aviso do Modo Livre."""
+        try:
+            return str(self.db.get_app_settings().get("free_mode_notice_hidden") or "0") == "1"
+        except Exception:
+            return False
+
+    def show_free_tournament_mode(self) -> ctk.CTkToplevel | None:
+        """Abre o aviso modal do Modo Livre e devolve a janela criada.
+
+        Se o operador marcou "Nao mostrar novamente", pula o aviso e vai direto
+        para a criacao do torneio (P1-11) — que ainda pede o nome, entao nada e
+        criado sem confirmacao. Devolve ``None`` nesse caso.
+        """
+        if self._free_mode_notice_hidden():
+            self._start_free_tournament(None)
+            return None
+
         dialog = ctk.CTkToplevel(self)
         dialog.title("Modo Livre")
         dialog.transient(self.winfo_toplevel())
@@ -24,11 +40,34 @@ class FreeTournamentMixin:
         # cria um torneio ja no perfil Livre/Escolar; "Cancelar" so fecha.
         footer = ctk.CTkFrame(body, fg_color="transparent")
         footer.pack(side="bottom", fill="x", pady=(12, 0))
+
+        # A escolha e gravada nos dois caminhos de saida (iniciar e cancelar):
+        # marcar a caixa e so entao cancelar tambem tem de valer.
+        hide_notice = ctk.CTkCheckBox(footer, text="Não mostrar novamente")
+        hide_notice.pack(side="left")
+        self.free_mode_hide_checkbox = hide_notice
+
+        def remember_choice() -> None:
+            if not hide_notice.get():
+                return
+            try:
+                self.db.save_app_settings({"free_mode_notice_hidden": "1"})
+            except Exception:
+                logger.exception("Falha ao gravar preferencia do aviso do Modo Livre")
+
+        def start() -> None:
+            remember_choice()
+            self._start_free_tournament(dialog)
+
+        def cancel() -> None:
+            remember_choice()
+            dialog.destroy()
+
         ctk.CTkButton(
             footer,
             text="Iniciar Modo Livre",
             width=190,
-            command=lambda: self._start_free_tournament(dialog),
+            command=start,
         ).pack(side="right")
         ctk.CTkButton(
             footer,
@@ -36,7 +75,7 @@ class FreeTournamentMixin:
             width=110,
             fg_color=THEME_NEUTRAL,
             hover_color=THEME_NEUTRAL_HOVER,
-            command=dialog.destroy,
+            command=cancel,
         ).pack(side="right", padx=(0, 8))
 
         icon = getattr(self, "_ctk_menu_icons", {}).get("torneios")
@@ -98,9 +137,9 @@ class FreeTournamentMixin:
         ).pack(fill="x", padx=4, pady=(12, 0))
 
         self._center_over_self(dialog, 500, 430)
-        dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
-        dialog.bind("<Escape>", lambda _e: dialog.destroy())
-        dialog.bind("<Return>", lambda _e: self._start_free_tournament(dialog))
+        dialog.protocol("WM_DELETE_WINDOW", cancel)
+        dialog.bind("<Escape>", lambda _e: cancel())
+        dialog.bind("<Return>", lambda _e: start())
 
         def _grab() -> None:
             try:
@@ -113,7 +152,7 @@ class FreeTournamentMixin:
         dialog.focus()
         return dialog
 
-    def _start_free_tournament(self, dialog: ctk.CTkToplevel) -> int | None:
+    def _start_free_tournament(self, dialog: ctk.CTkToplevel | None) -> int | None:
         """Fecha o aviso e cria um torneio ja em Modo Livre.
 
         Nao toca em torneios existentes nem no fluxo oficial: cria um evento
@@ -121,7 +160,8 @@ class FreeTournamentMixin:
         nao o perfil, que habilita o re-emparceiramento livre, a entrada tardia
         flexivel e o indicador 'Modo Livre' apenas neste evento.
         """
-        dialog.destroy()
+        if dialog is not None:  # None quando o aviso foi suprimido pelo operador
+            dialog.destroy()
         name = self._ask_string("Novo Torneio Livre", "Nome do torneio:")
         if name is None:
             return None  # usuario cancelou o prompt de nome

@@ -18,7 +18,7 @@ from typing import Any
 
 import customtkinter as ctk
 
-from ..support import THEME_ACCENT
+from ..theme import THEME_ACCENT
 
 
 class BusyIndicator:

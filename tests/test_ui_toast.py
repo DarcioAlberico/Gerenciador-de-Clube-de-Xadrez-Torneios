@@ -13,7 +13,11 @@ from tkinter import TclError
 import customtkinter as ctk
 
 from src.ui.components.toast import DURATION_MS, UNDO_DURATION_MS, ToastStack
-from tests.support.ctk_cleanup import cancel_pending_callbacks, release_dead_ctk_windows
+from tests.support.ctk_cleanup import (
+    cancel_pending_callbacks,
+    create_tk_window,
+    release_dead_ctk_windows,
+)
 
 
 def _find_button(widget, text: str) -> ctk.CTkButton | None:
@@ -32,7 +36,7 @@ class ToastStackTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         try:
-            cls.root = ctk.CTk()
+            cls.root = create_tk_window(ctk.CTk)
         except TclError as exc:  # pragma: no cover - ambiente sem display
             raise unittest.SkipTest(f"Tk indisponivel: {exc}") from exc
         cls.root.geometry("500x400+80+80")

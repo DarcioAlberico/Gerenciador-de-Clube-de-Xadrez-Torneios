@@ -15,7 +15,7 @@ class PairingPagesMixin(ArbitrationPagesMixin, PairingResultsMixin):
         settings = self.db.get_tournament_settings(self.current_tournament_id) or {}
         self._clear_content()
         self._page_title(
-            "Classificacao",
+            "Classificação",
             f"Torneio: {tournament['name'] if tournament else ''}",
         )
         self._build_tournament_nav("standings")

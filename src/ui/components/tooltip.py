@@ -16,7 +16,7 @@ from typing import Any
 
 import customtkinter as ctk
 
-from ..support import THEME_ACCENT, THEME_PANEL_BG, THEME_TEXT_MAIN
+from ..theme import THEME_ACCENT, THEME_PANEL_BG, THEME_TEXT_MAIN
 
 
 class Tooltip:

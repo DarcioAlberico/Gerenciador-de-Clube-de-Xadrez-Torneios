@@ -17,7 +17,7 @@ from typing import Any, Callable
 
 import customtkinter as ctk
 
-from ..support import (
+from ..theme import (
     SIZE_BODY,
     SPACE_SM,
     THEME_ACCENT,

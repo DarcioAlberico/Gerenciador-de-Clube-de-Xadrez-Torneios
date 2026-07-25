@@ -31,7 +31,7 @@ class ClubPagesMixin(ClubMembersMixin):
             ("address", "Endereco"),
             ("phone", "Telefone"),
             ("email", "E-mail"),
-            ("notes", "Observacoes"),
+            ("notes", "Observações"),
         ]
         for index, (key, label) in enumerate(fields):
             ctk.CTkLabel(form, text=label).grid(row=index * 2, column=0, padx=16, pady=(12, 0), sticky="w")
@@ -395,11 +395,11 @@ class ClubPagesMixin(ClubMembersMixin):
         active_check = ctk.CTkCheckBox(form, text="Ativo")
         active_check.select()
 
-        ctk.CTkLabel(form, text="Nivel").grid(row=0, column=0, padx=16, pady=(16, 4), sticky="w")
+        ctk.CTkLabel(form, text="Nível").grid(row=0, column=0, padx=16, pady=(16, 4), sticky="w")
         name_entry.grid(row=1, column=0, padx=16, pady=(0, 8), sticky="ew")
         ctk.CTkLabel(form, text="Ordem").grid(row=2, column=0, padx=16, pady=(8, 4), sticky="w")
         order_entry.grid(row=3, column=0, padx=16, pady=(0, 8), sticky="ew")
-        ctk.CTkLabel(form, text="Descricao").grid(row=4, column=0, padx=16, pady=(8, 4), sticky="w")
+        ctk.CTkLabel(form, text="Descrição").grid(row=4, column=0, padx=16, pady=(8, 4), sticky="w")
         description_entry.grid(row=5, column=0, padx=16, pady=(0, 8), sticky="ew")
         active_check.grid(row=6, column=0, padx=16, pady=(8, 12), sticky="w")
 
@@ -414,8 +414,8 @@ class ClubPagesMixin(ClubMembersMixin):
             {
                 "id": "ID",
                 "order": "Ordem",
-                "name": "Nivel",
-                "description": "Descricao",
+                "name": "Nível",
+                "description": "Descrição",
                 "members": "Alunos",
                 "active": "Ativo",
             },
@@ -535,7 +535,7 @@ class ClubPagesMixin(ClubMembersMixin):
             ("email", "E-mail"),
             ("document", "Documento"),
             ("address", "Endereco"),
-            ("notes", "Observacoes"),
+            ("notes", "Observações"),
         ]
         for index, (key, label) in enumerate(fields):
             ctk.CTkLabel(form, text=label).grid(row=index * 2, column=0, padx=16, pady=(8, 0), sticky="w")
@@ -575,7 +575,7 @@ class ClubPagesMixin(ClubMembersMixin):
             ["id", "name", "phone", "email", "members", "active"],
             {
                 "id": "ID",
-                "name": "Responsavel",
+                "name": "Responsável",
                 "phone": "Telefone",
                 "email": "E-mail",
                 "members": "Membros",

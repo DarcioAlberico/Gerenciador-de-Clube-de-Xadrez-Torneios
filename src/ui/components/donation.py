@@ -11,7 +11,7 @@ from typing import Any
 
 import customtkinter as ctk
 
-from ..support import THEME_ACCENT
+from ..theme import THEME_ACCENT
 
 _PIX_KEY = "30436841843"
 _LIVEPIX_URL = "https://livepix.gg/darcioalberico"

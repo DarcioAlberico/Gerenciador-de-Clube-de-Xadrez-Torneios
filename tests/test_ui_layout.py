@@ -12,7 +12,11 @@ from src.core.database import Database
 from src.core.services import AppError, TeamService, TournamentService
 from src.ui.app import AlbericusApp
 from src.ui.support import _classify_error
-from tests.support.ctk_cleanup import cancel_pending_callbacks, release_dead_ctk_windows
+from tests.support.ctk_cleanup import (
+    cancel_pending_callbacks,
+    create_tk_window,
+    release_dead_ctk_windows,
+)
 
 
 class UiLayoutSmokeTest(unittest.TestCase):
@@ -53,7 +57,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
         # fluxo 'Torneio | Modo Livre'. Testes de Modo Oficial desmarcam.
         self.db.set_free_mode(self.tournament_id, True)
         try:
-            self.app = AlbericusApp(db=self.db)
+            self.app = create_tk_window(lambda: AlbericusApp(db=self.db))
         except TclError as exc:
             self.temp_dir.cleanup()
             self.skipTest(f"Tk indisponivel para teste de layout: {exc}")
@@ -128,6 +132,50 @@ class UiLayoutSmokeTest(unittest.TestCase):
         finally:
             if dialog.winfo_exists():
                 dialog.destroy()
+                self.app.update()
+
+    def test_free_tournament_mode_nao_mostrar_novamente_persiste_e_pula_o_aviso(self) -> None:
+        dialog = self.app.show_free_tournament_mode()
+        self.app.update()
+        try:
+            self.app.free_mode_hide_checkbox.select()
+            for widget in self._walk(dialog):
+                if isinstance(widget, ctk.CTkButton) and widget.cget("text") == "Cancelar":
+                    widget.invoke()
+                    break
+            self.app.update()
+        finally:
+            if dialog.winfo_exists():
+                dialog.destroy()
+                self.app.update()
+
+        # marcar no caminho "Cancelar" tambem tem de valer
+        self.assertEqual("1", self.db.get_app_settings().get("free_mode_notice_hidden"))
+
+        # e a partir dai o menu vai direto para a criacao (que ainda pede o nome)
+        pedidos: list[str] = []
+        self.app._ask_string = lambda *a, **kw: pedidos.append("nome") or None
+        self.assertIsNone(self.app.show_free_tournament_mode())
+        self.app.update()
+        self.assertEqual(["nome"], pedidos, "deveria ir direto ao prompt de nome")
+
+    def test_free_tournament_mode_sem_marcar_continua_mostrando_o_aviso(self) -> None:
+        dialog = self.app.show_free_tournament_mode()
+        self.app.update()
+        for widget in self._walk(dialog):
+            if isinstance(widget, ctk.CTkButton) and widget.cget("text") == "Cancelar":
+                widget.invoke()
+                break
+        self.app.update()
+        self.assertEqual("0", self.db.get_app_settings().get("free_mode_notice_hidden"))
+
+        segundo = self.app.show_free_tournament_mode()
+        self.app.update()
+        try:
+            self.assertIsInstance(segundo, ctk.CTkToplevel)
+        finally:
+            if segundo is not None and segundo.winfo_exists():
+                segundo.destroy()
                 self.app.update()
 
     def test_free_tournament_mode_iniciar_marca_modo_livre(self) -> None:
@@ -1289,7 +1337,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.app.update()
 
         self.assertEqual([], self.db.list_rounds(self.tournament_id))
-        self._label("Configuracao do torneio")
+        self._label("Configuração do torneio")
 
     def test_pairing_write_handlers_require_tournament_permission(self) -> None:
         self.db.create_player(self.tournament_id, name="Jogador A", rating=1800, club="Clube", category="ABS")

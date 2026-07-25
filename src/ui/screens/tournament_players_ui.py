@@ -43,7 +43,7 @@ class TournamentPlayersMixin:
             ("name", "Nome"),
             ("surname", "Sobrenome"),
             ("given_name", "Nome proprio"),
-            ("title", "Titulo"),
+            ("title", "Título"),
             ("sex", "Sexo"),
             ("rating", "Rating principal"),
             ("national_rating", "Rating nacional"),
@@ -541,7 +541,7 @@ class TournamentPlayersMixin:
             result: dict[str, Any], importer: Callable[[], dict[str, Any]]
         ) -> None:
             dialog = ctk.CTkToplevel(self)
-            dialog.title("Inscricoes online")
+            dialog.title("Inscrições online")
             dialog.geometry("980x560")
             dialog.minsize(860, 460)
             dialog.transient(self)
@@ -806,7 +806,7 @@ class TournamentPlayersMixin:
                 title = (
                     f"Inscricao - {tournament['name']}"
                     if tournament and tournament.get("name")
-                    else "Inscricao no torneio"
+                    else "Inscrição no torneio"
                 )
 
                 if not self.google_forms_service.is_configured():
@@ -1391,7 +1391,7 @@ class TournamentPlayersMixin:
             dialog.grab_set()
             dialog.grid_columnconfigure(0, weight=1)
 
-            ctk.CTkLabel(dialog, text="Federacao", font=font_subsection()).grid(
+            ctk.CTkLabel(dialog, text="Federação", font=font_subsection()).grid(
                 row=0, column=0, padx=16, pady=(16, 4), sticky="w"
             )
             fed_option = ctk.CTkOptionMenu(dialog, values=options or ["(sem federacoes)"])

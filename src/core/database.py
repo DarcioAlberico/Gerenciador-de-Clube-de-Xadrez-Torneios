@@ -1080,6 +1080,9 @@ class Database(
             "arbitration_auto_refresh_enabled": "1",
             "arbitration_refresh_interval_seconds": "15",
             "arbitration_inline_tables_limit": "20",
+            # "1" quando o operador marcou "Nao mostrar novamente" no aviso do
+            # Modo Livre: o menu passa direto para a criacao do torneio.
+            "free_mode_notice_hidden": "0",
         }
         with self.connect() as connection:
             rows = connection.execute(
@@ -1221,6 +1224,7 @@ class Database(
             "arbitration_auto_refresh_enabled",
             "arbitration_refresh_interval_seconds",
             "arbitration_inline_tables_limit",
+            "free_mode_notice_hidden",
         }
         secret_keys = {"smtp_password", "ftp_password"}
         now = self.now()

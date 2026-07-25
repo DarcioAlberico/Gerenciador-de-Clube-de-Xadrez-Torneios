@@ -98,9 +98,22 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 > **Sem _big-bang_.** Extrai serviços de tema/navegação, depois migra **uma tela-piloto**
 > e valida o padrão antes de propagar.
 
+> **Status (2026-07-25): F1.1 CONCLUÍDA.** Nova camada
+> [`src/ui/theme.py`](src/ui/theme.py): tokens de cor/tipografia/espaçamento,
+> presets, temas curados e um registro de listeners (`on_theme_change` /
+> `notify_theme_change`). O `_propagate_theme_globals` **morreu** — não há mais
+> reescrita de `sys.modules`. A troca de preset alcança quem já importou o token
+> porque `ColorToken` é uma lista de dois elementos **mutada no lugar**: quem fez
+> `from ..support import *` guarda a referência ao mesmo objeto. O customtkinter
+> aceita lista de cores nativamente (é como os temas JSON dele já vêm), então não
+> houve adaptação nas telas. `support.py` re-exporta os nomes só enquanto as telas
+> usam `import *` (some na F1.6); `components/` e `app.py` já importam de `theme`.
+> Cobertura em [tests/test_ui_theme.py](tests/test_ui_theme.py), incluindo a
+> garantia de que o hack não volta.
+
 | ID | Tarefa | Esforço | Impacto | Risco | Depende | Aceite |
 |----|--------|---------|---------|-------|---------|--------|
-| F1.1 | `theme.py` (tokens + `on_change` listener); matar `_propagate_theme_globals` (P0-5) | 2d | A | M | — | Tokens importados de `theme`; sem `sys.modules` hack |
+| ✅ F1.1 | `theme.py` (tokens + `on_change` listener); matar `_propagate_theme_globals` (P0-5) | 2d | A | M | — | Tokens importados de `theme`; sem `sys.modules` hack |
 | F1.2 | Tema sem destroy/rebuild: `restyle()` por `configure()` (P0-6) | 3d | A | **M-A** | F1.1 | Trocar tema preserva foco/scroll/seleção |
 | F1.3 | `Navigator` + registro único de destinos (de `_command_palette_actions`) (P0-1) | 2d | A | M | — | Navegação central; F5 via `refresh_current()` |
 | F1.4 | `AppShell` (casca fina) coexistindo com mixins legados (P0-1) | 2d | A | M | F1.3 | App sobe via shell; mixins ainda funcionam |
@@ -202,9 +215,22 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 | F3.1 | Sidebar persistente com grupos + item ativo (P1-7) | 4d | A | M | F1.3 | Navegação primária visual; menu vira fallback |
 | F3.2 | Dashboard contextual pós-login (pendências acionáveis) (P1-8) | 3d | A | M | F1.3 | Abre em pendências com deep-link |
 | F3.3 | Tokenizar cores/fonts: 58 hex + 23 fonts + `#a3423c` (P2-1,2,3) + lint CI | 2d | M | B | F1.1 | CI barra novos literais em `screens/` |
-| F3.4 | Modo Livre "não mostrar de novo" (P1-11); Aulas/Exercícios → "(em breve)" (P1-12) | 0,5d | M | B | — | Sem fricção repetida; rótulo claro |
-| F3.5 | Corrigir acentuação das labels visíveis (P2-8) | 0,5d | M | B | — | "Configurações/Aparência/Segurança" |
+| ✅ F3.4 | Modo Livre "não mostrar de novo" (P1-11); Aulas/Exercícios → "(em breve)" (P1-12) | 0,5d | M | B | — | Sem fricção repetida; rótulo claro |
+| ✅ F3.5 | Corrigir acentuação das labels visíveis (P2-8) | 0,5d | M | B | — | "Configurações/Aparência/Segurança" |
 | F3.6 | Login com split layout + branding + versão (P2-6) | 1d | B | B | — | Layout dividido; espaço p/ "primeiro acesso" |
+
+> **Status (2026-07-25): F3.4 e F3.5 CONCLUÍDAS.** O aviso do Modo Livre ganhou
+> "Não mostrar novamente" (persistido em `free_mode_notice_hidden`); marcada a
+> caixa, o menu passa direto à criação — que **continua pedindo o nome**, então
+> nada é criado sem confirmação. A escolha vale nos dois caminhos de saída
+> (Iniciar e Cancelar). Aulas/Exercícios viraram "Aulas (em breve)" —
+> desabilitado sem explicação lê como quebrado, não como escopo. F3.5 acentuou
+> **93 rótulos curtos** em `src/ui` (incluindo Configurações/Aparência/Segurança
+> do critério de aceite). Fronteira deliberada: só rótulos, não frases de
+> diálogo — reescrever mensagens inteiras é trabalho do catálogo i18n (**B-3**).
+> **Divergência conhecida:** cabeçalhos de exportação em `src/services/export_*`
+> seguem sem acento (ver **B-7**) — mexer neles altera arquivo entregue e
+> formato consumido por terceiros, o que não cabe nesta tarefa.
 
 ### Backlog (não priorizar agora)
 
@@ -214,6 +240,9 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 - **B-4** Virtualização/paginação de `Treeview` (P2-13) — antes da base crescer.
 - **B-5** Cache de figuras matplotlib quando dados não mudam (P2-14).
 - **B-6** Migrar telas-monstro restantes para 3 camadas (continuação de F1.5).
+- **B-7** Acentuar cabeçalhos/títulos de `src/services/export_*` para casar com a UI
+  (F3.5). Fica fora da F3.5 porque altera **arquivo entregue** (PDF/CSV/HTML) e
+  formato que terceiros consomem — precisa de decisão sobre compatibilidade.
 
 ---
 

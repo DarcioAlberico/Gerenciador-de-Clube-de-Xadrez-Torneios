@@ -71,7 +71,7 @@ class AlbericusApp(
         # Aplica os presets de aparencia antes de criar qualquer widget.
         try:
             _init_settings = self.db.get_app_settings()
-            from src.ui.support import apply_accent_preset, apply_bg_preset, apply_frame_bg_preset
+            from src.ui.theme import apply_accent_preset, apply_bg_preset, apply_frame_bg_preset
             apply_bg_preset(str(_init_settings.get("bg_preset") or "slate"))
             apply_frame_bg_preset(str(_init_settings.get("frame_bg_preset") or "slate"))
             apply_accent_preset(str(_init_settings.get("accent_preset") or "blue"))
@@ -186,7 +186,7 @@ class AlbericusApp(
 
         # Aplica os 3 presets de aparencia antes de recriar os widgets.
         _settings = self.db.get_app_settings()
-        from src.ui.support import apply_accent_preset, apply_bg_preset, apply_frame_bg_preset
+        from src.ui.theme import apply_accent_preset, apply_bg_preset, apply_frame_bg_preset
         apply_bg_preset(str(_settings.get("bg_preset") or "slate"))
         apply_frame_bg_preset(str(_settings.get("frame_bg_preset") or "slate"))
         apply_accent_preset(str(_settings.get("accent_preset") or "blue"))
@@ -361,8 +361,10 @@ class AlbericusApp(
         # Aulas e Exercícios temporariamente DESATIVADOS (não excluídos):
         # itens visíveis porém acinzentados/não-clicáveis. Para reativar,
         # remover state="disabled". Métodos/telas permanecem intactos.
-        training_menu.add_command(label="Aulas", command=self.show_training, image=get_ico("aulas"), compound="left", state="disabled")
-        training_menu.add_command(label="Exercícios", command=self.show_exercises, image=get_ico("biblioteca"), compound="left", state="disabled")
+        # O rotulo "(em breve)" evita a leitura de "quebrado": item cinza sem
+        # explicacao passa a impressao de erro, e nao de escopo (P1-12 / F3.4).
+        training_menu.add_command(label="Aulas (em breve)", command=self.show_training, image=get_ico("aulas"), compound="left", state="disabled")
+        training_menu.add_command(label="Exercícios (em breve)", command=self.show_exercises, image=get_ico("biblioteca"), compound="left", state="disabled")
         training_menu.add_separator()
         training_menu.add_command(label="Torneio | Livre", command=self.show_free_tournament_mode, image=get_ico("torneios"), compound="left")
 
@@ -783,11 +785,11 @@ class AlbericusApp(
 
         items: list[tuple[str, str, Callable[[], None], str | None]] = [
             ("central", "Central", self.show_tournament_dashboard, None),
-            ("arbiter", "Arbitro", self.show_arbitration_panel, None),
+            ("arbiter", "Árbitro", self.show_arbitration_panel, None),
             ("settings", "Config.", self.show_tournament_settings, "tournament_write"),
             ("players", "Jogadores", self.show_players, "tournament_write"),
             ("pairings", "Rodadas", self.show_pairings, "tournament_write"),
-            ("standings", "Classificacao", self.show_standings, None),
+            ("standings", "Classificação", self.show_standings, None),
             ("export", "Exportar", self.show_export, None),
             ("certificates", "Diplomas", self.show_certificates, None),
         ]
@@ -988,7 +990,7 @@ class AlbericusApp(
             # sobrescreve o ThemeManager; o patch deve vir depois).
             try:
                 accent_key = str(settings.get("accent_preset") or "blue")
-                from src.ui.support import apply_accent_preset
+                from src.ui.theme import apply_accent_preset
                 apply_accent_preset(accent_key)
             except Exception:
                 pass
