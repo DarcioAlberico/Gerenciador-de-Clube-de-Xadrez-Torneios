@@ -370,15 +370,25 @@ class AppShell:
         self.bind("<Configure>", self._sync_sidebar_mode, add="+")
         self._sync_sidebar_mode()
 
-    # Limiares medidos, nao chutados: com a escala de UI padrao a barra completa
-    # custa ~235px e o rail ~62px, e a tela Exportar sozinha ja pede ~1.375px de
-    # conteudo. Abaixo destes tamanhos a barra some e o menu nativo volta a ser a
-    # navegacao (P1-7) — melhor perder a barra do que empurrar botao para fora da
-    # janela. Ver B-8 no ROADMAP: a Exportar merece um layout mais estreito.
-    # Os valores sao pixels REAIS: o CTk multiplica a geometria pela escala de UI
-    # (120% por padrao aqui), entao uma janela pedida em 1200 mede 1440 na tela.
-    _SIDEBAR_FULL_FROM = 1500
-    _SIDEBAR_RAIL_FROM = 1440
+    # Limiares REMEDIDOS na B-8, com as 23 telas do smoke de layout — e o achado
+    # foi que o gargalo mudou de dono. Eram 1500/1440 quando a Exportar pedia
+    # ~1.375px e a barra do torneio ocupava uma linha unica de ~950px; as duas
+    # foram corrigidas, e agora quem manda no limiar sao as telas administrativas
+    # densas (Ranking interno, Financeiro, Calendario, Exercicios, Relatorios).
+    #
+    # Medido: com a barra COMPLETA todas cabem a partir de 1.416px reais; com o
+    # RAIL, a partir de 1.260px — antes o rail so aparecia em 1.440px, ou seja,
+    # a navegacao agora sobrevive a 180px a menos de janela. Abaixo do menor
+    # limiar a barra some e o menu nativo volta a ser a navegacao (P1-7): melhor
+    # perder a barra do que empurrar botao para fora da janela.
+    #
+    # Pixels REAIS: o CTk multiplica a geometria pela escala de UI (120% por
+    # padrao), entao uma janela pedida em 1180 mede 1416 na tela.
+    #
+    # O proximo ganho esta nessas cinco telas administrativas — registrado no
+    # ROADMAP como continuacao da B-8, nao como divida esquecida.
+    _SIDEBAR_FULL_FROM = 1416
+    _SIDEBAR_RAIL_FROM = 1260
 
     def _sync_sidebar_mode(self, event: Any = None) -> None:
         sidebar = getattr(self, "sidebar", None)
@@ -389,6 +399,12 @@ class AppShell:
         # Dentro do <Configure>, winfo_width() ainda devolve a largura ANTIGA:
         # a nova vem no proprio evento.
         largura = getattr(event, "width", 0) or self.winfo_width()
+        # A barra do torneio se redistribui na mesma carona: ela ja escuta a
+        # largura da janela por tabela interposta, e um segundo <Configure> so
+        # para ela seria o dobro de trabalho no mesmo evento.
+        relayout = getattr(self, "_layout_tournament_nav", None)
+        if callable(relayout):
+            relayout()
         if largura >= self._SIDEBAR_FULL_FROM:
             sidebar.set_mode(SIDEBAR_FULL)
         elif largura >= self._SIDEBAR_RAIL_FROM:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from ..support import *
+from ..components import primary_button, secondary_button
 
 
 class SettingsReportsMixin:
@@ -314,9 +315,9 @@ class SettingsReportsMixin:
             else "Nenhum torneio selecionado"
         )
         ctk.CTkLabel(panel, text=status_text, text_color=THEME_TEXT_SUB).grid(
-            row=2,
+            row=3,
             column=0,
-            columnspan=4,
+            columnspan=3,
             padx=16,
             pady=(0, 16),
             sticky="w",
@@ -386,9 +387,11 @@ class SettingsReportsMixin:
             text_color=THEME_TEXT_SUB,
             justify="left",
             anchor="w",
-            wraplength=980,
+            # Antes 980: o rotulo sozinho pedia quase mil pixels e puxava a
+            # largura minima da tela junto (B-8).
+            wraplength=620,
         )
-        trf_warning_label.grid(row=3, column=0, columnspan=5, padx=16, pady=(0, 16), sticky="ew")
+        trf_warning_label.grid(row=4, column=0, columnspan=3, padx=16, pady=(0, 16), sticky="ew")
 
         def set_trf_validation_text(message: str) -> None:
             trf_warning_label.configure(text=message)
@@ -557,27 +560,31 @@ class SettingsReportsMixin:
             except Exception as exc:
                 self._show_error(exc)
 
-        ctk.CTkButton(panel, text="Gerar arquivo", command=export).grid(
-            row=1,
-            column=3,
-            padx=16,
-            pady=(0, 12),
-            sticky="w",
-        )
-        ctk.CTkButton(panel, text="Validar TRF FIDE", command=validate_trf).grid(
-            row=1,
-            column=4,
-            padx=(0, 16),
-            pady=(0, 12),
-            sticky="w",
-        )
-        ctk.CTkButton(panel, text="Geracao em lote", command=self._open_batch_export_dialog).grid(
-            row=1,
-            column=5,
-            padx=(0, 16),
-            pady=(0, 12),
-            sticky="w",
-        )
+        # As tres acoes em LINHA PROPRIA, e nao ao lado dos tres seletores
+        # (B-8). Em uma linha so, a tela pedia 1.360px de janela e era ela que
+        # obrigava a sidebar a sumir em telas medias — todas as outras cabem em
+        # 1.200px. Empilhar corta ~500px de exigencia horizontal e nao custa
+        # nada em altura, que aqui sobra.
+        actions = ctk.CTkFrame(panel, fg_color="transparent")
+        actions.grid(row=2, column=0, columnspan=3, padx=16, pady=(0, 12), sticky="w")
+        primary_button(
+            actions,
+            text="Gerar arquivo",
+            command=export,
+            tip="Escolhe onde salvar e gera o relatorio selecionado.",
+        ).pack(side="left")
+        secondary_button(
+            actions,
+            text="Validar TRF FIDE",
+            command=validate_trf,
+            tip="Confere pendencias do arquivo FIDE antes de gerar.",
+        ).pack(side="left", padx=(SPACE_SM, 0))
+        secondary_button(
+            actions,
+            text="Geracao em lote",
+            command=self._open_batch_export_dialog,
+            tip="Gera varios relatorios de uma vez.",
+        ).pack(side="left", padx=(SPACE_SM, 0))
 
         trf_help_panel = self._make_panel(body)
         trf_help_panel.pack(anchor="nw", fill="x", pady=(12, 0))
@@ -594,7 +601,7 @@ class SettingsReportsMixin:
                 "Em Jogadores, confira FIDE ID, rating FIDE, federacao/clube e nascimento."
             ),
             text_color=THEME_TEXT_SUB,
-            wraplength=920,
+            wraplength=620,
             justify="left",
         ).grid(row=1, column=0, columnspan=3, padx=16, pady=(0, 12), sticky="w")
         ctk.CTkButton(

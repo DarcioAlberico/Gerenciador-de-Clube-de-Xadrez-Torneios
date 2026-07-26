@@ -543,21 +543,73 @@ class AlbericusApp(
         if is_team_tournament:
             items.insert(3, ("teams", "Equipes", self.show_teams, "tournament_write"))
 
-        for index, (key, label, command, permission) in enumerate(items):
+        botoes: list[ctk.CTkButton] = []
+        for key, label, command, permission in items:
             is_active = key == active
             button = ctk.CTkButton(
                 nav,
                 text=label,
                 command=command,
-                width=112,
+                width=self._NAV_ITEM_WIDTH,
                 height=32,
                 fg_color=THEME_ACCENT if is_active else "transparent",
                 border_width=0 if is_active else 1,
                 text_color=THEME_ON_ACCENT if is_active else THEME_TEXT_MAIN,
             )
-            button.grid(row=0, column=index, padx=(6, 0), pady=(0, 6), sticky="e")
+            botoes.append(button)
             if permission:
                 self._disable_if_unauthorized(button, permission)
+
+        self._tournament_nav = nav
+        self._tournament_nav_buttons = botoes
+        self._layout_tournament_nav()
+
+    # Barra de navegacao do torneio: 8 itens (9 em torneio por equipes) de 112px
+    # numa linha so custam ~950px, e era ELA — nao o conteudo das telas — que
+    # empurrava botao para fora da janela em todas as telas de torneio (B-8).
+    # Medido: o unico widget fora da borda era sempre o ultimo item ("Diplomas").
+    _NAV_ITEM_WIDTH = 112
+    _NAV_ITEM_PAD = 6
+    # Espaco reservado ao titulo da pagina, a esquerda da barra.
+    _NAV_TITLE_RESERVE = 300
+
+    def _layout_tournament_nav(self) -> None:
+        """Distribui os itens em quantas linhas couberem na largura atual.
+
+        Quebrar em duas linhas custa ~38px de altura, que sobra; insistir numa
+        linha so custa um botao inacessivel, que nao tem substituto — o menu
+        nativo leva as mesmas telas, mas quem esta olhando a barra nao sabe
+        disso.
+        """
+        nav = getattr(self, "_tournament_nav", None)
+        botoes = getattr(self, "_tournament_nav_buttons", None)
+        if not nav or not botoes:
+            return
+        try:
+            if not nav.winfo_exists():
+                return
+            # Pelo `content`, e nao pelo cabecalho: o cabecalho acabou de nascer
+            # junto com a tela e ainda mede 1px, enquanto o `content` sobrevive
+            # a troca de tela e ja traz a largura util (sem a sidebar).
+            largura = self.content.winfo_width()
+        except Exception:
+            return
+        # Antes do primeiro desenho tudo mede 1: cabe numa linha, e o proximo
+        # <Configure> corrige sem piscar um layout intermediario errado.
+        disponivel = (largura if largura > 1 else 10_000) - self._NAV_TITLE_RESERVE
+        por_item = self._NAV_ITEM_WIDTH + self._NAV_ITEM_PAD
+        por_linha = max(1, min(len(botoes), int(disponivel // por_item)))
+        if getattr(nav, "_itens_por_linha", None) == por_linha:
+            return
+        nav._itens_por_linha = por_linha  # type: ignore[attr-defined]
+        for indice, button in enumerate(botoes):
+            button.grid(
+                row=indice // por_linha,
+                column=indice % por_linha,
+                padx=(self._NAV_ITEM_PAD, 0),
+                pady=(0, self._NAV_ITEM_PAD),
+                sticky="e",
+            )
 
     def _make_panel(self, parent: ctk.CTkBaseClass | None = None) -> ctk.CTkFrame:
         panel = ctk.CTkFrame(parent or self.content, fg_color=THEME_PANEL_BG, corner_radius=8)
