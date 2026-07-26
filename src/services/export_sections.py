@@ -25,12 +25,12 @@ class ReportSectionsMixin:
     def _tournament_section(self, tournament_id: int) -> tuple[str, list[str], list[list[Any]]]:
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
-            raise AppError("Selecione um torneio valido.")
+            raise AppError("Selecione um torneio válido.")
         rows = [
             ["Nome", tournament["name"]],
             ["Escopo", self._tournament_scope_label(tournament)],
             [
-                "Competicao",
+                "Competição",
                 COMPETITION_TYPES.get(tournament.get("competition_type", "individual"), "Individual"),
             ],
             ["Clube/Escola", tournament.get("club_name", "")],
@@ -49,17 +49,17 @@ class ReportSectionsMixin:
             [
                 ["FIDE Event-ID", settings.get("fide_event_id", "")],
                 ["Organizador", settings.get("organizer", "")],
-                ["Pagina web", settings.get("website", "")],
+                ["Página web", settings.get("website", "")],
                 ["E-mail", settings.get("contact_email", "")],
                 ["Diretor", settings.get("director", "")],
-                ["Arbitro principal", settings.get("chief_arbiter", "")],
-                ["Federacao", settings.get("federation", "")],
+                ["Árbitro principal", settings.get("chief_arbiter", "")],
+                ["Federação", settings.get("federation", "")],
                 ["Estado", settings.get("state", "")],
                 ["Categorias", settings.get("categories", "")],
                 ["Data de corte", settings.get("cutoff_date", "")],
                 ["Ordem inicial", settings.get("initial_order", "")],
                 ["Tipo de torneio", settings.get("tournament_type", "")],
-                ["Calcular desempenho", "Sim" if settings.get("calculate_performance") else "Nao"],
+                ["Calcular desempenho", "Sim" if settings.get("calculate_performance") else "Não"],
             ]
         )
         if tournament.get("competition_type") == "team":
@@ -77,14 +77,14 @@ class ReportSectionsMixin:
                         ),
                     ],
                     [
-                        "Criterio principal por equipes",
+                        "Critério principal por equipes",
                         TEAM_STANDING_CRITERIA.get(
                             settings.get("team_standing_primary", "match_points"),
                             settings.get("team_standing_primary", ""),
                         ),
                     ],
                     [
-                        "Criterio secundario por equipes",
+                        "Critério secundario por equipes",
                         TEAM_STANDING_CRITERIA.get(
                             settings.get("team_standing_secondary", "game_points"),
                             settings.get("team_standing_secondary", ""),
@@ -92,7 +92,7 @@ class ReportSectionsMixin:
                     ],
                     [
                         "Ordem fixa dos tabuleiros",
-                        "Sim" if settings.get("team_fixed_board_order", 1) else "Nao",
+                        "Sim" if settings.get("team_fixed_board_order", 1) else "Não",
                     ],
                 ]
             )
@@ -131,7 +131,7 @@ class ReportSectionsMixin:
             [
                 "ID",
                 "Nome",
-                "Titulo",
+                "Título",
                 "FIDE ID",
                 "CBX ID",
                 "LBX ID",
@@ -143,7 +143,7 @@ class ReportSectionsMixin:
                 "Categoria",
                 "Categoria idade",
                 "Categoria rating",
-                "Tags premiacao",
+                "Tags premiação",
                 "Nascimento",
                 "Sexo",
                 "Status",
@@ -173,7 +173,7 @@ class ReportSectionsMixin:
             title = f"{title} - {tournament['name']}"
         return (
             title,
-            ["Inicial", "Jogador", "Rating", "Clube", "Categoria", "Status", "Presenca"],
+            ["Inicial", "Jogador", "Rating", "Clube", "Categoria", "Status", "Presença"],
             rows,
         )
 
@@ -183,7 +183,7 @@ class ReportSectionsMixin:
             ["Torneio", summary["tournament_name"]],
             ["Inscritos", summary["players_count"]],
             ["Rated em alguma base", summary["rated_players"]],
-            ["Nao rated", summary["unrated_players"]],
+            ["Não rated", summary["unrated_players"]],
             ["Com ID oficial", summary["players_with_base"]],
             ["Sem ID oficial", summary["players_without_base"]],
             ["Total das taxas", self._format_currency(summary["total"])],
@@ -221,7 +221,7 @@ class ReportSectionsMixin:
             )
         return [
             ("Resumo de taxas de rating", ["Campo", "Valor"], summary_rows),
-            ("Taxas por base", ["Base", "Identificados", "Rated", "Nao rated", "Taxa unitaria", "Subtotal"], base_rows),
+            ("Taxas por base", ["Base", "Identificados", "Rated", "Não rated", "Taxa unitária", "Subtotal"], base_rows),
             (
                 "Inscritos por base",
                 ["Jogador", "FIDE ID", "Rating FIDE", "CBX ID", "Rating CBX", "LBX ID", "Rating LBX", "Bases cobradas"],
@@ -236,11 +236,11 @@ class ReportSectionsMixin:
     ) -> list[tuple[str, list[str], list[list[Any]]]]:
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
-            raise AppError("Selecione um torneio valido.")
+            raise AppError("Selecione um torneio válido.")
         if rating_type not in self.FIDE_RATING_TYPE_LABELS:
-            raise AppError("Tipo de rating invalido para o relatorio FIDE.")
+            raise AppError("Tipo de rating invalido para o relatório FIDE.")
         if tournament.get("competition_type") == "team":
-            raise AppError("Relatorio de variacao de rating disponivel apenas para torneios individuais.")
+            raise AppError("Relatório de variacao de rating disponível apenas para torneios individuais.")
 
         players = self.db.list_players(tournament_id, active_only=False)
         closed = self.db.get_pairings_for_tournament(tournament_id, closed_only=True)
@@ -258,15 +258,15 @@ class ReportSectionsMixin:
             return "-" if value is None else value
 
         notice_rows = [
-            ["Estimativa de apoio ao arbitro (We, fator K, Rc, Rp)."],
-            [f"Nao substitui a homologacao oficial da {base_label}."],
+            ["Estimativa de apoio ao árbitro (We, fator K, Rc, Rp)."],
+            [f"Não substitui a homologação oficial da {base_label}."],
             [f"So conta partidas jogadas contra adversarios com rating na base {base_label}."],
             ["Diferencas de rating acima de 400 sao tratadas como 400 (regra dos 400)."],
         ]
         summary_rows = [
             ["Torneio", tournament["name"]],
             ["Base de rating", base_label],
-            ["Jogadores no relatorio", len(rows)],
+            ["Jogadores no relatório", len(rows)],
             ["Com rating", len(rated)],
             ["Sem rating (somente performance)", len(rows) - len(rated)],
             ["Variacao total (ΔElo)", round(sum(deltas), 2)],
@@ -289,8 +289,8 @@ class ReportSectionsMixin:
             for row in rows
         ]
         return [
-            ("Aviso", ["Observacao"], notice_rows),
-            ("Resumo do relatorio de rating", ["Campo", "Valor"], summary_rows),
+            ("Aviso", ["Observação"], notice_rows),
+            ("Resumo do relatório de rating", ["Campo", "Valor"], summary_rows),
             (
                 f"Variacao de rating {base_label}",
                 ["Jogador", "Ro", "K", "n", "Pts", "We", "ΔElo", "Rc", "Rp", ">400"],
@@ -303,9 +303,9 @@ class ReportSectionsMixin:
     ) -> list[tuple[str, list[str], list[list[Any]]]]:
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
-            raise AppError("Selecione um torneio valido.")
+            raise AppError("Selecione um torneio válido.")
         if tournament.get("competition_type") == "team":
-            raise AppError("Distribuicao de premios disponivel apenas para torneios individuais.")
+            raise AppError("Distribuição de prêmios disponível apenas para torneios individuais.")
 
         settings = self.db.get_tournament_settings(tournament_id) or {}
         prizes = self.db.list_tournament_prizes(tournament_id)
@@ -320,12 +320,12 @@ class ReportSectionsMixin:
         policy_label = PRIZE_POLICIES.get(result["policy"], result["policy"])
         summary_rows = [
             ["Torneio", tournament["name"]],
-            ["Politica de premiacao", policy_label],
+            ["Política de premiação", policy_label],
             ["Imposto do organizador (%)", result["tax_percent"]],
             ["Premiados", result["winners"]],
             ["Total bruto", self._format_currency(result["total_gross"])],
             ["Total imposto", self._format_currency(result["total_tax"])],
-            ["Total liquido distribuido", self._format_currency(result["total_net"])],
+            ["Total líquido distribuido", self._format_currency(result["total_net"])],
         ]
         winner_rows = [
             [
@@ -341,10 +341,10 @@ class ReportSectionsMixin:
             for allocation in result["allocations"]
         ]
         sections: list[tuple[str, list[str], list[list[Any]]]] = [
-            ("Resumo da premiacao", ["Campo", "Valor"], summary_rows),
+            ("Resumo da premiação", ["Campo", "Valor"], summary_rows),
             (
-                "Premiacao por jogador",
-                ["Pos", "Jogador", "Categoria", "Pts", "Premio geral", "Premio categoria", "Bruto", "Liquido"],
+                "Premiação por jogador",
+                ["Pos", "Jogador", "Categoria", "Pts", "Prêmio geral", "Prêmio categoria", "Bruto", "Líquido"],
                 winner_rows,
             ),
         ]
@@ -360,8 +360,8 @@ class ReportSectionsMixin:
             ]
             sections.append(
                 (
-                    "Premios manuais (definir ganhador)",
-                    ["Tipo", "Premio", "Categoria", "Valor"],
+                    "Prêmios manuais (definir ganhador)",
+                    ["Tipo", "Prêmio", "Categoria", "Valor"],
                     manual_rows,
                 )
             )
@@ -370,15 +370,15 @@ class ReportSectionsMixin:
     def _individual_tournament(self, tournament_id: int, what: str) -> dict[str, Any]:
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
-            raise AppError("Selecione um torneio valido.")
+            raise AppError("Selecione um torneio válido.")
         if tournament.get("competition_type") == "team":
-            raise AppError(f"{what} disponivel apenas para torneios individuais.")
+            raise AppError(f"{what} disponível apenas para torneios individuais.")
         return tournament
 
     def _federation_sections(
         self, tournament_id: int
     ) -> list[tuple[str, list[str], list[list[Any]]]]:
-        tournament = self._individual_tournament(tournament_id, "Estatistica de federacoes")
+        tournament = self._individual_tournament(tournament_id, "Estatística de federações")
         players = self.db.list_players(tournament_id, active_only=False)
         federation_by_id = {
             int(player["id"]): (str(player.get("federation_id") or "").strip().upper() or "—")
@@ -411,14 +411,14 @@ class ReportSectionsMixin:
             )
         summary_rows = [
             ["Torneio", tournament["name"]],
-            ["Federacoes", len(groups)],
+            ["Federações", len(groups)],
             ["Jogadores", total_players],
         ]
         return [
-            ("Resumo de federacoes", ["Campo", "Valor"], summary_rows),
+            ("Resumo de federações", ["Campo", "Valor"], summary_rows),
             (
-                "Estatistica de federacoes",
-                ["Federacao", "Jogadores", "% jogadores", "Pontos", "Partidas", "Media pts"],
+                "Estatística de federações",
+                ["Federação", "Jogadores", "% jogadores", "Pontos", "Partidas", "Média pts"],
                 rows,
             ),
         ]
@@ -426,7 +426,7 @@ class ReportSectionsMixin:
     def _game_statistics_sections(
         self, tournament_id: int
     ) -> list[tuple[str, list[str], list[list[Any]]]]:
-        tournament = self._individual_tournament(tournament_id, "Estatistica de partidas")
+        tournament = self._individual_tournament(tournament_id, "Estatística de partidas")
         closed = self.db.get_pairings_for_tournament(tournament_id, closed_only=True)
 
         white_wins = draws = black_wins = walkovers = byes = 0
@@ -450,9 +450,9 @@ class ReportSectionsMixin:
             return f"{100 * value / played:.1f}%" if played else "0%"
 
         distribution_rows = [
-            ["Vitorias de brancas", white_wins, percent(white_wins)],
+            ["Vitórias de brancas", white_wins, percent(white_wins)],
             ["Empates", draws, percent(draws)],
-            ["Vitorias de pretas", black_wins, percent(black_wins)],
+            ["Vitórias de pretas", black_wins, percent(black_wins)],
         ]
         summary_rows = [
             ["Torneio", tournament["name"]],
@@ -463,7 +463,7 @@ class ReportSectionsMixin:
         ]
         return [
             ("Resumo de partidas", ["Campo", "Valor"], summary_rows),
-            ("Distribuicao de resultados", ["Resultado", "Quantidade", "%"], distribution_rows),
+            ("Distribuição de resultados", ["Resultado", "Quantidade", "%"], distribution_rows),
         ]
 
     def _player_cards_sections(
@@ -539,8 +539,8 @@ class ReportSectionsMixin:
         report = build_norm_report(players, closed, "fide")
 
         notice_rows = [
-            ["Estimativa de apoio ao arbitro: indica se o jogador atingiu indicadores"],
-            ["compativeis com uma norma. NAO concede norma nem titulo (exclusivo da FIDE)."],
+            ["Estimativa de apoio ao árbitro: indica se o jogador atingiu indicadores"],
+            ["compativeis com uma norma. NAO concede norma nem título (exclusivo da FIDE)."],
             ["So conta partidas jogadas contra adversarios com rating."],
         ]
         summary_rows = [
@@ -563,28 +563,28 @@ class ReportSectionsMixin:
                     [
                         item["name"],
                         title["label"],
-                        "Sim" if title["meets"] else "Nao",
+                        "Sim" if title["meets"] else "Não",
                         "OK" if title["meets"] else "; ".join(title["missing"]),
                     ]
                 )
         return [
-            ("Aviso", ["Observacao"], notice_rows),
+            ("Aviso", ["Observação"], notice_rows),
             (
                 "Indicadores de norma por jogador",
-                ["Jogador", "Sexo", "Rp", "Partidas", "Media adv.", "Federacoes", "Titulados", "Norma atingida"],
+                ["Jogador", "Sexo", "Rp", "Partidas", "Média adv.", "Federações", "Titulados", "Norma atingida"],
                 summary_rows,
             ),
-            ("Detalhe por titulo", ["Jogador", "Titulo", "Atende?", "Pendencias"], detail_rows),
+            ("Detalhe por título", ["Jogador", "Título", "Atende?", "Pendências"], detail_rows),
         ]
 
     _ARBITER_ROLE_LABELS = {
-        "chief": "Arbitro principal",
-        "chief_arbiter": "Arbitro principal",
-        "main": "Arbitro principal",
-        "principal": "Arbitro principal",
-        "deputy": "Arbitro adjunto",
-        "sector": "Arbitro de setor",
-        "arbiter": "Arbitro",
+        "chief": "Árbitro principal",
+        "chief_arbiter": "Árbitro principal",
+        "main": "Árbitro principal",
+        "principal": "Árbitro principal",
+        "deputy": "Árbitro adjunto",
+        "sector": "Árbitro de setor",
+        "arbiter": "Árbitro",
         "assistant": "Assistente",
     }
 
@@ -593,7 +593,7 @@ class ReportSectionsMixin:
     ) -> list[tuple[str, list[str], list[list[Any]]]]:
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
-            raise AppError("Selecione um torneio valido.")
+            raise AppError("Selecione um torneio válido.")
         settings = self.db.get_tournament_settings(tournament_id) or {}
         players = self.db.list_players(tournament_id, active_only=False)
         rated = sum(1 for player in players if self._trf_rating(player) > 0)
@@ -601,23 +601,23 @@ class ReportSectionsMixin:
         competition = "Equipes" if tournament.get("competition_type") == "team" else "Individual"
 
         notice_rows = [
-            ["Documento de apoio para a norma de arbitro (IA/FA)."],
-            ["Nao e o formulario oficial da FIDE; use os dados abaixo para preenche-lo."],
+            ["Documento de apoio para a norma de árbitro (IA/FA)."],
+            ["Não e o formulário oficial da FIDE; use os dados abaixo para preenche-lo."],
         ]
         tournament_rows = [
             ["Torneio", tournament["name"]],
             ["Local", tournament.get("location", "")],
-            ["Federacao", settings.get("federation", "")],
+            ["Federação", settings.get("federation", "")],
             ["FIDE Event-ID", settings.get("fide_event_id", "")],
-            ["Data de inicio", tournament.get("start_date", "")],
-            ["Data de termino", tournament.get("end_date", "")],
+            ["Data de início", tournament.get("start_date", "")],
+            ["Data de término", tournament.get("end_date", "")],
             ["Ritmo de jogo", tournament.get("time_control", "")],
             ["Rodadas", tournament.get("rounds_count", "")],
             ["Tipo", competition],
             ["Jogadores", len(players)],
             ["Jogadores com rating", rated],
             ["Organizador", settings.get("organizer", "")],
-            ["Arbitro principal (config.)", settings.get("chief_arbiter", "")],
+            ["Árbitro principal (config.)", settings.get("chief_arbiter", "")],
         ]
 
         arbiter_rows: list[list[Any]] = []
@@ -626,7 +626,7 @@ class ReportSectionsMixin:
             arbiter_rows.append(
                 [
                     referee.get("name", ""),
-                    self._ARBITER_ROLE_LABELS.get(role, role.replace("_", " ").title() or "Arbitro"),
+                    self._ARBITER_ROLE_LABELS.get(role, role.replace("_", " ").title() or "Árbitro"),
                     referee.get("fide_id", ""),
                     referee.get("category", ""),
                     "",
@@ -636,18 +636,18 @@ class ReportSectionsMixin:
         if not arbiter_rows:
             chief = str(settings.get("chief_arbiter") or "").strip()
             if chief:
-                arbiter_rows.append([chief, "Arbitro principal", "", "", "", ""])
+                arbiter_rows.append([chief, "Árbitro principal", "", "", "", ""])
             for name in str(settings.get("arbiters") or "").replace(";", ",").split(","):
                 cleaned = name.strip()
                 if cleaned:
-                    arbiter_rows.append([cleaned, "Arbitro", "", "", "", ""])
+                    arbiter_rows.append([cleaned, "Árbitro", "", "", "", ""])
 
         return [
-            ("Aviso", ["Observacao"], notice_rows),
-            ("Dados do torneio (norma de arbitro)", ["Campo", "Valor"], tournament_rows),
+            ("Aviso", ["Observação"], notice_rows),
+            ("Dados do torneio (norma de árbitro)", ["Campo", "Valor"], tournament_rows),
             (
-                "Arbitros designados",
-                ["Nome", "Funcao", "FIDE ID", "Categoria", "Norma (IA/FA)", "Assinatura"],
+                "Árbitros designados",
+                ["Nome", "Função", "FIDE ID", "Categoria", "Norma (IA/FA)", "Assinatura"],
                 arbiter_rows,
             ),
         ]
@@ -655,7 +655,7 @@ class ReportSectionsMixin:
     def _category_winners_section(
         self, tournament_id: int, top_n: int = 3
     ) -> tuple[str, list[str], list[list[Any]]]:
-        """Vencedores por categoria (top N de cada categoria, na ordem da classificacao)."""
+        """Vencedores por categoria (top N de cada categoria, na ordem da classificação)."""
         groups: dict[str, list[dict[str, Any]]] = {}
         for item in self.pairing_service.standings(tournament_id):
             category = str(item.get("category") or "").strip()
@@ -680,13 +680,13 @@ class ReportSectionsMixin:
     def _round_bulletin_sections(
         self, round_id: int
     ) -> list[tuple[str, list[str], list[list[Any]]]]:
-        """Secoes do boletim da rodada: cabecalho + resultados + classificacao + destaques."""
+        """Secoes do boletim da rodada: cabecalho + resultados + classificação + destaques."""
         round_data = self.db.get_round(round_id)
         if not round_data:
-            raise AppError("Rodada nao encontrada.")
+            raise AppError("Rodada não encontrada.")
         tournament = self.db.get_tournament(int(round_data["tournament_id"]))
         if not tournament:
-            raise AppError("Torneio nao encontrado.")
+            raise AppError("Torneio não encontrado.")
         number = round_data["number"]
 
         header_rows = [
@@ -702,7 +702,7 @@ class ReportSectionsMixin:
         sections.append(self._pairings_section(round_id))
         # Classificacao apos a rodada (top 10) reaproveita o layout da classificacao.
         title, headers, rows = self._standings_section(int(tournament["id"]))
-        sections.append((f"Classificacao apos a rodada {number} (top 10)", headers, rows[:10]))
+        sections.append((f"Classificação após a rodada {number} (top 10)", headers, rows[:10]))
         if tournament.get("competition_type") != "team":
             sections.append(self._bulletin_highlights_section(round_id, int(tournament["id"])))
         return sections
@@ -710,7 +710,7 @@ class ReportSectionsMixin:
     def _bulletin_highlights_section(
         self, round_id: int, tournament_id: int
     ) -> tuple[str, list[str], list[list[Any]]]:
-        """Destaques da rodada (individual): lider, decisivas/empates e maior zebra."""
+        """Destaques da rodada (individual): líder, decisivas/empates e maior zebra."""
         pairings = [item for item in self.db.get_pairings_for_round(round_id) if not item.get("is_bye")]
         decisive = sum(1 for item in pairings if item.get("result") in ("1-0", "0-1"))
         draws = sum(1 for item in pairings if item.get("result") == "1/2-1/2")
@@ -734,7 +734,7 @@ class ReportSectionsMixin:
 
         rows: list[list[Any]] = []
         if standings:
-            rows.append(["Lider", f"{standings[0].get('name', '')} ({standings[0].get('points', '')} pts)"])
+            rows.append(["Líder", f"{standings[0].get('name', '')} ({standings[0].get('points', '')} pts)"])
         rows.append(["Partidas decididas", decisive])
         rows.append(["Empates", draws])
         if best_upset:
@@ -745,7 +745,7 @@ class ReportSectionsMixin:
         """Dados do podio: top 3 (jogadores ou equipes) + campeoes por categoria."""
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
-            raise AppError("Selecione um torneio valido.")
+            raise AppError("Selecione um torneio válido.")
         is_team = tournament.get("competition_type") == "team"
         top: list[dict[str, Any]] = []
         categories: list[dict[str, Any]] = []
@@ -795,7 +795,7 @@ class ReportSectionsMixin:
         document.setFont("Helvetica-Bold", 24)
         document.drawCentredString(center, height - 90, str(tournament.get("name") or "Torneio"))
         document.setFont("Helvetica", 14)
-        document.drawCentredString(center, height - 116, "Premiacao - Podio")
+        document.drawCentredString(center, height - 116, "Premiação - Podio")
         subtitle = " - ".join(
             part for part in [str(tournament.get("location") or ""), str(tournament.get("start_date") or "")] if part
         )
@@ -814,7 +814,7 @@ class ReportSectionsMixin:
             y -= 70 if rank == 1 else 60
         if not data["top"]:
             document.setFont("Helvetica", 12)
-            document.drawCentredString(center, y, "Sem classificacao disponivel.")
+            document.drawCentredString(center, y, "Sem classificação disponível.")
 
         if data["categories"]:
             y -= 20
@@ -835,10 +835,10 @@ class ReportSectionsMixin:
     def _tournament_minutes_sections(
         self, tournament_id: int
     ) -> list[tuple[str, list[str], list[list[Any]]]]:
-        """Secoes da ata final: cabecalho + classificacao + categorias + premiacao + taxas + arbitros."""
+        """Secoes da ata final: cabecalho + classificação + categorias + premiação + taxas + árbitros."""
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
-            raise AppError("Selecione um torneio valido.")
+            raise AppError("Selecione um torneio válido.")
         settings = self.db.get_tournament_settings(tournament_id) or {}
         players = self.db.list_players(tournament_id, active_only=False)
         rated = sum(1 for player in players if self._trf_rating(player) > 0)
@@ -847,10 +847,10 @@ class ReportSectionsMixin:
         header_rows = [
             ["Torneio", tournament["name"]],
             ["Local", tournament.get("location", "")],
-            ["Federacao", settings.get("federation", "")],
+            ["Federação", settings.get("federation", "")],
             ["FIDE Event-ID", settings.get("fide_event_id", "")],
-            ["Data de inicio", tournament.get("start_date", "")],
-            ["Data de termino", tournament.get("end_date", "")],
+            ["Data de início", tournament.get("start_date", "")],
+            ["Data de término", tournament.get("end_date", "")],
             ["Ritmo de jogo", tournament.get("time_control", "")],
             ["Rodadas", tournament.get("rounds_count", "")],
             ["Tipo", competition],
@@ -858,7 +858,7 @@ class ReportSectionsMixin:
             ["Jogadores com rating", rated],
             ["Organizador", settings.get("organizer", "")],
             ["Diretor", settings.get("director", "")],
-            ["Arbitro principal", settings.get("chief_arbiter", "")],
+            ["Árbitro principal", settings.get("chief_arbiter", "")],
         ]
 
         referees = self.db.list_tournament_referees(tournament_id)
@@ -868,7 +868,7 @@ class ReportSectionsMixin:
             arbiter_rows.append(
                 [
                     referee.get("name", ""),
-                    self._ARBITER_ROLE_LABELS.get(role, role.replace("_", " ").title() or "Arbitro"),
+                    self._ARBITER_ROLE_LABELS.get(role, role.replace("_", " ").title() or "Árbitro"),
                     referee.get("fide_id", ""),
                     referee.get("category", ""),
                     "",
@@ -877,11 +877,11 @@ class ReportSectionsMixin:
         if not arbiter_rows:
             chief = str(settings.get("chief_arbiter") or "").strip()
             if chief:
-                arbiter_rows.append([chief, "Arbitro principal", "", "", ""])
+                arbiter_rows.append([chief, "Árbitro principal", "", "", ""])
             for name in str(settings.get("arbiters") or "").replace(";", ",").split(","):
                 cleaned = name.strip()
                 if cleaned:
-                    arbiter_rows.append([cleaned, "Arbitro", "", "", ""])
+                    arbiter_rows.append([cleaned, "Árbitro", "", "", ""])
 
         sections: list[tuple[str, list[str], list[list[Any]]]] = [
             ("Ata final do torneio", ["Campo", "Valor"], header_rows),
@@ -899,7 +899,7 @@ class ReportSectionsMixin:
         except AppError:
             pass
         sections.append(
-            ("Arbitros e assinaturas", ["Nome", "Funcao", "FIDE ID", "Categoria", "Assinatura"], arbiter_rows)
+            ("Árbitros e assinaturas", ["Nome", "Função", "FIDE ID", "Categoria", "Assinatura"], arbiter_rows)
         )
         return sections
 
@@ -921,9 +921,9 @@ class ReportSectionsMixin:
     def _teams_section(self, tournament_id: int) -> tuple[str, list[str], list[list[Any]]]:
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
-            raise AppError("Selecione um torneio valido.")
+            raise AppError("Selecione um torneio válido.")
         if tournament.get("competition_type") != "team":
-            raise AppError("Este relatorio esta disponivel apenas para torneios por equipes.")
+            raise AppError("Este relatório esta disponível apenas para torneios por equipes.")
         rows = [
             [
                 team["id"],
@@ -939,16 +939,16 @@ class ReportSectionsMixin:
         ]
         return (
             "Equipes",
-            ["ID", "Equipe", "Clube/Cidade", "Capitao", "Titulares", "Jogadores", "Status", "Observacoes"],
+            ["ID", "Equipe", "Clube/Cidade", "Capitão", "Titulares", "Jogadores", "Status", "Observações"],
             rows,
         )
 
     def _team_rosters_section(self, tournament_id: int) -> tuple[str, list[str], list[list[Any]]]:
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
-            raise AppError("Selecione um torneio valido.")
+            raise AppError("Selecione um torneio válido.")
         if tournament.get("competition_type") != "team":
-            raise AppError("Este relatorio esta disponivel apenas para torneios por equipes.")
+            raise AppError("Este relatório esta disponível apenas para torneios por equipes.")
 
         rows = []
         for team in self.db.list_teams(tournament_id, active_only=False):
@@ -972,18 +972,18 @@ class ReportSectionsMixin:
                     ]
                 )
         return (
-            "Escalacoes",
+            "Escalações",
             [
                 "Equipe",
                 "Tabuleiro",
-                "Funcao",
+                "Função",
                 "Jogador",
                 "Rating",
                 "Clube",
                 "Categoria",
                 "Categoria idade",
                 "Categoria rating",
-                "Tags premiacao",
+                "Tags premiação",
                 "Status",
             ],
             rows,

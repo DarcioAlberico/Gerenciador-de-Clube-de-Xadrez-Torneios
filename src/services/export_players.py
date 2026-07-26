@@ -51,7 +51,7 @@ class PlayerRoundReportsMixin:
     def export_player_import_template(self, file_path: str | Path) -> None:
         self._write_report(
             file_path,
-            "Modelo de importacao de jogadores",
+            "Modelo de importação de jogadores",
             [
                 "nome",
                 "sobrenome",
@@ -70,7 +70,7 @@ class PlayerRoundReportsMixin:
     def export_online_registration_template(self, file_path: str | Path) -> None:
         self._write_report(
             file_path,
-            "Modelo de inscricoes online",
+            "Modelo de inscrições online",
             [
                 "Nome completo do jogador",
                 "Rating",
@@ -88,21 +88,21 @@ class PlayerRoundReportsMixin:
     def export_registration_form(
         self, file_path: str | Path, tournament_id: int | None = None
     ) -> dict[str, str]:
-        """Gera o formulario de inscricao padronizado (REG-01).
+        """Gera o formulário de inscrição padronizado (REG-01).
 
         Produz dois artefatos com o mesmo nome base:
         - ``.gs``: script Google Apps Script colavel em script.google.com que
-          cria o formulario com as perguntas padronizadas;
+          cria o formulário com as perguntas padronizadas;
         - ``.json``: definicao reutilizavel dos campos.
 
         Os titulos das perguntas sao escolhidos para que o CSV de respostas
-        importe direto pelo fluxo de inscricoes online, sem mapeamento manual.
+        importe direto pelo fluxo de inscrições online, sem mapeamento manual.
         """
-        title = "Inscricao no torneio"
+        title = "Inscrição no torneio"
         if tournament_id is not None:
             tournament = self.db.get_tournament(int(tournament_id))
             if tournament and tournament.get("name"):
-                title = f"Inscricao - {tournament['name']}"
+                title = f"Inscrição - {tournament['name']}"
 
         path = Path(file_path)
         if path.suffix.lower() not in {".gs", ".js"}:
@@ -119,7 +119,7 @@ class PlayerRoundReportsMixin:
             ),
             encoding="utf-8",
         )
-        logger.info("Formulario de inscricao padronizado gerado em %s e %s", path, definition_path)
+        logger.info("Formulário de inscrição padronizado gerado em %s e %s", path, definition_path)
         return {"script_path": str(path), "definition_path": str(definition_path)}
 
     @staticmethod
@@ -129,23 +129,23 @@ class PlayerRoundReportsMixin:
 
         lines: list[str] = [
             "/**",
-            " * Albericus - Formulario de inscricao padronizado (REG-01).",
+            " * Albericus - Formulário de inscrição padronizado (REG-01).",
             " *",
             " * Passo a passo:",
             " *  1. Acesse https://script.google.com e crie um novo projeto.",
-            " *  2. Cole todo este codigo e salve.",
-            " *  3. Execute a funcao criarFormularioInscricao e autorize o acesso.",
-            " *  4. O link do formulario aparece no registro de execucao (Ver > Registros).",
-            " *  5. No formulario, vincule as respostas a uma planilha.",
+            " *  2. Cole todo este código e salve.",
+            " *  3. Execute a função criarFormularioInscricao e autorize o acesso.",
+            " *  4. O link do formulário aparece no registro de execução (Ver > Registros).",
+            " *  5. No formulário, vincule as respostas a uma planilha.",
             " *  6. Baixe a planilha como CSV (ou publique como CSV) e importe em",
-            " *     Jogadores > Importar inscricoes online / Importar link Forms/Sheets.",
+            " *     Jogadores > Importar inscrições online / Importar link Forms/Sheets.",
             " *",
-            " * Os titulos das perguntas ja seguem o padrao do importador; nao os",
-            " * renomeie para manter a importacao automatica sem mapeamento.",
+            " * Os titulos das perguntas ja seguem o padrão do importador; não os",
+            " * renomeie para manter a importação automatica sem mapeamento.",
             " */",
             "function criarFormularioInscricao() {",
             f"  var form = FormApp.create('{js_text(title)}');",
-            "  form.setDescription('Inscricao gerada pelo Albericus. Preencha os dados do jogador.');",
+            "  form.setDescription('Inscrição gerada pelo Albericus. Preencha os dados do jogador.');",
             "  form.setCollectEmail(false);",
             "",
         ]
@@ -170,15 +170,15 @@ class PlayerRoundReportsMixin:
                 )
                 lines.append(
                     f"  {var}.setValidation(FormApp.createTextValidation()"
-                    ".setHelpText('Informe um numero.').requireNumber().build());"
+                    ".setHelpText('Informe um número.').requireNumber().build());"
                 )
             else:
                 lines.append(
                     f"  form.addTextItem().setTitle('{title_js}').setRequired({required});"
                 )
         lines.append("")
-        lines.append("  Logger.log('Formulario criado: ' + form.getPublishedUrl());")
-        lines.append("  Logger.log('Edicao: ' + form.getEditUrl());")
+        lines.append("  Logger.log('Formulário criado: ' + form.getPublishedUrl());")
+        lines.append("  Logger.log('Edição: ' + form.getEditUrl());")
         lines.append("}")
         lines.append("")
         return "\n".join(lines)
@@ -192,7 +192,7 @@ class PlayerRoundReportsMixin:
         text = (link or "").strip()
         parsed = urlparse(text)
         if parsed.scheme not in {"http", "https"} or "docs.google.com" not in parsed.netloc:
-            raise AppError("Cole um link valido do Google Forms (pre-preenchido).")
+            raise AppError("Cole um link válido do Google Forms (pre-preenchido).")
         base_url = urlunparse((parsed.scheme, parsed.netloc, parsed.path, "", "", ""))
         query = parse_qs(parsed.query, keep_blank_values=True)
         entries = [
@@ -211,11 +211,11 @@ class PlayerRoundReportsMixin:
     def build_registration_prefill_url(
         base_url: str, tournament_entry: str, tournament_name: str
     ) -> str:
-        """Monta o link de inscricao com o nome do torneio ja preenchido e os
+        """Monta o link de inscrição com o nome do torneio ja preenchido e os
         campos do jogador em branco."""
         base = (base_url or "").strip()
         if not base:
-            raise AppError("Formulario de inscricao nao configurado.")
+            raise AppError("Formulário de inscrição não configurado.")
         params = {"usp": "pp_url"}
         entry = (tournament_entry or "").strip()
         name = (tournament_name or "").strip()
@@ -246,7 +246,7 @@ class PlayerRoundReportsMixin:
         config = self.registration_form_config()
         if not config["base_url"]:
             raise AppError(
-                "Formulario de inscricao nao configurado. Use 'Configurar formulario "
+                "Formulário de inscrição não configurado. Use 'Configurar formulário "
                 "(link)' e cole o link pre-preenchido do Google Forms."
             )
         tournament = self.db.get_tournament(int(tournament_id))
@@ -258,7 +258,7 @@ class PlayerRoundReportsMixin:
     def export_member_import_template(self, file_path: str | Path) -> None:
         self._write_report(
             file_path,
-            "Modelo de importacao de membros",
+            "Modelo de importação de membros",
             [
                 "nome",
                 "sobrenome",
@@ -271,7 +271,7 @@ class PlayerRoundReportsMixin:
                 "email",
                 "telefone",
                 "responsavel",
-                "telefone responsavel",
+                "telefone responsável",
             ],
             [["Ana", "Silva", "1500", "Escola A", "Turma 1", "aluno", "ativo", "2012-05-10", "", "", "", ""]],
         )
@@ -289,7 +289,7 @@ class PlayerRoundReportsMixin:
         path = Path(file_path)
         round_data = self.db.get_round(round_id)
         if not round_data:
-            raise AppError("Rodada nao encontrada.")
+            raise AppError("Rodada não encontrada.")
         tournament = self.db.get_tournament(int(round_data["tournament_id"]))
         if path.suffix.lower() == ".pdf" and tournament and tournament.get("competition_type") != "team":
             self._write_pairings_wall_pdf(path, tournament, round_data)
@@ -301,16 +301,16 @@ class PlayerRoundReportsMixin:
     def export_scoresheets(self, round_id: int, file_path: str | Path) -> None:
         path = Path(file_path)
         if path.suffix.lower() != ".pdf":
-            raise AppError("Sumulas de mesa devem ser exportadas em PDF.")
+            raise AppError("Súmulas de mesa devem ser exportadas em PDF.")
         round_data = self.db.get_round(round_id)
         if not round_data:
-            raise AppError("Rodada nao encontrada.")
+            raise AppError("Rodada não encontrada.")
         tournament = self.db.get_tournament(int(round_data["tournament_id"]))
         if not tournament:
-            raise AppError("Torneio nao encontrado.")
+            raise AppError("Torneio não encontrado.")
         scoresheets = self._scoresheet_rows(round_data, tournament)
         if not scoresheets:
-            raise AppError("Nao ha mesas validas para gerar sumulas.")
+            raise AppError("Não ha mesas validas para gerar súmulas.")
         self._write_scoresheets_pdf(path, tournament, round_data, scoresheets)
         logger.info("%s sumulas exportadas em PDF: %s", len(scoresheets), path)
 
@@ -324,17 +324,17 @@ class PlayerRoundReportsMixin:
     ) -> None:
         path = Path(file_path)
         if path.suffix.lower() != ".pdf":
-            raise AppError("Cartoes de mesa devem ser exportados em PDF.")
+            raise AppError("Cartões de mesa devem ser exportados em PDF.")
         if int(start_board) <= 0 or int(end_board) < int(start_board):
-            raise AppError("Informe um intervalo valido de mesas.")
+            raise AppError("Informe um intervalo válido de mesas.")
         if int(end_board) - int(start_board) + 1 > 500:
-            raise AppError("Gere no maximo 500 cartoes de mesa por arquivo.")
+            raise AppError("Gere no máximo 500 cartões de mesa por arquivo.")
         round_data = self.db.get_round(int(round_id)) if round_id else None
         tournament = self.db.get_tournament(int(round_data["tournament_id"])) if round_data else None
         if include_qr and not round_data:
-            raise AppError("Selecione uma rodada para incluir QR nos cartoes.")
+            raise AppError("Selecione uma rodada para incluir QR nos cartões.")
         if include_qr and tournament and tournament.get("competition_type") == "team":
-            raise AppError("QR nos cartoes esta disponivel apenas para torneios individuais.")
+            raise AppError("QR nos cartões esta disponível apenas para torneios individuais.")
         self._write_table_cards_pdf(path, int(start_board), int(end_board), tournament, round_data, include_qr)
         logger.info("%s cartoes de mesa exportados em PDF: %s", int(end_board) - int(start_board) + 1, path)
 
@@ -361,7 +361,7 @@ class PlayerRoundReportsMixin:
         for round_data in sorted(self.db.list_rounds(tournament_id), key=lambda item: item["number"]):
             sections.append(self._pairings_section(round_data["id"]))
         if not sections:
-            raise AppError("Nao ha rodadas para exportar.")
+            raise AppError("Não ha rodadas para exportar.")
         self._write_multi_report(file_path, sections)
 
     def export_standings(self, tournament_id: int, file_path: str | Path) -> None:

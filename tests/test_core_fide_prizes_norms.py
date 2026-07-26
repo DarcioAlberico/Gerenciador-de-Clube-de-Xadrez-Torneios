@@ -261,8 +261,8 @@ class FidePrizesNormsTest(CoreServiceTestCase):
         self.export_service.export_prize_report(self.tournament_id, path)
         self.assertTrue(path.exists())
         content = path.read_text(encoding="utf-8-sig")
-        self.assertIn("Premiacao por jogador", content)
-        self.assertIn("Total liquido distribuido", content)
+        self.assertIn("Premiação por jogador", content)
+        self.assertIn("Total líquido distribuido", content)
 
     def test_norm_verdict_meets_and_lists_missing(self) -> None:
         from src.services.fide_norms import evaluate_titles
@@ -333,8 +333,8 @@ class FidePrizesNormsTest(CoreServiceTestCase):
 
         self.assertTrue(path.exists())
         content = path.read_text(encoding="utf-8-sig")
-        self.assertIn("Dados do torneio (norma de arbitro)", content)
-        self.assertIn("Arbitros designados", content)
+        self.assertIn("Dados do torneio (norma de árbitro)", content)
+        self.assertIn("Árbitros designados", content)
         self.assertIn("Joao Arbitro", content)
         self.assertIn("Maria Aux", content)
 

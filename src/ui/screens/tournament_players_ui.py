@@ -805,7 +805,7 @@ class TournamentPlayersMixin:
                 tournament_id = int(self.current_tournament_id)
                 tournament = self.db.get_tournament(tournament_id)
                 title = (
-                    f"Inscricao - {tournament['name']}"
+                    f"Inscrição - {tournament['name']}"
                     if tournament and tournament.get("name")
                     else "Inscrição no torneio"
                 )

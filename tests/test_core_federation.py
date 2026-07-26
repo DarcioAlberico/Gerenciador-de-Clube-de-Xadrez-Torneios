@@ -739,7 +739,7 @@ class FederationExportTest(CoreServiceTestCase):
         fed_rows = {row[0]: row[1] for row in sections[1][2]}
 
         self.assertEqual(summary["Jogadores"], 8)
-        self.assertEqual(summary["Federacoes"], 2)   # BRA e "—"
+        self.assertEqual(summary["Federações"], 2)   # BRA e "—"
         self.assertEqual(fed_rows["BRA"], 3)
         self.assertEqual(fed_rows["—"], 5)
 

@@ -610,13 +610,13 @@ class RegistrationFormTest(unittest.TestCase):
             self.assertTrue(script_path.exists())
             self.assertEqual(script_path.suffix, ".gs")
             script = script_path.read_text(encoding="utf-8")
-            self.assertIn("FormApp.create('Inscricao - Torneio Teste')", script)
+            self.assertIn("FormApp.create('Inscrição - Torneio Teste')", script)
             self.assertIn("Nome completo do jogador", script)
             self.assertIn("addDateItem", script)
             self.assertIn("addMultipleChoiceItem", script)
 
             definition = json.loads(definition_path.read_text(encoding="utf-8"))
-            self.assertEqual(definition["title"], "Inscricao - Torneio Teste")
+            self.assertEqual(definition["title"], "Inscrição - Torneio Teste")
             self.assertEqual(len(definition["questions"]), 11)
 
     def test_form_titles_import_without_manual_mapping(self) -> None:

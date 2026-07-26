@@ -213,7 +213,7 @@ class ArbiterPanelNetNewTest(unittest.TestCase):
         sections = self.export_service._round_bulletin_sections(int(latest["id"]))
         titles = [title for title, _h, _r in sections]
         self.assertTrue(titles[0].startswith("Boletim da rodada"))
-        self.assertTrue(any("Classificacao apos a rodada" in title for title in titles))
+        self.assertTrue(any("Classificação após a rodada" in title for title in titles))
         self.assertIn("Destaques", titles)
         out_path = Path(self.temp_dir.name) / "boletim.xlsx"
         self.export_service.export_round_bulletin(int(latest["id"]), out_path)

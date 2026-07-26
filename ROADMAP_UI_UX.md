@@ -352,13 +352,13 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 - ✅ **B-4** `Treeview` grande (P2-13) — medida e adiada; ver o status abaixo.
 - ✅ **B-5** Cache de figuras matplotlib quando dados não mudam (P2-14).
 - **B-6** Migrar telas-monstro restantes para 3 camadas (continuação de F1.5).
+- ✅ **B-7** Acentuar cabeçalhos/títulos de `src/services/export_*` (F3.5) — a
+  decisão de compatibilidade foi tomada: acentuar **inclusive CSV/XLSX**, com
+  fronteira ASCII no pacote Access, TRF e PGN. Ver o status abaixo.
 - ✅ **B-8** Estreitar o layout da tela **Exportar** — feito; o gargalo mudou de
   dono (ver o status abaixo). **Continuação:** as cinco telas administrativas
   densas (Ranking interno, Financeiro, Calendário, Exercícios, Relatórios) são
   quem define o limiar agora.
-- **B-7** Acentuar cabeçalhos/títulos de `src/services/export_*` para casar com a UI
-  (F3.5). Fica fora da F3.5 porque altera **arquivo entregue** (PDF/CSV/HTML) e
-  formato que terceiros consomem — precisa de decisão sobre compatibilidade.
 
 > **Status (2026-07-25): B-4 — a medição desmentiu a premissa; virtualização
 > NÃO foi implementada.** O achado P2-13 dizia "lento em 1.000+ linhas". Medido:
@@ -423,6 +423,30 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 > passou a aceitar override de cor de texto, e a devolvê-la ao sair — senão o
 > preto puro grudaria no tema seguinte. 21 testes, nenhum abre janela.
 
+> **Status (2026-07-26): B-7 CONCLUÍDA.** A F3.5 tinha deixado isto de fora
+> porque mexe em **arquivo entregue**. A decisão tomada: **acentuar tudo que
+> gente lê**, inclusive CSV e XLSX — num app de clube, cabeçalho casado com a
+> tela vale mais do que a hipótese de um script de terceiro que faz *match* por
+> texto exato.
+>
+> **A parte que exigiu desenho foi a fronteira.** O pacote **Access** reusa os
+> **mesmos** construtores de seção das exportações para humanos, e ali o texto
+> vira nome de coluna de CSV lido por driver ODBC com `schema.ini` — acento é
+> risco de importação, não polimento. A saída não foi manter duas listas de
+> cabeçalhos (que divergem no primeiro descuido): a lista é **uma só**,
+> acentuada, e [`text_ascii.py`](src/services/text_ascii.py) dobra para ASCII
+> **no ponto de entrega**. A regra fica visível no código — quem exporta para
+> máquina chama `to_ascii`; quem exporta para gente, não.
+>
+> TRF/Chess-Results e PGN não passam pelos construtores de seção (vão pelos
+> `federation_exporters`), então continuaram ASCII sem esforço; o **JSON
+> público** usa chaves em inglês, e por isso nunca esteve em risco.
+>
+> 281 literais acentuados em 8 módulos. Onze testes foram atualizados por
+> asserirem o texto antigo — é exatamente o que muda quando se muda um arquivo
+> entregue. Um deles, o do pacote Access, passou a **exigir ASCII** com um
+> comentário dizendo por quê: era o único que poderia regredir em silêncio, já
+> que quem descobriria seria o usuário, na hora de importar.
 > **Status (2026-07-25): B-8 CONCLUÍDA — e o gargalo mudou de dono.** A tela
 > **Exportar** punha os três seletores e as três ações numa linha só e pedia
 > **1.360px**; empilhar as ações numa linha própria derrubou a exigência dela
