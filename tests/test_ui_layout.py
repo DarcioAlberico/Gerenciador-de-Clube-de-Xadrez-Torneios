@@ -18,6 +18,7 @@ from tests.support.ctk_cleanup import (
     create_tk_window,
     release_dead_ctk_windows,
 )
+from tests.support.ui_input import type_into
 
 # Esta suite abre janela: precisa de display real. Ver o marcador 'gui'
 # no pyproject — o gate sem display roda com -m 'not gui'.
@@ -1112,10 +1113,27 @@ class UiLayoutSmokeTest(unittest.TestCase):
 
         self.app.arbitration_issue_filter_option.set("Todas")
         self.app.arbitration_issue_filter_option._command("Todas")
-        self.app.arbitration_issue_search_entry.insert(0, "mesa 1")
-        self.app.arbitration_issue_search_entry.event_generate("<KeyRelease>")
         self.app.update()
         self.assertEqual(2, len(tree.get_children()))
+
+        # A busca e adiada (B-4): a tecla so agenda, quem executa e o flush.
+        # O termo abaixo nao casa com nada — antes, a asercao era "mesa 1", que
+        # devolvia as MESMAS 2 linhas e por isso nao provava filtro nenhum.
+        # type_into porque digitar num CTkEntry tem tres armadilhas silenciosas
+        # (ver tests/support/ui_input.py). A asercao antiga deste teste
+        # ("mesa 1" -> 2 linhas) media a tabela NAO filtrada e chamava aquilo de
+        # busca: o evento nunca chegava ao bind.
+        type_into(self.app.arbitration_issue_search_entry, "termo-que-nao-existe")
+        self.assertTrue(
+            self.app.arbitration_issue_search_debounced.is_pending,
+            "digitar agenda o refiltro em vez de rodar a cada tecla",
+        )
+
+        self.app.arbitration_issue_search_debounced.flush()
+        self.app.update()
+        self.assertEqual(0, len(tree.get_children()))
+        self.assertEqual("Exibindo 0 de 2", self.app.arbitration_issue_count_label.cget("text"))
+        # Filtrar e ler: a base continua com as duas ocorrencias.
         self.assertEqual(2, self.app.pairing_service.arbitration_issues(self.tournament_id)["metrics"]["total"])
 
     def test_pairing_screen_shows_result_states_for_qr_and_correction(self) -> None:
@@ -1531,6 +1549,42 @@ class UiLayoutSmokeTest(unittest.TestCase):
         card.grid(row=9, column=0)
         self.app.update()
         self.assertEqual(0, card.cget("border_width"))
+
+    def test_tabela_grande_continua_rapida_de_preencher(self) -> None:
+        """B-4/P2-13: o guarda que diz QUANDO a tabela vira problema.
+
+        O achado da tarefa foi que ela ainda nao e: com 6.000 jogadores, encher
+        a Treeview custou 42 ms de 677 ms de tela (6%) — o resto e a montagem
+        dos widgets do formulario, que nao depende do numero de linhas. Este
+        teste existe para a afirmacao nao envelhecer sozinha: se um dia
+        preencher 5.000 linhas passar do orcamento, ele reprova e a
+        virtualizacao volta a pauta com numero, nao com suposicao.
+
+        Orcamento folgado de proposito (10x o medido): o que se guarda aqui e a
+        ORDEM DE GRANDEZA, e a maquina do CI nao e a do desenvolvedor.
+        """
+        import time
+
+        colunas = ("id", "nome", "rating", "clube", "categoria")
+        tree = ttk.Treeview(self.app, columns=colunas, show="headings", height=20)
+        for coluna in colunas:
+            tree.column(coluna, width=120)
+        linhas = [(i, f"Jogador {i}", 1500 + i % 400, "Clube", "ABS") for i in range(5000)]
+
+        inicio = time.perf_counter()
+        for linha in linhas:
+            tree.insert("", "end", values=linha)
+        decorrido_ms = (time.perf_counter() - inicio) * 1000
+        try:
+            self.assertEqual(5000, len(tree.get_children()))
+            self.assertLess(
+                decorrido_ms,
+                2000,
+                f"encher 5.000 linhas levou {decorrido_ms:.0f} ms — a tabela virou "
+                "o gargalo e a virtualizacao (P2-13) deixou de ser dispensavel",
+            )
+        finally:
+            tree.destroy()
 
     def _arrastar_separador(self, tree: ttk.Treeview, coluna: str, largura: int) -> None:
         """Simula o fim de um arrasto no separador da coluna.

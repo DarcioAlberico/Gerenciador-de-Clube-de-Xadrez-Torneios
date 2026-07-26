@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from ..support import *
+from ..components import debounce
 
 from .club_members_ui import ClubMembersMixin
 
@@ -876,7 +877,7 @@ class ClubPagesMixin(ClubMembersMixin):
         self._grid_form_buttons(form, buttons, len(fields) * 2 + 1)
 
         guardian_tree.bind("<<TreeviewSelect>>", on_select)
-        search_entry.bind("<KeyRelease>", lambda _event: load_guardians())
+        search_entry.bind("<KeyRelease>", debounce(search_entry, load_guardians))
         active_filter.configure(command=lambda _value: load_guardians())
 
         clear_form()

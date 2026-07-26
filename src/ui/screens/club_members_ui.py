@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from ..support import *
-from ..components import danger_button
+from ..components import danger_button, debounce
 
 
 # Verde da marca WhatsApp: nao acompanha o tema — e identidade de terceiro.
@@ -926,7 +926,7 @@ class ClubMembersMixin:
 
         tree.bind("<<TreeviewSelect>>", on_select)
         history_tree.bind("<Double-1>", show_history_details)
-        search_entry.bind("<KeyRelease>", lambda _event: load_members())
+        search_entry.bind("<KeyRelease>", debounce(search_entry, load_members))
         type_filter.configure(command=lambda _value: load_members())
         status_filter.configure(command=lambda _value: load_members())
         category_filter.configure(command=lambda _value: load_members())

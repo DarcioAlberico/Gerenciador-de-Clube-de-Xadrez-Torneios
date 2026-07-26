@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from ..support import *
-from ..components import danger_button
+from ..components import danger_button, debounce
 
 
 # Sub-mixin de Admin: calendario, ranking interno e comunicacoes.
@@ -267,9 +267,9 @@ class CalendarRankingMixin:
 
         ctk.CTkButton(controls, text="Filtrar", command=load_events).grid(row=0, column=4, padx=(8, 0))
         events_tree.bind("<<TreeviewSelect>>", on_event_select)
-        search_entry.bind("<KeyRelease>", lambda _event: load_events())
-        start_filter.bind("<KeyRelease>", lambda _event: load_events())
-        end_filter.bind("<KeyRelease>", lambda _event: load_events())
+        search_entry.bind("<KeyRelease>", debounce(search_entry, load_events))
+        start_filter.bind("<KeyRelease>", debounce(start_filter, load_events))
+        end_filter.bind("<KeyRelease>", debounce(end_filter, load_events))
         status_filter.configure(command=lambda _value: load_events())
 
         clear_form()
@@ -639,9 +639,9 @@ class CalendarRankingMixin:
         club_option.configure(command=on_club_change)
         class_option.configure(command=lambda _value: load_ranking())
         status_option.configure(command=lambda _value: load_ranking())
-        search_entry.bind("<KeyRelease>", lambda _event: load_ranking())
-        start_filter.bind("<KeyRelease>", lambda _event: load_ranking())
-        end_filter.bind("<KeyRelease>", lambda _event: load_ranking())
+        search_entry.bind("<KeyRelease>", debounce(search_entry, load_ranking))
+        start_filter.bind("<KeyRelease>", debounce(start_filter, load_ranking))
+        end_filter.bind("<KeyRelease>", debounce(end_filter, load_ranking))
         tree.bind("<Double-1>", lambda _event: show_rating_history())
         category_option.set("Todas")
         status_option.set("Ativos")

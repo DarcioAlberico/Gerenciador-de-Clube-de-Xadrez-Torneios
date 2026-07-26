@@ -349,7 +349,7 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 - ✅ **B-1** Persistência de layout de colunas por usuário (P2-9).
 - ✅ **B-2** Auditoria de contraste WCAG AA + preset alto contraste (P2-11).
 - **B-3** i18n: extrair strings para `i18n/pt_BR.json`, manter só PT-BR (P2-12).
-- **B-4** Virtualização/paginação de `Treeview` (P2-13) — antes da base crescer.
+- ✅ **B-4** `Treeview` grande (P2-13) — medida e adiada; ver o status abaixo.
 - ✅ **B-5** Cache de figuras matplotlib quando dados não mudam (P2-14).
 - **B-6** Migrar telas-monstro restantes para 3 camadas (continuação de F1.5).
 - **B-8** Estreitar o layout da tela **Exportar** (e revisar as densas: Rodadas,
@@ -359,6 +359,38 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
   (F3.5). Fica fora da F3.5 porque altera **arquivo entregue** (PDF/CSV/HTML) e
   formato que terceiros consomem — precisa de decisão sobre compatibilidade.
 
+> **Status (2026-07-25): B-4 — a medição desmentiu a premissa; virtualização
+> NÃO foi implementada.** O achado P2-13 dizia "lento em 1.000+ linhas". Medido:
+>
+> | jogadores | abrir a tela | só as linhas | fatia |
+> |---|---|---|---|
+> | 1.200 | 849 ms | 11 ms | 1,3% |
+> | 3.000 | 597 ms | 20 ms | 3,3% |
+> | 6.000 | 677 ms | 42 ms | 6,3% |
+>
+> O custo da tela é **praticamente constante** e não vem da tabela: vem de
+> montar os widgets do formulário (14 campos, `CTkOptionMenu`, scrollbars) a
+> cada visita — no perfil, quatro `CTkOptionMenu` sozinhos custam 157 ms.
+> Virtualizar a tabela atacaria 6% do problema, cobrando complexidade e tirando
+> do usuário a rolagem contínua. **Adiada com número, não com opinião**, e com
+> um teste que reprova se encher 5.000 linhas passar do orçamento — a hora de
+> virtualizar volta à pauta sozinha.
+>
+> O que a medição mostrou que **de fato** cresce com a base é o caminho por
+> tecla: cada `<KeyRelease>` numa busca esvazia a tabela e reinsere tudo. Daí
+> [`components/debounce.py`](src/ui/components/debounce.py) — agendamento
+> injetado, testável sem janela — aplicado nas **14 caixas de busca e filtro de
+> data**. A paleta de comandos ficou de fora de propósito: a lista é curta e
+> qualquer atraso ali seria sentido como travamento.
+>
+> **Achado de infraestrutura de teste, e este é o mais sério.** Ao debouncear a
+> busca da arbitragem, o teste que a cobria continuou verde — porque ele nunca
+> havia buscado. Três detalhes silenciosos: o `bind` vive no `tk.Entry` **de
+> dentro** do `CTkEntry`; evento de tecla **sem `keysym`** o Tk descarta; e sem
+> **foco** ele também não é entregue. Nenhum levanta erro. A asserção antiga
+> (`"mesa 1"` → 2 linhas) media a tabela **não filtrada**. Agora há
+> [`tests/support/ui_input.py`](tests/support/ui_input.py) (`type_into`) e o
+> teste exige filtro de verdade (0 de 2) mais o `flush()` do adiamento.
 > **Status (2026-07-25): B-2 CONCLUÍDA — 77 reprovações viraram zero.**
 > A auditoria foi escrita antes das correções, e o número dizia tudo: **77
 > pares abaixo de AA nos 6 temas curados**. O pior deles era o rótulo do botão
