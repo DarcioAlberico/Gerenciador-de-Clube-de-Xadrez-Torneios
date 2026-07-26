@@ -18,6 +18,7 @@ from typing import Any, Sequence
 
 import customtkinter as ctk
 
+from ..i18n import t
 from ..theme import (
     SPACE_LG,
     SPACE_SM,
@@ -160,8 +161,8 @@ def confirm_dialog(
     message: str,
     *,
     danger: bool = False,
-    confirm_text: str = "Sim",
-    cancel_text: str = "Não",
+    confirm_text: str | None = None,
+    cancel_text: str | None = None,
 ) -> bool:
     """Confirmação Sim/Não temática. Retorna ``True`` se confirmado (``Esc``,
     fechar a janela ou Não retornam ``False``). Com ``danger=True`` o botão de
@@ -173,8 +174,8 @@ def confirm_dialog(
         title,
         message,
         [
-            (cancel_text, False, "secondary"),
-            (confirm_text, True, "danger" if danger else "primary"),
+            (cancel_text or t("dialog.no"), False, "secondary"),
+            (confirm_text or t("dialog.yes"), True, "danger" if danger else "primary"),
         ],
         default=False,
         title_color=THEME_DANGER if danger else THEME_TEXT_MAIN,
@@ -188,9 +189,9 @@ def tri_state_dialog(
     title: str,
     message: str,
     *,
-    yes_text: str = "Sim",
-    no_text: str = "Não",
-    cancel_text: str = "Cancelar",
+    yes_text: str | None = None,
+    no_text: str | None = None,
+    cancel_text: str | None = None,
 ) -> bool | None:
     """Escolha de três vias (equivalente a ``askyesnocancel``): retorna ``True``
     (Sim), ``False`` (Não) ou ``None`` (Cancelar / Esc / fechar)."""
@@ -199,9 +200,9 @@ def tri_state_dialog(
         title,
         message,
         [
-            (cancel_text, None, "secondary"),
-            (no_text, False, "secondary"),
-            (yes_text, True, "primary"),
+            (cancel_text or t("dialog.cancel"), None, "secondary"),
+            (no_text or t("dialog.no"), False, "secondary"),
+            (yes_text or t("dialog.yes"), True, "primary"),
         ],
         default=None,
     )
@@ -214,7 +215,7 @@ def alert_dialog(
     message: str,
     *,
     kind: str = "info",
-    ok_text: str = "OK",
+    ok_text: str | None = None,
 ) -> None:
     """Alerta bloqueante com um único botão (OK). ``kind`` ∈
     {info, success, warning, error} apenas colore o título."""
@@ -222,7 +223,7 @@ def alert_dialog(
         parent,
         title,
         message,
-        [(ok_text, None, "primary")],
+        [(ok_text or t("dialog.ok"), None, "primary")],
         default=None,
         title_color=_TITLE_COLOR.get(kind, THEME_TEXT_MAIN),
     )

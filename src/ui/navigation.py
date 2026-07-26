@@ -19,59 +19,78 @@ import unicodedata
 from dataclasses import dataclass
 from typing import Any, Callable, Iterable
 
+from .i18n import t
+
 logger = logging.getLogger("src.ui.navigation")
 
 
 @dataclass(frozen=True)
 class Destination:
-    """Um destino navegável. ``method`` é o nome do ``show_*`` na aplicação."""
+    """Um destino navegável. ``method`` é o nome do ``show_*`` na aplicação.
+
+    Rótulo, palavras-chave e grupo **não** ficam guardados aqui: são lidos do
+    catálogo de textos na hora de exibir (B-3). O registro guarda a identidade
+    (``key``) e o comportamento (``method``); o texto é conteúdo, e conteúdo
+    mora no catálogo. É isso que permite trocar de idioma sem reconstruir o
+    registro — e é por isso que são propriedades, não campos.
+    """
 
     key: str
-    label: str
     method: str
-    keywords: str = ""
     icon: str | None = None
-    group: str = ""
+    group_key: str = ""
+
+    @property
+    def label(self) -> str:
+        return t(f"nav.{self.key}.label")
+
+    @property
+    def keywords(self) -> str:
+        return t(f"nav.{self.key}.keywords")
+
+    @property
+    def group(self) -> str:
+        return t(f"nav.group.{self.group_key}") if self.group_key else ""
 
 
 # Ordem = ordem de exibição no palette (e, mais adiante, na sidebar da F3.1).
 DESTINATIONS: tuple[Destination, ...] = (
     # Inicio — pendencias acionaveis; e a tela que abre depois do login (F3.2).
-    Destination("home", "Início", "show_home", "inicio pendencias home painel", "dashboard", "Clube"),
+    Destination("home", "show_home", "dashboard", "club"),
     # Clube
-    Destination("visual_dashboard", "Dashboard Visual", "show_visual_dashboard", "inicio painel home", "dashboard", "Clube"),
-    Destination("club", "Perfil do Clube", "show_club", "clube unidade", "clube", "Clube"),
-    Destination("members", "Membros", "show_members", "socios alunos pessoas", "membros", "Clube"),
-    Destination("learning_levels", "Níveis de Aprendizagem", "show_learning_levels", "niveis turmas", "aulas", "Clube"),
-    Destination("guardians", "Responsáveis", "show_guardians", "guardian pais", "membros", "Clube"),
+    Destination("visual_dashboard", "show_visual_dashboard", "dashboard", "club"),
+    Destination("club", "show_club", "clube", "club"),
+    Destination("members", "show_members", "membros", "club"),
+    Destination("learning_levels", "show_learning_levels", "aulas", "club"),
+    Destination("guardians", "show_guardians", "membros", "club"),
     # Treinamento — Aulas e Exercícios seguem DESATIVADOS (ver _build_menu).
-    Destination("free_tournament", "Torneio | Livre", "show_free_tournament_mode", "modo livre escolar casual amistoso bagunca", "torneios", "Treinamento"),
-    Destination("library", "Biblioteca Pedagógica", "show_library", "biblioteca acervo", "biblioteca", "Treinamento"),
+    Destination("free_tournament", "show_free_tournament_mode", "torneios", "training"),
+    Destination("library", "show_library", "biblioteca", "training"),
     # Gestão
-    Destination("referees", "Árbitros", "show_referees", "arbitros juiz", "arbitros", "Gestão"),
-    Destination("inventory", "Inventário", "show_inventory", "estoque material", "integracoes", "Gestão"),
-    Destination("finance", "Financeiro", "show_finance", "caixa contas dinheiro", "financeiro", "Gestão"),
-    Destination("calendar", "Calendário", "show_calendar", "agenda eventos datas", "calendario", "Gestão"),
-    Destination("internal_ranking", "Ranking Interno", "show_internal_ranking", "rating classificacao", "dashboard", "Gestão"),
+    Destination("referees", "show_referees", "arbitros", "management"),
+    Destination("inventory", "show_inventory", "integracoes", "management"),
+    Destination("finance", "show_finance", "financeiro", "management"),
+    Destination("calendar", "show_calendar", "calendario", "management"),
+    Destination("internal_ranking", "show_internal_ranking", "dashboard", "management"),
     # Torneio
-    Destination("tournaments", "Torneios", "show_tournaments", "lista campeonatos", "torneios", "Torneio"),
-    Destination("tournament_dashboard", "Central do Torneio", "show_tournament_dashboard", "dashboard torneio", "emparceiramento", "Torneio"),
-    Destination("arbitration_panel", "Painel do Árbitro", "show_arbitration_panel", "arbitragem pendencias", "arbitros", "Torneio"),
-    Destination("tournament_settings", "Configurações do Torneio", "show_tournament_settings", "config torneio", "configuracoes", "Torneio"),
-    Destination("players", "Jogadores", "show_players", "participantes inscritos", "membros", "Torneio"),
-    Destination("teams", "Equipes", "show_teams", "times equipe", "clube", "Torneio"),
-    Destination("pairings", "Rodadas / Emparceiramento", "show_pairings", "pairings round chave", "emparceiramento", "Torneio"),
-    Destination("standings", "Classificação", "show_standings", "tabela standings ranking", "dashboard", "Torneio"),
-    Destination("certificates", "Diplomas / Certificados", "show_certificates", "certificado diploma", "relatorios", "Torneio"),
+    Destination("tournaments", "show_tournaments", "torneios", "tournament"),
+    Destination("tournament_dashboard", "show_tournament_dashboard", "emparceiramento", "tournament"),
+    Destination("arbitration_panel", "show_arbitration_panel", "arbitros", "tournament"),
+    Destination("tournament_settings", "show_tournament_settings", "configuracoes", "tournament"),
+    Destination("players", "show_players", "membros", "tournament"),
+    Destination("teams", "show_teams", "clube", "tournament"),
+    Destination("pairings", "show_pairings", "emparceiramento", "tournament"),
+    Destination("standings", "show_standings", "dashboard", "tournament"),
+    Destination("certificates", "show_certificates", "relatorios", "tournament"),
     # Ferramentas
-    Destination("export", "Exportar", "show_export", "trf16 pdf csv chess-results", "integracoes", "Ferramentas"),
-    Destination("admin_reports", "Relatórios Administrativos", "show_administrative_reports", "relatorio admin", "relatorios", "Ferramentas"),
-    Destination("financial_reports", "DRE Financeiro", "show_financial_reports", "dre financeiro relatorio", "financeiro", "Ferramentas"),
-    Destination("communication", "Comunicação", "show_communication", "mensagem whatsapp comunicado", "comunicacao", "Ferramentas"),
-    Destination("integrations", "Integrações Operacionais", "show_integrations", "qr relogio sync clock", "integracoes", "Ferramentas"),
+    Destination("export", "show_export", "integracoes", "tools"),
+    Destination("admin_reports", "show_administrative_reports", "relatorios", "tools"),
+    Destination("financial_reports", "show_financial_reports", "financeiro", "tools"),
+    Destination("communication", "show_communication", "comunicacao", "tools"),
+    Destination("integrations", "show_integrations", "integracoes", "tools"),
     # Configurações
-    Destination("app_settings", "Configurações do App", "show_app_settings", "preferencias config", "configuracoes", "Configurações"),
-    Destination("audit", "Auditoria Completa", "show_audit_logs", "log auditoria historico", "auditoria", "Configurações"),
+    Destination("app_settings", "show_app_settings", "configuracoes", "settings"),
+    Destination("audit", "show_audit_logs", "auditoria", "settings"),
 )
 
 _BY_KEY = {destination.key: destination for destination in DESTINATIONS}

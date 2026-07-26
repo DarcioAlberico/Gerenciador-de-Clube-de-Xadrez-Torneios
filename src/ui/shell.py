@@ -36,6 +36,7 @@ from .components.sidebar import (
     Sidebar,
 )
 from .components.toast import ToastAction, ToastStack
+from .i18n import t
 from .navigation import DESTINATIONS, Navigator
 from .theme import (
     SIZE_BODY,
@@ -93,7 +94,7 @@ class AppShell:
 
     def _refresh_current_view(self) -> None:
         if not self.navigator.refresh_current():
-            self._show_toast("Nada para recarregar.", kind="info", duration_ms=1500)
+            self._show_toast(t("shell.reload.empty"), kind="info", duration_ms=1500)
             return
         self._refresh_statusbar()
 
@@ -109,7 +110,7 @@ class AppShell:
             if callable(metodo):
                 acoes.append((destino.label, metodo, destino.keywords, destino.icon))
         acoes.append(
-            ("Recarregar tela (F5)", self._refresh_current_view, "refresh atualizar", "configuracoes")
+            (t("shell.action.reload"), self._refresh_current_view, "refresh atualizar", "configuracoes")
         )
         return acoes
 
@@ -119,7 +120,7 @@ class AppShell:
         self._palette_open = True
 
         palette = ctk.CTkToplevel(self)
-        palette.title("Comando")
+        palette.title(t("shell.palette.title"))
         palette.geometry("560x420")
         palette.transient(self)
         palette.resizable(False, False)
@@ -137,7 +138,7 @@ class AppShell:
         actions = self._command_palette_actions()
         state: dict[str, Any] = {"filtered": list(actions), "selected": 0, "rows": []}
 
-        entry = ctk.CTkEntry(palette, placeholder_text="Buscar ação… (digite e Enter)")
+        entry = ctk.CTkEntry(palette, placeholder_text=t("shell.palette.placeholder"))
         entry.pack(fill="x", padx=12, pady=(12, 6))
 
         list_holder = ctk.CTkScrollableFrame(palette, fg_color=THEME_PANEL_BG)
@@ -184,7 +185,7 @@ class AppShell:
                 state["rows"].append(row)
             if not state["filtered"]:
                 ctk.CTkLabel(
-                    list_holder, text="Nenhuma ação corresponde.",
+                    list_holder, text=t("shell.palette.empty"),
                     text_color=THEME_TEXT_SUB,
                 ).grid(row=0, column=0, pady=20)
 

@@ -348,7 +348,9 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 
 - ✅ **B-1** Persistência de layout de colunas por usuário (P2-9).
 - ✅ **B-2** Auditoria de contraste WCAG AA + preset alto contraste (P2-11).
-- **B-3** i18n: extrair strings para `i18n/pt_BR.json`, manter só PT-BR (P2-12).
+- ✅ **B-3** i18n: catálogo `i18n/pt_BR.json` + a cromagem migrada (P2-12).
+  **Continuação:** as 21 telas seguem com texto literal — migram junto com a B-6,
+  quando cada uma for aberta de qualquer forma.
 - ✅ **B-4** `Treeview` grande (P2-13) — medida e adiada; ver o status abaixo.
 - ✅ **B-5** Cache de figuras matplotlib quando dados não mudam (P2-14).
 - **B-6** Migrar telas-monstro restantes para 3 camadas (continuação de F1.5).
@@ -451,6 +453,33 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 > Um detalhe que o teste pegou: medir a largura pelo **cabeçalho** não funciona
 > (ele nasce junto com a tela e ainda mede 1px); pelo `content`, que sobrevive à
 > troca de tela, funciona.
+
+> **Status (2026-07-26): B-3 CONCLUÍDA — preparação, e só.** A ESPEC §6 e §8 são
+> explícitas: extrair strings mantendo **só PT-BR**, sem implementar inglês. O
+> valor imediato não é falar inglês; é ter **um lugar** onde o texto mora.
+>
+> Migrar as ~21 telas de uma vez seria trocar milhares de literais legíveis por
+> `t("chave")` num diff que colide de frente com a **B-6** — e as telas vão ser
+> abertas na B-6 de qualquer jeito. Então a fatia escolhida foi a **cromagem**:
+> o registro de navegação (29 destinos), os diálogos e a casca. É exatamente o
+> que uma versão em inglês precisaria primeiro, e é o que quase não muda.
+>
+> A decisão de desenho está no registro: `Destination` **deixou de guardar** o
+> rótulo. Guarda identidade (`key`) e comportamento (`method`); rótulo, palavras
+> de busca e grupo viraram **propriedades** que leem o catálogo na hora de
+> exibir. Por isso trocar o catálogo troca o idioma **sem reconstruir o
+> registro** — há um teste que faz exatamente isso e volta atrás.
+>
+> **Chave ausente devolve a própria chave**, de propósito: aparece feia na tela,
+> impossível de ignorar. O que impede isso de chegar ao usuário é o teste que
+> varre as chamadas de `t()` em `src/` e cobra que cada chave exista — e o
+> inverso, que o catálogo não acumule chave órfã. Esse segundo **reprovou na
+> primeira execução** e pegou uma chave que eu havia adicionado sem usar.
+>
+> Detalhe de empacotamento que passaria batido: o caminho do catálogo precisa da
+> mesma checagem de `sys.frozen` que o `assets/` usa, e o `albericus.spec`
+> precisou levar `i18n/` no build — senão o app empacotado abriria mostrando
+> `nav.club` no lugar de "Perfil do Clube".
 
 > **Status (2026-07-25): B-1 CONCLUÍDA — com uma divergência deliberada.**
 > O backlog dizia "reaproveitar `ColumnLayoutEditor`", e **não foi isso**. Aquele

@@ -10,7 +10,7 @@ a = Analysis(
     ["app.py"],
     pathex=[str(ROOT)],
     binaries=[],
-    datas=[("assets", "assets")],
+    datas=[("assets", "assets"), ("i18n", "i18n")],
     hiddenimports=["openpyxl", "xlrd", "pandas", "lxml", "reportlab"],
     hookspath=[],
     hooksconfig={},
