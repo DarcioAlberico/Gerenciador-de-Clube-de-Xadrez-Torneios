@@ -353,7 +353,8 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
   quando cada uma for aberta de qualquer forma.
 - ✅ **B-4** `Treeview` grande (P2-13) — medida e adiada; ver o status abaixo.
 - ✅ **B-5** Cache de figuras matplotlib quando dados não mudam (P2-14).
-- **B-6** Migrar telas-monstro restantes para 3 camadas (continuação de F1.5).
+- 🔄 **B-6** Migrar telas-monstro para 3 camadas (continuação de F1.5) — **em
+  execução**: Torneios migrada; a fila está no status abaixo, em ordem.
 - ✅ **B-7** Acentuar cabeçalhos/títulos de `src/services/export_*` (F3.5) — a
   decisão de compatibilidade foi tomada: acentuar **inclusive CSV/XLSX**, com
   fronteira ASCII no pacote Access, TRF e PGN. Ver o status abaixo.
@@ -478,6 +479,42 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 > (ele nasce junto com a tela e ainda mede 1px); pelo `content`, que sobrevive à
 > troca de tela, funciona.
 
+> **Status (2026-07-26): B-6 EM EXECUÇÃO — Torneios migrada; a fila está aqui.**
+> A B-6 é épico por natureza: sete telas de 1.000 a 1.900 linhas. Migrar todas
+> num passo seria trocar um diff revisável por um irrevisável, então este passo
+> migra **uma tela de verdade** e prova que o molde do piloto escala — o piloto
+> de Árbitros tinha 127 linhas; a tela de Torneios tem 315 só na lista.
+>
+> `screens/tournaments.py` virou pacote: `state.py` (regras do formulário e
+> forma da linha), `controller.py` (decide e fala com os serviços, sem Tk),
+> `view.py` (monta widgets) e `pages.py` — as **outras** telas do domínio,
+> intactas, registradas como as próximas. O import externo não mudou.
+>
+> **O que a extração expôs**, e que o teste agora guarda: a tela *desabilita*
+> clube e turma fora do escopo, mas desabilitar **não esvazia**. Quem escolhesse
+> um clube e voltasse para "avulso" criava o torneio carregando o clube junto —
+> sem nada na tela denunciando. Agora `payload()` zera o que o escopo não pede, e
+> um teste cobra que "o que a tela habilita" e "o que a validação exige" saiam da
+> **mesma** função. 26 testes, nenhum abre janela.
+>
+> **Dois achados de infraestrutura.** O lint anti-`import *` reconhecia `.` e
+> `..`, mas não `...` — mover uma tela para subpacote **escapava do lint em
+> silêncio**; a regex agora aceita qualquer profundidade. E um teste corrigia
+> `filedialog` no módulo errado (`screens.tournaments`), funcionando só porque o
+> `import *` re-exportava o nome de lá; agora aponta para quem de fato o usa.
+>
+> **Fila da B-6**, por ordem de valor sobre risco:
+> 1. `pairing_results_ui` (1.922) — a maior e a mais usada; entra depois de
+>    alguma outra pagar o aprendizado, porque é a que mais dói se quebrar;
+> 2. `tournament_players_ui` (1.613);
+> 3. `pairing_arbitration_ui` (1.527);
+> 4. `admin_training_finance` (1.226), `admin_exercises_inventory` (1.126),
+>    `club_members_ui` (1.073), `settings_certificates_ui` (1.062);
+> 5. as três telas restantes de `tournaments/pages.py` (Central, Equipes,
+>    árbitros do torneio) — já isoladas, é o passo mais barato.
+>
+> Cada uma vale um PR próprio, e o texto delas migra para o catálogo da **B-3**
+> no mesmo passo: a tela vai ser aberta de qualquer forma.
 > **Status (2026-07-26): B-3 CONCLUÍDA — preparação, e só.** A ESPEC §6 e §8 são
 > explícitas: extrair strings mantendo **só PT-BR**, sem implementar inglês. O
 > valor imediato não é falar inglês; é ter **um lugar** onde o texto mora.
