@@ -114,17 +114,23 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.assertEqual([], self._widgets_past_right_edge())
 
     def test_sidebar_sobrevive_a_janela_media(self) -> None:
-        """O ganho direto da B-8: a barra some 300px depois do que sumia antes.
+        """A barra some 400px depois do que sumia antes da B-8.
 
-        Nesta largura (1.260px reais) a sidebar ficava **escondida** — o limiar
-        do rail era 1.440, ditado pela tela Exportar e pela barra do torneio.
+        Em 1.260px reais a sidebar ja ficou **escondida** (limiar do rail era
+        1.440) e depois virou rail (1.260); agora e a barra **completa**. Em
+        1.040px, onde antes nao havia barra nenhuma, ainda ha o rail.
         """
+        for pedida, minimo in (("1050x700+0+0", "full"), ("867x700+0+0", "rail")):
+            with self.subTest(size=pedida):
+                self.app.geometry(pedida)
+                self.app.update()
+                self.app.show_players()
+                self.app.update()
+                self.assertIsNotNone(getattr(self.app, "sidebar", None))
+                self.assertNotEqual("hidden", self.app.sidebar.mode)
         self.app.geometry("1050x700+0+0")
         self.app.update()
-        self.app.show_players()
-        self.app.update()
-        self.assertIsNotNone(getattr(self.app, "sidebar", None))
-        self.assertNotEqual("hidden", self.app.sidebar.mode)
+        self.assertEqual("full", self.app.sidebar.mode, "1.260px reais ja comportam a barra inteira")
 
     def test_tela_aberta_por_chamada_direta_fica_registrada(self) -> None:
         """A B-6 quase levou a sidebar junto: tela migrada delega o
@@ -140,8 +146,50 @@ class UiLayoutSmokeTest(unittest.TestCase):
                 self.app.update()
                 self.assertEqual(pagina, self.app.navigator.current)
 
+    def test_faixa_de_filtros_quebra_linha_em_janela_estreita(self) -> None:
+        """Continuacao da B-8: os sete filtros do Ranking interno numa linha
+        rigida exigiam 1.416px de janela — era esta tela que definia o limiar da
+        sidebar. Em janela larga eles continuam numa linha; em janela estreita a
+        faixa quebra, em vez de empurrar filtro para fora.
+        """
+        self.app.geometry("1600x900+0+0")
+        self.app.update()
+        self.app.show_internal_ranking()
+        self.app.update()
+        self.assertEqual({0}, self._linhas_da_faixa_de_filtros())
+
+        self.app.geometry("900x700+0+0")
+        self.app.update()
+        self.app.show_internal_ranking()
+        self.app.update()
+        self.assertGreater(len(self._linhas_da_faixa_de_filtros()), 1)
+        self.assertEqual([], self._widgets_past_right_edge())
+
+    def test_faixa_de_filtros_nao_acumula_ouvinte_no_content(self) -> None:
+        """A faixa que quebra linha mede o `content`, e o `content` sobrevive a
+        troca de tela desde a F1.2 — entao o ouvinte precisa morrer junto com a
+        faixa. Sem isso, cada visita a uma tela densa deixaria mais um ouvinte
+        falando com widget destruido, e o custo cresceria com o uso do dia.
+        """
+        self.app.show_calendar()
+        self.app.update()
+        depois_da_primeira = self._content_configure_handlers()
+        self.assertGreater(depois_da_primeira, 0, "a faixa precisa estar escutando")
+
+        for _ in range(3):
+            self.app.show_internal_ranking()
+            self.app.update()
+            self.app.show_calendar()
+            self.app.update()
+
+        self.assertEqual(depois_da_primeira, self._content_configure_handlers())
+
     def test_main_pages_keep_controls_inside_window_at_supported_sizes(self) -> None:
-        for width, height in [(1360, 720), (1180, 640), (1050, 700)]:
+        # As duas ultimas larguras sao os limiares da sidebar (continuacao da
+        # B-8): 1000 pedidos = 1.200px reais, onde a barra COMPLETA aparece, e
+        # 867 = 1.040px, onde entra o rail. Se uma tela deixar de caber ali, o
+        # limiar envelheceu — e este teste avisa antes do usuario.
+        for width, height in [(1360, 720), (1180, 640), (1050, 700), (1000, 700), (867, 700)]:
             with self.subTest(size=f"{width}x{height}"):
                 self.app.geometry(f"{width}x{height}+0+0")
                 self.app.update()
@@ -1839,6 +1887,39 @@ class UiLayoutSmokeTest(unittest.TestCase):
             if right > root_right - 2:
                 offenders.append(f"{widget.winfo_class()}:{right - root_right}px")
         return offenders
+
+    def _linhas_da_faixa_de_filtros(self, minimo: int = 5) -> set[int]:
+        """Linhas ocupadas pela maior faixa de campos da tela atual.
+
+        A faixa e um frame cujos filhos sao os campos (cada um no seu frame);
+        procurar pelo frame com mais filhos-frame acha a faixa sem a tela
+        precisar expor nada.
+        """
+        candidatos = [
+            widget
+            for widget in self._walk(self.app.content)
+            if isinstance(widget, ctk.CTkFrame)
+            and len([f for f in widget.winfo_children() if isinstance(f, ctk.CTkFrame)]) >= minimo
+        ]
+        self.assertTrue(candidatos, "nenhuma faixa de campos encontrada")
+        faixa = max(candidatos, key=lambda w: len(w.winfo_children()))
+        return {
+            int(filho.grid_info()["row"])
+            for filho in faixa.winfo_children()
+            if isinstance(filho, ctk.CTkFrame) and filho.grid_info()
+        }
+
+    def _content_configure_handlers(self) -> int:
+        """Quantos callbacks de `<Configure>` estao registrados no `content`.
+
+        Cada `bind(..., add="+")` acrescenta uma linha `if {"[...]" == "break"}`
+        ao script do Tk; contar linhas conta ouvintes.
+        """
+        # O `content` e um CTkFrame: quem recebe as ligacoes e o canvas interno
+        # (ver o comentario em components/wrap_row.py sobre `CTkFrame.bind`).
+        alvo = getattr(self.app.content, "_canvas", self.app.content)
+        script = str(alvo.bind("<Configure>") or "")
+        return len([linha for linha in script.split("\n") if linha.strip().startswith("if {")])
 
     def _cancel_pending_callbacks(self) -> None:
         cancel_pending_callbacks(self.app)

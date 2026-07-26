@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from ..support import *
-from ..components import danger_button, debounce
+from ..components import WrapRow, danger_button, debounce
 
 
 # Sub-mixin de Admin: treinos e financeiro.
@@ -93,15 +93,22 @@ class TrainingFinanceMixin:
         right_panel.grid_rowconfigure(1, weight=2)
         right_panel.grid_rowconfigure(3, weight=2)
 
-        controls = ctk.CTkFrame(right_panel, fg_color="transparent")
+        # Faixa que quebra em quantas linhas couberem (continuacao da B-8).
+        controls = WrapRow(right_panel)
         controls.grid(row=0, column=0, sticky="ew", pady=(0, 8))
-        controls.grid_columnconfigure(0, weight=1)
-        search_entry = ctk.CTkEntry(controls, placeholder_text="Buscar por titulo, turma, instrutor ou local")
-        search_entry.grid(row=0, column=0, padx=(0, 8), sticky="ew")
-        start_filter = ctk.CTkEntry(controls, placeholder_text="Inicio", width=120)
-        start_filter.grid(row=0, column=1, padx=4)
-        end_filter = ctk.CTkEntry(controls, placeholder_text="Fim", width=120)
-        end_filter.grid(row=0, column=2, padx=4)
+        search_entry = controls.add(
+            ctk.CTkEntry(
+                controls.frame, placeholder_text="Buscar por titulo, turma, instrutor ou local"
+            ),
+            width=240,
+            grow=True,
+        )
+        start_filter = controls.add(
+            ctk.CTkEntry(controls.frame, placeholder_text="Inicio", width=120), width=120
+        )
+        end_filter = controls.add(
+            ctk.CTkEntry(controls.frame, placeholder_text="Fim", width=120), width=120
+        )
 
         sessions_holder = self._make_panel(right_panel)
         sessions_holder.grid(row=1, column=0, sticky="nsew", pady=(0, 12))
@@ -155,21 +162,25 @@ class TrainingFinanceMixin:
 
         attendance_controls = self._make_panel(right_panel)
         attendance_controls.grid(row=2, column=0, sticky="ew", pady=(0, 12))
-        attendance_controls.grid_columnconfigure(2, weight=1)
-        ctk.CTkLabel(attendance_controls, text="Presenca").grid(row=0, column=0, padx=12, pady=(10, 2), sticky="w")
-        attendance_status_option = ctk.CTkOptionMenu(
-            attendance_controls,
-            values=list(ATTENDANCE_STATUS_VALUES.keys()),
+        attendance_controls.grid_columnconfigure(0, weight=1)
+        attendance_fields = WrapRow(attendance_controls)
+        attendance_fields.grid(row=0, column=0, padx=12, pady=(10, 4), sticky="ew")
+        attendance_status_option = attendance_fields.add_field(
+            "Presença",
+            lambda parent: ctk.CTkOptionMenu(
+                parent, values=list(ATTENDANCE_STATUS_VALUES.keys()), width=150
+            ),
             width=150,
         )
-        attendance_status_option.grid(row=1, column=0, padx=12, pady=(0, 10), sticky="w")
-        ctk.CTkLabel(attendance_controls, text="Observações").grid(row=0, column=1, padx=8, pady=(10, 2), sticky="w")
-        attendance_notes_entry = ctk.CTkEntry(attendance_controls, width=240)
-        attendance_notes_entry.grid(row=1, column=1, padx=8, pady=(0, 10), sticky="ew")
-        attendance_actions = ctk.CTkFrame(attendance_controls, fg_color="transparent")
-        attendance_actions.grid(row=2, column=0, columnspan=2, padx=12, pady=(0, 10), sticky="ew")
-        attendance_actions.grid_columnconfigure(0, weight=1)
-        attendance_actions.grid_columnconfigure(1, weight=1)
+        attendance_notes_entry = attendance_fields.add_field(
+            "Observações",
+            lambda parent: ctk.CTkEntry(parent, width=240),
+            width=240,
+            grow=True,
+        )
+        attendance_fields.bind_to(self.content)
+        attendance_actions = WrapRow(attendance_controls)
+        attendance_actions.grid(row=1, column=0, padx=12, pady=(0, 10), sticky="ew")
 
         attendance_holder = self._make_panel(right_panel)
         attendance_holder.grid(row=3, column=0, sticky="nsew")
@@ -466,19 +477,30 @@ class TrainingFinanceMixin:
         ]
         self._grid_form_buttons(form, buttons, option_row + 12)
 
-        ctk.CTkButton(controls, text="Filtrar", command=load_sessions).grid(row=0, column=3, padx=(8, 0))
-        ctk.CTkButton(attendance_actions, text="Marcar selecionado", command=mark_selected_attendance).grid(
-            row=0,
-            column=0,
-            padx=(0, 4),
-            sticky="ew",
+        controls.add(
+            ctk.CTkButton(controls.frame, text="Filtrar", command=load_sessions, width=100),
+            width=100,
         )
-        ctk.CTkButton(attendance_actions, text="Todos presentes", command=mark_all_present).grid(
-            row=0,
-            column=1,
-            padx=(4, 0),
-            sticky="ew",
+        controls.bind_to(self.content)
+        attendance_actions.add(
+            ctk.CTkButton(
+                attendance_actions.frame,
+                text="Marcar selecionado",
+                command=mark_selected_attendance,
+                width=180,
+            ),
+            width=180,
         )
+        attendance_actions.add(
+            ctk.CTkButton(
+                attendance_actions.frame,
+                text="Todos presentes",
+                command=mark_all_present,
+                width=160,
+            ),
+            width=160,
+        )
+        attendance_actions.bind_to(self.content)
 
         sessions_tree.bind("<<TreeviewSelect>>", on_session_select)
         attendance_tree.bind("<<TreeviewSelect>>", on_attendance_select)
@@ -607,21 +629,28 @@ class TrainingFinanceMixin:
             ctk.CTkLabel(card, text=label, text_color=THEME_TEXT_SUB).pack(anchor="w", padx=12, pady=(0, 10))
             summary_labels[key] = value_label
 
-        controls = ctk.CTkFrame(right_panel, fg_color="transparent")
+        # Faixa que quebra em quantas linhas couberem (continuacao da B-8).
+        controls = WrapRow(right_panel)
         controls.grid(row=1, column=0, sticky="ew", pady=(0, 8))
-        controls.grid_columnconfigure(0, weight=1)
-        search_entry = ctk.CTkEntry(controls, placeholder_text="Buscar por membro, plano ou descricao")
-        search_entry.grid(row=0, column=0, padx=(0, 8), sticky="ew")
-        start_filter = ctk.CTkEntry(controls, placeholder_text="Inicio", width=120)
-        start_filter.grid(row=0, column=1, padx=4)
-        end_filter = ctk.CTkEntry(controls, placeholder_text="Fim", width=120)
-        end_filter.grid(row=0, column=2, padx=4)
-        status_filter = ctk.CTkOptionMenu(
-            controls,
-            values=["Todos"] + list(PAYMENT_STATUS_VALUES.keys()),
+        search_entry = controls.add(
+            ctk.CTkEntry(controls.frame, placeholder_text="Buscar por membro, plano ou descricao"),
+            width=240,
+            grow=True,
+        )
+        start_filter = controls.add(
+            ctk.CTkEntry(controls.frame, placeholder_text="Inicio", width=120), width=120
+        )
+        end_filter = controls.add(
+            ctk.CTkEntry(controls.frame, placeholder_text="Fim", width=120), width=120
+        )
+        status_filter = controls.add(
+            ctk.CTkOptionMenu(
+                controls.frame,
+                values=["Todos"] + list(PAYMENT_STATUS_VALUES.keys()),
+                width=140,
+            ),
             width=140,
         )
-        status_filter.grid(row=0, column=3, padx=4)
 
         payments_holder = self._make_panel(right_panel)
         payments_holder.grid(row=2, column=0, sticky="nsew", pady=(0, 12))
@@ -1001,7 +1030,11 @@ class TrainingFinanceMixin:
         ]
         self._grid_form_buttons(form, payment_buttons, payment_button_row)
 
-        ctk.CTkButton(controls, text="Filtrar", command=load_payments).grid(row=0, column=4, padx=(8, 0))
+        controls.add(
+            ctk.CTkButton(controls.frame, text="Filtrar", command=load_payments, width=100),
+            width=100,
+        )
+        controls.bind_to(self.content)
         plans_tree.bind("<<TreeviewSelect>>", on_plan_select)
         payments_tree.bind("<<TreeviewSelect>>", on_payment_select)
         search_entry.bind("<KeyRelease>", debounce(search_entry, load_payments))

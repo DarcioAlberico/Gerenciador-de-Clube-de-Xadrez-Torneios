@@ -371,25 +371,30 @@ class AppShell:
         self.bind("<Configure>", self._sync_sidebar_mode, add="+")
         self._sync_sidebar_mode()
 
-    # Limiares REMEDIDOS na B-8, com as 23 telas do smoke de layout — e o achado
-    # foi que o gargalo mudou de dono. Eram 1500/1440 quando a Exportar pedia
-    # ~1.375px e a barra do torneio ocupava uma linha unica de ~950px; as duas
-    # foram corrigidas, e agora quem manda no limiar sao as telas administrativas
-    # densas (Ranking interno, Financeiro, Calendario, Exercicios, Relatorios).
+    # Limiares REMEDIDOS na continuacao da B-8, com as 23 telas do smoke e com a
+    # barra FORCADA no modo medido — a primeira medicao nao forcava, e por isso
+    # media com a barra escondida e mentia. Eram 1500/1440 na B-8 e 1416/1260
+    # depois dela; as cinco telas administrativas densas que seguravam o 1.416
+    # (Ranking interno, Financeiro, Calendario, Exercicios, Relatorios) agora
+    # quebram a faixa de filtros em linhas e cabem em 768px.
     #
-    # Medido: com a barra COMPLETA todas cabem a partir de 1.416px reais; com o
-    # RAIL, a partir de 1.260px — antes o rail so aparecia em 1.440px, ou seja,
-    # a navegacao agora sobrevive a 180px a menos de janela. Abaixo do menor
-    # limiar a barra some e o menu nativo volta a ser a navegacao (P1-7): melhor
-    # perder a barra do que empurrar botao para fora da janela.
+    # Medido: com a barra COMPLETA todas cabem a partir de 1.200px reais. Quem
+    # manda agora e o Painel de Arbitragem ("Atualizar agora"), e ele e a
+    # proxima tela da fila da B-6 — sera atacado la, com a tela aberta de
+    # qualquer forma.
+    #
+    # O limiar do RAIL sai da diferenca medida entre as duas barras (235px x
+    # 62px = 173px de conteudo a mais), com folga: o que cabe em 1.200px com a
+    # barra completa cabe em 1.027px com o rail. Nao e conta no papel — o smoke
+    # de layout cobra as duas larguras, tela por tela.
+    #
+    # Abaixo do menor limiar a barra some e o menu nativo volta a ser a
+    # navegacao (P1-7): melhor perder a barra do que empurrar botao para fora.
     #
     # Pixels REAIS: o CTk multiplica a geometria pela escala de UI (120% por
-    # padrao), entao uma janela pedida em 1180 mede 1416 na tela.
-    #
-    # O proximo ganho esta nessas cinco telas administrativas — registrado no
-    # ROADMAP como continuacao da B-8, nao como divida esquecida.
-    _SIDEBAR_FULL_FROM = 1416
-    _SIDEBAR_RAIL_FROM = 1260
+    # padrao), entao uma janela pedida em 1000 mede 1200 na tela.
+    _SIDEBAR_FULL_FROM = 1200
+    _SIDEBAR_RAIL_FROM = 1040
 
     def _sync_sidebar_mode(self, event: Any = None) -> None:
         sidebar = getattr(self, "sidebar", None)
