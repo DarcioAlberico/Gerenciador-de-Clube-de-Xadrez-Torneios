@@ -46,7 +46,7 @@ class WebExportMixin:
     def export_site(self, tournament_id: int, output_dir: str | Path) -> Path:
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
-            raise AppError("Selecione um torneio valido.")
+            raise AppError("Selecione um torneio válido.")
 
         path = Path(output_dir)
         path.mkdir(parents=True, exist_ok=True)
@@ -77,7 +77,7 @@ class WebExportMixin:
         mode = self._portal_mode(mode)
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
-            raise AppError("Selecione um torneio valido.")
+            raise AppError("Selecione um torneio válido.")
         settings = self.db.get_tournament_settings(tournament_id) or {}
         app_settings = self.db.get_app_settings()
         is_team_tournament = tournament.get("competition_type") == "team"
@@ -289,10 +289,10 @@ class WebExportMixin:
       <div><strong>Rodada atual</strong><span>{self._escape(current.get('number', 'Sem rodada'))}</span></div>
       <div><strong>Status</strong><span>{self._escape(tournament.get('status', ''))}</span></div>
     </section>
-    <section><h2>Avisos do arbitro</h2><p>{self._escape(payload.get('notice') or 'Nenhum aviso publicado.')}</p></section>
+    <section><h2>Avisos do árbitro</h2><p>{self._escape(payload.get('notice') or 'Nenhum aviso publicado.')}</p></section>
     <section><h2>Rodada atual</h2><table><thead><tr><th>Mesa</th><th>Brancas/Equipe A</th><th>Resultado</th><th>Pretas/Equipe B</th></tr></thead><tbody>{current_rows}</tbody></table></section>
-    <section><h2>Classificacao</h2><table><thead><tr><th>Pos</th><th>Nome</th><th>Categoria/Clube</th><th>Pts</th><th>Buchholz</th></tr></thead><tbody>{standings_rows}</tbody></table></section>
-    <section><h2>Historico de rodadas</h2><table><thead><tr><th>Rodada</th><th>Status</th><th>Mesas</th></tr></thead><tbody>{rounds_rows}</tbody></table></section>
+    <section><h2>Classificação</h2><table><thead><tr><th>Pos</th><th>Nome</th><th>Categoria/Clube</th><th>Pts</th><th>Buchholz</th></tr></thead><tbody>{standings_rows}</tbody></table></section>
+    <section><h2>Histórico de rodadas</h2><table><thead><tr><th>Rodada</th><th>Status</th><th>Mesas</th></tr></thead><tbody>{rounds_rows}</tbody></table></section>
     <section><h2>Fichas publicas</h2><table><thead><tr><th>Nome</th><th>Clube</th><th>Categoria</th><th>Rating</th></tr></thead><tbody>{player_rows}</tbody></table></section>
   </main>
   <footer>Atualizado em {self._escape(payload['generated_at'])}</footer>
@@ -306,15 +306,15 @@ class WebExportMixin:
     ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
         class_data = self.db.get_class(class_id) if class_id else None
         if class_id and not class_data:
-            raise AppError("Turma do portal nao encontrada.")
+            raise AppError("Turma do portal não encontrada.")
         if class_data and club_id and int(class_data["club_id"]) != int(club_id):
-            raise AppError("A turma selecionada nao pertence ao clube/escola do portal.")
+            raise AppError("A turma selecionada não pertence ao clube/escola do portal.")
 
         if class_data and not club_id:
             club_id = int(class_data["club_id"])
         club = self.db.get_club(club_id) if club_id else None
         if club_id and not club:
-            raise AppError("Clube/escola do portal nao encontrado.")
+            raise AppError("Clube/escola do portal não encontrado.")
         if not club:
             active_clubs = self.db.list_clubs(active_only=True)
             club = active_clubs[0] if active_clubs else self.db.get_club(1)
@@ -440,7 +440,7 @@ class WebExportMixin:
       <h3>Eventos</h3>
       <table><thead><tr><th>Data</th><th>Hora</th><th>Tipo</th><th>Evento</th><th>Local</th><th>Status</th></tr></thead><tbody>{event_rows}</tbody></table>
       <h3>Aulas e treinos</h3>
-      <table><thead><tr><th>Data</th><th>Hora</th><th>Aula/Treino</th><th>Turma</th><th>Nivel</th><th>Objetivo</th></tr></thead><tbody>{session_rows}</tbody></table>
+      <table><thead><tr><th>Data</th><th>Hora</th><th>Aula/Treino</th><th>Turma</th><th>Nível</th><th>Objetivo</th></tr></thead><tbody>{session_rows}</tbody></table>
     </section>
     <section>
       <h2>Turmas</h2>
@@ -623,19 +623,19 @@ footer {
   </header>
   <main>
     <section class="summary">
-      <div><strong>Periodo</strong><span>{self._escape(tournament['start_date'])} - {self._escape(tournament['end_date'])}</span></div>
+      <div><strong>Período</strong><span>{self._escape(tournament['start_date'])} - {self._escape(tournament['end_date'])}</span></div>
       <div><strong>Rodadas</strong><span>{tournament['rounds_count']}</span></div>
       <div><strong>Ritmo</strong><span>{self._escape(tournament['time_control'])}</span></div>
-      <div><strong>Competicao</strong><span>{self._escape(COMPETITION_TYPES.get(tournament.get('competition_type', 'individual'), 'Individual'))}</span></div>
+      <div><strong>Competição</strong><span>{self._escape(COMPETITION_TYPES.get(tournament.get('competition_type', 'individual'), 'Individual'))}</span></div>
       <div><strong>Status</strong><span>{self._escape(tournament['status'])}</span></div>
     </section>
     <section>
-      <h2>Informacoes</h2>
+      <h2>Informações</h2>
       <dl>
         <dt>FIDE Event-ID</dt><dd>{self._escape(settings.get('fide_event_id') or '')}</dd>
         <dt>Organizador</dt><dd>{self._escape(settings.get('organizer') or '')}</dd>
         <dt>Diretor</dt><dd>{self._escape(settings.get('director') or '')}</dd>
-        <dt>Arbitro principal</dt><dd>{self._escape(settings.get('chief_arbiter') or '')}</dd>
+        <dt>Árbitro principal</dt><dd>{self._escape(settings.get('chief_arbiter') or '')}</dd>
         <dt>Categorias</dt><dd>{self._escape(settings.get('categories') or '')}</dd>
       </dl>
     </section>
@@ -647,7 +647,7 @@ footer {
     {team_sections}
     <section>
       <h2>Jogadores</h2>
-      <table><thead><tr><th>Nome</th><th>Titulo</th><th>FIDE</th><th>CBX</th><th>LBX</th><th>Rating</th><th>Clube</th><th>Categoria</th><th>Idade</th><th>Rating cat.</th><th>Tags</th><th>Status</th></tr></thead><tbody>{players_rows}</tbody></table>
+      <table><thead><tr><th>Nome</th><th>Título</th><th>FIDE</th><th>CBX</th><th>LBX</th><th>Rating</th><th>Clube</th><th>Categoria</th><th>Idade</th><th>Rating cat.</th><th>Tags</th><th>Status</th></tr></thead><tbody>{players_rows}</tbody></table>
     </section>
     {''.join(round_sections)}
   </main>
@@ -747,7 +747,7 @@ footer {
         is_team_tournament: bool,
     ) -> str:
         if settings.get("hide_standings"):
-            return "<section><h2>Classificacao</h2><p>Classificacao ocultada pela organizacao.</p></section>"
+            return "<section><h2>Classificação</h2><p>Classificação ocultada pela organização.</p></section>"
 
         if is_team_tournament:
             standings_rows = "".join(
@@ -766,7 +766,7 @@ footer {
             )
             return (
                 "<section>"
-                "<h2>Classificacao por equipes</h2>"
+                "<h2>Classificação por equipes</h2>"
                 "<table><thead><tr><th>Pos</th><th>Equipe</th><th>Clube/Cidade</th><th>MP</th>"
                 "<th>GP</th><th>V</th><th>E</th><th>D</th><th>Buchholz</th></tr></thead>"
                 f"<tbody>{standings_rows}</tbody></table>"
@@ -811,10 +811,10 @@ footer {
             )
         return (
             "<section>"
-            "<h2>Classificacao</h2>"
+            "<h2>Classificação</h2>"
             "<table><thead><tr><th>Pos</th><th>Jogador</th><th>Categoria</th><th>Pts</th>"
             "<th>Buchholz</th><th>Buchholz M</th><th>SB</th>"
-            "<th>Vitorias</th><th>Perf.</th></tr></thead>"
+            "<th>Vitórias</th><th>Perf.</th></tr></thead>"
             f"<tbody>{standings_rows}</tbody></table>"
             "<h3>Componentes de desempate</h3>"
             "<table><thead><tr><th>Pos</th><th>Jogador</th><th>Resumo</th></tr></thead>"
@@ -851,13 +851,13 @@ footer {
         return (
             "<section>"
             "<h2>Equipes</h2>"
-            "<table><thead><tr><th>Equipe</th><th>Clube/Cidade</th><th>Capitao</th>"
+            "<table><thead><tr><th>Equipe</th><th>Clube/Cidade</th><th>Capitão</th>"
             "<th>Titulares</th><th>Jogadores</th><th>Status</th></tr></thead>"
             f"<tbody>{''.join(team_rows)}</tbody></table>"
             "</section>"
             "<section>"
-            "<h2>Escalacoes</h2>"
-            "<table><thead><tr><th>Equipe</th><th>Tabuleiro</th><th>Funcao</th><th>Jogador</th>"
+            "<h2>Escalações</h2>"
+            "<table><thead><tr><th>Equipe</th><th>Tabuleiro</th><th>Função</th><th>Jogador</th>"
             "<th>Rating</th><th>Status</th></tr></thead>"
             f"<tbody>{''.join(roster_rows)}</tbody></table>"
             "</section>"

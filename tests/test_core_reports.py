@@ -130,6 +130,9 @@ class AccessExportTest(unittest.TestCase):
         )
         result = self.export_service.export_access(tournament_id, self.temp_dir.name)
         self.assertIn("Jogadores", result["tables"])
+        # Fronteira ASCII deliberada (B-7): as exportacoes para gente ganharam
+        # acento, mas o pacote Access vira nome de coluna de CSV lido por driver
+        # ODBC com schema.ini. Aqui acento e risco de importacao, nao polimento.
         self.assertIn("Classificacao", result["tables"])
         self.assertTrue(result["csv_paths"])
         self.assertTrue(Path(result["schema_ini"]).exists())
@@ -228,7 +231,7 @@ class ReportsTest(CoreServiceTestCase):
         )
         content = output_path.read_text(encoding="utf-8-sig")
 
-        self.assertIn("Torneios por periodo", content)
+        self.assertIn("Torneios por período", content)
         self.assertIn("Torneio maio", content)
         self.assertNotIn("Torneio junho", content)
 
@@ -259,7 +262,7 @@ class ReportsTest(CoreServiceTestCase):
         self.assertTrue(index_path.exists())
         self.assertTrue((output_dir / "styles.css").exists())
         self.assertIn("Torneio teste", html)
-        self.assertIn("Classificacao", html)
+        self.assertIn("Classificação", html)
         self.assertIn("Rodada 1", html)
 
     def test_game_statistics_counts_results(self) -> None:
@@ -274,9 +277,9 @@ class ReportsTest(CoreServiceTestCase):
         self.assertEqual(summary["WO / forfait"], 1)
         self.assertEqual(summary["Byes"], 0)
         self.assertEqual(summary["Total de pareamentos fechados"], 4)
-        self.assertEqual(distribution["Vitorias de brancas"], 1)
+        self.assertEqual(distribution["Vitórias de brancas"], 1)
         self.assertEqual(distribution["Empates"], 1)
-        self.assertEqual(distribution["Vitorias de pretas"], 1)
+        self.assertEqual(distribution["Vitórias de pretas"], 1)
 
     def test_player_cards_summary_and_round_by_round(self) -> None:
         self._create_players(8)

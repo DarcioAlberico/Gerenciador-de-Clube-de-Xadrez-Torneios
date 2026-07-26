@@ -112,11 +112,11 @@ class ClubReportsMixin:
     def export_payment_receipt(self, payment_id: int, file_path: str | Path) -> Path:
         payment = self.db.get_payment(payment_id)
         if not payment:
-            raise AppError("Lancamento financeiro nao encontrado.")
+            raise AppError("Lancamento financeiro não encontrado.")
         finance_service = __import__('src.services.finance_service', fromlist=['FinanceService']).FinanceService(self.db)
         payment = finance_service._with_effective_status(payment)
         if payment["effective_status"] not in {"paid", "exempt"}:
-            raise AppError("Recibo disponivel apenas para lancamentos pagos ou isentos.")
+            raise AppError("Recibo disponível apenas para lancamentos pagos ou isentos.")
 
         path = Path(file_path)
         if path.suffix.lower() != ".pdf":
@@ -125,8 +125,8 @@ class ClubReportsMixin:
                 ["Recibo", f"REC-{int(payment['id']):06d}"],
                 ["Membro", payment.get("member_name") or ""],
                 ["Plano", payment.get("plan_name") or ""],
-                ["Descricao", payment.get("description") or ""],
-                ["Referencia", payment.get("reference_period") or ""],
+                ["Descrição", payment.get("description") or ""],
+                ["Referência", payment.get("reference_period") or ""],
                 ["Valor", self._format_report_number(payment.get("amount") or 0.0)],
                 ["Pagamento", payment.get("payment_date") or ""],
             ]

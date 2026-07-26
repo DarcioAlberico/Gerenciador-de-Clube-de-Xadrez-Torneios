@@ -545,8 +545,8 @@ class TeamTournamentsTest(CoreServiceTestCase):
         export_path = Path(self.temp_dir.name) / "escalacoes.csv"
         self.export_service.export_team_lineups(tournament_id, export_path)
         content = export_path.read_text(encoding="utf-8-sig")
-        self.assertIn("Escalacoes por equipes", content)
-        self.assertIn("Substituicoes por equipes", content)
+        self.assertIn("Escalações por equipes", content)
+        self.assertIn("Substituições por equipes", content)
         self.assertIn("Reserva Equipe 1", content)
 
     def test_phase6_team_substitution_after_result_requires_formal_correction(self) -> None:
@@ -1041,13 +1041,13 @@ class TeamTournamentsTest(CoreServiceTestCase):
         self.assertIn("Equipe 1", standings_csv)
         self.assertIn("Confronto", pairings_csv)
         self.assertIn("2 x 0", pairings_csv)
-        self.assertIn("Escalacoes", teams_csv)
+        self.assertIn("Escalações", teams_csv)
         self.assertIn("Titular", teams_csv)
-        self.assertIn("Classificacao por equipes", complete_csv)
+        self.assertIn("Classificação por equipes", complete_csv)
         self.assertIn("Rodada 1", complete_csv)
-        self.assertIn("Classificacao por equipes", html)
+        self.assertIn("Classificação por equipes", html)
         self.assertIn("Equipes", html)
-        self.assertIn("Escalacoes", html)
+        self.assertIn("Escalações", html)
         self.assertIn("2 x 0", html)
         self.assertEqual(scoresheets_path.read_bytes()[:4], b"%PDF")
         from pypdf import PdfReader

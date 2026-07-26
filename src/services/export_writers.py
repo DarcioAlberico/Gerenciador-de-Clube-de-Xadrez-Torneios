@@ -65,17 +65,17 @@ class ReportWritersMixin:
         extension = path.suffix.lower()
         if extension == ".csv":
             self._write_csv(path, headers, rows)
-            logger.info("Relatorio exportado em CSV: %s", path)
+            logger.info("Relatório exportado em CSV: %s", path)
             return
         if extension == ".xlsx":
             self._write_xlsx(path, title, headers, rows, widths)
-            logger.info("Relatorio exportado em XLSX: %s", path)
+            logger.info("Relatório exportado em XLSX: %s", path)
             return
         if extension == ".pdf":
             self._write_pdf(path, title, headers, rows)
-            logger.info("Relatorio exportado em PDF: %s", path)
+            logger.info("Relatório exportado em PDF: %s", path)
             return
-        raise AppError("Formato nao suportado. Use .csv, .xlsx ou .pdf.")
+        raise AppError("Formato não suportado. Use .csv, .xlsx ou .pdf.")
 
     def _write_multi_report(
         self,
@@ -86,17 +86,17 @@ class ReportWritersMixin:
         extension = path.suffix.lower()
         if extension == ".csv":
             self._write_multi_csv(path, sections)
-            logger.info("Relatorio composto exportado em CSV: %s", path)
+            logger.info("Relatório composto exportado em CSV: %s", path)
             return
         if extension == ".xlsx":
             self._write_multi_xlsx(path, sections)
-            logger.info("Relatorio composto exportado em XLSX: %s", path)
+            logger.info("Relatório composto exportado em XLSX: %s", path)
             return
         if extension == ".pdf":
             self._write_multi_pdf(path, sections)
-            logger.info("Relatorio composto exportado em PDF: %s", path)
+            logger.info("Relatório composto exportado em PDF: %s", path)
             return
-        raise AppError("Formato nao suportado. Use .csv, .xlsx ou .pdf.")
+        raise AppError("Formato não suportado. Use .csv, .xlsx ou .pdf.")
 
     @staticmethod
     def _write_csv(path: Path, headers: list[str], rows: list[list[Any]]) -> None:
@@ -186,7 +186,7 @@ class ReportWritersMixin:
     def _unique_sheet_name(title: str, used_names: set[str]) -> str:
         invalid = set("[]:*?/\\")
         base = "".join("_" if character in invalid else character for character in title).strip()
-        base = (base or "Relatorio")[:31]
+        base = (base or "Relatório")[:31]
         name = base
         counter = 2
         while name in used_names:

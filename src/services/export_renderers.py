@@ -48,7 +48,7 @@ class ReportRenderersMixin:
     def _pairings_section(self, round_id: int) -> tuple[str, list[str], list[list[Any]]]:
         round_data = self.db.get_round(round_id)
         if not round_data:
-            raise AppError("Rodada nao encontrada.")
+            raise AppError("Rodada não encontrada.")
         tournament = self.db.get_tournament(int(round_data["tournament_id"]))
         if tournament and tournament.get("competition_type") == "team":
             return self._team_pairings_section(round_data)
@@ -155,7 +155,7 @@ class ReportRenderersMixin:
         path.parent.mkdir(parents=True, exist_ok=True)
         page_width, page_height = A4
         document = canvas.Canvas(str(path), pagesize=A4)
-        document.setTitle(f"Sumulas - {tournament.get('name', '')} - Rodada {round_data.get('number', '')}")
+        document.setTitle(f"Súmulas - {tournament.get('name', '')} - Rodada {round_data.get('number', '')}")
 
         def fitted_text(text: Any, max_width: float, font_name: str = "Helvetica", font_size: int = 9) -> str:
             value = str(text or "")
@@ -269,7 +269,7 @@ class ReportRenderersMixin:
             document.drawRightString(
                 page_width - margin,
                 page_height - 21 * mm,
-                f"Pagina {page_index + 1}/{total_pages}",
+                f"Página {page_index + 1}/{total_pages}",
             )
             document.drawString(margin, page_height - 27 * mm, f"Jogadores inscritos: {len(rows)}")
 
@@ -372,7 +372,7 @@ class ReportRenderersMixin:
             document.drawRightString(
                 page_width - margin,
                 page_height - 21 * mm,
-                f"Pagina {page_index + 1}/{total_pages}",
+                f"Página {page_index + 1}/{total_pages}",
             )
             document.drawString(margin, page_height - 27 * mm, f"Mesas: {len(pairings)}")
 
@@ -460,7 +460,7 @@ class ReportRenderersMixin:
             from reportlab.lib.utils import ImageReader
             from reportlab.pdfgen import canvas
         except ImportError as exc:
-            raise AppError("Instale reportlab e qrcode para exportar cartoes de mesa.") from exc
+            raise AppError("Instale reportlab e qrcode para exportar cartões de mesa.") from exc
 
         path.parent.mkdir(parents=True, exist_ok=True)
         pairings_by_board = {
@@ -468,7 +468,7 @@ class ReportRenderersMixin:
             for pairing in self.db.get_pairings_for_round(int(round_data["id"]))
         } if round_data else {}
         document = canvas.Canvas(str(path), pagesize=A4)
-        document.setTitle("Cartoes de mesa")
+        document.setTitle("Cartões de mesa")
         page_width, page_height = A4
         margin = 10 * mm
         gap = 6 * mm
@@ -624,7 +624,7 @@ class ReportRenderersMixin:
         )
         headers = [STANDINGS_COLUMNS[key] for key in columns]
         rows = [[item.get(key, "") for key in columns] for item in standings]
-        return ("Classificacao", headers, rows)
+        return ("Classificação", headers, rows)
 
     def _crosstable_section(self, tournament_id: int) -> tuple[str, list[str], list[list[Any]]]:
         payload = self.pairing_service.crosstable(tournament_id)
@@ -684,7 +684,7 @@ class ReportRenderersMixin:
 </head>
 <body>
   <h1>{html.escape(title)}</h1>
-  <p>Celulas: posicao do adversario, lado (B = brancas; P = pretas), resultado e pontuacao.</p>
+  <p>Celulas: posição do adversario, lado (B = brancas; P = pretas), resultado e pontuação.</p>
   <table>
     <thead><tr>{header_html}</tr></thead>
     <tbody>{rows_html}</tbody>
@@ -741,15 +741,15 @@ class ReportRenderersMixin:
             for item in standings
         ]
         return (
-            "Classificacao por equipes",
+            "Classificação por equipes",
             [
                 "Pos",
                 "Equipe",
                 "Clube/Cidade",
-                "Capitao",
+                "Capitão",
                 "Match points",
                 "Game points",
-                "Vitorias",
+                "Vitórias",
                 "Empates",
                 "Derrotas",
                 "Byes",
@@ -784,8 +784,8 @@ class ReportRenderersMixin:
                     ]
                 )
         return (
-            "Escalacoes por equipes",
-            ["Rodada", "Match", "Equipe", "Tabuleiro", "Cor", "Jogador", "Rating", "Funcao", "Status"],
+            "Escalações por equipes",
+            ["Rodada", "Match", "Equipe", "Tabuleiro", "Cor", "Jogador", "Rating", "Função", "Status"],
             rows,
         )
 
@@ -800,13 +800,13 @@ class ReportRenderersMixin:
                 item.get("color", ""),
                 item.get("out_player_name", ""),
                 item.get("in_player_name", ""),
-                "Sim" if item.get("requires_correction") else "Nao",
+                "Sim" if item.get("requires_correction") else "Não",
                 item.get("reason", ""),
             ]
             for item in self.db.list_team_substitution_events(tournament_id)
         ]
         return (
-            "Substituicoes por equipes",
+            "Substituições por equipes",
             [
                 "Data/hora",
                 "Rodada",
@@ -816,7 +816,7 @@ class ReportRenderersMixin:
                 "Cor",
                 "Saiu",
                 "Entrou",
-                "Correcao formal",
+                "Correção formal",
                 "Motivo",
             ],
             rows,

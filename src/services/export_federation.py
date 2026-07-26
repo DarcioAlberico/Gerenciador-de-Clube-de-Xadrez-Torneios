@@ -23,6 +23,7 @@ from src.services.fide_norms import build_norm_report
 from src.services.fide_rating import build_fide_report_rows
 from src.services.list_layouts import STANDINGS_COLUMNS, resolve_column_specs, resolve_columns
 from src.services.prizes import PRIZE_KINDS, PRIZE_POLICIES, allocate_prizes
+from src.services.text_ascii import headers_to_ascii
 from src.services.trf_import import build_trf_rounds, parse_trf
 
 if TYPE_CHECKING:
@@ -46,7 +47,7 @@ class FederationReportsMixin:
     def rating_fee_summary(self, tournament_id: int) -> dict[str, Any]:
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
-            raise AppError("Selecione um torneio valido.")
+            raise AppError("Selecione um torneio válido.")
         settings = self.db.get_tournament_settings(tournament_id) or {}
         players = self.db.list_players(tournament_id, active_only=False)
         base_specs = [
@@ -102,7 +103,7 @@ class FederationReportsMixin:
     def export_rating_fee_report(self, tournament_id: int, file_path: str | Path) -> None:
         path = Path(file_path)
         if path.suffix.lower() not in {".xlsx", ".pdf"}:
-            raise AppError("Relatorio de taxas de rating deve ser exportado em XLSX ou PDF.")
+            raise AppError("Relatório de taxas de rating deve ser exportado em XLSX ou PDF.")
         self._write_multi_report(path, self._rating_fee_sections(tournament_id))
 
     def export_fide_rating_report(
@@ -139,14 +140,26 @@ class FederationReportsMixin:
         """
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
-            raise AppError("Selecione um torneio valido.")
+            raise AppError("Selecione um torneio válido.")
         directory = Path(dest_dir)
 
+        # Fronteira ASCII (B-7). Estes cabeçalhos são os MESMOS das exportações
+        # para gente, que passaram a ser acentuados — mas aqui viram nome de
+        # coluna de CSV lido por driver ODBC com schema.ini, e acento ali é
+        # risco de importação, não polimento. Em vez de manter duas listas de
+        # cabeçalhos (que divergem no primeiro descuido), a lista é uma só e a
+        # dobra acontece aqui, no ponto de entrega que exige ASCII.
         tables: dict[str, tuple[list[str], list[list[Any]]]] = {}
         _, player_headers, player_rows = self._players_section(tournament_id)
-        tables["Jogadores"] = (player_headers, [list(row) for row in player_rows])
+        tables["Jogadores"] = (
+            headers_to_ascii(player_headers),
+            [list(row) for row in player_rows],
+        )
         _, standings_headers, standings_rows = self._standings_section(tournament_id)
-        tables["Classificacao"] = (standings_headers, [list(row) for row in standings_rows])
+        tables["Classificacao"] = (
+            headers_to_ascii(standings_headers),
+            [list(row) for row in standings_rows],
+        )
 
         pairing_headers: list[str] | None = None
         pairing_rows: list[list[Any]] = []
@@ -160,7 +173,7 @@ class FederationReportsMixin:
             for row in rows:
                 pairing_rows.append([round_data["number"], *list(row)])
         if pairing_headers is not None:
-            tables["Emparceiramentos"] = (pairing_headers, pairing_rows)
+            tables["Emparceiramentos"] = (headers_to_ascii(pairing_headers), pairing_rows)
 
         bundle = write_csv_bundle(tables, directory)
 
@@ -191,17 +204,17 @@ class FederationReportsMixin:
         scoresheets: bool = True,
         cards: bool = True,
     ) -> dict[str, Any]:
-        """Pacote da rodada em um passo: mural + sumulas + cartoes numa pasta (PDF).
+        """Pacote da rodada em um passo: mural + súmulas + cartões numa pasta (PDF).
 
         Reaproveita os geradores existentes e isola erros (um documento que falha
-        nao impede os demais). Pensado para o arbitro afixar/distribuir de uma vez.
+        não impede os demais). Pensado para o árbitro afixar/distribuir de uma vez.
         """
         round_data = self.db.get_round(round_id)
         if not round_data:
-            raise AppError("Rodada nao encontrada.")
+            raise AppError("Rodada não encontrada.")
         tournament = self.db.get_tournament(int(round_data["tournament_id"]))
         if not tournament:
-            raise AppError("Torneio nao encontrado.")
+            raise AppError("Torneio não encontrado.")
         directory = Path(dest_dir)
         directory.mkdir(parents=True, exist_ok=True)
         slug = re.sub(r"[^A-Za-z0-9._-]+", "_", str(tournament.get("name") or "torneio").strip()).strip("_") or "torneio"
@@ -222,7 +235,7 @@ class FederationReportsMixin:
                 self.export_scoresheets(round_id, path)
                 generated.append(str(path))
             except Exception as exc:
-                errors.append(f"Sumulas: {exc}")
+                errors.append(f"Súmulas: {exc}")
         if cards:
             try:
                 if tournament.get("competition_type") == "team":
@@ -237,12 +250,12 @@ class FederationReportsMixin:
                     pairings = self.db.get_pairings_for_round(round_id)
                     total_boards = max((int(item.get("board_number") or 0) for item in pairings), default=0)
                 if total_boards <= 0:
-                    raise AppError("Rodada sem mesas para cartoes.")
+                    raise AppError("Rodada sem mesas para cartões.")
                 path = directory / f"{base}_cartoes.pdf"
                 self.export_table_cards(path, 1, total_boards, round_id, False)
                 generated.append(str(path))
             except Exception as exc:
-                errors.append(f"Cartoes: {exc}")
+                errors.append(f"Cartões: {exc}")
 
         logger.info(
             "Pacote da rodada %s do torneio %s: %s documentos, %s erros",
@@ -258,7 +271,7 @@ class FederationReportsMixin:
         self._write_multi_report(Path(file_path), self._tournament_minutes_sections(tournament_id))
 
     def export_round_bulletin(self, round_id: int, file_path: str | Path) -> None:
-        """Boletim/press-release da rodada: resultados + classificacao + destaques."""
+        """Boletim/press-release da rodada: resultados + classificação + destaques."""
         self._write_multi_report(Path(file_path), self._round_bulletin_sections(round_id))
 
     def export_podium(self, tournament_id: int, file_path: str | Path) -> None:
@@ -272,9 +285,9 @@ class FederationReportsMixin:
     def export_tiebreak_report(self, tournament_id: int, file_path: str | Path) -> None:
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
-            raise AppError("Selecione um torneio valido.")
+            raise AppError("Selecione um torneio válido.")
         if tournament.get("competition_type") == "team":
-            raise AppError("Relatorio de desempates por jogador disponivel apenas para torneios individuais.")
+            raise AppError("Relatório de desempates por jogador disponível apenas para torneios individuais.")
         rows = []
         for standing in self.pairing_service.tiebreak_report(tournament_id):
             components = dict(standing.get("tiebreak_components") or {})
@@ -301,14 +314,14 @@ class FederationReportsMixin:
         self._write_report(
             file_path,
             f"Desempates - {tournament['name']}",
-            ["Pos", "Jogador", "Pts", "Criterio", "Valor", "Formula", "Componentes"],
+            ["Pos", "Jogador", "Pts", "Critério", "Valor", "Formula", "Componentes"],
             rows,
         )
 
     def export_tournament_audit(self, tournament_id: int, file_path: str | Path) -> None:
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
-            raise AppError("Selecione um torneio valido.")
+            raise AppError("Selecione um torneio válido.")
         events = self.db.list_audit_events(tournament_id, limit=5000)
         rows = [
             [
@@ -346,7 +359,7 @@ class FederationReportsMixin:
     def export_complete(self, tournament_id: int, file_path: str | Path) -> None:
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
-            raise AppError("Selecione um torneio valido.")
+            raise AppError("Selecione um torneio válido.")
         sections = [
             self._tournament_section(tournament_id),
         ]
@@ -364,7 +377,7 @@ class FederationReportsMixin:
     def export_pgn(self, tournament_id: int, file_path: str | Path) -> None:
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
-            raise AppError("Selecione um torneio valido.")
+            raise AppError("Selecione um torneio válido.")
             
         path = Path(file_path)
         with path.open("w", encoding="utf-8") as f:
@@ -411,7 +424,7 @@ class FederationReportsMixin:
         rows = self._federation_exporter("trf16").validation_report_rows(tournament_id)
         self._write_report(
             file_path,
-            "Pendencias TRF16",
+            "Pendências TRF16",
             ["Tipo", "Item", "Valor"],
             rows,
         )
@@ -627,7 +640,7 @@ class FederationReportsMixin:
             return chief
         for referee in self.db.list_tournament_referees(tournament_id):
             role = str(referee.get("role") or "").casefold()
-            if "chief" in role or "principal" in role or "arbitro chefe" in role:
+            if "chief" in role or "principal" in role or "árbitro chefe" in role:
                 return str(referee.get("name") or "").strip()
         return str(settings.get("director") or settings.get("organizer") or "").strip()
 
