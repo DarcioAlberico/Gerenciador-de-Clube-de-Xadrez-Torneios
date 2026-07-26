@@ -1,9 +1,10 @@
 """Factories de botão com hierarquia visual padronizada.
 
-Três níveis, uma única linguagem visual em todo o app (ver ESPEC_UI_UX §4.4):
+Quatro níveis, uma única linguagem visual em todo o app (ver ESPEC_UI_UX §4.4):
 
 - ``primary_button``   — ação principal da tela (preenchida com a cor de destaque).
 - ``secondary_button`` — ação de apoio (contorno, fundo transparente).
+- ``neutral_button``   — sair sem fazer nada (Cancelar/Fechar de um diálogo).
 - ``danger_button``    — ação destrutiva (cor de perigo do tema), visualmente isolada.
 
 As factories centralizam cor/altura/raio para que nenhuma tela precise repetir
@@ -19,6 +20,8 @@ import customtkinter as ctk
 from ..theme import (
     THEME_DANGER,
     THEME_DANGER_HOVER,
+    THEME_NEUTRAL,
+    THEME_NEUTRAL_HOVER,
     THEME_ON_ACCENT,
     THEME_ON_DANGER,
     THEME_TEXT_MAIN,
@@ -68,6 +71,26 @@ def secondary_button(
     kwargs.setdefault("fg_color", "transparent")
     kwargs.setdefault("border_width", 1)
     kwargs.setdefault("text_color", THEME_TEXT_MAIN)
+    return _with_tip(ctk.CTkButton(master, text=text, command=command, **kwargs), tip)
+
+
+def neutral_button(
+    master: Any,
+    text: str,
+    command: Callable[[], None] | None = None,
+    *,
+    tip: str | None = None,
+    **kwargs: Any,
+) -> ctk.CTkButton:
+    """Saída sem consequência: o "Cancelar"/"Fechar" de um diálogo.
+
+    Existe como factory porque o par ``fg_color=THEME_NEUTRAL`` +
+    ``hover_color=THEME_NEUTRAL_HOVER`` estava repetido à mão em cinco telas —
+    e um par repetido é um par que um dia sai do lugar pela metade.
+    """
+    kwargs.setdefault("height", _DEFAULT_HEIGHT)
+    kwargs.setdefault("fg_color", THEME_NEUTRAL)
+    kwargs.setdefault("hover_color", THEME_NEUTRAL_HOVER)
     return _with_tip(ctk.CTkButton(master, text=text, command=command, **kwargs), tip)
 
 

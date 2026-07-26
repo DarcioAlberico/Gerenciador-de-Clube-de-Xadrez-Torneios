@@ -126,6 +126,20 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.assertIsNotNone(getattr(self.app, "sidebar", None))
         self.assertNotEqual("hidden", self.app.sidebar.mode)
 
+    def test_tela_aberta_por_chamada_direta_fica_registrada(self) -> None:
+        """A B-6 quase levou a sidebar junto: tela migrada delega o
+        `_clear_content` para o `build()` de uma view, e o registro anotava
+        "build" em vez de `show_*`. Efeito visivel: abrir Jogadores pelo botao
+        da tela de Torneios deixava a barra destacando **Torneios**, e o F5
+        recarregava a tela errada. Cobre as duas telas ja migradas e uma
+        legada, porque a correcao vale para os dois formatos.
+        """
+        for pagina in ("show_tournaments", "show_players", "show_club"):
+            with self.subTest(page=pagina):
+                getattr(self.app, pagina)()
+                self.app.update()
+                self.assertEqual(pagina, self.app.navigator.current)
+
     def test_main_pages_keep_controls_inside_window_at_supported_sizes(self) -> None:
         for width, height in [(1360, 720), (1180, 640), (1050, 700)]:
             with self.subTest(size=f"{width}x{height}"):
@@ -421,12 +435,13 @@ class UiLayoutSmokeTest(unittest.TestCase):
 
         self.app.show_players()
         self.app.update()
-        # O alvo do patch e o modulo que REALMENTE usa o filedialog (a tela de
-        # Jogadores). Antes apontava para screens.tournaments, e so funcionava
-        # porque o `import *` re-exportava o nome de la — a B-6 fechou esse
-        # caminho ao mover a tela para um pacote.
+        # O alvo do patch e o modulo que REALMENTE usa o filedialog. Ja mudou
+        # duas vezes pelo mesmo motivo: primeiro apontava para
+        # screens.tournaments (funcionava so porque o `import *` re-exportava o
+        # nome de la), agora acompanha a B-6, que separou as importacoes da tela
+        # de Jogadores em `tournament_players/imports.py`.
         with mock.patch(
-            "src.ui.screens.tournament_players_ui.filedialog.askopenfilename",
+            "src.ui.screens.tournament_players.imports.filedialog.askopenfilename",
             return_value=str(csv_path),
         ):
             self._click_button("Importar CSV/Excel")
@@ -438,7 +453,8 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.assertTrue(
             any(
                 isinstance(widget, ctk.CTkLabel)
-                and widget.cget("text") == "Total: 2 | Visiveis: 2 | Presentes: 2 | Ausentes: 0 | Membros: 0 | Convidados: 2"
+                and widget.cget("text")
+                == "Total: 2 | Visíveis: 2 | Presentes: 2 | Ausentes: 0 | Membros: 0 | Convidados: 2"
                 for widget in self._walk(self.app.content)
             )
         )
@@ -475,7 +491,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
             for widget in self._walk(dialog)
             if isinstance(widget, ctk.CTkLabel)
         ]
-        self.assertTrue(any("Alteracoes: 1" in label for label in labels))
+        self.assertTrue(any("Alterações: 1" in label for label in labels))
         self.assertTrue(any("Selecionadas para aplicar: 1" in label for label in labels))
         self.assertEqual(self.db.get_player(player_id)["name"], "Nome antigo")
 
@@ -533,7 +549,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.app.update()
 
         for widget in self._walk(dialog):
-            if isinstance(widget, ctk.CTkButton) and widget.cget("text") == "Confirmar alteracoes":
+            if isinstance(widget, ctk.CTkButton) and widget.cget("text") == "Confirmar alterações":
                 widget.invoke()
                 break
         else:

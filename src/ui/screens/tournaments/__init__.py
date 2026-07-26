@@ -12,7 +12,7 @@ TournamentPagesMixin`): quem consome não precisou saber da mudança.
 """
 from __future__ import annotations
 
-from ..tournament_players_ui import TournamentPlayersMixin
+from ..tournament_players import TournamentPlayersMixin
 from ..tournament_settings_ui import TournamentSettingsMixin
 from .pages import TournamentOtherPagesMixin
 from .view import TournamentListMixin, TournamentListView
