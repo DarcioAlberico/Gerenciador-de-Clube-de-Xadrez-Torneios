@@ -421,7 +421,14 @@ class UiLayoutSmokeTest(unittest.TestCase):
 
         self.app.show_players()
         self.app.update()
-        with mock.patch("src.ui.screens.tournaments.filedialog.askopenfilename", return_value=str(csv_path)):
+        # O alvo do patch e o modulo que REALMENTE usa o filedialog (a tela de
+        # Jogadores). Antes apontava para screens.tournaments, e so funcionava
+        # porque o `import *` re-exportava o nome de la — a B-6 fechou esse
+        # caminho ao mover a tela para um pacote.
+        with mock.patch(
+            "src.ui.screens.tournament_players_ui.filedialog.askopenfilename",
+            return_value=str(csv_path),
+        ):
             self._click_button("Importar CSV/Excel")
         self.app.update()
 

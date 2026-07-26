@@ -50,10 +50,13 @@ WILDCARD_PERMITIDO = {
     "screens/tournament_players_ui.py",
     "screens/tournament_settings_ui.py",
     "screens/tournament_widgets.py",
-    "screens/tournaments.py",
+    "screens/tournaments/pages.py",
 }
 
-_WILDCARD = re.compile(r"^\s*from\s+\.{1,2}support\s+import\s+\*", re.MULTILINE)
+# `\.+` e nao `\.{1,2}`: a B-6 moveu uma tela para subpacote e o `import *`
+# dela virou `from ...support import *` — com o limite antigo, mudar de
+# profundidade escapava do lint em silencio.
+_WILDCARD = re.compile(r"^\s*from\s+\.+support\s+import\s+\*", re.MULTILINE)
 _HEX = re.compile(r"#[0-9a-fA-F]{6}\b")
 _FONTE = re.compile(r"CTkFont\(\s*size\s*=\s*\d+")
 _CONSTANTE = re.compile(r"^[A-Z][A-Z0-9_]*\s*(:.*)?=")
