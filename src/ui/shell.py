@@ -424,9 +424,31 @@ class AppShell:
         # Anota o show_* que disparou esta limpeza, para o F5 saber o que
         # recarregar. Fica aqui (e nao so no Navigator.go) porque muita tela e
         # aberta por chamada direta — botao que chama self.show_pairings().
-        caller = inspect.currentframe().f_back
-        if caller is not None:
-            self.navigator.record(caller.f_code.co_name)
+        metodo = self._calling_show_method()
+        if metodo:
+            self.navigator.record(metodo)
         for child in self.content.winfo_children():
             child.destroy()
+
+    @staticmethod
+    def _calling_show_method(limite: int = 12) -> str | None:
+        """Nome do ``show_*`` mais proximo na pilha de chamadas.
+
+        Era ``f_back`` e so, o que valia enquanto toda tela chamava
+        ``_clear_content`` de dentro do proprio ``show_*``. As telas migradas
+        pela B-6 delegam para o ``build()`` de uma view, e ai o quadro anterior
+        se chama "build": a tela abria, mas o registro continuava apontando para
+        a anterior — sidebar destacando o item errado e F5 recarregando outra
+        tela. Subir a pilha ate achar o ``show_*`` cobre os dois formatos sem
+        pedir nada de quem escreve tela.
+        """
+        quadro = inspect.currentframe()
+        for _ in range(limite):
+            quadro = quadro.f_back if quadro is not None else None
+            if quadro is None:
+                return None
+            nome = quadro.f_code.co_name
+            if nome.startswith("show_"):
+                return nome
+        return None
 

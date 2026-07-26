@@ -349,12 +349,14 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 - ✅ **B-1** Persistência de layout de colunas por usuário (P2-9).
 - ✅ **B-2** Auditoria de contraste WCAG AA + preset alto contraste (P2-11).
 - ✅ **B-3** i18n: catálogo `i18n/pt_BR.json` + a cromagem migrada (P2-12).
-  **Continuação:** as 21 telas seguem com texto literal — migram junto com a B-6,
-  quando cada uma for aberta de qualquer forma.
+  **Continuação:** 20 telas seguem com texto literal — migram junto com a B-6,
+  quando cada uma for aberta de qualquer forma. **Jogadores** já migrou (198
+  chaves, catálogo em 271).
 - ✅ **B-4** `Treeview` grande (P2-13) — medida e adiada; ver o status abaixo.
 - ✅ **B-5** Cache de figuras matplotlib quando dados não mudam (P2-14).
 - 🔄 **B-6** Migrar telas-monstro para 3 camadas (continuação de F1.5) — **em
-  execução**: Torneios migrada; a fila está no status abaixo, em ordem.
+  execução**: Torneios e **Jogadores** migradas; a fila está no status abaixo,
+  em ordem.
 - ✅ **B-7** Acentuar cabeçalhos/títulos de `src/services/export_*` (F3.5) — a
   decisão de compatibilidade foi tomada: acentuar **inclusive CSV/XLSX**, com
   fronteira ASCII no pacote Access, TRF e PGN. Ver o status abaixo.
@@ -506,7 +508,7 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 > **Fila da B-6**, por ordem de valor sobre risco:
 > 1. `pairing_results_ui` (1.922) — a maior e a mais usada; entra depois de
 >    alguma outra pagar o aprendizado, porque é a que mais dói se quebrar;
-> 2. `tournament_players_ui` (1.613);
+> 2. ✅ `tournament_players_ui` (1.613) — **migrada** (ver o status abaixo);
 > 3. `pairing_arbitration_ui` (1.527);
 > 4. `admin_training_finance` (1.226), `admin_exercises_inventory` (1.126),
 >    `club_members_ui` (1.073), `settings_certificates_ui` (1.062);
@@ -515,6 +517,56 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 >
 > Cada uma vale um PR próprio, e o texto delas migra para o catálogo da **B-3**
 > no mesmo passo: a tela vai ser aberta de qualquer forma.
+
+> **Status (2026-07-26): B-6 — Jogadores migrada, e o molde precisou crescer.**
+> A tela de Torneios cabia em três arquivos. A de Jogadores (1.613 linhas) não:
+> ela **é quatro telas** empilhadas — cadastrar jogador, importar de fora, cuidar
+> de rating oficial e publicar no Chess-Results —, e foi justamente empilhá-las
+> que produziu o arquivo. Então o pacote
+> [`screens/tournament_players/`](src/ui/screens/tournament_players/) tem as três
+> camadas do molde (`state`/`controller`/`view`) **mais** um módulo por domínio
+> de ação (`imports`, `forms`, `ratings`, `chess_results`) e dois de apoio
+> (`dialogs`, `file_types`). Onze arquivos, o maior com **433 linhas**
+> (comentário incluso); o import externo não mudou.
+>
+> **O achado mais sério não estava na tela, e sim na casca.** `_clear_content`
+> descobre qual tela está aberta olhando o **quadro anterior da pilha**
+> (`inspect.currentframe().f_back`) e anotando o nome se começar com `show_`.
+> Isso valia enquanto toda tela chamava `_clear_content` de dentro do próprio
+> `show_*`. Tela migrada delega para o `build()` de uma view: o quadro anterior
+> passa a se chamar **"build"**, nada é anotado, e o registro continua apontando
+> para a tela anterior — **sidebar destacando o item errado e F5 recarregando
+> outra tela**. A tela de Torneios já tinha embarcado com esse defeito no PR
+> anterior; foi um teste de tema que o denunciou aqui, ao ver `show_club` onde
+> devia estar `show_players`. A correção sobe a pilha até achar o `show_*`, o
+> que cobre os dois formatos sem pedir nada de quem escreve tela — e há teste
+> cobrando as duas migradas **e** uma legada.
+>
+> **Três achados na própria tela**, todos com teste agora:
+> 1. **Botões por cima dos seletores.** `_grid_form_buttons` começava na linha
+>    `control_row + 7` — exatamente onde já estavam os três widgets do grupo
+>    Scheveningen. Os três primeiros botões nasciam empilhados na mesma célula do
+>    grid. Passou despercebido porque o painel rola: quem não desce até lá não vê.
+> 2. **"Erro inesperado" para erro de digitação.** Rating "abc" virava
+>    `int("abc")` → `ValueError` → modal com código de log, como se fosse falha
+>    do programa. Agora `parse_rating` é puro e devolve `None`, e a validação diz
+>    qual dos **três** campos de rating recusou o valor.
+> 3. **Contagem em duas varreduras.** O resumo ("Total / Visíveis / Presentes")
+>    era montado num laço e o filtro em outro; `rows()` devolve linhas e resumo
+>    juntos, porque dois números que precisam concordar não podem ter duas fontes.
+>
+> **A parte de i18n (B-3) mudou uma decisão de desenho.** A primeira versão
+> guardava as colunas num dicionário de *chaves* (`("players.column.id", 60)`) e
+> resolvia com `t(chave)` na hora de montar. Funciona na tela e **fura o teste**:
+> o `test_ui_i18n` varre chamadas `t("literal")`, então toda chave indireta
+> viraria "órfã no catálogo" — ou pior, uma chave ausente só apareceria para o
+> usuário. As colunas viraram **funções** que chamam `t()` literalmente e
+> devolvem o título pronto. Ganho de brinde: o título passa a ser resolvido a
+> cada montagem, então trocar o catálogo troca a tabela.
+>
+> 198 chaves novas (catálogo de 73 → 271), 34 testes sem janela, e o
+> `neutral_button` — o par `THEME_NEUTRAL`/`THEME_NEUTRAL_HOVER` repetido à mão
+> em cinco telas — virou factory em `components/buttons.py`.
 > **Status (2026-07-26): B-3 CONCLUÍDA — preparação, e só.** A ESPEC §6 e §8 são
 > explícitas: extrair strings mantendo **só PT-BR**, sem implementar inglês. O
 > valor imediato não é falar inglês; é ter **um lugar** onde o texto mora.

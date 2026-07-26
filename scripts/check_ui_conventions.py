@@ -47,7 +47,6 @@ WILDCARD_PERMITIDO = {
     "screens/settings_certificates_ui.py",
     "screens/settings_reports_ui.py",
     "screens/settings_users_ui.py",
-    "screens/tournament_players_ui.py",
     "screens/tournament_settings_ui.py",
     "screens/tournament_widgets.py",
     "screens/tournaments/pages.py",
