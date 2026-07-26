@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from ..support import *
-from ..components import danger_button, debounce
+from ..components import WrapRow, danger_button, debounce
 
 
 # Sub-mixin de Admin: calendario, ranking interno e comunicacoes.
@@ -65,21 +65,30 @@ class CalendarRankingMixin:
         right_panel.grid_columnconfigure(0, weight=1)
         right_panel.grid_rowconfigure(1, weight=1)
 
-        controls = ctk.CTkFrame(right_panel, fg_color="transparent")
+        # Faixa que quebra em quantas linhas couberem (continuacao da B-8): numa
+        # linha so, busca + 2 datas + status + Filtrar exigiam 1.368px de janela
+        # (medido, com a barra completa) para nao empurrar botao para fora.
+        controls = WrapRow(right_panel)
         controls.grid(row=0, column=0, sticky="ew", pady=(0, 8))
-        controls.grid_columnconfigure(0, weight=1)
-        search_entry = ctk.CTkEntry(controls, placeholder_text="Buscar por titulo, local, clube ou torneio")
-        search_entry.grid(row=0, column=0, padx=(0, 8), sticky="ew")
-        start_filter = ctk.CTkEntry(controls, placeholder_text="Inicio", width=120)
-        start_filter.grid(row=0, column=1, padx=4)
-        end_filter = ctk.CTkEntry(controls, placeholder_text="Fim", width=120)
-        end_filter.grid(row=0, column=2, padx=4)
-        status_filter = ctk.CTkOptionMenu(
-            controls,
-            values=["Todos"] + list(EVENT_STATUS_VALUES.keys()),
+        search_entry = controls.add(
+            ctk.CTkEntry(controls.frame, placeholder_text="Buscar por titulo, local, clube ou torneio"),
+            width=240,
+            grow=True,
+        )
+        start_filter = controls.add(
+            ctk.CTkEntry(controls.frame, placeholder_text="Inicio", width=120), width=120
+        )
+        end_filter = controls.add(
+            ctk.CTkEntry(controls.frame, placeholder_text="Fim", width=120), width=120
+        )
+        status_filter = controls.add(
+            ctk.CTkOptionMenu(
+                controls.frame,
+                values=["Todos"] + list(EVENT_STATUS_VALUES.keys()),
+                width=140,
+            ),
             width=140,
         )
-        status_filter.grid(row=0, column=3, padx=4)
 
         events_holder = self._make_panel(right_panel)
         events_holder.grid(row=1, column=0, sticky="nsew")
@@ -265,7 +274,10 @@ class CalendarRankingMixin:
         ]
         self._grid_form_buttons(form, buttons, option_row + 8)
 
-        ctk.CTkButton(controls, text="Filtrar", command=load_events).grid(row=0, column=4, padx=(8, 0))
+        controls.add(
+            ctk.CTkButton(controls.frame, text="Filtrar", command=load_events, width=100), width=100
+        )
+        controls.bind_to(self.content)
         events_tree.bind("<<TreeviewSelect>>", on_event_select)
         search_entry.bind("<KeyRelease>", debounce(search_entry, load_events))
         start_filter.bind("<KeyRelease>", debounce(start_filter, load_events))
@@ -288,9 +300,9 @@ class CalendarRankingMixin:
         body.grid_columnconfigure(0, weight=1)
         body.grid_rowconfigure(1, weight=1)
 
-        toolbar = self._make_panel(body)
-        toolbar.grid(row=0, column=0, sticky="ew", pady=(0, 12))
-        toolbar.grid_columnconfigure(3, weight=1)
+        panel = self._make_panel(body)
+        panel.grid(row=0, column=0, sticky="ew", pady=(0, 12))
+        panel.grid_columnconfigure(0, weight=1)
 
         categories = sorted(
             {
@@ -300,35 +312,54 @@ class CalendarRankingMixin:
             },
             key=lambda value: value.casefold(),
         )
-        ctk.CTkLabel(toolbar, text="Categoria").grid(row=0, column=0, padx=12, pady=(12, 4), sticky="w")
-        category_option = ctk.CTkOptionMenu(toolbar, values=["Todas"] + categories, width=170)
-        category_option.grid(row=1, column=0, padx=12, pady=(0, 12), sticky="w")
 
         club_option_map: dict[str, int | None] = {"Todos clubes": None}
         class_option_map: dict[str, int | None] = {"Todas turmas": None}
 
-        ctk.CTkLabel(toolbar, text="Clube/Escola").grid(row=0, column=1, padx=(0, 12), pady=(12, 4), sticky="w")
-        club_option = ctk.CTkOptionMenu(toolbar, values=["Todos clubes"], width=170)
-        club_option.grid(row=1, column=1, padx=(0, 12), pady=(0, 12), sticky="w")
-
-        ctk.CTkLabel(toolbar, text="Turma").grid(row=0, column=2, padx=(0, 12), pady=(12, 4), sticky="w")
-        class_option = ctk.CTkOptionMenu(toolbar, values=["Todas turmas"], width=160)
-        class_option.grid(row=1, column=2, padx=(0, 12), pady=(0, 12), sticky="w")
-
-        ctk.CTkLabel(toolbar, text="Busca").grid(row=0, column=3, padx=(0, 12), pady=(12, 4), sticky="w")
-        search_entry = ctk.CTkEntry(toolbar, placeholder_text="Buscar por nome, clube, turma ou categoria")
-        search_entry.grid(row=1, column=3, padx=(0, 12), pady=(0, 12), sticky="ew")
-
-        ctk.CTkLabel(toolbar, text="Inicio").grid(row=0, column=4, padx=(0, 8), pady=(12, 4), sticky="w")
-        start_filter = ctk.CTkEntry(toolbar, placeholder_text="AAAA-MM-DD", width=115)
-        start_filter.grid(row=1, column=4, padx=(0, 8), pady=(0, 12), sticky="w")
-
-        ctk.CTkLabel(toolbar, text="Fim").grid(row=0, column=5, padx=(0, 8), pady=(12, 4), sticky="w")
-        end_filter = ctk.CTkEntry(toolbar, placeholder_text="AAAA-MM-DD", width=115)
-        end_filter.grid(row=1, column=5, padx=(0, 8), pady=(0, 12), sticky="w")
-
-        status_option = ctk.CTkOptionMenu(toolbar, values=["Ativos", "Todos"], width=120)
-        status_option.grid(row=1, column=6, padx=(0, 12), pady=(0, 12), sticky="w")
+        # Sete filtros numa linha rigida exigiam 1.416px de janela — era esta a
+        # tela que definia o limiar da sidebar depois da B-8, e o limiar era
+        # exatamente 1.416. Agora a faixa quebra (ver components/wrap_row.py).
+        toolbar = WrapRow(panel)
+        toolbar.grid(row=0, column=0, padx=12, pady=12, sticky="ew")
+        category_option = toolbar.add_field(
+            "Categoria",
+            lambda parent: ctk.CTkOptionMenu(parent, values=["Todas"] + categories, width=170),
+            width=170,
+        )
+        club_option = toolbar.add_field(
+            "Clube/Escola",
+            lambda parent: ctk.CTkOptionMenu(parent, values=["Todos clubes"], width=170),
+            width=170,
+        )
+        class_option = toolbar.add_field(
+            "Turma",
+            lambda parent: ctk.CTkOptionMenu(parent, values=["Todas turmas"], width=160),
+            width=160,
+        )
+        search_entry = toolbar.add_field(
+            "Busca",
+            lambda parent: ctk.CTkEntry(
+                parent, placeholder_text="Buscar por nome, clube, turma ou categoria"
+            ),
+            width=240,
+            grow=True,
+        )
+        start_filter = toolbar.add_field(
+            "Inicio",
+            lambda parent: ctk.CTkEntry(parent, placeholder_text="AAAA-MM-DD", width=115),
+            width=115,
+        )
+        end_filter = toolbar.add_field(
+            "Fim",
+            lambda parent: ctk.CTkEntry(parent, placeholder_text="AAAA-MM-DD", width=115),
+            width=115,
+        )
+        status_option = toolbar.add_field(
+            "Situação",
+            lambda parent: ctk.CTkOptionMenu(parent, values=["Ativos", "Todos"], width=120),
+            width=120,
+        )
+        toolbar.bind_to(self.content)
 
         table_panel = self._make_panel(body)
         table_panel.grid(row=1, column=0, sticky="nsew")
@@ -599,41 +630,22 @@ class CalendarRankingMixin:
             except Exception as exc:
                 self._show_error(exc)
 
-        ctk.CTkButton(toolbar, text="Recalcular", command=load_ranking).grid(
-            row=2,
-            column=0,
-            padx=(12, 8),
-            pady=(0, 12),
-            sticky="w",
-        )
-        ctk.CTkButton(toolbar, text="Aplicar torneio atual", command=apply_selected_tournament_rating).grid(
-            row=2,
-            column=1,
-            padx=(0, 8),
-            pady=(0, 12),
-            sticky="w",
-        )
-        ctk.CTkButton(toolbar, text="Histórico", command=show_rating_history).grid(
-            row=2,
-            column=2,
-            padx=(0, 8),
-            pady=(0, 12),
-            sticky="w",
-        )
-        ctk.CTkButton(toolbar, text="Exportar", command=export_ranking).grid(
-            row=2,
-            column=3,
-            padx=(0, 8),
-            pady=(0, 12),
-            sticky="w",
-        )
-        ctk.CTkButton(toolbar, text="Imprimir", command=print_ranking).grid(
-            row=2,
-            column=4,
-            padx=(0, 8),
-            pady=(0, 12),
-            sticky="w",
-        )
+        # As acoes ficam numa faixa propria, tambem quebravel: cinco botoes numa
+        # linha rigida sao os proximos a sair da janela depois dos filtros.
+        actions = WrapRow(panel)
+        actions.grid(row=1, column=0, padx=12, pady=(0, 12), sticky="ew")
+        for texto, comando, largura in (
+            ("Recalcular", load_ranking, 120),
+            ("Aplicar torneio atual", apply_selected_tournament_rating, 180),
+            ("Histórico", show_rating_history, 110),
+            ("Exportar", export_ranking, 110),
+            ("Imprimir", print_ranking, 110),
+        ):
+            actions.add(
+                ctk.CTkButton(actions.frame, text=texto, command=comando, width=largura),
+                width=largura,
+            )
+        actions.bind_to(self.content)
 
         category_option.configure(command=lambda _value: load_ranking())
         club_option.configure(command=on_club_change)

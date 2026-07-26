@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from ..support import *
-from ..components import primary_button, secondary_button
+from ..components import WrapRow, primary_button, secondary_button
 
 
 class SettingsReportsMixin:
@@ -18,8 +18,7 @@ class SettingsReportsMixin:
 
         panel = self._make_panel(body)
         panel.grid(row=0, column=0, sticky="ew")
-        for column in range(5):
-            panel.grid_columnconfigure(column, weight=0)
+        panel.grid_columnconfigure(0, weight=1)
 
         members = self.db.list_members(active_only=False)
         member_map: dict[str, int] = {
@@ -33,54 +32,70 @@ class SettingsReportsMixin:
         club_values = list(club_map.keys())
         class_map: dict[str, int | None] = {"Todas turmas": None}
 
-        ctk.CTkLabel(panel, text="Relatório").grid(row=0, column=0, padx=16, pady=(16, 4), sticky="w")
-        report_option = ctk.CTkOptionMenu(
-            panel,
-            values=[
-                "Geral do clube",
-                "Membro individual",
-                "Torneios por periodo",
-                "Presencas por periodo",
-                "Financeiro por periodo",
-                "Eventos por periodo",
-                "Ranking interno",
-                "Portal do clube/turma",
-                "Pacote administrativo",
-            ],
+        # Sete seletores em quatro colunas fixas exigiam 1.296px de janela (so
+        # o painel de cima). A faixa quebra em quantas colunas couberem
+        # (continuacao da B-8); os campos mantem a ordem de leitura.
+        fields = WrapRow(panel, pad=16)
+        fields.grid(row=0, column=0, padx=16, pady=(16, 8), sticky="ew")
+        report_option = fields.add_field(
+            "Relatório",
+            lambda parent: ctk.CTkOptionMenu(
+                parent,
+                values=[
+                    "Geral do clube",
+                    "Membro individual",
+                    "Torneios por periodo",
+                    "Presencas por periodo",
+                    "Financeiro por periodo",
+                    "Eventos por periodo",
+                    "Ranking interno",
+                    "Portal do clube/turma",
+                    "Pacote administrativo",
+                ],
+                width=190,
+            ),
             width=190,
         )
-        report_option.grid(row=1, column=0, padx=16, pady=(0, 12), sticky="w")
-
-        ctk.CTkLabel(panel, text="Formato").grid(row=0, column=1, padx=16, pady=(16, 4), sticky="w")
-        format_option = ctk.CTkOptionMenu(panel, values=["xlsx", "csv", "pdf"], width=110)
-        format_option.grid(row=1, column=1, padx=16, pady=(0, 12), sticky="w")
-
-        ctk.CTkLabel(panel, text="Membro").grid(row=0, column=2, padx=16, pady=(16, 4), sticky="w")
-        member_option = ctk.CTkOptionMenu(panel, values=member_values, width=220)
-        member_option.grid(row=1, column=2, padx=16, pady=(0, 12), sticky="w")
-
-        ctk.CTkLabel(panel, text="Clube/Escola").grid(row=2, column=2, padx=16, pady=(4, 4), sticky="w")
-        club_option = ctk.CTkOptionMenu(panel, values=club_values, width=190)
-        club_option.grid(row=3, column=2, padx=16, pady=(0, 16), sticky="w")
-
-        ctk.CTkLabel(panel, text="Turma").grid(row=2, column=3, padx=16, pady=(4, 4), sticky="w")
-        class_option = ctk.CTkOptionMenu(panel, values=["Todas turmas"], width=190)
-        class_option.grid(row=3, column=3, padx=16, pady=(0, 16), sticky="w")
-
-        ctk.CTkLabel(panel, text="Inicio").grid(row=2, column=0, padx=16, pady=(4, 4), sticky="w")
-        start_entry = ctk.CTkEntry(panel, placeholder_text="AAAA-MM-DD", width=130)
-        start_entry.grid(row=3, column=0, padx=16, pady=(0, 16), sticky="w")
-
-        ctk.CTkLabel(panel, text="Fim").grid(row=2, column=1, padx=16, pady=(4, 4), sticky="w")
-        end_entry = ctk.CTkEntry(panel, placeholder_text="AAAA-MM-DD", width=130)
-        end_entry.grid(row=3, column=1, padx=16, pady=(0, 16), sticky="w")
+        format_option = fields.add_field(
+            "Formato",
+            lambda parent: ctk.CTkOptionMenu(parent, values=["xlsx", "csv", "pdf"], width=110),
+            width=110,
+        )
+        member_option = fields.add_field(
+            "Membro",
+            lambda parent: ctk.CTkOptionMenu(parent, values=member_values, width=220),
+            width=220,
+        )
+        start_entry = fields.add_field(
+            "Inicio",
+            lambda parent: ctk.CTkEntry(parent, placeholder_text="AAAA-MM-DD", width=130),
+            width=130,
+        )
+        end_entry = fields.add_field(
+            "Fim",
+            lambda parent: ctk.CTkEntry(parent, placeholder_text="AAAA-MM-DD", width=130),
+            width=130,
+        )
+        club_option = fields.add_field(
+            "Clube/Escola",
+            lambda parent: ctk.CTkOptionMenu(parent, values=club_values, width=190),
+            width=190,
+        )
+        class_option = fields.add_field(
+            "Turma",
+            lambda parent: ctk.CTkOptionMenu(parent, values=["Todas turmas"], width=190),
+            width=190,
+        )
+        fields.bind_to(self.content)
 
         help_label = ctk.CTkLabel(
             panel,
             text="Use datas no formato ISO para filtrar torneios, presencas, financeiro ou eventos por periodo.",
             text_color=THEME_TEXT_SUB,
+            wraplength=760,
+            justify="left",
         )
-        help_label.grid(row=4, column=0, columnspan=4, padx=16, pady=(0, 16), sticky="w")
+        help_label.grid(row=1, column=0, padx=16, pady=(0, 16), sticky="w")
 
         def selected_club_id() -> int | None:
             return club_map.get(club_option.get())
@@ -224,7 +239,7 @@ class SettingsReportsMixin:
         load_class_options()
         update_fields()
         ctk.CTkButton(panel, text="Gerar relatorio", command=export_report).grid(
-            row=5,
+            row=2,
             column=0,
             padx=16,
             pady=(0, 16),

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from ..support import *
-from ..components import debounce
+from ..components import WrapRow, debounce
 
 
 # Sub-mixin de Admin: exercicios e inventario.
@@ -81,19 +81,27 @@ class ExercisesInventoryMixin:
         right_panel.grid_rowconfigure(3, weight=1)
         right_panel.grid_rowconfigure(5, weight=1)
 
-        controls = ctk.CTkFrame(right_panel, fg_color="transparent")
+        # Faixa que quebra em quantas linhas couberem (continuacao da B-8).
+        controls = WrapRow(right_panel)
         controls.grid(row=0, column=0, sticky="ew", pady=(0, 8))
-        controls.grid_columnconfigure(0, weight=1)
-        search_entry = ctk.CTkEntry(controls, placeholder_text="Buscar exercicio, tema, FEN, PGN, solucao ou tags")
-        search_entry.grid(row=0, column=0, padx=(0, 8), sticky="ew")
-        difficulty_filter = ctk.CTkOptionMenu(
-            controls,
-            values=["Todas", *EXERCISE_DIFFICULTY_VALUES.keys()],
+        search_entry = controls.add(
+            ctk.CTkEntry(
+                controls.frame, placeholder_text="Buscar exercicio, tema, FEN, PGN, solucao ou tags"
+            ),
+            width=240,
+            grow=True,
+        )
+        difficulty_filter = controls.add(
+            ctk.CTkOptionMenu(
+                controls.frame,
+                values=["Todas", *EXERCISE_DIFFICULTY_VALUES.keys()],
+                width=145,
+            ),
             width=145,
         )
-        difficulty_filter.grid(row=0, column=1, padx=4)
-        active_filter = ctk.CTkOptionMenu(controls, values=["Ativos", "Todos"], width=105)
-        active_filter.grid(row=0, column=2, padx=4)
+        active_filter = controls.add(
+            ctk.CTkOptionMenu(controls.frame, values=["Ativos", "Todos"], width=105), width=105
+        )
 
         exercises_holder = self._make_panel(right_panel)
         exercises_holder.grid(row=1, column=0, sticky="nsew", pady=(0, 10))
@@ -127,26 +135,37 @@ class ExercisesInventoryMixin:
         list_form = self._make_panel(right_panel)
         list_form.grid(row=2, column=0, sticky="ew", pady=(0, 10))
         list_form.grid_columnconfigure(0, weight=1)
-        list_name_entry = ctk.CTkEntry(list_form, placeholder_text="Nome da lista")
-        list_name_entry.grid(row=0, column=0, padx=(12, 6), pady=(10, 4), sticky="ew")
-        list_date_entry = self._make_date_entry(list_form, width=12)
-        list_date_entry.grid(row=0, column=1, padx=4, pady=(10, 4))
-        list_status_option = ctk.CTkOptionMenu(
-            list_form,
-            values=list(TRAINING_LIST_STATUS_VALUES.keys()),
+        # Seis campos da lista de treino numa linha rigida: era o que segurava
+        # esta tela em 1.272px, depois da faixa de busca (continuacao da B-8).
+        list_fields = WrapRow(list_form)
+        list_fields.grid(row=0, column=0, padx=12, pady=(10, 4), sticky="ew")
+        list_name_entry = list_fields.add(
+            ctk.CTkEntry(list_fields.frame, placeholder_text="Nome da lista"),
+            width=200,
+            grow=True,
+        )
+        list_date_entry = list_fields.add(
+            self._make_date_entry(list_fields.frame, width=12), width=120
+        )
+        list_status_option = list_fields.add(
+            ctk.CTkOptionMenu(
+                list_fields.frame, values=list(TRAINING_LIST_STATUS_VALUES.keys()), width=130
+            ),
             width=130,
         )
-        list_status_option.grid(row=0, column=2, padx=4, pady=(10, 4))
-        list_buttons = ctk.CTkFrame(list_form, fg_color="transparent")
-        list_buttons.grid(row=0, column=3, padx=(4, 12), pady=(10, 4), sticky="e")
-        list_club_option = ctk.CTkOptionMenu(list_form, values=[""], width=180)
-        list_club_option.grid(row=1, column=0, padx=(12, 6), pady=4, sticky="ew")
-        list_class_option = ctk.CTkOptionMenu(list_form, values=["Sem turma"], width=150)
-        list_class_option.grid(row=1, column=1, padx=4, pady=4)
-        list_level_option = ctk.CTkOptionMenu(list_form, values=["Sem nivel"], width=150)
-        list_level_option.grid(row=1, column=2, padx=4, pady=4)
+        list_club_option = list_fields.add(
+            ctk.CTkOptionMenu(list_fields.frame, values=[""], width=180), width=180
+        )
+        list_class_option = list_fields.add(
+            ctk.CTkOptionMenu(list_fields.frame, values=["Sem turma"], width=150), width=150
+        )
+        list_level_option = list_fields.add(
+            ctk.CTkOptionMenu(list_fields.frame, values=["Sem nivel"], width=150), width=150
+        )
+        list_buttons = ctk.CTkFrame(list_fields.frame, fg_color="transparent")
+        list_fields.add(list_buttons, width=160)
         list_description_entry = ctk.CTkEntry(list_form, placeholder_text="Descrição da lista")
-        list_description_entry.grid(row=2, column=0, columnspan=4, padx=12, pady=(4, 10), sticky="ew")
+        list_description_entry.grid(row=1, column=0, padx=12, pady=(4, 10), sticky="ew")
 
         lists_holder = self._make_panel(right_panel)
         lists_holder.grid(row=3, column=0, sticky="nsew", pady=(0, 10))
@@ -179,21 +198,27 @@ class ExercisesInventoryMixin:
             },
         )
 
-        item_controls = ctk.CTkFrame(right_panel, fg_color="transparent")
+        item_controls = WrapRow(right_panel)
         item_controls.grid(row=4, column=0, sticky="ew", pady=(0, 8))
-        item_controls.grid_columnconfigure(2, weight=1)
-        ctk.CTkButton(item_controls, text="Adicionar exercicio selecionado", command=lambda: add_selected_exercise()).grid(
-            row=0,
-            column=0,
-            padx=(0, 8),
-            sticky="w",
+        item_controls.add(
+            ctk.CTkButton(
+                item_controls.frame,
+                text="Adicionar exercicio selecionado",
+                command=lambda: add_selected_exercise(),
+                width=240,
+            ),
+            width=240,
         )
-        ctk.CTkButton(item_controls, text="Remover da lista", command=lambda: remove_selected_item()).grid(
-            row=0,
-            column=1,
-            padx=4,
-            sticky="w",
+        item_controls.add(
+            ctk.CTkButton(
+                item_controls.frame,
+                text="Remover da lista",
+                command=lambda: remove_selected_item(),
+                width=150,
+            ),
+            width=150,
         )
+        item_controls.bind_to(self.content)
 
         items_holder = self._make_panel(right_panel)
         items_holder.grid(row=5, column=0, sticky="nsew")
@@ -545,9 +570,14 @@ class ExercisesInventoryMixin:
         ]
         self._grid_form_buttons(form, buttons, option_row + 8)
 
-        ctk.CTkButton(controls, text="Filtrar", command=refresh_all).grid(row=0, column=3, padx=(8, 0))
+        controls.add(
+            ctk.CTkButton(controls.frame, text="Filtrar", command=refresh_all, width=100),
+            width=100,
+        )
+        controls.bind_to(self.content)
         ctk.CTkButton(list_buttons, text="Nova", width=70, command=clear_list_form).grid(row=0, column=0, padx=(0, 4))
         ctk.CTkButton(list_buttons, text="Salvar", width=80, command=save_training_list).grid(row=0, column=1)
+        list_fields.bind_to(self.content)
 
         exercises_tree.bind("<<TreeviewSelect>>", on_exercise_select)
         lists_tree.bind("<<TreeviewSelect>>", on_list_select)
@@ -642,15 +672,25 @@ class ExercisesInventoryMixin:
             ctk.CTkLabel(card, text=label, text_color=THEME_TEXT_SUB).pack(anchor="w", padx=12, pady=(0, 10))
             summary_labels[key] = value_label
 
-        controls = ctk.CTkFrame(right_panel, fg_color="transparent")
+        # Faixa que quebra em quantas linhas couberem (continuacao da B-8).
+        controls = WrapRow(right_panel)
         controls.grid(row=1, column=0, sticky="ew", pady=(0, 8))
-        controls.grid_columnconfigure(0, weight=1)
-        search_entry = ctk.CTkEntry(controls, placeholder_text="Buscar por codigo, item, local ou observacao")
-        search_entry.grid(row=0, column=0, padx=(0, 8), sticky="ew")
-        type_filter = ctk.CTkOptionMenu(controls, values=["Todos", *INVENTORY_ITEM_TYPE_VALUES.keys()], width=140)
-        type_filter.grid(row=0, column=1, padx=4)
-        active_filter = ctk.CTkOptionMenu(controls, values=["Ativos", "Todos"], width=105)
-        active_filter.grid(row=0, column=2, padx=4)
+        search_entry = controls.add(
+            ctk.CTkEntry(
+                controls.frame, placeholder_text="Buscar por codigo, item, local ou observacao"
+            ),
+            width=240,
+            grow=True,
+        )
+        type_filter = controls.add(
+            ctk.CTkOptionMenu(
+                controls.frame, values=["Todos", *INVENTORY_ITEM_TYPE_VALUES.keys()], width=140
+            ),
+            width=140,
+        )
+        active_filter = controls.add(
+            ctk.CTkOptionMenu(controls.frame, values=["Ativos", "Todos"], width=105), width=105
+        )
 
         items_holder = self._make_panel(right_panel)
         items_holder.grid(row=2, column=0, sticky="nsew", pady=(0, 10))
@@ -1105,7 +1145,11 @@ class ExercisesInventoryMixin:
         ]
         self._grid_form_buttons(form, buttons, option_row + 7)
 
-        ctk.CTkButton(controls, text="Filtrar", command=refresh_all).grid(row=0, column=3, padx=(8, 0))
+        controls.add(
+            ctk.CTkButton(controls.frame, text="Filtrar", command=refresh_all, width=100),
+            width=100,
+        )
+        controls.bind_to(self.content)
         ctk.CTkButton(loan_actions, text="Salvar", width=76, command=save_loan).grid(row=0, column=0, padx=(0, 4))
         ctk.CTkButton(loan_actions, text="Devolver", width=82, command=return_loan).grid(row=0, column=1)
         ctk.CTkButton(maintenance_actions, text="Salvar", width=76, command=save_maintenance).grid(

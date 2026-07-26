@@ -361,9 +361,10 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
   decisão de compatibilidade foi tomada: acentuar **inclusive CSV/XLSX**, com
   fronteira ASCII no pacote Access, TRF e PGN. Ver o status abaixo.
 - ✅ **B-8** Estreitar o layout da tela **Exportar** — feito; o gargalo mudou de
-  dono (ver o status abaixo). **Continuação:** as cinco telas administrativas
-  densas (Ranking interno, Financeiro, Calendário, Exercícios, Relatórios) são
-  quem define o limiar agora.
+  dono (ver o status abaixo). **Continuação CONCLUÍDA:** as cinco telas
+  administrativas densas (Ranking interno, Financeiro, Calendário, Exercícios,
+  Relatórios) deixaram de definir o limiar — a faixa de filtros agora quebra em
+  linhas. O próximo dono tem nome: o **Painel de Arbitragem**.
 
 > **Status (2026-07-25): B-4 — a medição desmentiu a premissa; virtualização
 > NÃO foi implementada.** O achado P2-13 dizia "lento em 1.000+ linhas". Medido:
@@ -480,6 +481,76 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 > Um detalhe que o teste pegou: medir a largura pelo **cabeçalho** não funciona
 > (ele nasce junto com a tela e ainda mede 1px); pelo `content`, que sobrevive à
 > troca de tela, funciona.
+
+> **Status (2026-07-26): B-8 (continuação) CONCLUÍDA — as cinco telas densas
+> saíram do caminho, e a conta de quebrar linha virou componente.**
+> A B-8 tinha deixado o próximo dono do gargalo com nome e número. Medido tela a
+> tela, com a barra **completa** forçada e a janela encolhendo de 20 em 20
+> pixels (largura real; o CTk multiplica a geometria por 1,2):
+>
+> | tela | antes | depois |
+> |---|---|---|
+> | Ranking interno | 1.416px | **768px** |
+> | Painel de Arbitragem | 1.416px | 1.200px |
+> | Financeiro | 1.368px | **768px** |
+> | Calendário | 1.368px | **768px** |
+> | Relatórios | 1.296px | **768px** |
+> | Exercícios | 1.272px | 984px |
+> | Inventário | 1.200px | 1.104px |
+> | Treinos | 1.200px | 936px |
+>
+> (768px é o **piso da varredura**, não o mínimo real: abaixo disso não medi.
+> E a medição precisou ser refeita: a primeira não *forçava* o modo da barra, e
+> como o app esconde a sidebar em janela estreita, ela media com a barra
+> escondida — números 170px otimistas demais, comparando maçã com laranja.)
+>
+> O defeito era o mesmo em todas: uma **faixa de filtros numa linha rígida**.
+> Agora ela quebra em quantas linhas couberem — a ideia que a B-8 provou na
+> barra do torneio, agora em [`components/wrap_row.py`](src/ui/components/wrap_row.py),
+> com a aritmética isolada e sem Tk em [`layout.py`](src/ui/layout.py). A barra
+> do torneio passou a usar a mesma conta, em vez da cópia dela.
+>
+> **Três achados de medição. O primeiro explica por que a versão ingênua não
+> funcionava, e o segundo é o que faz a conta fechar:**
+> 1. **`CTkEntry(width=190)` não ocupa 190px.** O customtkinter multiplica pela
+>    escala de UI (120% por padrão) e o widget desenha 228. Comparar largura
+>    pedida (lógica) com espaço disponível (real) faz a conta concluir que cabe
+>    — e era também por isso que a barra do torneio quebrava tarde demais.
+> 2. **O `grid` não empilha linhas independentes.** A coluna 1 tem uma largura
+>    só, e é a do item mais largo que caiu nela *em qualquer linha*. Somando
+>    linha a linha, a tela Relatórios "cabia"; na tela, o último campo ficava
+>    **1px** fora da janela, esticado pelo vizinho de baixo. A conta agora mede
+>    pelas colunas do grid, e escolhe o maior número de itens por linha que
+>    ainda cabe.
+> 3. **Item ocupa ~3px a mais do que pede** (borda do frame). Três pixels não
+>    parecem nada; com sete itens viram vinte. A faixa erra para o lado da
+>    quebra, que custa altura — e altura sobra.
+>
+> **Um vazamento que o próprio desenho criou, e que o teste pegou.** A faixa
+> precisa medir o `content` (largura própria, vinda da janela): medir a si mesma
+> não funciona, porque no grid um container fica tão largo quanto o que ele
+> pede, e uma faixa em linha única *empurra* o painel para a largura dela — daí
+> nunca "ver" largura menor para justificar a quebra. Mas o `content` **não**
+> morre com a tela (F1.2), então cada visita deixava mais um ouvinte de
+> `<Configure>` falando com widget destruído. A faixa se desliga sozinha no
+> `<Destroy>`; para conseguir, escuta o canvas interno do `CTkFrame`, porque
+> `CTkFrame.bind` **não devolve** o funcid e `CTkFrame.unbind` recusa receber um
+> — só sabe apagar todas as ligações da sequência, levando junto as internas do
+> customtkinter. Há teste contando ouvintes depois de sete visitas.
+>
+> | modo da sidebar | antes | depois |
+> |---|---|---|
+> | completa | 1.416px | **1.200px** |
+> | rail (só ícones) | 1.260px | **1.040px** |
+>
+> Os dois limiares não ficam só no comentário: o smoke de layout passou a
+> exercitar **exatamente** essas duas larguras, tela por tela. Limiar que
+> envelhece reprova antes de o usuário descobrir.
+>
+> **Próximo dono do gargalo:** o **Painel de Arbitragem** (1.200px, no botão
+> "Atualizar agora") — e ele já está na fila da **B-6**, então será atacado lá,
+> com a tela aberta de qualquer forma. Depois dele vêm Inventário (1.104px) e
+> Configurações do torneio (1.080px).
 
 > **Status (2026-07-26): B-6 EM EXECUÇÃO — Torneios migrada; a fila está aqui.**
 > A B-6 é épico por natureza: sete telas de 1.000 a 1.900 linhas. Migrar todas

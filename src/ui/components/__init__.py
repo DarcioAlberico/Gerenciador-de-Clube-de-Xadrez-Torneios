@@ -15,6 +15,7 @@ from .empty_state import EmptyState
 from .menu_button import menu_button
 from .toast import ToastStack
 from .tooltip import Tooltip
+from .wrap_row import WrapRow
 
 __all__ = [
     "primary_button",
@@ -31,5 +32,6 @@ __all__ = [
     "debounce",
     "BusyIndicator",
     "ToastStack",
+    "WrapRow",
     "show_donation_modal",
 ]

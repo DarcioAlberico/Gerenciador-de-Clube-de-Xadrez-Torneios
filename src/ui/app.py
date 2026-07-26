@@ -18,6 +18,7 @@ from .screens.settings import SettingsPagesMixin
 from .support import *
 from .components import EmptyState, primary_button, secondary_button, show_donation_modal
 from .components.dialogs import alert_dialog
+from .layout import wrap_positions
 from .shell import AppShell
 from .screens.tournaments import TournamentPagesMixin
 from .screens.reports import ReportPagesMixin
@@ -573,6 +574,14 @@ class AlbericusApp(
     # Espaco reservado ao titulo da pagina, a esquerda da barra.
     _NAV_TITLE_RESERVE = 300
 
+    @staticmethod
+    def _requested_width(widget: ctk.CTkBaseClass) -> int:
+        """Largura que o widget pede, em pixels de tela. 0 se ainda nao sabe."""
+        try:
+            return int(widget.winfo_reqwidth())
+        except Exception:
+            return 0
+
     def _layout_tournament_nav(self) -> None:
         """Distribui os itens em quantas linhas couberem na largura atual.
 
@@ -594,18 +603,29 @@ class AlbericusApp(
             largura = self.content.winfo_width()
         except Exception:
             return
-        # Antes do primeiro desenho tudo mede 1: cabe numa linha, e o proximo
-        # <Configure> corrige sem piscar um layout intermediario errado.
-        disponivel = (largura if largura > 1 else 10_000) - self._NAV_TITLE_RESERVE
-        por_item = self._NAV_ITEM_WIDTH + self._NAV_ITEM_PAD
-        por_linha = max(1, min(len(botoes), int(disponivel // por_item)))
-        if getattr(nav, "_itens_por_linha", None) == por_linha:
+        # A conta esta em ui/layout.py, sem Tk: e a mesma que as faixas de
+        # filtro das telas administrativas passaram a usar (continuacao da B-8).
+        # Largura 1 (antes do primeiro desenho) vira linha unica la dentro, para
+        # nao piscar um layout intermediario que o proximo <Configure> desfaz.
+        #
+        # `winfo_reqwidth` e nao `_NAV_ITEM_WIDTH`: o botao criado com width=112
+        # desenha 134px, porque o CTk multiplica pela escala de UI (120% por
+        # padrao). Medido: com a conta em unidades logicas, a barra so quebrava
+        # tarde demais e "Diplomas" ficava fora da janela ate 1.416px.
+        larguras = [max(self._NAV_ITEM_WIDTH, self._requested_width(b)) for b in botoes]
+        arranjo = wrap_positions(
+            larguras,
+            largura,
+            self._NAV_ITEM_PAD,
+            self._NAV_TITLE_RESERVE,
+        )
+        if getattr(nav, "_arranjo_nav", None) == arranjo:
             return
-        nav._itens_por_linha = por_linha  # type: ignore[attr-defined]
-        for indice, button in enumerate(botoes):
+        nav._arranjo_nav = arranjo  # type: ignore[attr-defined]
+        for (linha, coluna), button in zip(arranjo, botoes):
             button.grid(
-                row=indice // por_linha,
-                column=indice % por_linha,
+                row=linha,
+                column=coluna,
                 padx=(self._NAV_ITEM_PAD, 0),
                 pady=(0, self._NAV_ITEM_PAD),
                 sticky="e",
