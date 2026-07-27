@@ -60,6 +60,7 @@ class WrapRow:
         self._fonte: Any = None
         self._escuta: Any = None
         self._funcid: str | None = None
+        self._agendado: Any = None
 
     # ---- Montagem --------------------------------------------------------- #
 
@@ -112,7 +113,7 @@ class WrapRow:
         # densa) e quanto cada item de fato pede. Roda dentro do mesmo
         # `update()`, antes de a tela aparecer — o usuário não vê o intervalo.
         try:
-            self.frame.after_idle(self._on_configure)
+            self._agendado = self.frame.after_idle(self._on_configure)
         except Exception:  # noqa: BLE001 — sem laço de eventos (teste puro)
             pass
 
@@ -194,6 +195,7 @@ class WrapRow:
     # ---- Ciclo de vida ---------------------------------------------------- #
 
     def _on_configure(self, _event: Any = None) -> None:
+        self._agendado = None
         if not self._alive():
             self._unbind()
             return
@@ -203,7 +205,25 @@ class WrapRow:
         # Sem checar `event.widget`: `CTkFrame.bind` registra no canvas interno,
         # então quem chega aqui é o `<Destroy>` do canvas — que só acontece
         # quando o frame inteiro morre, que é exatamente o gatilho desejado.
+        self._cancel_pending()
         self._unbind()
+
+    def _cancel_pending(self) -> None:
+        """Descarta o arranjo agendado que já não tem para quem falar.
+
+        Trocar de tela destrói a faixa antes de o ``after_idle`` do ``bind_to``
+        rodar. Sem este cancelamento o Tcl dispara um callback cujo comando
+        acabou de ser apagado junto com o frame — erro no console a cada visita
+        rápida a uma tela densa. Cancelar **pelo próprio frame** é o que mantém
+        a contabilidade de comandos com quem é dono dela.
+        """
+        if self._agendado is None:
+            return
+        try:
+            self.frame.after_cancel(self._agendado)
+        except Exception:  # noqa: BLE001 — ja disparado ou raiz destruida
+            pass
+        self._agendado = None
 
     def _alive(self) -> bool:
         try:

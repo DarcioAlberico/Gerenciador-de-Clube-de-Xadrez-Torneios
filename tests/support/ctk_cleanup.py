@@ -70,6 +70,17 @@ def cancel_pending_callbacks(window) -> None:
     interno do customtkinter) continuam agendados no interpretador Tcl depois da
     janela morrer e chegam a atrapalhar a criação da raiz seguinte. Tolerante a
     falhas: nunca deve derrubar um ``tearDown``.
+
+    **Cancela pelo Tcl, e não por ``window.after_cancel``**, e a diferença não é
+    estilo. O ``after_cancel`` do tkinter não só cancela: ele *apaga o comando
+    Tcl* do callback — usando a lista de comandos de **quem chamou**. Como aqui
+    quem chama é a janela e quem agendou foi um widget lá dentro, o comando
+    some do interpretador e continua anotado no widget; quando o ``destroy()``
+    chega nesse widget, ele tenta apagar o que já não existe e o ``tearDown``
+    morre com ``can't delete Tcl command``.
+
+    Cancelar sem apagar o comando é o que se quer: o comando morre junto com o
+    widget dono, que é quem sabe que ele existe.
     """
     try:
         jobs = window.tk.call("after", "info")
@@ -77,7 +88,7 @@ def cancel_pending_callbacks(window) -> None:
         return
     for job in jobs:
         try:
-            window.after_cancel(job)
+            window.tk.call("after", "cancel", job)
         except Exception:
             pass
 
