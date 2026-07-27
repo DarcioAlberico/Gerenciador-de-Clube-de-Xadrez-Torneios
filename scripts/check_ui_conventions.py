@@ -40,7 +40,6 @@ WILDCARD_PERMITIDO = {
     "screens/communication.py",
     "screens/free_tournament.py",
     "screens/integrations.py",
-    "screens/pairing_arbitration_ui.py",
     "screens/pairing_results_ui.py",
     "screens/pairings.py",
     "screens/settings.py",
