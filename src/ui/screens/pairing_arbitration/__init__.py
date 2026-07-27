@@ -9,7 +9,9 @@ espremer tudo em três camadas.
   cadastros TRF25, parsing de pontos e rodadas;
 - [`controller.py`](controller.py) — decide e fala com banco/serviços, sem Tk,
   e é onde a escolha entre individual e equipes fica explícita;
-- [`panel.py`](panel.py) — o painel do árbitro;
+- [`panel.py`](panel.py) — o painel do árbitro, e
+  [`pending.py`](pending.py) — as mesas aguardando resultado, que é a parte do
+  painel que o árbitro **usa** (as outras informam);
 - [`issues.py`](issues.py) — a Central de pendências;
 - [`registry.py`](registry.py) + [`page.py`](page.py) — a casca comum dos três
   cadastros TRF25, e o contrato que cada um cumpre;

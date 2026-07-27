@@ -5,9 +5,13 @@ montar, ler campo, redesenhar. Quais cartões existem e qual é o próximo passo
 recomendado são decisões puras, e moram em [`state`](state.py); a conversa com
 o banco, em [`controller`](controller.py).
 
-**A faixa de controles quebra linha (B-8).** Este painel era o próximo dono do
-gargalo: com a sidebar completa, o botão "Atualizar agora" pedia 1.200px de
-janela e sozinho definia o limiar em que a barra de navegação aparece.
+**O gargalo de largura da B-8 morreu aqui**, e não como se esperava: a faixa
+que quebra linha resolve a busca de mesas (coluna larga) e **não** as
+preferências de atualização (coluna estreita, onde a conta gira em círculo).
+Ver ``_build_controls``.
+
+A lista de mesas pendentes tem módulo próprio ([`pending`](pending.py)): é a
+parte do painel que o árbitro **usa**, enquanto o resto informa.
 """
 from __future__ import annotations
 
@@ -15,7 +19,7 @@ from typing import Any
 
 import customtkinter as ctk
 
-from ...components import WrapRow, primary_button, secondary_button
+from ...components import primary_button, secondary_button
 from ...i18n import t
 from ...support import (
     THEME_DANGER,
@@ -25,6 +29,7 @@ from ...support import (
     THEME_TEXT_MAIN,
     THEME_TEXT_SUB,
 )
+from .pending import PendingTablesSection
 from .state import (
     INLINE_LIMIT_CHOICES,
     REFRESH_INTERVAL_CHOICES,
@@ -42,22 +47,6 @@ ALERT_COLORS = {
     "info": THEME_TEXT_MAIN,
 }
 
-PENDING_COLUMNS = ("board", "context", "white", "black")
-
-# Atalhos de teclado da lista de mesas: tecla → resultado lançado. O árbitro
-# digita "1" com a mão esquerda enquanto a direita segura a súmula, e o teclado
-# numérico precisa valer o mesmo que o de cima.
-RESULT_SHORTCUTS = {
-    "1": "1-0",
-    "<KP_1>": "1-0",
-    "0": "0-1",
-    "<KP_0>": "0-1",
-    "-": "1/2-1/2",
-    "<KP_Subtract>": "1/2-1/2",
-    "<BackSpace>": "",
-    "<Delete>": "",
-}
-
 
 class ArbitrationPanelView:
     """Monta o painel do árbitro sobre o host (a ``AlbericusApp``)."""
@@ -66,6 +55,7 @@ class ArbitrationPanelView:
         self.host = host
         self.controller = controller
         self.auto_refresh = auto_refresh
+        self.pending = PendingTablesSection(host, controller)
 
     @property
     def tournament_id(self) -> int:
@@ -106,7 +96,7 @@ class ArbitrationPanelView:
 
         self._build_alerts(main, metrics, painel.get("alerts_detailed", []))
         self._build_actions(main)
-        self._build_pending(main, metrics, painel["pending_items"])
+        self.pending.build(main, metrics, painel["pending_items"])
 
         self.auto_refresh.schedule()
 
@@ -264,233 +254,68 @@ class ArbitrationPanelView:
         ]
 
     def _build_controls(self, painel: ctk.CTkFrame, linha: int, colunas: int) -> None:
-        """A faixa de preferências — e o gargalo de largura que a B-8 apontou.
+        """As preferências de atualização — o gargalo de largura da B-8.
 
-        Checkbox, botão e dois seletores numa linha rígida dentro de um painel
-        estreito: era o "Atualizar agora" que ficava fora da janela, e era ele
-        que segurava o limiar da sidebar completa em 1.200px.
+        **Empilhadas, e não numa faixa que quebra linha.** Foi o que a medição
+        mandou. A `WrapRow` mede o quanto lhe sobra a partir de onde ela
+        começa, e aqui ela começa dentro de um painel estreito cuja largura
+        depende dela: a conta gira em círculo e lê a posição de antes de a
+        coluna assentar — o "Atualizar agora" acabava a 1px da borda. Numa
+        coluna larga (a busca de mesas, logo abaixo) isso não acontece, e lá a
+        faixa continua.
+
+        Empilhar dispensa medição: a linha mais larga é a caixa de seleção
+        (~230px), e ela cabe em qualquer largura que este painel possa ter.
         """
         host = self.host
-        faixa = WrapRow(painel)
-        faixa.grid(row=linha, column=0, columnspan=colunas, padx=14, pady=(4, 12), sticky="ew")
+        controles = ctk.CTkFrame(painel, fg_color="transparent")
+        controles.grid(row=linha, column=0, columnspan=colunas, padx=14, pady=(4, 12), sticky="ew")
+        controles.grid_columnconfigure(1, weight=1)
 
         auto = ctk.CTkCheckBox(
-            faixa.frame,
+            controles,
             text=t("arbitration.control.auto_refresh"),
             command=host._toggle_arbitration_auto_refresh,
         )
-        faixa.add(auto, 200)
+        auto.grid(row=0, column=0, columnspan=2, sticky="w")
         if host._arbitration_auto_refresh_enabled:
             auto.select()
 
-        faixa.add(
-            secondary_button(
-                faixa.frame,
-                t("arbitration.control.refresh_now"),
-                host.show_arbitration_panel,
-                width=130,
-            ),
-            130,
-        )
-        intervalo = faixa.add_field(
+        secondary_button(
+            controles,
+            t("arbitration.control.refresh_now"),
+            host.show_arbitration_panel,
+            width=130,
+        ).grid(row=1, column=0, columnspan=2, pady=(8, 0), sticky="w")
+
+        intervalo = self._option_row(
+            controles,
+            2,
             t("arbitration.control.interval"),
-            lambda pai: ctk.CTkOptionMenu(
-                pai,
-                values=list(REFRESH_INTERVAL_CHOICES),
-                width=80,
-                command=host._set_arbitration_refresh_interval,
-            ),
-            80,
+            REFRESH_INTERVAL_CHOICES,
+            host._set_arbitration_refresh_interval,
         )
         intervalo.set(str(host._arbitration_refresh_interval_seconds))
-        limite = faixa.add_field(
+        limite = self._option_row(
+            controles,
+            3,
             t("arbitration.control.inline_limit"),
-            lambda pai: ctk.CTkOptionMenu(
-                pai,
-                values=list(INLINE_LIMIT_CHOICES),
-                width=80,
-                command=host._set_arbitration_inline_tables_limit,
-            ),
-            80,
+            INLINE_LIMIT_CHOICES,
+            host._set_arbitration_inline_tables_limit,
         )
         limite.set(str(host._arbitration_inline_tables_limit))
-        faixa.bind_to(host.content)
-
-    # ---- Mesas aguardando resultado --------------------------------------- #
-
-    def _build_pending(
-        self, main: ctk.CTkFrame, metrics: dict[str, Any], pending_items: list[dict[str, Any]]
-    ) -> None:
-        host = self.host
-        painel = host._make_panel(main)
-        painel.grid(row=1, column=0, padx=(0, 12), pady=(12, 0), sticky="nsew")
-        painel.grid_columnconfigure(0, weight=1)
-
-        self._build_pending_header(painel, metrics, len(pending_items))
-        if pending_items:
-            self._build_pending_table(painel, pending_items)
-        else:
-            host.arbitration_pending_row_map = {}
-            host.arbitration_pending_tree = None
-            ctk.CTkLabel(
-                painel, text=t("arbitration.pending.empty"), text_color=THEME_TEXT_SUB
-            ).grid(row=1, column=0, padx=14, pady=(0, 12), sticky="w")
-
-    def _build_pending_header(
-        self, painel: ctk.CTkFrame, metrics: dict[str, Any], exibidos: int
-    ) -> None:
-        host = self.host
-        cabecalho = ctk.CTkFrame(painel, fg_color="transparent")
-        cabecalho.grid(row=0, column=0, padx=14, pady=(12, 6), sticky="ew")
-        cabecalho.grid_columnconfigure(0, weight=1)
-        host._section_title(cabecalho, t("arbitration.pending.title")).grid(
-            row=0, column=0, sticky="w"
-        )
-        ctk.CTkLabel(
-            cabecalho,
-            text=t(
-                "arbitration.pending.showing",
-                exibidos=exibidos,
-                total=metrics["pending_results"],
-            ),
-            text_color=THEME_TEXT_SUB,
-        ).grid(row=0, column=1, padx=(8, 0), sticky="e")
-        secondary_button(
-            cabecalho, t("arbitration.pending.open"), host.show_pairings, width=140
-        ).grid(row=0, column=2, padx=(10, 0), sticky="e")
-
-        # A faixa de busca quebra linha: três itens de ~400px somados dentro de
-        # um painel que já divide a largura com as "Ações rápidas".
-        faixa = WrapRow(cabecalho)
-        faixa.grid(row=1, column=0, columnspan=3, pady=(8, 0), sticky="ew")
-        # O campo nasce dentro da faixa: no Tk um widget não troca de pai depois
-        # de criado, e um `master` reatribuído à mão mente para o layout.
-        busca = ctk.CTkEntry(
-            faixa.frame, width=160, placeholder_text=t("arbitration.pending.search_placeholder")
-        )
-        busca.insert(0, getattr(host, "_arbitration_pending_query", ""))
-        host.arbitration_pending_query_entry = busca
-        faixa.add(busca, 160, grow=True)
-        faixa.add(
-            secondary_button(
-                faixa.frame, t("arbitration.pending.search"), self._apply_query, width=120
-            ),
-            120,
-        )
-        faixa.add(
-            secondary_button(
-                faixa.frame, t("arbitration.pending.clear"), self._clear_query, width=120
-            ),
-            120,
-        )
-        busca.bind("<Return>", self._apply_query)
-        faixa.bind_to(host.content)
-
-    def _build_pending_table(self, painel: ctk.CTkFrame, pending_items: list[dict[str, Any]]) -> None:
-        host = self.host
-        tabela = host._make_tree(
-            painel,
-            list(PENDING_COLUMNS),
-            {
-                "board": t("arbitration.pending.column.board"),
-                "context": t("arbitration.pending.column.context"),
-                "white": t("arbitration.pending.column.white"),
-                "black": t("arbitration.pending.column.black"),
-            },
-            {"board": 70, "context": 100, "white": 320, "black": 320},
-            visible_rows=min(6, len(pending_items)),
-        )
-        tabela.grid(row=1, column=0, padx=14, pady=(0, 12), sticky="ew")
-        host.arbitration_pending_tree = tabela
-        host.arbitration_pending_row_map = {}
-        for item in pending_items:
-            iid = tabela.insert(
-                "",
-                "end",
-                values=(item["board"], item["context"], item["white"], item["black"]),
-            )
-            host.arbitration_pending_row_map[iid] = int(item["pairing_id"])
-
-        tabela.bind("<Double-1>", lambda _evento: host.show_pairings())
-        for tecla, resultado in RESULT_SHORTCUTS.items():
-            tabela.bind(
-                tecla,
-                lambda _evento, valor=resultado: host._save_arbitration_panel_result(valor),
-            )
-        primeira = tabela.get_children()
-        if primeira:
-            tabela.selection_set(primeira[0])
-            tabela.focus(primeira[0])
-            tabela.see(primeira[0])
-
-        self._build_inline_actions(painel)
-        tabela.focus_set()
-
-    def _build_inline_actions(self, painel: ctk.CTkFrame) -> None:
-        host = self.host
-        faixa = WrapRow(painel)
-        faixa.grid(row=2, column=0, padx=14, pady=(0, 12), sticky="ew")
-        faixa.add(
-            ctk.CTkLabel(
-                faixa.frame, text=t("arbitration.pending.enter_result"), text_color=THEME_TEXT_SUB
-            ),
-            130,
-        )
-        for rotulo, resultado in (
-            ("1-0", "1-0"),
-            ("1/2", "1/2-1/2"),
-            ("0-1", "0-1"),
-            (t("arbitration.pending.clear_result"), ""),
-        ):
-            faixa.add(
-                ctk.CTkButton(
-                    faixa.frame,
-                    text=rotulo,
-                    width=70,
-                    command=lambda valor=resultado: host._save_arbitration_panel_result(valor),
-                ),
-                70,
-            )
-        faixa.add(
-            ctk.CTkLabel(
-                faixa.frame, text=t("arbitration.pending.shortcuts"), text_color=THEME_TEXT_SUB
-            ),
-            170,
-        )
-        faixa.bind_to(host.content)
-
-    # ---- Ponte ------------------------------------------------------------ #
-
-    def _apply_query(self, _event: Any = None) -> None:
-        entrada = self.host.arbitration_pending_query_entry
-        self.host._arbitration_pending_query = entrada.get().strip()
-        self.host.show_arbitration_panel()
-
-    def _clear_query(self) -> None:
-        self.host._arbitration_pending_query = ""
-        self.host.show_arbitration_panel()
-
-    def save_result(self, result: str) -> str:
-        """Lança o resultado da mesa selecionada. Devolve "break" (é um bind)."""
-        host = self.host
-        try:
-            tabela = getattr(host, "arbitration_pending_tree", None)
-            if tabela is None:
-                raise self._app_error(t("arbitration.error.no_pending"))
-            selecionado = tabela.selection()
-            if not selecionado:
-                raise self._app_error(t("arbitration.error.select_table"))
-            pairing_id = host.arbitration_pending_row_map.get(selecionado[0])
-            if not pairing_id:
-                raise self._app_error(t("arbitration.error.table_not_found"))
-            self.controller.save_result(self.tournament_id, int(pairing_id), result)
-            host.show_arbitration_panel()
-        except Exception as exc:
-            host._show_error(exc)
-        return "break"
 
     @staticmethod
-    def _app_error(message: str) -> Exception:
-        from src.services.constants import AppError
-
-        return AppError(message)
+    def _option_row(
+        controles: ctk.CTkFrame,
+        linha: int,
+        rotulo: str,
+        valores: tuple[str, ...],
+        comando: Any,
+    ) -> ctk.CTkOptionMenu:
+        ctk.CTkLabel(controles, text=rotulo, text_color=THEME_TEXT_SUB).grid(
+            row=linha, column=0, pady=(8, 0), sticky="w"
+        )
+        seletor = ctk.CTkOptionMenu(controles, values=list(valores), width=80, command=comando)
+        seletor.grid(row=linha, column=1, padx=(6, 0), pady=(8, 0), sticky="w")
+        return seletor

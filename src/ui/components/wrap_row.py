@@ -107,6 +107,13 @@ class WrapRow:
         self._escuta = getattr(source, "_canvas", source)
         self._funcid = self._escuta.bind("<Configure>", self._on_configure, add="+")
         self.frame.bind("<Destroy>", self._on_destroy, add="+")
+        # E quando a faixa aparecer. Sem isto o arranjo dependia de sorte: a
+        # faixa só sabe onde começa depois de **mapeada**, e o `after_idle`
+        # abaixo às vezes roda antes disso — aí ela mede deslocamento zero,
+        # conclui que tem a largura inteira do `content` e nunca quebra. Foi
+        # exatamente o que aconteceu nas telas de cadastro TRF25, onde a faixa
+        # nasce à direita de um formulário de ~420px.
+        self.frame.bind("<Map>", self._on_configure, add="+")
         self.relayout()
         # E de novo quando a geometria assentar: só então a faixa sabe onde
         # começa (há um painel de formulário à esquerda em quase toda tela
@@ -129,6 +136,13 @@ class WrapRow:
             return 0
         try:
             largura = int(self._fonte.winfo_width())
+            # Enquanto a faixa não está na tela, `winfo_rootx` devolve a posição
+            # do pai — e o deslocamento sai zero, que é justamente o valor que
+            # faz a conta concluir "cabe tudo numa linha". Declarar a largura
+            # como desconhecida é honesto: o `<Map>` refaz a conta com o número
+            # de verdade, antes de o usuário ver.
+            if not self.frame.winfo_ismapped():
+                return 1
         except Exception:  # noqa: BLE001 — fonte destruida entre eventos
             return 0
         if largura <= 1:
