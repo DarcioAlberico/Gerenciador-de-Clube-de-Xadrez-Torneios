@@ -355,8 +355,8 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 - ✅ **B-4** `Treeview` grande (P2-13) — medida e adiada; ver o status abaixo.
 - ✅ **B-5** Cache de figuras matplotlib quando dados não mudam (P2-14).
 - 🔄 **B-6** Migrar telas-monstro para 3 camadas (continuação de F1.5) — **em
-  execução**: Torneios e **Jogadores** migradas; a fila está no status abaixo,
-  em ordem.
+  execução**: Torneios, **Jogadores** e **Arbitragem** migradas; a fila está no
+  status abaixo, em ordem.
 - ✅ **B-7** Acentuar cabeçalhos/títulos de `src/services/export_*` (F3.5) — a
   decisão de compatibilidade foi tomada: acentuar **inclusive CSV/XLSX**, com
   fronteira ASCII no pacote Access, TRF e PGN. Ver o status abaixo.
@@ -364,7 +364,10 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
   dono (ver o status abaixo). **Continuação CONCLUÍDA:** as cinco telas
   administrativas densas (Ranking interno, Financeiro, Calendário, Exercícios,
   Relatórios) deixaram de definir o limiar — a faixa de filtros agora quebra em
-  linhas. O próximo dono tem nome: o **Painel de Arbitragem**.
+  linhas. **Segunda continuação CONCLUÍDA:** o Painel de Arbitragem saiu do
+  caminho junto com a B-6, e a faixa que quebra linha ganhou o conserto que
+  faltava (ver o status de 2026-07-27). O próximo dono é a tela de **Rodadas**,
+  que já é a próxima da fila da B-6.
 
 > **Status (2026-07-25): B-4 — a medição desmentiu a premissa; virtualização
 > NÃO foi implementada.** O achado P2-13 dizia "lento em 1.000+ linhas". Medido:
@@ -578,9 +581,10 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 >
 > **Fila da B-6**, por ordem de valor sobre risco:
 > 1. `pairing_results_ui` (1.922) — a maior e a mais usada; entra depois de
->    alguma outra pagar o aprendizado, porque é a que mais dói se quebrar;
+>    alguma outra pagar o aprendizado, porque é a que mais dói se quebrar. É
+>    também o **dono atual do gargalo de largura** (1.220px, no "Limpar");
 > 2. ✅ `tournament_players_ui` (1.613) — **migrada** (ver o status abaixo);
-> 3. `pairing_arbitration_ui` (1.527);
+> 3. ✅ `pairing_arbitration_ui` (1.527) — **migrada** (ver o status de 2026-07-27);
 > 4. `admin_training_finance` (1.226), `admin_exercises_inventory` (1.126),
 >    `club_members_ui` (1.073), `settings_certificates_ui` (1.062);
 > 5. as três telas restantes de `tournaments/pages.py` (Central, Equipes,
@@ -638,6 +642,93 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 > 198 chaves novas (catálogo de 73 → 271), 34 testes sem janela, e o
 > `neutral_button` — o par `THEME_NEUTRAL`/`THEME_NEUTRAL_HOVER` repetido à mão
 > em cinco telas — virou factory em `components/buttons.py`.
+> **Status (2026-07-27): B-6 — Arbitragem migrada, e a B-8 fechou junto.**
+> `pairing_arbitration_ui.py` (1.527 linhas) era **cinco** telas: painel do
+> árbitro, Central de pendências e os três cadastros TRF25 (ajustes de pontos,
+> byes solicitados, proibições de pareamento). Virou o pacote
+> [`screens/pairing_arbitration/`](src/ui/screens/pairing_arbitration/) com 14
+> arquivos, o maior com **392 linhas**; o import externo não mudou.
+>
+> **Os três cadastros TRF25 eram a mesma tela escrita três vezes** — formulário
+> estreito à esquerda, tabela à direita, rodapé com Atualizar/Remover/Voltar e
+> exclusão com Desfazer. Agora a casca é uma só ([`registry.py`](src/ui/screens/pairing_arbitration/registry.py))
+> e cada cadastro declara só o que tem de próprio. A prova de que triplicar
+> custa: **só um dos três rodapés** tinha o botão destrutivo destacado, e a
+> confirmação de exclusão não pedia `danger=` em nenhum — agora os três pedem.
+>
+> **Três achados, e os dois primeiros são de infraestrutura de teste:**
+>
+> 1. **`cancel_pending_callbacks` apagava comando Tcl dos outros.** O
+>    `after_cancel` do tkinter não só cancela: apaga o comando do callback
+>    usando a lista de comandos de **quem chamou**. Chamado na janela para um
+>    `after` agendado por um widget lá dentro, o comando some do interpretador e
+>    continua anotado no widget — e o `destroy()` do `tearDown` morre com
+>    `can't delete Tcl command`. Onze testes reprovaram em cascata a partir daí.
+>    Agora o cancelamento vai direto pelo Tcl (`after cancel`), sem apagar
+>    comando de ninguém.
+> 2. **A faixa que quebra linha media antes de existir na tela.** A `WrapRow`
+>    só sabe onde começa depois de **mapeada**; a única remedição vinha de um
+>    `after_idle` que às vezes rodava antes disso, lia deslocamento zero e
+>    concluía que tinha a largura inteira do `content`. Agora ela também escuta
+>    o próprio `<Map>` e declara a largura como *desconhecida* enquanto não está
+>    na tela. Isso não era teoria: **Exercícios caiu de 1.180 para 1.000px e
+>    Treinos de 1.140 para 940px** só com esse conserto — telas que a
+>    continuação anterior da B-8 dava por resolvidas.
+> 3. **O layout antigo escondia o transbordo truncando o botão.** No rodapé dos
+>    cadastros, o `pack` desenhava "Voltar ao painel" com **115px** em vez dos
+>    168 que ele pede: o rótulo saía cortado e a medição — que olha a largura
+>    desenhada — dizia que cabia. Trocar por faixa que quebra linha tornou o
+>    problema visível antes de torná-lo resolvido.
+>
+> **A faixa não serve em toda parte, e a medição é que disse.** No painel do
+> árbitro as preferências de atualização vivem numa coluna estreita **cuja
+> largura depende da própria faixa**: a conta gira em círculo e lê a posição de
+> antes de a coluna assentar, deixando "Atualizar agora" a 1px da borda.
+> Ali a resposta é empilhar, que dispensa medição. A faixa ficou onde a coluna é
+> larga e a posição dela não depende do resultado (busca de mesas, ações inline,
+> rodapé da Central, rodapé dos cadastros).
+>
+> **Limiares remedidos com dados na base** (torneio com jogadores e rodada
+> gerada — a medição anterior usava base vazia e era otimista), com a barra
+> **completa** forçada:
+>
+> | tela | antes | depois |
+> |---|---|---|
+> | Rodadas (`pairing_results_ui`) | 1.220px | 1.220px (não mexida) |
+> | Exercícios | 1.180px | **1.000px** |
+> | Painel de Arbitragem | 1.160px | **1.020px** |
+> | Treinos | 1.140px | **940px** |
+> | Ajustes / Byes / Proibições | 1.020px (com botão cortado) | **1.020px** (inteiro) |
+>
+> O Painel de Arbitragem deixou de ser o dono do gargalo: o que o limita agora é
+> a barra do torneio, igual a nove outras telas. Com a barra em **rail** ele cai
+> para o piso da varredura (700px), junto com as outras quinze.
+>
+> **Os dois limiares continuam onde estavam — 1.200px e 1.040px — e agora se
+> sabe por quê.** Com o rail, a exigência máxima medida é exatamente **1.040px**,
+> e o dono é a tela de **Rodadas**; com a barra completa ela pede **1.220px**,
+> 20px acima do limiar configurado. O smoke roda com base vazia e passa em
+> 1.200, então o número não reprova hoje — mas está **otimista** para quem tem
+> torneio em andamento. Fica registrado aqui em vez de virar um número corrigido
+> no escuro: Rodadas é a próxima da fila da B-6, e o acerto do limiar cabe lá,
+> junto com a tela que o define.
+>
+> **Cobertura:** 42 testes sem janela em
+> [tests/test_ui_arbitration.py](tests/test_ui_arbitration.py) (estado puro,
+> controlador com banco de mentira, as três páginas de cadastro) mais o smoke,
+> que passou a exercitar **as quatro telas de arbitragem que ficavam de fora** —
+> eram justamente elas que definiam o limiar. Dois testes guardam os achados: um
+> exige que o rodapé dos cadastros quebre em janela estreita, e outro varre o
+> `pairing_service` procurando **toda ação de alerta emitida** e cobra que ela
+> tenha destino no painel. Esse último precisou de parser de parênteses
+> balanceados: a regex ingênua perdia três das nove ações, porque metade dos
+> alertas é montada com f-string que contém `)` — `"resultado(s)"`.
+>
+> **B-3 no mesmo passo:** 205 chaves novas (catálogo de 271 → 476) e a
+> acentuação que a F3.5 tinha deixado para trás nesta tela ("Painel do árbitro",
+> "Central de pendências", "Ações rápidas", "Proibições"). Sete asserções de
+> teste mudaram junto — é o que muda quando o texto visível muda.
+
 > **Status (2026-07-26): B-3 CONCLUÍDA — preparação, e só.** A ESPEC §6 e §8 são
 > explícitas: extrair strings mantendo **só PT-BR**, sem implementar inglês. O
 > valor imediato não é falar inglês; é ter **um lugar** onde o texto mora.

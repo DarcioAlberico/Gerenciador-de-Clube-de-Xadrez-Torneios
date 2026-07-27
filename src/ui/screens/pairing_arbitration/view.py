@@ -114,7 +114,7 @@ class ArbitrationPagesMixin:
     # ---- Ações do painel -------------------------------------------------- #
 
     def _save_arbitration_panel_result(self, result: str) -> str:
-        return self._arbitration_panel_view().save_result(result)
+        return self._arbitration_panel_view().pending.save_result(result)
 
     def _open_closing_checklist_dialog(self) -> Any:
         return open_closing_checklist(self, self._arbitration_controller())

@@ -39,6 +39,12 @@ class UiLayoutSmokeTest(unittest.TestCase):
         "show_tournaments",
         "show_tournament_dashboard",
         "show_arbitration_panel",
+        # As quatro telas de arbitragem entraram com a B-6: elas ficavam de fora
+        # do smoke e eram justamente as que definiam o limiar da sidebar.
+        "show_arbitration_issues",
+        "show_point_adjustments",
+        "show_requested_byes",
+        "show_prohibited_pairings",
         "show_tournament_settings",
         "show_players",
         "show_teams",
@@ -164,6 +170,40 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.app.update()
         self.assertGreater(len(self._linhas_da_faixa_de_filtros()), 1)
         self.assertEqual([], self._widgets_past_right_edge())
+
+    def test_faixa_so_sabe_onde_comeca_depois_de_aparecer(self) -> None:
+        """B-8: o rodape dos cadastros TRF25 nasce a **direita** de um formulario
+        de ~420px, e a faixa mede o espaco a partir de onde ela comeca.
+
+        Antes, a unica remedicao vinha de um `after_idle` que as vezes rodava
+        com a faixa ainda **nao mapeada** — deslocamento zero, conta concluindo
+        "cabe a largura inteira do content" e o ultimo botao fora da janela. O
+        layout antigo escondia isso porque o `pack` *encolhia* o ultimo botao
+        (168px desenhados como 115), ou seja, truncava o rotulo em vez de
+        transbordar: nao dava erro, e nao cabia.
+        """
+        self.app.geometry("1600x900+0+0")
+        self.app.update()
+        self.app.show_requested_byes()
+        self.app.update()
+        self.assertEqual({0}, self._linhas_do_rodape_de_cadastro(), "em janela larga fica em uma linha")
+
+        self.app.geometry("1000x700+0+0")
+        self.app.update()
+        self.app.show_requested_byes()
+        self.app.update()
+        self.assertGreater(len(self._linhas_do_rodape_de_cadastro()), 1, "em janela estreita quebra")
+        self.assertEqual([], self._widgets_past_right_edge())
+
+    def _linhas_do_rodape_de_cadastro(self) -> set[int]:
+        rodape = [
+            widget
+            for widget in self._walk(self.app.content)
+            if isinstance(widget, ctk.CTkButton)
+            and widget.cget("text") in {"Atualizar", "Remover selecionado", "Voltar ao painel"}
+        ]
+        self.assertEqual(3, len(rodape), "o rodape do cadastro tem tres acoes")
+        return {int(botao.grid_info()["row"]) for botao in rodape}
 
     def test_faixa_de_filtros_nao_acumula_ouvinte_no_content(self) -> None:
         """A faixa que quebra linha mede o `content`, e o `content` sobrevive a
