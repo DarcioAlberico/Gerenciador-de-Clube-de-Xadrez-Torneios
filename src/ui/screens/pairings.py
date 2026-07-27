@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from ..support import *
 
-from .pairing_arbitration_ui import ArbitrationPagesMixin
+from .pairing_arbitration import ArbitrationPagesMixin
 from .pairing_results_ui import PairingResultsMixin
 
 
