@@ -54,7 +54,7 @@ class HomePagesMixin:
             pass
         self._page_title(
             "Inicio" + (f" — {operador}" if operador else ""),
-            "O que precisa da sua acao agora.",
+            "O que precisa da sua ação agora.",
         )
 
         pendencias = build_pendencies(self._home_snapshot())
@@ -115,7 +115,7 @@ class HomePagesMixin:
             cartao,
             pendencia.action_label,
             lambda destino=pendencia.destination: self.navigator.go(destino),
-            tip="Abre a tela onde essa pendencia se resolve.",
+            tip="Abre a tela onde essa pendência se resolve.",
         )
         acao.grid(row=0, column=1, rowspan=2, padx=(SPACE_LG, 0))
         return cartao

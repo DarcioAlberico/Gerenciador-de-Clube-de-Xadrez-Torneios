@@ -335,6 +335,6 @@ class ColumnLayoutEditor(ctk.CTkFrame):
                 footer, text="Adicionar coluna", width=150,
                 command=lambda: self._add(label_to_key.get(add_menu.get())),
             ).grid(row=0, column=1, padx=(8, 0))
-        ctk.CTkButton(footer, text="Restaurar padrao", width=150, command=self._reset).grid(
+        ctk.CTkButton(footer, text="Restaurar padrão", width=150, command=self._reset).grid(
             row=0, column=2, padx=(8, 0)
         )

@@ -520,12 +520,19 @@ class AlbericusApp(
         header.grid_columnconfigure(0, weight=1)
         self._page_header = header
 
+        # `anchor="w"` nos dois (P3-16): `sticky` posiciona o WIDGET na celula,
+        # mas quem alinha o TEXTO dentro dele e o anchor do proprio CTkLabel, e
+        # ele nasce centralizado. Quando a barra do torneio espreme a coluna, o
+        # texto centralizado e cortado **dos dois lados** — foi assim que o
+        # subtitulo da Config. do torneio virou "rneio: Aberto Primavera - Clube
+        # Modelo Alberic" no screenshot do manual.
         ctk.CTkLabel(
             header,
             text=title,
             font=ctk.CTkFont(size=SIZE_PAGE_TITLE, weight="bold"),
             text_color=THEME_TEXT_MAIN,
-        ).grid(row=0, column=0, sticky="w")
+            anchor="w",
+        ).grid(row=0, column=0, sticky="ew")
         if subtitle:
             ctk.CTkLabel(
                 header,
@@ -533,7 +540,8 @@ class AlbericusApp(
                 text_color=THEME_TEXT_SUB,
                 wraplength=760,
                 justify="left",
-            ).grid(row=1, column=0, pady=(2, 0), sticky="w")
+                anchor="w",
+            ).grid(row=1, column=0, pady=(2, 0), sticky="ew")
 
     def _build_tournament_nav(self, active: str) -> None:
         if not getattr(self, "current_tournament_id", None):

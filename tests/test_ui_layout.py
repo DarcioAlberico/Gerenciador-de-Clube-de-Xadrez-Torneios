@@ -732,7 +732,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.app.show_tournament_settings()
         self.app.update()
         self._set_entry_after_label("Tabuleiros por equipe", "5")
-        self._set_entry_after_label("Pontos por vitoria da equipe", "3")
+        self._set_entry_after_label("Pontos por vitória da equipe", "3")
         self._set_entry_after_label("Pontos por empate da equipe", "1")
         self._set_entry_after_label("Pontos por derrota da equipe", "0")
         self._set_entry_after_label("Taxa rating FIDE por inscrito", "2,50")
@@ -867,7 +867,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.app.current_tournament_id = tournament_id
         self.app.show_pairings()
         self.app.update()
-        self._click_button("Gerar proxima rodada")
+        self._click_button("Gerar próxima rodada")
         self.app.update()
 
         row_values = [
@@ -928,7 +928,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
 
         self.app.show_pairings()
         self.app.update()
-        self._click_button("Gerar proxima rodada")
+        self._click_button("Gerar próxima rodada")
         self.app.update()
 
         first_pairing_row = self.app.pairing_tree.get_children()[0]
@@ -961,7 +961,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
 
         self.app.show_pairings()
         self.app.update()
-        self._click_button("Gerar proxima rodada")
+        self._click_button("Gerar próxima rodada")
         self.app.update()
 
         # The round has 2 boards: Board 1 (Bruno x Carlos), Board 2 (Daniel x BYE)
@@ -1094,7 +1094,10 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self._label("Rodadas e resultados")
         self.app.show_arbitration_panel()
         self.app.update()
-        self._click_button("Central de pendências")
+        # O botao leva a forma CURTA desde a F5.12 (em tres colunas o rotulo
+        # inteiro era cortado); o titulo da tela de destino segue completo, e e
+        # ele que prova que o clique foi para o lugar certo.
+        self._click_button("Pendências")
         self.app.update()
         self._label("Central de pendências")
         self._label("Total")
@@ -1446,7 +1449,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
 
         self.app.show_pairings()
         self.app.update()
-        self._click_button("Gerar proxima rodada")
+        self._click_button("Gerar próxima rodada")
         self.app.update()
 
         rows = list(self.app.pairing_tree.get_children())
@@ -1520,7 +1523,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.app.show_pairings()
         self.app.update()
         with mock.patch("src.ui.components.dialogs.tri_state_dialog", return_value=True) as confirm:
-            self._click_button("Gerar proxima rodada")
+            self._click_button("Gerar próxima rodada")
         self.app.update()
 
         self.assertEqual(1, len(self.db.list_rounds(self.tournament_id)))
@@ -1540,7 +1543,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.app.show_pairings()
         self.app.update()
         with mock.patch("src.ui.components.dialogs.tri_state_dialog", return_value=False):
-            self._click_button("Gerar proxima rodada")
+            self._click_button("Gerar próxima rodada")
         self.app.update()
 
         self.assertEqual([], self.db.list_rounds(self.tournament_id))

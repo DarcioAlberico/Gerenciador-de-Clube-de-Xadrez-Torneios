@@ -863,7 +863,7 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 | ✅ F5.9 | `ProgressOverlay` local sobre o painel em ação + `busy_widget` obrigatório por convenção de lint (P3-11) | 1,5d | M | B | — | Duplo clique não duplica operação; espera visível no local |
 | ✅ F5.10 | Teclado: ordem de Tab explícita nos formulários, `Return` → ação primária, `takefocus=False` em botões secundários (P3-13) | 1,5d | M | B | F5.4 | Lançar 20 resultados usando só o teclado |
 | ✅ F5.11 | `tk.Menu` gerado do registro `DESTINATIONS`; sidebar vira **rail** (não some) abaixo de 1.040px (P3-14) | 1d | M | B | F1.3 | Menu e sidebar com os mesmos destinos e rótulos |
-| F5.12 | Lint de acentuação em `text=`/`t()` + correção dos ~26 rótulos; caça aos defeitos pontuais: truncamento dos botões do painel, data corrompida na Config. do torneio (P3-15, P3-16) | 1d | M | B | — | Grep de palavras-alvo zerado no CI; screenshots do manual re-tirados |
+| ✅ F5.12 | Lint de acentuação em `text=`/`t()` + correção dos ~26 rótulos; caça aos defeitos pontuais: truncamento dos botões do painel, data corrompida na Config. do torneio (P3-15, P3-16) | 1d | M | B | — | Grep de palavras-alvo zerado no CI; screenshots do manual re-tirados |
 
 > **Status (2026-07-29): F5.1 CONCLUÍDA.** As cores dos campos deixaram de ser
 > escolhidas e passaram a ser **derivadas**: `field_palette(painel)` em
@@ -1247,6 +1247,59 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 > as 23 telas foram verificadas com o rail ligado, e nenhuma empurra controle
 > para fora.
 
+> **Status (2026-07-29): F5.12 CONCLUÍDA — fase 5 encerrada.** O lint de
+> acentuação ([`check_ui_accents.py`](scripts/check_ui_accents.py)) não usa
+> dicionário: a regra é a **auto-consistência**. O app é quem diz como se
+> escreve cada palavra — se "Classificação" aparece no catálogo e
+> "Classificacao" aparece numa tela, a segunda está errada. Isso vale sem
+> manter lista de palavras portuguesas, sem dependência nova, e **melhora
+> sozinho** a cada texto novo escrito direito.
+>
+> Duas exclusões, e ambas são decisões, não preguiça:
+> - **`{codigo}` não é palavra**, é o nome do parâmetro que o `t()` preenche.
+>   A primeira versão do lint "corrigiu" `{codigo}` para `{código}` e quebrou a
+>   chamada — o texto entre chaves sai do corpus.
+> - **`nav.*.keywords` não se lê, digita-se**: é o que o usuário escreve no
+>   command palette, e "classificacao" ali é o comportamento correto.
+>
+> Mais os **homógrafos**, onde as duas grafias existem em português ("esta
+> mesa" × "está pronto", "eu publico" × "público alvo"): lista curta, cada
+> entrada com o par anotado. Nesses o lint se cala e a revisão decide — dois
+> casos de "esta oculta"/"esta fechada" foram corrigidos à mão.
+>
+> **O corpus foi onde estava o buraco.** A primeira versão só lia argumento
+> **nomeado** (`text=`), e por isso passou batido pela tela de Configurações do
+> app inteira: `_page_title("Configurações do aplicativo", "Ajuste preferencias
+> locais...")` não tem nenhum `text=`. Cabeçalho de tabela, idem — ele chega
+> como **dicionário** no terceiro posicional do `_make_tree`, e "Acao" é dos
+> textos mais lidos da tela. Com os posicionais das factories de UI e os
+> dicionários de cabeçalho, o corpus foi de 977 para **1.526 textos**.
+>
+> Resultado: **90 ocorrências** corrigidas em 19 arquivos e no catálogo, mais
+> **20 palavras** que a auto-consistência não podia ver — o app nunca as tinha
+> escrito certo em lugar nenhum ("horario", "solucao", "posicao"). Essas foram
+> à mão, e a partir de agora o lint protege cada uma: a forma acentuada entrou
+> no corpus. O gate passa a rodar o lint no CI e no `check_quality.ps1`.
+>
+> **Defeitos pontuais (P3-16), com os screenshots re-tirados para conferir:**
+> - *Botões cortados no Painel do árbitro* — em três colunas o botão tem ~137px
+>   e "Ajustes de pontos (TRF25)" não cabe; o `CTkButton` **corta pelos dois
+>   lados** ("justes de pontos (TRF25"). Rótulo do botão e nome da ação deixaram
+>   de ser a mesma string: o botão leva a forma curta e o tooltip guarda o nome
+>   inteiro — que é onde a referência ao TRF25 faz falta, na hora de conferir a
+>   regra, não na de clicar. O nome do grupo já dá o contexto ("Configuração
+>   arbitral" → "Ajustes"), então o rótulo não precisa repeti-lo.
+> - *Subtítulo cortado dos dois lados na Config. do torneio* — mesma família:
+>   `sticky` posiciona o **widget** na célula, mas quem alinha o **texto** é o
+>   `anchor` do `CTkLabel`, e ele nasce centralizado. Espremido pela barra do
+>   torneio, o texto era cortado à esquerda **e** à direita ("rneio: Aberto
+>   Primavera - Clube Modelo Alberic"). Com `anchor="w"` ele corta só onde deve.
+> - *Data corrompida ("2026-05-182026-06-07")* — já não reproduz: o
+>   `MaskedDateEntry` substitui o conteúdo no `insert`, e a F5.4 levou os dois
+>   campos de data para o `date_field`. Confirmado no screenshot novo.
+> - *"None" literal em coluna* — resolvido na F5.5, que faz nulo (e a string
+>   "None") virar célula vazia no `ThemedTreeview`.
+
 ---
 
 ## 3. Sequenciamento recomendado
@@ -1290,10 +1343,10 @@ dos campos de entrada — e as telas de uso diário.
 > "campos de entrada" — a reclamação que originou a auditoria — está fechado
 > ponta a ponta: cor, anatomia e estados.**
 >
-> Restam da Fase 5, em ordem de retorno: `F5.4` (migração ampla dos formulários
-> para o `fields.py` — é o que leva o ganho às telas que ainda montam campo à
-> mão), `F5.8` (21 diálogos ad-hoc), `F5.9` (progresso local), `F5.10`
-> (teclado), `F5.11` (menu/rail) e `F5.12` (lint de acentuação).
+> Restavam da Fase 5, em ordem de retorno: `F5.4` (migração ampla dos
+> formulários), `F5.8` (21 diálogos ad-hoc), `F5.9` (progresso local), `F5.10`
+> (teclado), `F5.11` (menu/rail) e `F5.12` (lint de acentuação). **Todas
+> concluídas** — cada uma com a sua nota de status adiante.
 
 ---
 

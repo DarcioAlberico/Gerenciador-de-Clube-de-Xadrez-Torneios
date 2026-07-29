@@ -9,7 +9,7 @@ class SettingsReportsMixin:
         self._clear_content()
         self._page_title(
             "Relatórios",
-            "Gere relatorios administrativos do clube, de membros e de torneios por periodo.",
+            "Gere relatórios administrativos do clube, de membros e de torneios por período.",
         )
 
         body = ctk.CTkFrame(self.content, fg_color="transparent")
@@ -90,7 +90,7 @@ class SettingsReportsMixin:
 
         help_label = ctk.CTkLabel(
             panel,
-            text="Use datas no formato ISO para filtrar torneios, presencas, financeiro ou eventos por periodo.",
+            text="Use datas no formato ISO para filtrar torneios, presencas, financeiro ou eventos por período.",
             text_color=THEME_TEXT_SUB,
             wraplength=760,
             justify="left",
@@ -180,7 +180,7 @@ class SettingsReportsMixin:
                     return
 
                 file_path = filedialog.asksaveasfilename(
-                    title="Gerar relatorio",
+                    title="Gerar relatório",
                     initialdir=str(self._default_export_dir()),
                     initialfile=default_filename(report, extension),
                     defaultextension=f".{extension}",
@@ -238,7 +238,7 @@ class SettingsReportsMixin:
         )
         load_class_options()
         update_fields()
-        ctk.CTkButton(panel, text="Gerar relatorio", command=export_report).grid(
+        ctk.CTkButton(panel, text="Gerar relatório", command=export_report).grid(
             row=2,
             column=0,
             padx=16,
@@ -398,7 +398,7 @@ class SettingsReportsMixin:
 
         trf_warning_label = ctk.CTkLabel(
             panel,
-            text="Clique em Validar TRF FIDE para conferir pendencias antes de gerar o arquivo.",
+            text="Clique em Validar TRF FIDE para conferir pendências antes de gerar o arquivo.",
             text_color=THEME_TEXT_SUB,
             justify="left",
             anchor="w",
@@ -586,19 +586,19 @@ class SettingsReportsMixin:
             actions,
             text="Gerar arquivo",
             command=export,
-            tip="Escolhe onde salvar e gera o relatorio selecionado.",
+            tip="Escolhe onde salvar e gera o relatório selecionado.",
         ).pack(side="left")
         secondary_button(
             actions,
             text="Validar TRF FIDE",
             command=validate_trf,
-            tip="Confere pendencias do arquivo FIDE antes de gerar.",
+            tip="Confere pendências do arquivo FIDE antes de gerar.",
         ).pack(side="left", padx=(SPACE_SM, 0))
         secondary_button(
             actions,
-            text="Geracao em lote",
+            text="Geração em lote",
             command=self._open_batch_export_dialog,
-            tip="Gera varios relatorios de uma vez.",
+            tip="Gera vários relatórios de uma vez.",
         ).pack(side="left", padx=(SPACE_SM, 0))
 
         trf_help_panel = self._make_panel(body)
@@ -606,14 +606,14 @@ class SettingsReportsMixin:
         trf_help_panel.grid_columnconfigure(0, weight=1)
         ctk.CTkLabel(
             trf_help_panel,
-            text="Preparacao FIDE/TRF",
+            text="Preparação FIDE/TRF",
             font=font_section(),
         ).grid(row=0, column=0, padx=16, pady=(16, 4), sticky="w")
         ctk.CTkLabel(
             trf_help_panel,
             text=(
-                "Antes de gerar o TRF, confira em Config. Torneio: local, datas, ritmo, federacao e arbitro-chefe. "
-                "Em Jogadores, confira FIDE ID, rating FIDE, federacao/clube e nascimento."
+                "Antes de gerar o TRF, confira em Config. Torneio: local, datas, ritmo, federação e árbitro-chefe. "
+                "Em Jogadores, confira FIDE ID, rating FIDE, federação/clube e nascimento."
             ),
             text_color=THEME_TEXT_SUB,
             wraplength=620,
@@ -651,7 +651,7 @@ class SettingsReportsMixin:
 
         ctk.CTkLabel(
             dialog,
-            text="Selecione os relatorios e formatos para gerar de uma vez na mesma pasta.",
+            text="Selecione os relatórios e formatos para gerar de uma vez na mesma pasta.",
             text_color=THEME_TEXT_SUB,
             anchor="w",
             justify="left",
@@ -698,7 +698,7 @@ class SettingsReportsMixin:
             keys = [key for key, check in report_checks.items() if check.get() == "1"]
             fmts = [fmt for fmt, check in format_checks.items() if check.get() == "1"]
             if not keys:
-                self._show_warning("Selecione ao menos um relatorio.")
+                self._show_warning("Selecione ao menos um relatório.")
                 return
             if not fmts:
                 self._show_warning("Selecione ao menos um formato.")

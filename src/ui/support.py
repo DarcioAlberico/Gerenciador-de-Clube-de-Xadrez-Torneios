@@ -425,7 +425,7 @@ class ErrorCatchingMixin:
                 restore()
                 if refresh is not None:
                     refresh()
-                self._show_toast("Exclusao desfeita.", kind="info")
+                self._show_toast("Exclusão desfeita.", kind="info")
             except Exception as exc:
                 self._show_error(exc)
 

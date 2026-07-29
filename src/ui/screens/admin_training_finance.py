@@ -25,12 +25,12 @@ class TrainingFinanceMixin:
         fields = [
             ("title", "Título"),
             ("session_date", "Data"),
-            ("start_time", "Inicio"),
+            ("start_time", "Início"),
             ("end_time", "Fim"),
             ("instructor", "Instrutor"),
             ("location", "Local"),
             ("objective", "Objetivo"),
-            ("content", "Conteudo"),
+            ("content", "Conteúdo"),
             ("homework", "Tarefa"),
             ("notes", "Observações"),
         ]
@@ -98,13 +98,13 @@ class TrainingFinanceMixin:
         controls.grid(row=0, column=0, sticky="ew", pady=(0, 8))
         search_entry = controls.add(
             ctk.CTkEntry(
-                controls.frame, placeholder_text="Buscar por titulo, turma, instrutor ou local"
+                controls.frame, placeholder_text="Buscar por título, turma, instrutor ou local"
             ),
             width=240,
             grow=True,
         )
         start_filter = controls.add(
-            ctk.CTkEntry(controls.frame, placeholder_text="Inicio", width=120), width=120
+            ctk.CTkEntry(controls.frame, placeholder_text="Início", width=120), width=120
         )
         end_filter = controls.add(
             ctk.CTkEntry(controls.frame, placeholder_text="Fim", width=120), width=120
@@ -134,7 +134,7 @@ class TrainingFinanceMixin:
                 "id": "ID",
                 "title": "Aula/Treino",
                 "date": "Data",
-                "time": "Horario",
+                "time": "Horário",
                 "club": "Clube/Escola",
                 "class": "Turma",
                 "level": "Nível",
@@ -517,7 +517,7 @@ class TrainingFinanceMixin:
         self._clear_content()
         self._page_title(
             "Financeiro",
-            "Controle planos, mensalidades, pagamentos e pendencias dos membros.",
+            "Controle planos, mensalidades, pagamentos e pendências dos membros.",
         )
 
         tabs = ctk.CTkTabview(self.content)
@@ -564,7 +564,7 @@ class TrainingFinanceMixin:
 
         ctk.CTkLabel(
             form,
-            text="Lancamento",
+            text="Lançamento",
             font=font_section(),
             text_color=THEME_TEXT_MAIN,
         ).grid(row=13, column=0, padx=16, pady=(18, 4), sticky="w")
@@ -584,7 +584,7 @@ class TrainingFinanceMixin:
             ("due_date", "Vencimento"),
             ("payment_date", "Pagamento"),
             ("amount", "Valor"),
-            ("method", "Metodo"),
+            ("method", "Método"),
             ("notes", "Observações"),
         ]
         base_row = 18
@@ -633,12 +633,12 @@ class TrainingFinanceMixin:
         controls = WrapRow(right_panel)
         controls.grid(row=1, column=0, sticky="ew", pady=(0, 8))
         search_entry = controls.add(
-            ctk.CTkEntry(controls.frame, placeholder_text="Buscar por membro, plano ou descricao"),
+            ctk.CTkEntry(controls.frame, placeholder_text="Buscar por membro, plano ou descrição"),
             width=240,
             grow=True,
         )
         start_filter = controls.add(
-            ctk.CTkEntry(controls.frame, placeholder_text="Inicio", width=120), width=120
+            ctk.CTkEntry(controls.frame, placeholder_text="Início", width=120), width=120
         )
         end_filter = controls.add(
             ctk.CTkEntry(controls.frame, placeholder_text="Fim", width=120), width=120
@@ -943,7 +943,7 @@ class TrainingFinanceMixin:
                 if not self._confirm_action(
                     "Gerar mensalidades",
                     "Gerar mensalidades para todos os socios/alunos ativos? "
-                    "Lancamentos ja existentes na mesma referencia serao pulados.",
+                    "Lançamentos ja existentes na mesma referencia serao pulados.",
                 ):
                     return
                 result = self.finance_service.generate_recurring_payments(
@@ -1062,7 +1062,7 @@ class TrainingFinanceMixin:
         selected_transaction_id: dict[str, int | None] = {"value": None}
 
         ctk.CTkLabel(
-            caixa_form, text="Transacao", font=font_section(), text_color=THEME_TEXT_MAIN
+            caixa_form, text="Transação", font=font_section(), text_color=THEME_TEXT_MAIN
         ).grid(row=0, column=0, padx=16, pady=(12, 4), sticky="w")
 
         trans_entries: dict[str, ctk.CTkEntry] = {}
@@ -1071,7 +1071,7 @@ class TrainingFinanceMixin:
             ("amount", "Valor"),
             ("transaction_date", "Data (AAAA-MM-DD)"),
             ("category", "Categoria"),
-            ("payment_method", "Metodo"),
+            ("payment_method", "Método"),
             ("notes", "Observações"),
         ]
         
@@ -1103,7 +1103,7 @@ class TrainingFinanceMixin:
             ["id", "date", "type", "description", "category", "amount", "method"],
             {
                 "id": "ID", "date": "Data", "type": "Tipo", "description": "Descrição",
-                "category": "Categoria", "amount": "Valor", "method": "Metodo"
+                "category": "Categoria", "amount": "Valor", "method": "Método"
             },
             {"id": 55, "date": 90, "type": 80, "description": 250, "category": 120, "amount": 80, "method": 100}
         )

@@ -57,6 +57,12 @@ jobs:
       - name: Convenções de UI (tokens e imports)
         run: uv run python scripts/check_ui_conventions.py
 
+      # Acentuacao dos textos visiveis (P3-15): a regra e a auto-consistencia —
+      # palavra que o app escreve acentuada num lugar nao pode aparecer sem
+      # acento em outro. A F3.5 corrigiu 93 rotulos e, sem lint, ~26 voltaram.
+      - name: Acentuação dos textos visíveis
+        run: uv run python scripts/check_ui_accents.py
+
       - name: Testes sem janela
         run: uv run pytest -m "not gui"
         env:

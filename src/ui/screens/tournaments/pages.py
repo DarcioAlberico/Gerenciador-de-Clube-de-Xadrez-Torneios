@@ -141,14 +141,14 @@ class TournamentOtherPagesMixin:
             ).grid(row=0, column=0, padx=16, pady=(16, 6), sticky="w")
             ctk.CTkLabel(
                 panel,
-                text="Altere o formato para Equipes na configuracao do torneio para cadastrar equipes.",
+                text="Altere o formato para Equipes na configuração do torneio para cadastrar equipes.",
                 text_color=THEME_TEXT_SUB,
                 wraplength=420,
                 justify="left",
             ).grid(row=1, column=0, padx=16, pady=(0, 12), sticky="w")
             ctk.CTkButton(
                 panel,
-                text="Abrir configuracao do torneio",
+                text="Abrir configuração do torneio",
                 command=self.show_tournament_settings,
             ).grid(row=2, column=0, padx=16, pady=(0, 16), sticky="w")
             return
@@ -196,7 +196,7 @@ class TournamentOtherPagesMixin:
         player_option = ctk.CTkOptionMenu(form, values=["Sem jogadores disponiveis"], width=252)
         player_option.grid(row=assignment_row + 2, column=0, padx=16, pady=(4, 2), sticky="ew")
 
-        ctk.CTkLabel(form, text="Funcao").grid(
+        ctk.CTkLabel(form, text="Função").grid(
             row=assignment_row + 3,
             column=0,
             padx=16,
@@ -266,7 +266,7 @@ class TournamentOtherPagesMixin:
         roster_panel.grid_rowconfigure(1, weight=1)
         ctk.CTkLabel(
             roster_panel,
-            text="Escalacao da equipe",
+            text="Escalação da equipe",
             font=font_section(),
         ).grid(row=0, column=0, padx=12, pady=(12, 6), sticky="w")
         roster_tree = self._make_tree(
@@ -275,7 +275,7 @@ class TournamentOtherPagesMixin:
             {
                 "id": "ID",
                 "board": "Tab.",
-                "role": "Funcao",
+                "role": "Função",
                 "player": "Jogador",
                 "rating": "Rating",
                 "club": "Clube",
@@ -480,7 +480,7 @@ class TournamentOtherPagesMixin:
                 self.team_service.delete_team(team_id)
                 clear_team_form()
                 load_teams()
-                self._show_toast("Equipe excluida.", kind="success")
+                self._show_toast("Equipe excluída.", kind="success")
             except Exception as exc:
                 self._show_error(exc)
 

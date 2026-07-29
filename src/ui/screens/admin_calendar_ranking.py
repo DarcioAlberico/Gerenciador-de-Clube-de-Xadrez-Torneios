@@ -9,8 +9,8 @@ class CalendarRankingMixin:
     def show_calendar(self) -> None:
         self._clear_content()
         self._page_title(
-            "Calendario",
-            "Organize eventos do clube e vincule torneios ao calendario.",
+            "Calendário",
+            "Organize eventos do clube e vincule torneios ao calendário.",
         )
 
         body = ctk.CTkFrame(self.content, fg_color="transparent")
@@ -25,7 +25,7 @@ class CalendarRankingMixin:
         fields = [
             ("title", "Título"),
             ("event_date", "Data"),
-            ("start_time", "Inicio"),
+            ("start_time", "Início"),
             ("end_time", "Fim"),
             ("location", "Local"),
             ("notes", "Observações"),
@@ -71,12 +71,12 @@ class CalendarRankingMixin:
         controls = WrapRow(right_panel)
         controls.grid(row=0, column=0, sticky="ew", pady=(0, 8))
         search_entry = controls.add(
-            ctk.CTkEntry(controls.frame, placeholder_text="Buscar por titulo, local, clube ou torneio"),
+            ctk.CTkEntry(controls.frame, placeholder_text="Buscar por título, local, clube ou torneio"),
             width=240,
             grow=True,
         )
         start_filter = controls.add(
-            ctk.CTkEntry(controls.frame, placeholder_text="Inicio", width=120), width=120
+            ctk.CTkEntry(controls.frame, placeholder_text="Início", width=120), width=120
         )
         end_filter = controls.add(
             ctk.CTkEntry(controls.frame, placeholder_text="Fim", width=120), width=120
@@ -102,7 +102,7 @@ class CalendarRankingMixin:
                 "title": "Evento",
                 "type": "Tipo",
                 "date": "Data",
-                "time": "Horario",
+                "time": "Horário",
                 "club": "Clube/Escola",
                 "tournament": "Torneio",
                 "location": "Local",
@@ -292,7 +292,7 @@ class CalendarRankingMixin:
         self._clear_content()
         self._page_title(
             "Ranking interno",
-            "Acompanhe rating, aproveitamento e historico esportivo dos membros.",
+            "Acompanhe rating, aproveitamento e histórico esportivo dos membros.",
         )
 
         body = ctk.CTkFrame(self.content, fg_color="transparent")
@@ -345,7 +345,7 @@ class CalendarRankingMixin:
             grow=True,
         )
         start_filter = toolbar.add_field(
-            "Inicio",
+            "Início",
             lambda parent: ctk.CTkEntry(parent, placeholder_text="AAAA-MM-DD", width=115),
             width=115,
         )
@@ -520,7 +520,7 @@ class CalendarRankingMixin:
                     raise AppError("Selecione um membro.")
                 history = self.internal_rating_service.member_rating_history(member_id)
                 if not history:
-                    self._show_warning("Este membro ainda nao possui historico de rating interno.")
+                    self._show_warning("Este membro ainda nao possui histórico de rating interno.")
                     return
                 lines = []
                 for item in history:

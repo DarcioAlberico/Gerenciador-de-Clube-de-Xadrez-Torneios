@@ -1,6 +1,6 @@
 # Manual Completo do Albericus
 
-Gerado em 07/06/2026.
+Gerado em 29/07/2026.
 
 Este manual documenta os menus, telas, funcoes principais, fluxos recomendados e cuidados operacionais do Albericus.
 

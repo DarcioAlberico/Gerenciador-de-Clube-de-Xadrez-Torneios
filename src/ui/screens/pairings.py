@@ -27,7 +27,7 @@ class PairingPagesMixin(ArbitrationPagesMixin, PairingResultsMixin):
             panel.pack(anchor="nw", fill="x")
             ctk.CTkLabel(
                 panel,
-                text="A classificacao esta oculta nas configuracoes do torneio.",
+                text="A classificação está oculta nas configurações do torneio.",
                 text_color=THEME_TEXT_SUB,
             ).pack(anchor="w", padx=16, pady=16)
             return
@@ -133,7 +133,7 @@ class PairingPagesMixin(ArbitrationPagesMixin, PairingResultsMixin):
             def show_team_crosstable_detail() -> None:
                 selected = tree.selection()
                 if not selected:
-                    self._show_warning("Selecione uma equipe na classificacao.")
+                    self._show_warning("Selecione uma equipe na classificação.")
                     return
                 team_id = row_team_ids.get(selected[0])
                 payload = self.pairing_service.team_crosstable(int(self.current_tournament_id))
@@ -235,7 +235,7 @@ class PairingPagesMixin(ArbitrationPagesMixin, PairingResultsMixin):
                 "buchholz": "Buchholz",
                 "median": "Buchholz M",
                 "sb": "SB",
-                "wins": "Vitorias",
+                "wins": "Vitórias",
                 "performance": "Perf.",
                 "rating": "Rating",
                 "club": "Clube",
@@ -263,7 +263,7 @@ class PairingPagesMixin(ArbitrationPagesMixin, PairingResultsMixin):
         def show_tiebreak_detail(criterion: str = "") -> None:
             selected = tree.selection()
             if not selected:
-                self._show_warning("Selecione um jogador na classificacao.")
+                self._show_warning("Selecione um jogador na classificação.")
                 return
             player_id = row_player_ids.get(selected[0])
             if not player_id:
@@ -317,7 +317,7 @@ class PairingPagesMixin(ArbitrationPagesMixin, PairingResultsMixin):
                 lines.append("— Detalhes técnicos —")
                 lines.extend(detail_lines)
 
-            self._show_report("Por que esta posicao?", "\n".join(lines))
+            self._show_report("Por que esta posição?", "\n".join(lines))
 
         ctk.CTkButton(
             toolbar,
