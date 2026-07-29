@@ -16,7 +16,13 @@ from .screens.pairings import PairingPagesMixin
 from .screens.referees import RefereePagesMixin
 from .screens.settings import SettingsPagesMixin
 from .support import *
-from .components import EmptyState, primary_button, secondary_button, show_donation_modal
+from .components import (
+    EmptyState,
+    ThemedTreeview,
+    primary_button,
+    secondary_button,
+    show_donation_modal,
+)
 from .components.dialogs import alert_dialog
 from .layout import wrap_positions
 from .shell import AppShell
@@ -724,28 +730,43 @@ class AlbericusApp(
         headings: dict[str, str],
         widths: dict[str, int],
         visible_rows: int = 10,
+        empty_title: str = "Nenhum registro",
+        empty_description: str = "Os dados aparecem aqui quando houver registros.",
     ) -> ttk.Treeview:
         tree_frame = ctk.CTkFrame(parent, fg_color="transparent")
         tree_frame.grid(row=0, column=0, sticky="nsew")
         tree_frame.grid_columnconfigure(0, weight=1)
         tree_frame.grid_rowconfigure(0, weight=1)
 
-        tree = ttk.Treeview(
+        tree = ThemedTreeview(
             tree_frame,
             columns=columns,
             height=visible_rows,
             show="headings",
             selectmode="browse",
         )
+        # A coluna mais larga (nome, em geral) absorve a sobra: sem isso toda
+        # tabela vivia com barra horizontal permanente (P3-9).
+        larguras = {column: widths.get(column, 100) for column in columns}
+        principal = max(larguras, key=lambda c: larguras[c]) if columns else None
         for column in columns:
             tree.heading(column, text=headings.get(column, column))
-            tree.column(column, width=widths.get(column, 100), anchor="w", stretch=False)
+            tree.column(
+                column,
+                width=larguras[column],
+                anchor="w",
+                stretch=(column == principal),
+            )
+        tree.enable_sorting()
         y_scrollbar = ttk.Scrollbar(tree_frame, orient="vertical", command=tree.yview)
         x_scrollbar = ttk.Scrollbar(tree_frame, orient="horizontal", command=tree.xview)
         tree.configure(yscrollcommand=y_scrollbar.set, xscrollcommand=x_scrollbar.set)
         tree.grid(row=0, column=0, sticky="nsew")
         y_scrollbar.grid(row=0, column=1, sticky="ns")
         x_scrollbar.grid(row=1, column=0, sticky="ew")
+        tree.attach_empty_state(
+            EmptyState(tree_frame, title=empty_title, description=empty_description)
+        )
         self._remember_column_widths(tree)
         return tree
 

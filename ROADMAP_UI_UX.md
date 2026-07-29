@@ -856,7 +856,7 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 | ✅ F5.2 | `components/fields.py`: `text_field`/`select_field`/`text_area`/`date_field`/`labeled_field` — altura única 36px, raio único, escala `FIELD_SM/MD/LG/FULL`, placeholder obrigatório, `font_field()` (P3-3, P3-5, P3-6) | 2d | A | B | F5.1 | Campo e botão alinhados na mesma linha; escala de larguras fechada |
 | F5.3 | Estados de campo: anel de foco (borda accent no `FocusIn`), `set_field_error(widget, msg)`/`clear_field_error` únicos com mensagem sob o campo, desabilitado distinto (P3-4) | 1,5d | A | B | F5.2 | Foco visível em navegação por Tab; 3 implementações locais de erro removidas |
 | F5.4 | Migrar formulários p/ `fields.py` + `components/form.py` (promover `_settings_stack`, com seções) — ordem: Config. torneio, Jogadores, Torneios, Arbitragem, Config. app (P3-12) | 3d | A | M | F5.2 | 5 telas com seções visuais e largura de painel unificada |
-| F5.5 | `_make_tree`: zebra (tokens já existentes), ordenação por clique no cabeçalho, `stretch=True` na coluna principal, `EmptyState` embutido, nulos renderizados vazios (P3-9, "None") | 1,5d | A | B | — | 57 tabelas ganham zebra+sort+vazio sem tocar call-sites |
+| ✅ F5.5 | `_make_tree`: zebra (tokens já existentes), ordenação por clique no cabeçalho, `stretch=True` na coluna principal, `EmptyState` embutido, nulos renderizados vazios (P3-9, "None") | 1,5d | A | B | — | 57 tabelas ganham zebra+sort+vazio sem tocar call-sites |
 | F5.6 | Quebrar o muro de Jogadores (25 → ~5: primárias + `Importar ▾`/`Bases oficiais ▾`/`Publicar ▾` + danger isolada) e aplicar o molde F2.1 aos 15 call-sites de `_grid_form_buttons` (P3-7) | 2d | A | M | — | Nenhuma tela com >8 ações visíveis no mesmo nível |
 | F5.7 | Separar `_show_info`: toast só p/ confirmação curta; `_show_report(title, body)` rolável com botão **Copiar** p/ relatórios; validações → `_show_warning` (~35 call-sites reclassificados) (P3-8) | 1,5d | A | B | — | URL do QR e narrativa de desempate legíveis e copiáveis |
 | F5.8 | Migrar os 21 diálogos ad-hoc p/ `Dialog` canônico (Esc, centralização, tamanho × `ui_scale_percent`, ordem [secundário][primário]); corrigir o aviso de BYE e o diálogo sem saída de Usuários (P3-10) | 2,5d | M | M | — | Todo diálogo fecha com Esc e cabe na tela em 160% |
@@ -927,6 +927,39 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 > sobre o tema sépia. A migração ampla dos formulários é a F5.4.
 > Testes: contratos puros (paridade de altura com botão, escala fechada,
 > placeholder obrigatório) + anatomia real com janela (marcados `gui`).
+
+> **Status (2026-07-29): F5.5 CONCLUÍDA.** Nasce
+> [`components/tree.py`](src/ui/components/tree.py) com a `ThemedTreeview`, e o
+> `_make_tree` passa a instanciá-la — **nenhum dos ~57 call-sites mudou**, que
+> era o aceite. Tudo acontece por dentro de `insert`/`delete`:
+>
+> - **zebra**: os tokens `THEME_TREE_ODD/EVEN` existiam desde a B-2 e nunca
+>   tinham sido aplicados; a tag entra por ÚLTIMO na lista do item (no ttk a
+>   primeira tag que define uma opção vence), então as tags semânticas das
+>   telas — estado QR com fundo próprio, verde de "registrado" — continuam
+>   mandando. Excluir e ordenar reaplicam a alternância; cada instância se
+>   inscreve em `on_theme_change` + `AppearanceModeTracker` e se **desinscreve
+>   no `<Destroy>`** (testado — sem isso cada tela visitada viraria ouvinte
+>   imortal);
+> - **ordenação por clique**: numérica quando a coluna inteira é numérica
+>   ("1740", "1.5" e "1,5"), texto `casefold` caso contrário, vazios sempre ao
+>   fim, segundo clique inverte, indicador ▲/▼ no cabeçalho. Tela que registra
+>   o próprio `heading(command=...)` depois (explicação de desempates em
+>   `pairings.py`) substitui a ordenação naquela coluna — comportamento certo.
+>   O fluxo "próxima mesa" do lançamento rápido não quebra: ele recaptura o
+>   índice a cada recarga;
+> - **`stretch=True` na coluna mais larga** (nome, em geral): a sobra de
+>   largura é absorvida em vez de virar barra horizontal permanente;
+> - **nulos viram célula vazia**: `None` e a string `"None"` (nunca é dado
+>   legítimo em PT-BR) — era o "None" vazando na coluna Turma de Jogadores;
+> - **estado vazio embutido**: `EmptyState` central aparece quando a tabela
+>   fica sem linhas e some na primeira inserção; `_make_tree` ganhou
+>   `empty_title`/`empty_description` opcionais com default genérico — P1-9
+>   sai de 4 para as ~57 tabelas.
+>
+> 9 testes novos (`tests/test_ui_tree.py`, marcados `gui`) + smoke de layout
+> completo verde. Screenshot de Jogadores confirma zebra e "None" eliminado
+> sobre o tema sépia.
 
 ---
 
