@@ -795,6 +795,11 @@ class TournamentSettingsMixin:
         actions.grid(row=1, column=0, pady=(10, 0), sticky="e")
         btn_save_config = ctk.CTkButton(actions, text="Salvar", command=save_settings)
         btn_save_config.pack(side="right", padx=(8, 0))
+        # Enter em qualquer campo de qualquer aba salva (F5.10). As cinco abas
+        # compartilham um unico rodape de acoes, entao a acao primaria e a
+        # mesma para todas — e cada pilha liga o Enter dos seus campos a ela.
+        for pilha in (form_general, form_official, form_rules, form_prizes, form_of(tab_reports)):
+            pilha.submit(save_settings)
         self._disable_if_unauthorized(btn_save_config, "tournament_write")
         btn_save_as = ctk.CTkButton(actions, text="Salvar como novo", command=save_as_new_tournament)
         btn_save_as.pack(side="right", padx=(8, 0))

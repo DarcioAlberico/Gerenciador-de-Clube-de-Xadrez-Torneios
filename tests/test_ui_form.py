@@ -122,7 +122,19 @@ class FormStackTest(unittest.TestCase):
 
     def setUp(self) -> None:
         self.painel = ctk.CTkFrame(self.root)
+        # Mapeado de verdade: o Tk **descarta evento de teclado destinado a
+        # widget nao mapeado**, e os testes de teclado abaixo dependem de o
+        # evento chegar. Mesma familia da pegadinha de foco da B-4.
+        self.painel.pack(fill="both", expand=True)
+        self.root.update()
         self.addCleanup(self.painel.destroy)
+
+    def _teclar(self, alvo: object, sequencia: str) -> None:
+        """Foca o alvo e gera a tecla — nessa ordem, que e a que funciona."""
+        alvo.focus_set()  # type: ignore[attr-defined]
+        self.root.update()
+        alvo.event_generate(sequencia)  # type: ignore[attr-defined]
+        self.root.update()
 
     def test_linhas_avancam_sozinhas_e_nao_se_sobrepoem(self) -> None:
         # O bug que a aritmetica manual causou de verdade na tela de
@@ -178,6 +190,79 @@ class FormStackTest(unittest.TestCase):
         pilha = FormStack(self.painel)
         seletor = pilha.select("Escopo", ["A", "B"])
         self.assertEqual(list(THEME_FIELD_BG), list(seletor.cget("fg_color")))
+
+    # ---- Teclado (F5.10 / P3-13) -----------------------------------------
+
+    def test_select_entra_na_ordem_de_tab(self) -> None:
+        """O buraco real do P3-13, medido: o ``tk_focusNext`` visita ``Entry`` e
+        ``Text`` e **pula** select e caixa de selecao. Uma aba de sete selects
+        nao tinha um unico ponto de parada do teclado."""
+        pilha = FormStack(self.painel)
+        seletor = pilha.select("Escopo", ["A", "B"])
+        self.assertEqual("1", str(seletor._canvas.cget("takefocus")))
+
+    def test_setas_trocam_o_valor_do_select_e_avisam_o_comando(self) -> None:
+        # Trocar na tela sem disparar o `command` deixaria o formulario
+        # mostrando um valor e guardando outro.
+        avisos: list[str] = []
+        pilha = FormStack(self.painel)
+        seletor = pilha.select("Escopo", ["A", "B", "C"], command=avisos.append)
+        seletor.set("A")
+        self._teclar(seletor._canvas, "<Down>")
+        self.assertEqual("B", seletor.get())
+        self.assertEqual(["B"], avisos)
+        self._teclar(seletor._canvas, "<Up>")
+        self.assertEqual("A", seletor.get())
+
+    def test_setas_dao_a_volta_na_lista(self) -> None:
+        pilha = FormStack(self.painel)
+        seletor = pilha.select("Escopo", ["A", "B"])
+        seletor.set("A")
+        self._teclar(seletor._canvas, "<Up>")
+        self.assertEqual("B", seletor.get())
+
+    def test_caixa_de_selecao_alterna_com_espaco(self) -> None:
+        pilha = FormStack(self.painel)
+        caixa = ctk.CTkCheckBox(self.painel, text="Arquivado")
+        pilha.widget(caixa)
+        self.assertEqual("1", str(caixa._canvas.cget("takefocus")))
+        self._teclar(caixa._canvas, "<space>")
+        self.assertEqual(1, caixa.get())
+
+    def test_enter_num_campo_dispara_a_acao_primaria(self) -> None:
+        disparos: list[str] = []
+        pilha = FormStack(self.painel)
+        nome = pilha.text("Nome", placeholder="x")
+        pilha.submit(lambda: disparos.append("salvou"))
+        self._teclar(nome._entry, "<Return>")
+        self.assertEqual(["salvou"], disparos)
+
+    def test_submit_alcanca_tambem_os_campos_criados_depois(self) -> None:
+        # Um formulario e montado em partes; exigir que `submit` fosse a ultima
+        # chamada seria a ordem implicita que a F5.4 tirou do caminho.
+        disparos: list[str] = []
+        pilha = FormStack(self.painel)
+        pilha.submit(lambda: disparos.append("salvou"))
+        depois = pilha.text("Local", placeholder="x")
+        self._teclar(depois._entry, "<Return>")
+        self.assertEqual(["salvou"], disparos)
+
+    def test_enter_nao_e_roubado_da_area_de_texto(self) -> None:
+        """Ali o Enter e quebra de linha — roubá-lo impediria um parágrafo."""
+        disparos: list[str] = []
+        pilha = FormStack(self.painel)
+        area = pilha.area("Observações")
+        pilha.submit(lambda: disparos.append("salvou"))
+        self._teclar(area._textbox, "<Return>")
+        self.assertEqual([], disparos)
+
+    def test_focus_first_leva_ao_primeiro_campo(self) -> None:
+        pilha = FormStack(self.painel)
+        primeiro = pilha.text("Nome", placeholder="x")
+        pilha.text("Local", placeholder="y")
+        pilha.focus_first()
+        self.root.update()
+        self.assertEqual(str(primeiro._entry), str(self.root.focus_get()))
 
 
 if __name__ == "__main__":  # pragma: no cover

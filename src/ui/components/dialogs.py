@@ -511,6 +511,16 @@ def actions_bar(
 
     for texto, comando, fabrica in itens:
         fabrica(barra, texto, comando).pack(side="left", padx=(SPACE_SM, 0))
+
+    # Enter dispara a primaria (F5.10) — mas **nao** quando ha acao de perigo
+    # na faixa: e a mesma regra do `_ModalDialog`, e existe para que um Enter
+    # reflexo nao apague nada. Sem `danger`, o formulario do dialogo passa a
+    # ser preenchivel e confirmavel sem tirar a mao do teclado.
+    if primary is not None and danger is None:
+        try:
+            dialog.bind("<Return>", lambda _e: primary[1]())
+        except Exception:  # pragma: no cover - dialogo sem bind
+            pass
     return barra
 
 

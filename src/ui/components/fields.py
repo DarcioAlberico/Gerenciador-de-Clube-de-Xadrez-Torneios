@@ -149,8 +149,15 @@ def attach_field_states(widget: Any) -> Any:
         _apply_field_state(widget)
 
     # O bind vai no widget Tk de DENTRO: no CTkEntry o foco chega ao tk.Entry
-    # interno, nao ao frame CTk (mesma pegadinha documentada na B-4).
-    alvo = getattr(widget, "_entry", None) or getattr(widget, "_textbox", None) or widget
+    # interno, nao ao frame CTk (mesma pegadinha documentada na B-4). Num
+    # select ou numa caixa de selecao nao ha `_entry`: quem recebe o foco e o
+    # canvas, e e nele que o `_focusable` da F5.10 liga o `takefocus`.
+    alvo = (
+        getattr(widget, "_entry", None)
+        or getattr(widget, "_textbox", None)
+        or getattr(widget, "_canvas", None)
+        or widget
+    )
     try:
         alvo.bind("<FocusIn>", on_focus_in, add="+")
         alvo.bind("<FocusOut>", on_focus_out, add="+")
@@ -158,6 +165,109 @@ def attach_field_states(widget: Any) -> Any:
         pass
     _apply_field_state(widget)
     return widget
+
+
+# ---------------------------------------------------------------------------
+# Teclado (F5.10 / P3-13)
+#
+# O achado do catalogo dizia "ordem de Tab = ordem de criacao". Medindo, o
+# problema era outro e maior: **select e caixa de selecao nao entram na ordem
+# de Tab de jeito nenhum**. O `tk_focusNext` visita `Entry` e `Text` e pula o
+# resto — e no customtkinter TODO botao, select e checkbox e um frame com um
+# canvas dentro, invisivel para a travessia.
+#
+# Consequencia pratica: um formulario de sete selects (a aba "Regras" da
+# Config. do torneio) nao tinha um unico ponto de parada do teclado. Nao havia
+# ordem errada; nao havia ordem.
+#
+# `takefocus=False` em botao secundario, que o catalogo pedia, **nao e
+# necessario**: eles ja sao pulados. Foi verificado, nao suposto.
+# ---------------------------------------------------------------------------
+def _focusable(widget: Any) -> Any:
+    """Coloca o widget na ordem de Tab e devolve o alvo Tk que recebe o foco."""
+    canvas = getattr(widget, "_canvas", None)
+    if canvas is None:
+        return widget
+    try:
+        canvas.configure(takefocus=True)
+    except Exception:  # pragma: no cover
+        return widget
+    return canvas
+
+
+def _bind_keys(alvo: Any, mapa: dict[str, Callable[[Any], Any]]) -> None:
+    for sequencia, acao in mapa.items():
+        try:
+            alvo.bind(sequencia, acao, add="+")
+        except Exception:  # pragma: no cover
+            continue
+
+
+def keyboard_select(campo: Any) -> Any:
+    """Torna um ``CTkOptionMenu`` operavel só com o teclado.
+
+    ``Espaço``/``Enter``/``Alt+Baixo`` abrem a lista; ``↑``/``↓`` trocam o
+    valor sem abrir, que é o gesto rápido de quem está preenchendo um
+    formulário inteiro sem tirar a mão do teclado. Trocar o valor **dispara o
+    ``command``** — senão o formulário mudaria na tela e não no estado.
+    """
+    alvo = _focusable(campo)
+    if alvo is campo:
+        return campo
+
+    def passo(delta: int) -> Callable[[Any], str]:
+        def mover(_evento: Any) -> str:
+            valores = list(campo.cget("values") or [])
+            if not valores:
+                return "break"
+            try:
+                indice = valores.index(campo.get())
+            except ValueError:
+                indice = 0
+            escolhido = valores[(indice + delta) % len(valores)]
+            campo.set(escolhido)
+            comando = campo.cget("command")
+            if callable(comando):
+                comando(escolhido)
+            return "break"
+
+        return mover
+
+    def abrir(_evento: Any) -> str:
+        try:
+            campo._open_dropdown_menu()
+        except Exception:  # pragma: no cover - interno do customtkinter
+            pass
+        return "break"
+
+    _bind_keys(
+        alvo,
+        {
+            "<Down>": passo(1),
+            "<Up>": passo(-1),
+            "<space>": abrir,
+            "<Return>": abrir,
+            "<Alt-Down>": abrir,
+        },
+    )
+    return campo
+
+
+def keyboard_toggle(caixa: Any) -> Any:
+    """Torna um ``CTkCheckBox``/``CTkSwitch`` alcançável e alternável por teclado."""
+    alvo = _focusable(caixa)
+    if alvo is caixa:
+        return caixa
+
+    def alternar(_evento: Any) -> str:
+        try:
+            caixa.toggle()
+        except Exception:  # pragma: no cover
+            pass
+        return "break"
+
+    _bind_keys(alvo, {"<space>": alternar, "<Return>": alternar})
+    return caixa
 
 
 def set_field_error(widget: Any, message: str = "") -> None:
@@ -241,8 +351,10 @@ def select_field(
     kwargs.setdefault("dropdown_fg_color", THEME_PANEL_BG)
     kwargs.setdefault("dropdown_text_color", THEME_TEXT_MAIN)
     kwargs.setdefault("dropdown_hover_color", THEME_TREE_EVEN)
-    return attach_field_states(
-        ctk.CTkOptionMenu(master, values=values, command=command, variable=variable, **kwargs)
+    return keyboard_select(
+        attach_field_states(
+            ctk.CTkOptionMenu(master, values=values, command=command, variable=variable, **kwargs)
+        )
     )
 
 

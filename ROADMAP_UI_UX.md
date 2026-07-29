@@ -861,7 +861,7 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 | ✅ F5.7 | Separar `_show_info`: toast só p/ confirmação curta; `_show_report(title, body)` rolável com botão **Copiar** p/ relatórios; validações → `_show_warning` (~35 call-sites reclassificados) (P3-8) | 1,5d | A | B | — | URL do QR e narrativa de desempate legíveis e copiáveis |
 | ✅ F5.8 | Migrar os 21 diálogos ad-hoc p/ `Dialog` canônico (Esc, centralização, tamanho × `ui_scale_percent`, ordem [secundário][primário]); corrigir o aviso de BYE e o diálogo sem saída de Usuários (P3-10) | 2,5d | M | M | — | Todo diálogo fecha com Esc e cabe na tela em 160% |
 | ✅ F5.9 | `ProgressOverlay` local sobre o painel em ação + `busy_widget` obrigatório por convenção de lint (P3-11) | 1,5d | M | B | — | Duplo clique não duplica operação; espera visível no local |
-| F5.10 | Teclado: ordem de Tab explícita nos formulários, `Return` → ação primária, `takefocus=False` em botões secundários (P3-13) | 1,5d | M | B | F5.4 | Lançar 20 resultados usando só o teclado |
+| ✅ F5.10 | Teclado: ordem de Tab explícita nos formulários, `Return` → ação primária, `takefocus=False` em botões secundários (P3-13) | 1,5d | M | B | F5.4 | Lançar 20 resultados usando só o teclado |
 | F5.11 | `tk.Menu` gerado do registro `DESTINATIONS`; sidebar vira **rail** (não some) abaixo de 1.040px (P3-14) | 1d | M | B | F1.3 | Menu e sidebar com os mesmos destinos e rótulos |
 | F5.12 | Lint de acentuação em `text=`/`t()` + correção dos ~26 rótulos; caça aos defeitos pontuais: truncamento dos botões do painel, data corrompida na Config. do torneio (P3-15, P3-16) | 1d | M | B | — | Grep de palavras-alvo zerado no CI; screenshots do manual re-tirados |
 
@@ -1185,6 +1185,43 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 > só pode cair. As duas chamadas da tabela cruzada já saíram da lista — o
 > botão entra no próprio comando (`lambda b=botao: ...`), padrão para as
 > demais. Contagem de partida: 33 chamadas em 11 arquivos.
+
+> **Status (2026-07-29): F5.10 CONCLUÍDA — e o achado mudou ao medir.** O
+> catálogo dizia "ordem de Tab = ordem de criação" e pedia `takefocus=False`
+> nos botões secundários. Medindo com `tk_focusNext`, o problema era outro e
+> maior: **select e caixa de seleção não entram na ordem de Tab de jeito
+> nenhum**. A travessia visita `Entry` e `Text` e pula o resto — e no
+> customtkinter todo botão, select e checkbox é um frame com um canvas dentro,
+> invisível para ela. A aba "Regras e desempates", com sete selects e dez
+> caixas, não tinha **um único** ponto de parada do teclado. Não havia ordem
+> errada; não havia ordem.
+>
+> Pelo mesmo motivo, `takefocus=False` em botão secundário **não era
+> necessário**: eles já são pulados. Verificado, não suposto — é o tipo de
+> item que se copia do catálogo e se implementa sem efeito nenhum.
+>
+> O que a fase entrega:
+>
+> - **`keyboard_select`**: o select entra na ordem de Tab (`takefocus` no
+>   canvas, que é quem recebe o foco), `↑`/`↓` trocam o valor sem abrir a lista
+>   — o gesto de quem preenche um formulário inteiro sem tirar a mão do teclado
+>   — e `Espaço`/`Enter` abrem. Trocar o valor **dispara o `command`**: sem
+>   isso o formulário mudaria na tela e não no estado.
+> - **`keyboard_toggle`**: caixa de seleção alcançável e alternável com
+>   `Espaço`. Aplicado automaticamente pelo `FormStack.widget`.
+> - **`FormStack.submit(ação)`**: `Enter` em qualquer campo dispara a ação
+>   primária, inclusive nos campos criados **depois** da chamada — um
+>   formulário é montado em partes, e exigir `submit` por último seria a ordem
+>   implícita que a F5.4 tirou do caminho. Não alcança `text_area` (ali Enter é
+>   quebra de linha) nem `select` (ali Enter abre a lista). Ligado em Torneios,
+>   Jogadores e nas cinco abas da Config. do torneio.
+> - **`actions_bar`**: `Enter` dispara a primária do diálogo — **exceto** com
+>   ação de perigo na faixa, mesma regra do `_ModalDialog` (Enter reflexo não
+>   pode apagar nada).
+>
+> O anel de foco da F5.3 passou a alcançar selects e caixas na mesma tacada: o
+> `attach_field_states` agora liga os eventos de foco ao canvas quando não há
+> `_entry`/`_textbox`.
 
 ---
 

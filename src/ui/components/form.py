@@ -37,6 +37,7 @@ from ..form_layout import FORM_PADX, RowKind, row_padding
 from ..theme import THEME_TEXT_SUB, font_section
 from .fields import (
     date_field,
+    keyboard_toggle,
     labeled_field,
     select_field,
     text_area,
@@ -59,6 +60,8 @@ class FormStack:
         self.panel = panel
         self.padx = padx
         self._row = 0
+        self._fields: list[Any] = []
+        self._submit: Callable[[], Any] | None = None
         panel.grid_columnconfigure(0, weight=1)
         setattr(panel, _STACK_ATTR, self)
 
@@ -104,7 +107,47 @@ class FormStack:
         """Rótulo + campo + linha de mensagem, como unidade (``labeled_field``)."""
         box, campo = labeled_field(self.panel, label, builder, help_text=help_text)
         self.place(box, "field")
+        self._fields.append(campo)
+        self._bind_submit(campo)
         return campo
+
+    # ---- Teclado (F5.10 / P3-13) ------------------------------------------
+
+    def submit(self, action: Callable[[], Any]) -> None:
+        """Liga ``Enter`` de todos os campos à ação primária do formulário.
+
+        Vale para os campos já criados **e para os próximos**: um formulário é
+        montado em partes, e exigir que a tela chamasse isto por último seria
+        justamente o tipo de ordem implícita que a F5.4 tirou do caminho.
+
+        Não alcança ``text_area``: ali o Enter é quebra de linha, e roubá-lo
+        impediria escrever um parágrafo. Também não alcança o ``select``, onde
+        Enter já abre a lista — o campo tem uso próprio para a tecla.
+        """
+        self._submit = action
+        for campo in self._fields:
+            self._bind_submit(campo)
+
+    def _bind_submit(self, campo: Any) -> None:
+        if self._submit is None:
+            return
+        if isinstance(campo, (ctk.CTkTextbox, ctk.CTkOptionMenu)):
+            return
+        alvo = getattr(campo, "_entry", None) or campo
+        try:
+            alvo.bind("<Return>", lambda _e: self._submit(), add="+")  # type: ignore[misc]
+        except Exception:  # pragma: no cover - widget sem bind
+            pass
+
+    def focus_first(self) -> None:
+        """Põe o cursor no primeiro campo — o começo do caminho do teclado."""
+        for campo in self._fields:
+            alvo = getattr(campo, "_entry", None) or getattr(campo, "_canvas", None) or campo
+            try:
+                alvo.focus_set()
+                return
+            except Exception:  # pragma: no cover
+                continue
 
     def widget(self, widget: Any, *, label: str = "", help_text: str = "") -> Any:
         """Widget que não é campo (checkbox, editor, botão) na mesma coluna.
@@ -112,11 +155,17 @@ class FormStack:
         Mantém a assinatura do ``_settings_stack`` original para que os
         call-sites que empilham editores próprios (sequência de desempates,
         premiação, colunas) sigam funcionando sem tradução.
+
+        Caixas de seleção passam pelo ``keyboard_toggle`` (F5.10): sem isso
+        elas ficam fora da ordem de Tab, e um formulário com dez ``flags`` —
+        o caso da aba "Regras" — vira um trecho intransponível pelo teclado.
         """
         if label:
             self.place(ctk.CTkLabel(self.panel, text=label, anchor="w"), "widget")
         if help_text:
             self.note(help_text)
+        if isinstance(widget, (ctk.CTkCheckBox, ctk.CTkSwitch)):
+            keyboard_toggle(widget)
         return self.place(widget, "widget")
 
     # ---- Atalhos de campo (a anatomia da F5.2 sem repetir o builder) ------- #

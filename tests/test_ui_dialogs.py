@@ -348,10 +348,17 @@ class DialogCanonicoTest(unittest.TestCase):
             if dialogo.winfo_ismapped():
                 break
             dialogo.update()
-        dialogo.focus_force()
-        dialogo.update()
-        dialogo.event_generate("<Escape>")
-        self.root.update()
+        # Ate dez tentativas: com varias janelas abertas na mesma sessao de
+        # testes o primeiro Esc as vezes chega antes de o foco assentar, e o Tk
+        # o descarta em silencio. Repetir e barato e limitado — `wait_visibility`
+        # ou um laco sem teto trocariam a intermitencia por travamento.
+        for _ in range(10):
+            if not dialogo.winfo_exists():
+                break
+            dialogo.focus_force()
+            dialogo.update()
+            dialogo.event_generate("<Escape>")
+            self.root.update()
         self.assertFalse(dialogo.winfo_exists())
 
     def test_fechar_devolve_o_grab_ao_modal_pai(self) -> None:
