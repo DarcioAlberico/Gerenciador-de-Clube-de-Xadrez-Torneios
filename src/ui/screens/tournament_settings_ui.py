@@ -324,7 +324,7 @@ class TournamentSettingsMixin:
         )
         team_setting_fields = [
             ("team_boards_count", "Tabuleiros por equipe", "Ex.: 4"),
-            ("team_match_win_points", "Pontos por vitoria da equipe", "Ex.: 2"),
+            ("team_match_win_points", "Pontos por vitória da equipe", "Ex.: 2"),
             ("team_match_draw_points", "Pontos por empate da equipe", "Ex.: 1"),
             ("team_match_loss_points", "Pontos por derrota da equipe", "Ex.: 0"),
         ]
@@ -403,7 +403,7 @@ class TournamentSettingsMixin:
         }
         custom_labels = [
             ("rounds", "Rodadas aceleradas"),
-            ("bonus", "Bonus por jogador"),
+            ("bonus", "Bônus por jogador"),
             ("upper", "Fracao do topo (0-1)"),
         ]
         for column, (key, label) in enumerate(custom_labels):
@@ -436,8 +436,8 @@ class TournamentSettingsMixin:
             label="Desempates (individual)",
             section=True,
             help_text=(
-                "Ordem aplicada apos os pontos. Pontos e sempre o primeiro criterio;\n"
-                "rating e nome sao os criterios tecnicos finais."
+                "Ordem aplicada após os pontos. Pontos é sempre o primeiro critério;\n"
+                "rating e nome são os critérios técnicos finais."
             ),
         )
 
@@ -452,7 +452,7 @@ class TournamentSettingsMixin:
             team_tiebreak_editor,
             label="Desempates por equipes",
             section=True,
-            help_text="Ordem dos criterios para a classificacao por equipes (vazio = match points, game points, Buchholz, vitorias).",
+            help_text="Ordem dos critérios para a classificação por equipes (vazio = match points, game points, Buchholz, vitórias).",
         )
 
         # Campos especificos de equipes ficam habilitados apenas quando o
@@ -761,7 +761,7 @@ class TournamentSettingsMixin:
                 )
                 self._set_current_tournament(self.current_tournament_id)
                 if show_message:
-                    self._show_toast("Configuracoes do torneio salvas.", kind="success")
+                    self._show_toast("Configurações do torneio salvas.", kind="success")
                 self.show_tournament_settings()
             except Exception as exc:
                 self._show_error(exc)
@@ -783,7 +783,7 @@ class TournamentSettingsMixin:
                     schedule_payload,
                 )
                 self._set_current_tournament(new_tournament_id)
-                self._show_info("Novo torneio criado com estas configuracoes. Inclua ou importe os participantes.")
+                self._show_info("Novo torneio criado com estas configurações. Inclua ou importe os participantes.")
                 self.show_tournament_settings()
             except Exception as exc:
                 self._show_error(exc)

@@ -362,7 +362,7 @@ class ClubMembersMixin:
         contato_frame = self._make_scrollable_panel(tab_contato)
         contato_frame.pack(fill="both", expand=True)
 
-        ctk.CTkLabel(contato_frame, text="Acoes Rapidas", font=ctk.CTkFont(weight="bold")).grid(row=0, column=0, padx=16, pady=(16, 8), sticky="w")
+        ctk.CTkLabel(contato_frame, text="Ações Rápidas", font=ctk.CTkFont(weight="bold")).grid(row=0, column=0, padx=16, pady=(16, 8), sticky="w")
 
         def open_whatsapp():
             phone = entries.get("phone")
@@ -370,7 +370,7 @@ class ClubMembersMixin:
                 return
             num = "".join(filter(str.isdigit, phone.get()))
             if not num:
-                self._show_warning("Membro nao possui telefone valido.")
+                self._show_warning("Membro nao possui telefone válido.")
                 return
             if not num.startswith("55"):
                 num = "55" + num
@@ -513,7 +513,7 @@ class ClubMembersMixin:
         history_header = ctk.CTkFrame(list_panel, fg_color="transparent")
         history_header.grid(row=2, column=0, padx=12, pady=(0, 8), sticky="ew")
         history_header.grid_columnconfigure(0, weight=1)
-        self._section_title(history_header, "Historico de torneios do membro selecionado").grid(
+        self._section_title(history_header, "Histórico de torneios do membro selecionado").grid(
             row=0, column=0, sticky="w"
         )
 
@@ -531,7 +531,7 @@ class ClubMembersMixin:
                 "position": "Pos",
                 "rounds": "Rodadas",
                 "record": "V/E/D/B",
-                "last": "Ultimo",
+                "last": "Último",
             },
             {
                 "tournament": 260,
@@ -803,7 +803,7 @@ class ClubMembersMixin:
                     raise AppError("Selecione um membro.")
                 history = self.internal_rating_service.member_rating_history(int(member["id"]))
                 if not history:
-                    self._show_warning("Este membro ainda nao possui historico de rating interno.")
+                    self._show_warning("Este membro ainda nao possui histórico de rating interno.")
                     return
                 lines = []
                 for item in history:
@@ -837,7 +837,7 @@ class ClubMembersMixin:
                     raise AppError("Selecione um membro.")
                 safe_name = self._safe_filename(str(member["name"]), "membro")
                 file_path = filedialog.asksaveasfilename(
-                    title="Exportar evolucao do membro",
+                    title="Exportar evolução do membro",
                     initialdir=str(self._default_export_dir()),
                     initialfile=f"{safe_name}_evolucao.xlsx",
                     defaultextension=".xlsx",

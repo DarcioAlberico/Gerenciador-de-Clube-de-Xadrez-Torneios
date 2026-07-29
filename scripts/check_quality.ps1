@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Gate de qualidade do Albericus: compilacao, lint, tipos e testes.
 
@@ -55,6 +55,7 @@ Invoke-Step "Compilacao" { uv run --extra dev python -m compileall -q .\src .\te
 Invoke-Step "Lint (ruff)" { uv run --extra dev ruff check . }
 Invoke-Step "Tipos (mypy, src/core)" { uv run --extra dev mypy }
 Invoke-Step "Convencoes de UI (tokens e imports)" { uv run --extra dev python scripts/check_ui_conventions.py }
+Invoke-Step "Acentuacao dos textos visiveis" { uv run --extra dev python scripts/check_ui_accents.py }
 
 if (-not $Fast) {
     if ($NoGui) {

@@ -27,7 +27,7 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
         self._clear_content()
         self._page_title(
             "Configurações do aplicativo",
-            "Ajuste preferencias locais, pasta de exportacao e rotinas de backup.",
+            "Ajuste preferências locais, pasta de exportação e rotinas de backup.",
         )
 
         settings = self.db.get_app_settings()
@@ -191,7 +191,7 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
         backup_header.grid_columnconfigure(0, weight=1)
         ctk.CTkLabel(
             backup_header,
-            text="Backups disponiveis",
+            text="Backups disponíveis",
             font=font_section(),
         ).grid(row=0, column=0, sticky="w")
 
@@ -226,7 +226,7 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
                 "created": "Data",
                 "actor": "Operador",
                 "role": "Perfil",
-                "action": "Acao",
+                "action": "Ação",
                 "description": "Descrição",
             },
             {"created": 145, "actor": 120, "role": 100, "action": 140, "description": 260},
@@ -341,7 +341,7 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
             try:
                 persist_settings()
                 if show_message:
-                    self._show_toast("Configuracoes salvas.", kind="success")
+                    self._show_toast("Configurações salvas.", kind="success")
             except Exception as exc:
                 self._show_error(exc)
 
@@ -422,7 +422,7 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
         actions = ctk.CTkFrame(body, fg_color="transparent")
         actions.grid(row=1, column=0, padx=(0, 16), pady=(10, 0), sticky="ew")
         actions.grid_columnconfigure(0, weight=1)
-        btn_save = ctk.CTkButton(actions, text="Salvar configuracoes", command=lambda: save_settings())
+        btn_save = ctk.CTkButton(actions, text="Salvar configurações", command=lambda: save_settings())
         btn_save.grid(row=0, column=0, pady=(0, 8), sticky="ew")
         self._disable_if_unauthorized(btn_save, "settings_write")
         
@@ -430,7 +430,7 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
         btn_backup.grid(row=1, column=0, pady=(0, 8), sticky="ew")
         self._disable_if_unauthorized(btn_backup, "settings_write")
         
-        btn_retention = ctk.CTkButton(actions, text="Aplicar retencao", command=apply_retention)
+        btn_retention = ctk.CTkButton(actions, text="Aplicar retenção", command=apply_retention)
         btn_retention.grid(row=2, column=0, pady=(0, 8), sticky="ew")
         self._disable_if_unauthorized(btn_retention, "settings_write")
         
@@ -555,7 +555,7 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
         # uma coluna ate ela sumir. Este botao e a volta ao estado conhecido.
         form.section(
             "Tabelas",
-            help_text="As larguras que voce ajusta arrastando ficam guardadas por usuario.",
+            help_text="As larguras que você ajusta arrastando ficam guardadas por usuário.",
         )
         form.place(
             secondary_button(
@@ -563,7 +563,7 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
                 text="Restaurar largura das colunas",
                 command=self._reset_column_widths,
                 width=260,
-                tip="Volta todas as tabelas a largura padrao (so para o seu usuario).",
+                tip="Volta todas as tabelas a largura padrão (so para o seu usuário).",
             ),
             "widget",
         )

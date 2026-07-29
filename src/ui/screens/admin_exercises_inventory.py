@@ -10,7 +10,7 @@ class ExercisesInventoryMixin:
         self._clear_content()
         self._page_title(
             "Exercícios e listas",
-            "Cadastre posicoes, temas taticos e listas de treino para aulas ou turmas.",
+            "Cadastre posições, temas táticos e listas de treino para aulas ou turmas.",
         )
 
         body = ctk.CTkFrame(self.content, fg_color="transparent")
@@ -36,7 +36,7 @@ class ExercisesInventoryMixin:
             ("source", "Fonte"),
             ("fen", "FEN"),
             ("pgn", "PGN"),
-            ("solution", "Solucao"),
+            ("solution", "Solução"),
             ("objective", "Objetivo"),
             ("tags", "Tags"),
             ("notes", "Observações"),
@@ -86,7 +86,7 @@ class ExercisesInventoryMixin:
         controls.grid(row=0, column=0, sticky="ew", pady=(0, 8))
         search_entry = controls.add(
             ctk.CTkEntry(
-                controls.frame, placeholder_text="Buscar exercicio, tema, FEN, PGN, solucao ou tags"
+                controls.frame, placeholder_text="Buscar exercício, tema, FEN, PGN, solução ou tags"
             ),
             width=240,
             grow=True,
@@ -112,7 +112,7 @@ class ExercisesInventoryMixin:
             ["id", "title", "theme", "difficulty", "level", "active", "lists", "attempts"],
             {
                 "id": "ID",
-                "title": "Exercicio",
+                "title": "Exercício",
                 "theme": "Tema",
                 "difficulty": "Dif.",
                 "level": "Nível",
@@ -203,7 +203,7 @@ class ExercisesInventoryMixin:
         item_controls.add(
             ctk.CTkButton(
                 item_controls.frame,
-                text="Adicionar exercicio selecionado",
+                text="Adicionar exercício selecionado",
                 command=lambda: add_selected_exercise(),
                 width=240,
             ),
@@ -230,7 +230,7 @@ class ExercisesInventoryMixin:
             {
                 "order": "#",
                 "exercise_id": "ID",
-                "title": "Exercicio na lista",
+                "title": "Exercício na lista",
                 "theme": "Tema",
                 "difficulty": "Dif.",
                 "level": "Nível",
@@ -593,8 +593,8 @@ class ExercisesInventoryMixin:
     def show_inventory(self) -> None:
         self._clear_content()
         self._page_title(
-            "Inventario",
-            "Controle materiais, emprestimos e manutencoes do clube ou escola.",
+            "Inventário",
+            "Controle materiais, emprestimos e manutenções do clube ou escola.",
         )
 
         body = ctk.CTkFrame(self.content, fg_color="transparent")
@@ -659,7 +659,7 @@ class ExercisesInventoryMixin:
         summary_labels: dict[str, ctk.CTkLabel] = {}
         summary_items = [
             ("total_quantity", "Total"),
-            ("available_quantity", "Disponivel"),
+            ("available_quantity", "Disponível"),
             ("borrowed_quantity", "Emprestado"),
             ("open_loans", "Em aberto"),
             ("open_maintenance", "Manutenção"),
@@ -677,7 +677,7 @@ class ExercisesInventoryMixin:
         controls.grid(row=1, column=0, sticky="ew", pady=(0, 8))
         search_entry = controls.add(
             ctk.CTkEntry(
-                controls.frame, placeholder_text="Buscar por codigo, item, local ou observacao"
+                controls.frame, placeholder_text="Buscar por código, item, local ou observação"
             ),
             width=240,
             grow=True,
@@ -731,7 +731,7 @@ class ExercisesInventoryMixin:
         loan_box = ctk.CTkFrame(detail_form, fg_color="transparent")
         loan_box.grid(row=0, column=0, columnspan=2, padx=12, pady=(10, 4), sticky="ew")
         loan_box.grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(loan_box, text="Emprestimo", font=font_subsection()).grid(
+        ctk.CTkLabel(loan_box, text="Empréstimo", font=font_subsection()).grid(
             row=0,
             column=0,
             columnspan=4,

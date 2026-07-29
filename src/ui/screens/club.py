@@ -29,7 +29,7 @@ class ClubPagesMixin(ClubMembersMixin):
         fields = [
             ("name", "Nome"),
             ("city", "Cidade"),
-            ("address", "Endereco"),
+            ("address", "Endereço"),
             ("phone", "Telefone"),
             ("email", "E-mail"),
             ("notes", "Observações"),
@@ -158,7 +158,7 @@ class ClubPagesMixin(ClubMembersMixin):
             ("name", "Turma", 160, 0, 0),
             ("teacher", "Professor", 150, 0, 1),
             ("weekday", "Dia", 90, 0, 2),
-            ("time", "Horario", 90, 2, 0),
+            ("time", "Horário", 90, 2, 0),
             ("location", "Local", 130, 2, 1),
         ]
         for key, label, width, row, column in class_fields:
@@ -198,7 +198,7 @@ class ClubPagesMixin(ClubMembersMixin):
                 "name": "Turma",
                 "teacher": "Professor",
                 "weekday": "Dia",
-                "time": "Horario",
+                "time": "Horário",
                 "members": "Alunos",
                 "active": "Ativa",
             },
@@ -376,8 +376,8 @@ class ClubPagesMixin(ClubMembersMixin):
     def show_learning_levels(self) -> None:
         self._clear_content()
         self._page_title(
-            "Niveis de aprendizagem",
-            "Cadastre os niveis usados para acompanhar a evolucao dos alunos.",
+            "Níveis de aprendizagem",
+            "Cadastre os níveis usados para acompanhar a evolução dos alunos.",
         )
 
         body = ctk.CTkFrame(self.content, fg_color="transparent")
@@ -517,8 +517,8 @@ class ClubPagesMixin(ClubMembersMixin):
     def show_guardians(self) -> None:
         self._clear_content()
         self._page_title(
-            "Responsaveis",
-            "Cadastre contatos responsaveis e vincule-os aos alunos do clube.",
+            "Responsáveis",
+            "Cadastre contatos responsáveis e vincule-os aos alunos do clube.",
         )
 
         body = ctk.CTkFrame(self.content, fg_color="transparent")
@@ -535,7 +535,7 @@ class ClubPagesMixin(ClubMembersMixin):
             ("phone", "Telefone"),
             ("email", "E-mail"),
             ("document", "Documento"),
-            ("address", "Endereco"),
+            ("address", "Endereço"),
             ("notes", "Observações"),
         ]
         for index, (key, label) in enumerate(fields):
@@ -604,7 +604,7 @@ class ClubPagesMixin(ClubMembersMixin):
 
         primary_check = ctk.CTkCheckBox(link_panel, text="Principal")
         primary_check.grid(row=1, column=3, padx=8, pady=(0, 10), sticky="w")
-        emergency_check = ctk.CTkCheckBox(link_panel, text="Emergencia")
+        emergency_check = ctk.CTkCheckBox(link_panel, text="Emergência")
         emergency_check.grid(row=1, column=4, padx=8, pady=(0, 10), sticky="w")
 
         linked_holder = self._make_panel(right_panel)
@@ -641,7 +641,7 @@ class ClubPagesMixin(ClubMembersMixin):
         minors_header = ctk.CTkFrame(right_panel, fg_color="transparent")
         minors_header.grid(row=4, column=0, sticky="ew")
         minors_header.grid_columnconfigure(0, weight=1)
-        self._section_title(minors_header, "Alunos menores sem responsavel").grid(
+        self._section_title(minors_header, "Alunos menores sem responsável").grid(
             row=0, column=0, sticky="w"
         )
 

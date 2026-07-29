@@ -73,27 +73,33 @@ class ProgressOverlayTest(unittest.TestCase):
     def test_o_botao_coberto_nao_recebe_mais_o_clique(self) -> None:
         """O ponto do véu (P3-11): o segundo clique acerta ele, não o botão.
 
-        A garantia não é o binding — é a **cobertura**: o véu ocupa o alvo
-        inteiro e fica por cima, e o Tk entrega o evento ao widget mais ao topo
-        sob o cursor. Por isso o teste pergunta ao próprio Tk quem está sob o
-        ponto do botão, em vez de simular um clique.
+        A garantia são **duas** propriedades, e o teste cobra as duas: o véu
+        ocupa o alvo **inteiro** e fica **por cima**. O Tk entrega o evento ao
+        widget mais ao topo sob o cursor, então as duas juntas bastam.
+
+        Perguntar ``winfo_containing`` seria mais direto, e foi a primeira
+        versão — mas ela depende de a janela estar visível na tela, e na suíte
+        inteira o teste passava a depender de qual janela o sistema deixou por
+        cima. ``winfo children`` devolve os filhos **em ordem de empilhamento**
+        (o mais baixo primeiro), o que responde a mesma pergunta sem olhar para
+        a tela.
         """
         botao = ctk.CTkButton(self.painel, text="Importar", command=lambda: None)
         botao.place(x=10, y=10)
         self.root.update()
-        ponto = (botao.winfo_rootx() + 5, botao.winfo_rooty() + 5)
-        self.assertTrue(
-            str(self.root.winfo_containing(*ponto)).startswith(str(botao)),
-            "sem veu, o botao deveria estar exposto",
-        )
 
         self.veu.start("Importando...")
         self.root.update()
-        sob_o_ponto = str(self.root.winfo_containing(*ponto))
-        self.assertTrue(
-            sob_o_ponto.startswith(str(self.veu._frame)),
-            f"o veu deveria cobrir o botao; sob o ponto esta {sob_o_ponto}",
+        quadro = self.veu._frame
+
+        self.assertEqual(
+            (self.painel.winfo_width(), self.painel.winfo_height()),
+            (quadro.winfo_width(), quadro.winfo_height()),
+            "o veu precisa cobrir o painel inteiro",
         )
+        empilhamento = list(self.painel.winfo_children())
+        self.assertIs(quadro, empilhamento[-1], "o veu precisa ficar por cima")
+        self.assertLess(empilhamento.index(botao), empilhamento.index(quadro))
 
     def test_duas_tarefas_mostram_um_veu_e_a_ultima_o_retira(self) -> None:
         # Mesma regra do BusyIndicator: start/stop em pares, e a primeira a

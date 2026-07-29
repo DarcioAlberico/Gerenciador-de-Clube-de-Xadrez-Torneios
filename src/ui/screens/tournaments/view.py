@@ -282,7 +282,7 @@ class TournamentListView:
             self.host._set_current_tournament(self.controller.duplicate(tournament_id, novo_nome))
             self.reload()
             self.host._show_info(
-                "Torneio duplicado. Ajuste data, local e participantes conforme necessario."
+                "Torneio duplicado. Ajuste data, local e participantes conforme necessário."
             )
         except Exception as exc:
             self.host._show_error(exc)
@@ -303,7 +303,7 @@ class TournamentListView:
                 self.host.current_round_id = None
                 self.host.tournament_label.configure(text="Nenhum torneio selecionado")
             self.reload()
-            self.host._show_toast("Torneio excluido.", kind="success")
+            self.host._show_toast("Torneio excluído.", kind="success")
         except Exception as exc:
             self.host._show_error(exc)
 

@@ -1206,7 +1206,7 @@ def seed_demo_database(db: Database, temp_dir: Path) -> dict[str, int]:
         actor="Admin Manual",
         role="admin",
         entity_type="manual",
-        description="Base de demonstracao criada para o manual.",
+        description="Base de demonstração criada para o manual.",
         metadata_json='{"source":"scripts/generate_user_manual.py"}',
     )
 

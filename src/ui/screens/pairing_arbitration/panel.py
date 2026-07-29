@@ -19,7 +19,7 @@ from typing import Any
 
 import customtkinter as ctk
 
-from ...components import FormStack, primary_button, secondary_button
+from ...components import FormStack, Tooltip, primary_button, secondary_button
 from ...i18n import t
 from ...support import (
     THEME_DANGER,
@@ -205,9 +205,12 @@ class ArbitrationPanelView:
                 row=linha, column=0, columnspan=colunas, padx=14, pady=(4, 4), sticky="w"
             )
             linha += 1
-            for indice, (rotulo, comando) in enumerate(acoes):
+            for indice, (rotulo, completo, comando) in enumerate(acoes):
                 coluna = indice % colunas
-                ctk.CTkButton(painel, text=rotulo, command=comando).grid(
+                botao = ctk.CTkButton(painel, text=rotulo, command=comando)
+                if completo != rotulo:
+                    Tooltip(botao, completo)
+                botao.grid(
                     row=linha + indice // colunas,
                     column=coluna,
                     padx=(14 if coluna == 0 else 4, 14 if coluna == colunas - 1 else 4),
@@ -218,37 +221,46 @@ class ArbitrationPanelView:
 
         self._build_controls(painel, linha, colunas)
 
-    def _action_groups(self) -> list[tuple[str, list[tuple[str, Any]]]]:
+    def _action_groups(self) -> list[tuple[str, list[tuple[str, str, Any]]]]:
+        """Grupos de ação: ``(rótulo curto, texto completo, comando)``.
+
+        O rótulo do botão e o nome da ação deixaram de ser a mesma string
+        (P3-16). Em três colunas, "Ajustes de pontos (TRF25)" não cabe e o
+        ``CTkButton`` **corta o texto pelos dois lados** — o screenshot do
+        manual mostrava "justes de pontos (TRF25". O botão passa a levar a
+        forma curta e o tooltip guarda o nome inteiro, que é onde a referência
+        ao TRF25 faz falta: na hora de conferir a regra, não na de clicar.
+        """
         host = self.host
         return [
             (
                 t("arbitration.actions.group.round"),
                 [
-                    (t("arbitration.action.issues"), host.show_arbitration_issues),
-                    (t("arbitration.action.pairings"), host.show_pairings),
-                    (t("arbitration.action.preview"), host._preview_next_round),
-                    (t("arbitration.action.checklist"), host._open_closing_checklist_dialog),
-                    (t("arbitration.action.close_round"), host._close_current_round_from_panel),
+                    (t("arbitration.action.issues.short"), t("arbitration.action.issues"), host.show_arbitration_issues),
+                    (t("arbitration.action.pairings"), t("arbitration.action.pairings"), host.show_pairings),
+                    (t("arbitration.action.preview.short"), t("arbitration.action.preview"), host._preview_next_round),
+                    (t("arbitration.action.checklist.short"), t("arbitration.action.checklist"), host._open_closing_checklist_dialog),
+                    (t("arbitration.action.close_round.short"), t("arbitration.action.close_round"), host._close_current_round_from_panel),
                 ],
             ),
             (
                 t("arbitration.actions.group.config"),
                 [
-                    (t("arbitration.action.adjustments"), host.show_point_adjustments),
-                    (t("arbitration.action.prohibitions"), host.show_prohibited_pairings),
-                    (t("arbitration.action.byes"), host.show_requested_byes),
+                    (t("arbitration.action.adjustments.short"), t("arbitration.action.adjustments"), host.show_point_adjustments),
+                    (t("arbitration.action.prohibitions.short"), t("arbitration.action.prohibitions"), host.show_prohibited_pairings),
+                    (t("arbitration.action.byes.short"), t("arbitration.action.byes"), host.show_requested_byes),
                 ],
             ),
             (
                 t("arbitration.actions.group.publish"),
                 [
-                    (t("arbitration.action.export"), host.show_export),
-                    (t("arbitration.action.site"), host._export_site_from_panel),
-                    (t("arbitration.action.live"), host._publish_live_portal_from_panel),
-                    (t("arbitration.action.round_package"), host._export_round_package_from_panel),
-                    (t("arbitration.action.bulletin"), host._export_round_bulletin_from_panel),
-                    (t("arbitration.action.podium"), host._export_podium_from_panel),
-                    (t("arbitration.action.minutes"), host._export_tournament_minutes_from_panel),
+                    (t("arbitration.action.export"), t("arbitration.action.export"), host.show_export),
+                    (t("arbitration.action.site"), t("arbitration.action.site"), host._export_site_from_panel),
+                    (t("arbitration.action.live"), t("arbitration.action.live"), host._publish_live_portal_from_panel),
+                    (t("arbitration.action.round_package.short"), t("arbitration.action.round_package"), host._export_round_package_from_panel),
+                    (t("arbitration.action.bulletin.short"), t("arbitration.action.bulletin"), host._export_round_bulletin_from_panel),
+                    (t("arbitration.action.podium"), t("arbitration.action.podium"), host._export_podium_from_panel),
+                    (t("arbitration.action.minutes"), t("arbitration.action.minutes"), host._export_tournament_minutes_from_panel),
                 ],
             ),
         ]

@@ -505,7 +505,7 @@ class IntegrationPagesMixin:
         def save_config() -> None:
             try:
                 self.photo_album_service.save_config(current_config())
-                self._show_toast("Configuracao FTP salva.", kind="success")
+                self._show_toast("Configuração FTP salva.", kind="success")
             except Exception as exc:
                 self._show_error(exc)
 

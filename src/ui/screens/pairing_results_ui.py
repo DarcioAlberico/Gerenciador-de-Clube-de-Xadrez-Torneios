@@ -74,9 +74,9 @@ class PairingResultsMixin:
         actions.grid_columnconfigure(3, weight=1)  # espaco flexivel isola a acao destrutiva
         self._generate_round_button = primary_button(
             actions,
-            "Gerar proxima rodada",
+            "Gerar próxima rodada",
             self._generate_round,
-            tip="Emparceira a proxima rodada a partir dos resultados ja lancados.",
+            tip="Emparceira a próxima rodada a partir dos resultados ja lançados.",
         )
         self._generate_round_button.grid(row=0, column=0, padx=(0, SPACE_SM))
         menu_button(
@@ -95,7 +95,7 @@ class PairingResultsMixin:
             actions,
             "Excluir rodada",
             self._delete_current_round,
-            tip="Apaga a rodada selecionada e todos os resultados lancados nela.",
+            tip="Apaga a rodada selecionada e todos os resultados lançados nela.",
         ).grid(row=0, column=4, sticky="e")
 
         # Linha 2 - lancamento de resultados (fluxo mais frequente do dia a dia).
@@ -153,7 +153,7 @@ class PairingResultsMixin:
             corner_radius=8,
         )
         projector.grid(row=2, column=0, padx=SPACE_MD, pady=(0, SPACE_MD), sticky="ew")
-        Tooltip(projector, "Abre a rodada atual em tela cheia para projecao na sala.")
+        Tooltip(projector, "Abre a rodada atual em tela cheia para projeção na sala.")
 
     def show_pairings(self) -> None:
         if not self._require_tournament():
@@ -189,7 +189,7 @@ class PairingResultsMixin:
             launch.grid(row=0, column=0, padx=SPACE_MD, pady=SPACE_MD, sticky="w")
             self._generate_round_button = primary_button(
                 launch,
-                "Gerar proxima rodada",
+                "Gerar próxima rodada",
                 self._generate_round,
                 tip="Emparceira a primeira rodada com os jogadores presentes na chamada inicial.",
             )
@@ -1166,7 +1166,7 @@ class PairingResultsMixin:
                         )
                     confirmed = self._confirm_action(
                         "Confirmar",
-                        "Esta rodada ja esta fechada. Alterar o resultado mesmo assim?",
+                        "Esta rodada já está fechada. Alterar o resultado mesmo assim?",
                         danger=True,
                     )
                     if not confirmed:
@@ -1274,7 +1274,7 @@ class PairingResultsMixin:
                 "submitted": "Enviado",
                 "current": "Atual",
                 "submitter": "Enviado por",
-                "time": "Horario",
+                "time": "Horário",
             },
             {
                 "id": 60,

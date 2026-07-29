@@ -67,7 +67,7 @@ class SettingsCertificatesMixin:
         seal_switch.grid(row=9, column=0, padx=10, pady=(0, 4), sticky="w")
         watermark_switch = ctk.CTkSwitch(frame, text="Marca d'agua ligada")
         watermark_switch.grid(row=10, column=0, padx=10, pady=(0, 4), sticky="w")
-        medal_switch = ctk.CTkSwitch(frame, text="Medalha por colocacao")
+        medal_switch = ctk.CTkSwitch(frame, text="Medalha por colocação")
         medal_switch.grid(row=11, column=0, padx=10, pady=(0, 8), sticky="w")
         for switch in (seal_switch, watermark_switch, medal_switch):
             switch.select()
@@ -206,7 +206,7 @@ class SettingsCertificatesMixin:
         type_option = ctk.CTkOptionMenu(form_panel, values=list(CERTIFICATE_TYPE_VALUES.keys()), width=290)
         type_option.grid(row=9, column=0, padx=16, pady=(0, 10), sticky="ew")
 
-        ctk.CTkLabel(form_panel, text="Orientacao").grid(row=10, column=0, padx=16, pady=(2, 4), sticky="w")
+        ctk.CTkLabel(form_panel, text="Orientação").grid(row=10, column=0, padx=16, pady=(2, 4), sticky="w")
         orientation_option = ctk.CTkOptionMenu(form_panel, values=list(CERTIFICATE_ORIENTATION_VALUES.keys()), width=290)
         orientation_option.grid(row=11, column=0, padx=16, pady=(0, 10), sticky="ew")
 
@@ -237,13 +237,13 @@ class SettingsCertificatesMixin:
             command=lambda: choose_image(logo_entry, "Escolher logo principal"),
         ).grid(row=2, column=0, pady=(0, 10), sticky="ew")
 
-        ctk.CTkLabel(assets_frame, text="Logo secundario").grid(row=3, column=0, pady=(0, 4), sticky="w")
+        ctk.CTkLabel(assets_frame, text="Logo secundário").grid(row=3, column=0, pady=(0, 4), sticky="w")
         secondary_logo_entry = ctk.CTkEntry(assets_frame, width=290)
         secondary_logo_entry.grid(row=4, column=0, pady=(0, 6), sticky="ew")
         ctk.CTkButton(
             assets_frame,
-            text="Escolher logo secundario",
-            command=lambda: choose_image(secondary_logo_entry, "Escolher logo secundario"),
+            text="Escolher logo secundário",
+            command=lambda: choose_image(secondary_logo_entry, "Escolher logo secundário"),
         ).grid(row=5, column=0, pady=(0, 10), sticky="ew")
 
         ctk.CTkLabel(assets_frame, text="Imagem de fundo").grid(row=6, column=0, pady=(0, 4), sticky="w")
@@ -268,7 +268,7 @@ class SettingsCertificatesMixin:
         accent_color_entry = ctk.CTkEntry(form_panel, width=140)
         accent_color_entry.grid(row=18, column=0, padx=16, pady=(0, 10), sticky="w")
 
-        ctk.CTkLabel(form_panel, text="Fonte do titulo").grid(row=19, column=0, padx=16, pady=(2, 4), sticky="w")
+        ctk.CTkLabel(form_panel, text="Fonte do título").grid(row=19, column=0, padx=16, pady=(2, 4), sticky="w")
         title_font_entry = ctk.CTkEntry(form_panel, width=80)
         title_font_entry.grid(row=20, column=0, padx=16, pady=(0, 10), sticky="w")
 
@@ -300,7 +300,7 @@ class SettingsCertificatesMixin:
         signature_right_entry = ctk.CTkEntry(form_panel, width=290)
         signature_right_entry.grid(row=34, column=0, padx=16, pady=(0, 14), sticky="ew")
 
-        ctk.CTkLabel(form_panel, text="Destinatarios").grid(row=35, column=0, padx=16, pady=(4, 4), sticky="w")
+        ctk.CTkLabel(form_panel, text="Destinatários").grid(row=35, column=0, padx=16, pady=(4, 4), sticky="w")
         recipient_option = ctk.CTkOptionMenu(form_panel, values=recipient_modes["tournament"], width=250)
         recipient_option.grid(row=36, column=0, padx=16, pady=(0, 10), sticky="ew")
 
@@ -319,13 +319,13 @@ class SettingsCertificatesMixin:
         style_frame, style_payload, load_style = self._build_certificate_style_controls(form_panel)
         style_frame.grid(row=42, column=0, padx=16, pady=(2, 10), sticky="ew")
 
-        ctk.CTkLabel(form_panel, text="Código de verificacao").grid(row=43, column=0, padx=16, pady=(2, 4), sticky="w")
+        ctk.CTkLabel(form_panel, text="Código de verificação").grid(row=43, column=0, padx=16, pady=(2, 4), sticky="w")
         verification_code_entry = ctk.CTkEntry(form_panel, width=250)
         verification_code_entry.grid(row=44, column=0, padx=16, pady=(0, 8), sticky="ew")
 
         ctk.CTkLabel(
             table_panel,
-            text="Selecione destinatarios na lista apenas quando usar destinatarios selecionados.",
+            text="Selecione destinatários na lista apenas quando usar destinatários selecionados.",
             text_color=THEME_TEXT_SUB,
         ).grid(row=0, column=0, padx=16, pady=(16, 8), sticky="w")
 
@@ -370,7 +370,7 @@ class SettingsCertificatesMixin:
             ["issued_at", "recipient", "context", "code", "status"],
             {
                 "issued_at": "Emissao",
-                "recipient": "Destinatario",
+                "recipient": "Destinatário",
                 "context": "Contexto",
                 "code": "Código",
                 "status": "Status",
@@ -639,7 +639,7 @@ class SettingsCertificatesMixin:
                     "Diploma encontrado:\n"
                     f"Codigo: {issuance['verification_code']}\n"
                     f"Status: {status}\n"
-                    f"Destinatario: {issuance['recipient_name']}\n"
+                    f"Destinatário: {issuance['recipient_name']}\n"
                     f"Contexto: {issuance_context_label(issuance)}\n"
                     f"Origem: {issuance.get('source_title') or ''}\n"
                     f"Arquivo: {issuance.get('file_path') or ''}"
@@ -1039,7 +1039,7 @@ class SettingsCertificatesMixin:
         on_context_select("Torneio")
         refresh_history()
 
-        ctk.CTkButton(form_panel, text="Consultar codigo", command=verify_certificate_code).grid(
+        ctk.CTkButton(form_panel, text="Consultar código", command=verify_certificate_code).grid(
             row=45,
             column=0,
             padx=16,

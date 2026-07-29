@@ -88,9 +88,7 @@ class SettingsUsersMixin:
         name_entry = pilha.text("Nome do Plano", placeholder="Ex.: Mensal Padrão")
         amount_entry = pilha.text("Valor (R$)", placeholder="Ex.: 120,00")
         cycle_var = ctk.StringVar(value="monthly")
-        cycle_menu = pilha.select(
-            "Ciclo de Cobrança", ["monthly", "quarterly", "yearly"], variable=cycle_var
-        )
+        pilha.select("Ciclo de Cobrança", ["monthly", "quarterly", "yearly"], variable=cycle_var)
         active_var = ctk.BooleanVar(value=True)
         active_cb = ctk.CTkCheckBox(dlg, text="Plano Ativo", variable=active_var)
         pilha.place(active_cb, "widget", sticky="w")
@@ -180,9 +178,7 @@ class SettingsUsersMixin:
             # texto limpo, num dialogo aberto na tela do clube.
             pwd_entry = pilha.text("Senha Provisória", placeholder="Senha inicial", show="*")
             role_var = ctk.StringVar(value="teacher")
-            role_combo = pilha.select(
-                "Perfil", list(OPERATOR_ROLE_VALUES.keys()), variable=role_var
-            )
+            pilha.select("Perfil", list(OPERATOR_ROLE_VALUES.keys()), variable=role_var)
 
             def save():
                 try:

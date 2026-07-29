@@ -136,6 +136,14 @@ class DialogsTest(unittest.TestCase):
 
         self._quando_abrir(acao, delay)
 
+    def _walk(self, widget) -> list:
+        """Descendentes em ordem de criação — que é a ordem de empacotamento."""
+        encontrados = []
+        for filho in widget.winfo_children():
+            encontrados.append(filho)
+            encontrados.extend(self._walk(filho))
+        return encontrados
+
     def _teclar(self, tecla: str, delay: int = 250) -> None:
         def acao(dialog: ctk.CTkToplevel) -> None:
             dialog.focus_force()
@@ -250,6 +258,34 @@ class DialogsTest(unittest.TestCase):
         self._teclar("<Escape>")
         report_dialog(self.root, "Relatorio", "a\nb\nc")
         self.assertIsNone(self.root.grab_current())
+
+    def test_choice_dialog_reordena_para_a_ordem_canonica(self) -> None:
+        """F5.8: a ordem na tela **não** é a da lista — é [secundário][perigo]
+        [primário]. Aqui as opções são declaradas ao contrário de propósito."""
+        vistos: list[str] = []
+
+        def acao(dialog: ctk.CTkToplevel) -> None:
+            vistos.extend(
+                widget.cget("text")
+                for widget in self._walk(dialog)
+                if isinstance(widget, ctk.CTkButton)
+            )
+            _find_button(dialog, "Cancelar").invoke()
+
+        self._quando_abrir(acao)
+        resultado = choice_dialog(
+            self.root,
+            "Aviso",
+            "Tres caminhos.",
+            options=[
+                ("Voltar ao padrão", "restore", "primary"),
+                ("Realmente editar", "edit", "danger"),
+                ("Cancelar", "cancel", "secondary"),
+            ],
+            default="cancel",
+        )
+        self.assertEqual("cancel", resultado)
+        self.assertEqual(["Cancelar", "Realmente editar", "Voltar ao padrão"], vistos)
 
     def test_modal_sobre_modal_devolve_o_grab_ao_pai(self) -> None:
         estado: dict[str, object] = {}
