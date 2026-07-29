@@ -77,6 +77,21 @@ def best_ink(fill: str, light: str = INK_LIGHT, dark: str = INK_DARK) -> str:
     return light if contrast_ratio(light, fill) >= contrast_ratio(dark, fill) else dark
 
 
+def mix_hex(base: str, other: str, amount: float) -> str:
+    """Mistura linear de duas cores: ``amount=0`` devolve ``base``, ``1`` devolve ``other``.
+
+    É o tijolo das cores *derivadas* (F5.1): o fundo e a borda de um campo não
+    são escolhidos numa tabela, são calculados a partir do painel em que o campo
+    vive — assim um preset de painel novo já nasce com campos coerentes.
+    """
+    t = min(1.0, max(0.0, float(amount)))
+    canais = (
+        round(a + (b - a) * t)
+        for a, b in zip(parse_hex(base), parse_hex(other))
+    )
+    return "#{:02X}{:02X}{:02X}".format(*canais)
+
+
 # Famílias de par. Servem para cobrar níveis diferentes de cada uma: o tema de
 # alto contraste manda nas SUPERFÍCIES (fundo, painel, texto), mas o vermelho de
 # perigo e o âmbar de aviso são semânticos e valem para todos os temas — exigir

@@ -1,7 +1,9 @@
 # ROADMAP_UI_UX — Plano de implementação de UI/UX do Albericus
 
-> **Status:** Proposta (v1) · **Data:** 2026-06-25 · **Spec:** [ESPEC_UI_UX.md](ESPEC_UI_UX.md)
-> **Estimativa total:** ~6–7 semanas de um dev solo focado · **MVP de percepção:** ~10 dias úteis.
+> **Status:** v2 · **Data:** 2026-07-29 (v1: 2026-06-25) · **Spec:** [ESPEC_UI_UX.md](ESPEC_UI_UX.md)
+> **Fases 0–3 encerradas; Fase 4 com B-6 em execução.** A v2 adiciona o catálogo
+> **P3** (auditoria de campos de entrada e adoção, 2026-07-29) e a **Fase 5**.
+> **MVP de percepção v2:** F5.1 → F5.2 → F5.5 → F5.6 → F5.7 (~1,5 semana).
 
 Roadmap derivado da spec. Mescla duas análises (arquitetural + visual), reconciliadas e
 validadas no código. Esforço em dias úteis de um dev solo; impacto e risco em Alto/Médio/Baixo.
@@ -59,6 +61,31 @@ IDs estáveis (referenciados pelas tarefas). Prioridade: **P0** destrava evoluç
 | P2-12 | i18n: strings PT-BR espalhadas (sem catálogo) | global | Baixo |
 | P2-13 | Tabelas `ttk.Treeview` sem virtualização (lento em 1.000+ linhas) | trees | Baixo |
 | P2-14 | Charts matplotlib recriados a cada refresh | [dashboard.py](src/ui/screens/dashboard.py) | Baixo |
+
+### P3 — Campos de entrada e adoção (auditoria 2026-07-29)
+
+Origem: auditoria de design de 2026-07-29 (código + screenshots de
+`docs/manual_screenshots/`), motivada pela insatisfação com o visual dos campos de
+entrada. Detalhes e estado-alvo em [ESPEC_UI_UX.md §2.3 e §4.6](ESPEC_UI_UX.md).
+
+| ID | Achado | Evidência | Impacto |
+|----|--------|-----------|---------|
+| P3-1 | Campos fora do sistema de tema: `CTkEntry`/`CTkTextbox` nunca são patchados; do `CTkOptionMenu` só a setinha muda — corpo azul de fábrica em **141 widgets** com qualquer accent | [theme.py:382-393](src/ui/theme.py:382) | Alto |
+| P3-2 | Contraste reprovado nos campos (medido com o próprio `contrast.py`): borda 2,74:1 / 2,13:1; rótulo do OptionMenu 2,74:1; placeholder 3,51:1; campo invisível nos presets sépia/floresta (1,04–1,12:1); Alto Contraste não alcança campos | [contrast.py](src/ui/contrast.py) | Alto |
+| P3-3 | Anarquia dimensional: **67 larguras distintas** (33 Entry + 34 OptionMenu), altura 28px ao lado de botões de 36px, 5 raios de canto, `width=` inútil em 114 casos com `sticky="ew"`, campo de 1.250px na Config. do torneio | grep validado | Alto |
+| P3-4 | Sem foco visível (0 bindings), estado de erro em só ~5 de 150 campos (3 implementações locais duplicadas), desabilitado indistinguível do habilitado | [support.py:528](src/ui/support.py:528), [settings.py:252](src/ui/screens/settings.py:252), [tournament_settings_ui.py:586](src/ui/screens/tournament_settings_ui.py:586) | Alto |
+| P3-5 | OptionMenu tem anatomia de botão (bloco de cor sólida); `CTkComboBox` (anatomia de campo) nunca usado; calendário do date field com 3ª linguagem visual e tinta cravada | [club_members_ui.py:69](src/ui/screens/club_members_ui.py:69), [support.py:617](src/ui/support.py:617) | Médio |
+| P3-6 | Placeholder em só 56/150 campos; nenhuma `font=` em campo; 3 famílias tipográficas coexistem (Roboto/Segoe UI/Inter); 286/332 labels sem cor tokenizada | grep validado | Médio |
+| P3-7 | Muro de **25 botões idênticos** na tela Jogadores via `_grid_form_buttons` (15 call-sites); adoção das factories de botão em 17% (35 vs 170 crus) | [tournament_players/view.py:198](src/ui/screens/tournament_players/view.py:198), [app.py:1018](src/ui/app.py:1018) | Alto |
+| P3-8 | `_show_info` (77×) manda para toast efêmero (320px/3,5s) conteúdo que precisa ser lido/copiado — URL do servidor QR, caminho do backup, narrativa de desempate — e validações de erro (pintadas de verde) | [support.py:349](src/ui/support.py:349), [pairing_results_ui.py:1262](src/ui/screens/pairing_results_ui.py:1262) | Alto |
+| P3-9 | 57 tabelas sem zebra (tokens `THEME_TREE_EVEN/ODD` existem e não são aplicados), sem ordenação por cabeçalho, sem empty state, com scrollbar horizontal permanente (`stretch=False`) | [app.py:720-750](src/ui/app.py:720) | Alto |
+| P3-10 | 21 diálogos ad-hoc fora de `components/dialogs.py`: ~16 sem Esc, 22 `geometry()` fixos que ignoram `ui_scale_percent` (120% padrão), ordem/cor de botões contraditória (Cancelar à direita, saída segura verde, diálogo sem botão de saída) | [pairing_results_ui.py:1210](src/ui/screens/pairing_results_ui.py:1210), [settings_users_ui.py:37](src/ui/screens/settings_users_ui.py:37) | Alto |
+| P3-11 | Loading só na statusbar (barra de 6px longe da ação); `busy_widget` opcional em `_run_background` → duplo clique dispara a operação 2× | [components/busy.py](src/ui/components/busy.py), [pairings.py:394](src/ui/screens/pairings.py:394) | Médio |
+| P3-12 | Três padrões de formulário (grid com aritmética manual de linhas, `_settings_stack`, `pack`); formulários de 14–25 campos sem nenhuma seção; larguras de painel divergentes (272/280/292) | [tournaments/view.py:111](src/ui/screens/tournaments/view.py:111) | Médio |
+| P3-13 | Ordem de Tab = ordem de criação (0 `takefocus` no app); `Return` não submete formulários; foco de botão invisível — ESPEC §6 descumprida | grep validado | Médio |
+| P3-14 | `tk.Menu` com 31 itens hardcoded paralelo ao registro (rótulos divergem da sidebar); sidebar **some** abaixo de 1.040px em vez de virar rail — notebook 1366px perde a navegação | [app.py:413-486](src/ui/app.py:413), [shell.py:396](src/ui/shell.py:396) | Médio |
+| P3-15 | Regressão de acentuação: ~26 rótulos visíveis sem acento, a começar pela tela Início ("Inicio", "acao", "pendencia") — F3.5 corrigiu 93 e não deixou lint | [screens/home.py:56](src/ui/screens/home.py:56) | Médio |
+| P3-16 | Defeitos pontuais visíveis nos screenshots: botões com texto cortado no Painel do árbitro ("justes de pontos (TRF25"), "None" literal em coluna de tabela, valor de data corrompido na Config. do torneio ("2026-05-182026-06-07") | `docs/manual_screenshots/` | Médio |
 
 ---
 
@@ -311,6 +338,8 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 > ausência daquele dado, não tela em branco. Um teste garante que **todo destino
 > de pendência existe no registro** — deep link quebrado seria pior que pendência
 > nenhuma.
+
+| ID | Tarefa | Esforço | Impacto | Risco | Depende | Aceite |
 |----|--------|---------|---------|-------|---------|--------|
 | ✅ F3.1 | Sidebar persistente com grupos + item ativo (P1-7) | 4d | A | M | F1.3 | Navegação primária visual; menu vira fallback |
 | ✅ F3.2 | Dashboard contextual pós-login (pendências acionáveis) (P1-8) | 3d | A | M | F1.3 | Abre em pendências com deep-link |
@@ -401,6 +430,7 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 > (`"mesa 1"` → 2 linhas) media a tabela **não filtrada**. Agora há
 > [`tests/support/ui_input.py`](tests/support/ui_input.py) (`type_into`) e o
 > teste exige filtro de verdade (0 de 2) mais o `flush()` do adiamento.
+
 > **Status (2026-07-25): B-2 CONCLUÍDA — 77 reprovações viraram zero.**
 > A auditoria foi escrita antes das correções, e o número dizia tudo: **77
 > pares abaixo de AA nos 6 temas curados**. O pior deles era o rótulo do botão
@@ -456,6 +486,7 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 > entregue. Um deles, o do pacote Access, passou a **exigir ASCII** com um
 > comentário dizendo por quê: era o único que poderia regredir em silêncio, já
 > que quem descobriria seria o usuário, na hora de importar.
+
 > **Status (2026-07-25): B-8 CONCLUÍDA — e o gargalo mudou de dono.** A tela
 > **Exportar** punha os três seletores e as três ações numa linha só e pedia
 > **1.360px**; empilhar as ações numa linha própria derrubou a exigência dela
@@ -642,6 +673,7 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 > 198 chaves novas (catálogo de 73 → 271), 34 testes sem janela, e o
 > `neutral_button` — o par `THEME_NEUTRAL`/`THEME_NEUTRAL_HOVER` repetido à mão
 > em cinco telas — virou factory em `components/buttons.py`.
+
 > **Status (2026-07-27): B-6 — Arbitragem migrada, e a B-8 fechou junto.**
 > `pairing_arbitration_ui.py` (1.527 linhas) era **cinco** telas: painel do
 > árbitro, Central de pendências e os três cadastros TRF25 (ajustes de pontos,
@@ -808,6 +840,64 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 > visita destrói o conteúdo e cria um `FigureCanvasTkAgg` novo sobre a mesma
 > figura, inclusive entre raízes Tk destruídas (verificado à parte).
 
+### Fase 5 — Campos de entrada e adoção do design system (auditoria 2026-07-29) · ~21 dias
+
+> **Motivação:** a auditoria de 2026-07-29 mostrou que a fundação (Fases 0–3) foi
+> **criada** mas não **adotada** — e que os campos de entrada nunca entraram no
+> design system (catálogo P3 acima; estado-alvo em
+> [ESPEC_UI_UX.md §4.6](ESPEC_UI_UX.md)). Esta fase é o que o usuário vê: é aqui
+> que o visual dos campos, tabelas e diálogos muda de fato. Ordem interna pensada
+> para percepção imediata: F5.1 sozinha corrige a cor de 141 OptionMenus e liga os
+> campos aos 13 presets.
+
+| ID | Tarefa | Esforço | Impacto | Risco | Depende | Aceite |
+|----|--------|---------|---------|-------|---------|--------|
+| ✅ F5.1 | Tokens de campo (`THEME_FIELD_*`, `THEME_PLACEHOLDER`) + patch do `ThemeManager` p/ `CTkEntry`/`CTkTextbox`/`CTkOptionMenu` (corpo + tinta via `best_ink`) + bloco de pares de campo no `theme_audit` (P3-1, P3-2) | 2d | A | M | F1.1 | 141 selects e 162 campos seguem o preset; auditor reprova par de campo abaixo de AA; Alto Contraste alcança campos |
+| F5.2 | `components/fields.py`: `text_field`/`select_field`/`text_area`/`date_field`/`labeled_field` — altura única 36px, raio único, escala `FIELD_SM/MD/LG/FULL`, placeholder obrigatório, `font_field()` (P3-3, P3-5, P3-6) | 2d | A | B | F5.1 | Campo e botão alinhados na mesma linha; escala de larguras fechada |
+| F5.3 | Estados de campo: anel de foco (borda accent no `FocusIn`), `set_field_error(widget, msg)`/`clear_field_error` únicos com mensagem sob o campo, desabilitado distinto (P3-4) | 1,5d | A | B | F5.2 | Foco visível em navegação por Tab; 3 implementações locais de erro removidas |
+| F5.4 | Migrar formulários p/ `fields.py` + `components/form.py` (promover `_settings_stack`, com seções) — ordem: Config. torneio, Jogadores, Torneios, Arbitragem, Config. app (P3-12) | 3d | A | M | F5.2 | 5 telas com seções visuais e largura de painel unificada |
+| F5.5 | `_make_tree`: zebra (tokens já existentes), ordenação por clique no cabeçalho, `stretch=True` na coluna principal, `EmptyState` embutido, nulos renderizados vazios (P3-9, "None") | 1,5d | A | B | — | 57 tabelas ganham zebra+sort+vazio sem tocar call-sites |
+| F5.6 | Quebrar o muro de Jogadores (25 → ~5: primárias + `Importar ▾`/`Bases oficiais ▾`/`Publicar ▾` + danger isolada) e aplicar o molde F2.1 aos 15 call-sites de `_grid_form_buttons` (P3-7) | 2d | A | M | — | Nenhuma tela com >8 ações visíveis no mesmo nível |
+| F5.7 | Separar `_show_info`: toast só p/ confirmação curta; `_show_report(title, body)` rolável com botão **Copiar** p/ relatórios; validações → `_show_warning` (~35 call-sites reclassificados) (P3-8) | 1,5d | A | B | — | URL do QR e narrativa de desempate legíveis e copiáveis |
+| F5.8 | Migrar os 21 diálogos ad-hoc p/ `Dialog` canônico (Esc, centralização, tamanho × `ui_scale_percent`, ordem [secundário][primário]); corrigir o aviso de BYE e o diálogo sem saída de Usuários (P3-10) | 2,5d | M | M | — | Todo diálogo fecha com Esc e cabe na tela em 160% |
+| F5.9 | `ProgressOverlay` local sobre o painel em ação + `busy_widget` obrigatório por convenção de lint (P3-11) | 1,5d | M | B | — | Duplo clique não duplica operação; espera visível no local |
+| F5.10 | Teclado: ordem de Tab explícita nos formulários, `Return` → ação primária, `takefocus=False` em botões secundários (P3-13) | 1,5d | M | B | F5.4 | Lançar 20 resultados usando só o teclado |
+| F5.11 | `tk.Menu` gerado do registro `DESTINATIONS`; sidebar vira **rail** (não some) abaixo de 1.040px (P3-14) | 1d | M | B | F1.3 | Menu e sidebar com os mesmos destinos e rótulos |
+| F5.12 | Lint de acentuação em `text=`/`t()` + correção dos ~26 rótulos; caça aos defeitos pontuais: truncamento dos botões do painel, data corrompida na Config. do torneio (P3-15, P3-16) | 1d | M | B | — | Grep de palavras-alvo zerado no CI; screenshots do manual re-tirados |
+
+> **Status (2026-07-29): F5.1 CONCLUÍDA.** As cores dos campos deixaram de ser
+> escolhidas e passaram a ser **derivadas**: `field_palette(painel)` em
+> [`theme.py`](src/ui/theme.py) calcula fundo, borda, texto e placeholder a
+> partir da cor do painel em que o campo vive — borda e placeholder são
+> *procurados* (`_least_mix`), a menor mistura de tinta que alcança 3:1 sobre o
+> painel e 4.5:1 sobre o campo, então **qualquer** preset de painel passa por
+> construção, inclusive os que ainda não existem. No painel sépia o campo sai
+> branco-quente; no floresta, branco-esverdeado — fim do cinza-azulado de
+> fábrica destoando em 12 dos 13 presets.
+>
+> `apply_frame_bg_preset` muta os tokens novos (`THEME_FIELD_BG/BORDER/TEXT`,
+> `THEME_PLACEHOLDER`) e patcha os padrões do `ThemeManager` para `CTkEntry`,
+> `CTkTextbox` e `CTkComboBox` — com isso o [`restyle.py`](src/ui/restyle.py),
+> que **já sabia** repintar essas classes e rodava a vazio (o padrão nunca
+> mudava), passou a propagar a troca de tema aos ~162 campos existentes sem
+> nenhuma mudança de código. `THEME_FIELD_BORDER_FOCUS` e
+> `THEME_FIELD_BORDER_ERROR` são *aliases vivos* de `THEME_ACCENT` e
+> `THEME_DANGER` — trocar o accent move o anel de foco junto (consumo na F5.3).
+>
+> O corpo do `CTkOptionMenu` agora segue o accent com tinta calculada
+> (`best_ink`): morre o azul de fábrica nos 141 seletores (P3-1) e a reprovação
+> de 2.74:1 do rótulo (P3-2). A setinha usa o tom de hover para manter a
+> distinção. A anatomia de *campo* para selects fica para a F5.2.
+>
+> O [`theme_audit.py`](src/ui/theme_audit.py) ganhou os três pares de campo
+> (borda×painel, texto×campo, placeholder×campo) usando a **mesma** função pura
+> do preset — auditor e tema não podem divergir. O placeholder entra na família
+> FILL de propósito: exigir AAA dele no alto contraste o tornaria tão escuro
+> quanto o texto real. Testes: garantias da paleta nos 13 presets × 2 faces,
+> temperatura preservada (sépia sai quente), tokens mutados no lugar, patch do
+> `ThemeManager` verificado, e os dois gates existentes (curados AA + 5.070
+> combinações) agora cobrem os campos automaticamente.
+
 ---
 
 ## 3. Sequenciamento recomendado
@@ -832,6 +922,14 @@ Semana 7   ██ folga/estabilização + início do backlog B-6 (telas-monstro)
 
 `F0.2` + `F0.3` (botões/tooltip) → `F2.1` (toolbar) → `F2.2`+`F2.3` (erro/loading) →
 `F3.1` (sidebar). Transforma a cara do app sem depender do refactor estrutural completo.
+
+### MVP de percepção v2 (~1,5 semana · Fase 5)
+
+`F5.1` (campos entram no tema — 141 selects deixam de ser azuis de fábrica) →
+`F5.2`+`F5.3` (anatomia e estados dos campos) → `F5.5` (zebra/sort/vazio nas 57
+tabelas, sem tocar call-sites) → `F5.6` (muro de Jogadores) → `F5.7` (relatório
+copiável). É o menor corte que ataca diretamente a reclamação de origem — o visual
+dos campos de entrada — e as telas de uso diário.
 
 ---
 

@@ -102,6 +102,54 @@ class TemaPropagaTest(unittest.TestCase):
         self.assertEqual([teal["l"], teal["d"]], list(theme.THEME_ACCENT))
 
 
+class CamposNoTemaTest(unittest.TestCase):
+    """F5.1 / P3-1: os campos de entrada passam a acompanhar os presets."""
+
+    def tearDown(self) -> None:
+        theme.apply_accent_preset("blue")
+        theme.apply_bg_preset("slate")
+        theme.apply_frame_bg_preset("slate")
+        theme._listeners.clear()
+
+    def test_trocar_frame_preset_alcanca_os_tokens_de_campo(self) -> None:
+        token_importado = support.THEME_FIELD_BG  # como faria `import *` numa tela
+        antes = list(token_importado)
+        theme.apply_frame_bg_preset("sepia")
+        self.assertNotEqual(antes, list(token_importado))
+        esperado = theme.field_palette(theme.FRAME_BG_PRESETS["sepia"]["panel"][0])["bg"]
+        self.assertEqual(esperado, token_importado[0])
+
+    def test_padrao_do_thememanager_e_patchado_para_campos(self) -> None:
+        """É o patch que faz o restyle.py — que já sabia repintar CTkEntry e
+        rodava a vazio — finalmente ter um padrão novo para propagar."""
+        import customtkinter as ctk
+
+        theme.apply_frame_bg_preset("forest")
+        tm = ctk.ThemeManager.theme
+        self.assertEqual(list(theme.THEME_FIELD_BG), tm["CTkEntry"]["fg_color"])
+        self.assertEqual(list(theme.THEME_FIELD_BORDER), tm["CTkEntry"]["border_color"])
+        self.assertEqual(list(theme.THEME_PLACEHOLDER), tm["CTkEntry"]["placeholder_text_color"])
+        self.assertEqual(list(theme.THEME_FIELD_BG), tm["CTkTextbox"]["fg_color"])
+        self.assertEqual(list(theme.THEME_FIELD_BG), tm["CTkComboBox"]["fg_color"])
+
+    def test_corpo_do_optionmenu_segue_o_accent_com_tinta_calculada(self) -> None:
+        """P3-1: antes só a setinha mudava — o corpo ficava azul de fábrica."""
+        import customtkinter as ctk
+
+        from src.ui.contrast import best_ink
+
+        theme.apply_accent_preset("amber")
+        preset = theme.ACCENT_PRESETS["amber"]
+        om = ctk.ThemeManager.theme["CTkOptionMenu"]
+        self.assertEqual([preset["l"], preset["d"]], om["fg_color"])
+        self.assertEqual([best_ink(preset["l"]), best_ink(preset["d"])], om["text_color"])
+
+    def test_foco_e_erro_sao_aliases_vivos_de_accent_e_perigo(self) -> None:
+        """Alias do MESMO objeto: trocar o accent move o anel de foco junto."""
+        self.assertIs(theme.THEME_FIELD_BORDER_FOCUS, theme.THEME_ACCENT)
+        self.assertIs(theme.THEME_FIELD_BORDER_ERROR, theme.THEME_DANGER)
+
+
 class SemHackDeGlobaisTest(unittest.TestCase):
     def test_propagate_theme_globals_nao_existe_mais(self) -> None:
         """P0-5: a troca de tema não pode voltar a reescrever `sys.modules`."""

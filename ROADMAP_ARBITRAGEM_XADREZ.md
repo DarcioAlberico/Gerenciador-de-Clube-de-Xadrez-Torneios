@@ -26,9 +26,20 @@ Ja existe no Albericus:
 
 As fases 0 a 9 ja possuem implementacao substancial: auditoria, snapshots,
 previa, painel do arbitro, QR local, portal live, equipes, exportadores
-versionados, sincronizacao e eventos de relogio. O backlog prioritario atual
-esta concentrado em documentos operacionais impressos, tabela cruzada e
-refinos de agilidade do painel para torneios com mais de 100 jogadores.
+versionados, sincronizacao e eventos de relogio. As fases 10 (manual
+operacional) e 11 (inscricoes flexiveis) foram concluidas, assim como os
+documentos impressos, a tabela cruzada e os refinos de agilidade do painel
+(ver `ESPEC_PAINEL_ARBITRO.md`, secoes 4 e 5, EPICs A a E).
+
+Alem do previsto nas fases, o projeto adotou o motor Gacrux (Otto Milvang,
+homologado FIDE) como padrao de emparceiramento (`gacrux_swiss`) e de
+desempates (`tiebreak_engine = gacrux`, com adversario virtual e regras FIDE
+por data de vigencia), mantendo o motor proprio como fallback.
+
+O backlog prioritario atual vem da auditoria arbitral de 2026-07-29 (Fase 12
+abaixo): conformidade de desempates e classificacao, fluxo arbitral de salao,
+correcoes nos motores secundarios e submissao federativa. O detalhamento
+executivo esta nos EPICs F a J de `ESPEC_PAINEL_ARBITRO.md`.
 
 ## Principios de implementacao
 
@@ -344,46 +355,108 @@ Fora de escopo: importacao de formularios em PDF/imagem digitalizada (somente
 formatos tabulares: CSV/XLS/XLSX e URL CSV publicada). OCR nao sera
 implementado.
 
+## Fase 12 - Conformidade arbitral e federativa
+
+Status: planejado (auditoria arbitral de 2026-07-29).
+
+Objetivo: fechar as lacunas encontradas na auditoria completa dos modulos de
+gestao de torneio feita sob otica de arbitro FIDE. Detalhamento executivo em
+`ESPEC_PAINEL_ARBITRO.md` (EPICs F a J, Sprints 7 a 12).
+
+Entregas, em ordem de prioridade:
+
+1. **Classificacao correta (bloqueante, Sprint 7)**: ajustes de pontos do
+   arbitro aplicados na classificacao (`TBK-01` — hoje uma penalidade so
+   aparece no TRF25), fallback do motor Gacrux de desempates com aviso e
+   auditoria (`TBK-02`), correcao de resultado com motivo obrigatorio,
+   desbloqueio pontual e alerta de cascata (`ARB-01`), troca de cores com
+   auditoria e round-robin por equipes destravado (`PAR-04` parcial).
+2. **Desempates conformes (Sprint 8)**: adversario virtual FIDE no motor
+   proprio ou rebaixamento formal a modo legado (`TBK-03`), parametros de
+   criterios editaveis e registro 212 fiel a sequencia configurada
+   (`TBK-04`), desempates olimpicos de equipes (`TBK-05`).
+3. **Fluxo arbitral de salao (Sprint 9)**: W.O. e partida adiada no painel
+   inline (`ARB-02`), politica de byes solicitados com limites (`ARB-04`),
+   retirada/reentrada com historico por rodada (`ARB-05`), registro
+   disciplinar de incidentes (`ARB-03`).
+4. **Motores secundarios (Sprint 10)**: aceleracao e entrada tardia no caminho
+   Gacrux sem divergencia silenciosa (`PAR-02`), round-robin com tabela
+   persistida e returno (`PAR-01`), knockout com desempate registrado e
+   Scheveningen robusto (`PAR-03`).
+5. **Submissao federativa (Sprint 11)**: correcao do `birth_date` da lista
+   FIDE (`FED-05`), TRF16 com `XXR`/`XXC`/`XXA`, Event-ID e modo submissao
+   (`FED-03`), round-trip TRF fiel (`FED-04`), normas FIDE corretas com
+   certificado IT3 (`FED-06`), rating com K/piso/ritmo corretos e relatorio
+   CBX real (`FED-07`).
+6. **Organizacao (Sprint 12)**: categorias configuraveis por torneio
+   (`ORG-01`), premiacao conforme edital, inclusive Feminino automatico
+   (`ORG-02`), agenda e controle de tempo estruturados (`ORG-03`), remocao ou
+   implementacao das flags mortas de configuracao (`ORG-04`).
+
+Criterios de aceite:
+
+- Nenhuma decisao arbitral registrada no sistema fica invisivel na
+  classificacao publicada.
+- Nenhuma troca de motor, descarte de configuracao ou perda de dado acontece
+  em silencio: tudo gera aviso ao arbitro e evento de auditoria.
+- TRF16 gerado passa no validador Gacrux e abre no Swiss-Manager sem ajuste
+  manual.
+- Cada item entregue segue a definicao de pronto geral deste roadmap.
+
 ## Backlog priorizado
+
+Atualizado em 2026-07-29. Os itens do backlog original (previa, painel,
+snapshots, componentes de desempate, QR, portal, Google Forms, mapeamento de
+colunas, TRF25) foram entregues nas fases 0 a 11 e nos EPICs A a E da
+`ESPEC_PAINEL_ARBITRO.md`. O backlog atual deriva da Fase 12.
 
 ### Muito alto impacto / baixa complexidade
 
-- Pre-visualizar proxima rodada.
-- Relatorio de auditoria do torneio.
-- Log de correcoes com motivo.
-- Status visual de resultados pendentes.
-- PDF de emparceiramento com layout limpo e, depois, QR.
-- CSV/Excel de classificacao com desempates detalhados.
+- Aplicar `point_adjustments` na classificacao (`TBK-01`).
+- Aviso e auditoria no fallback do motor de desempates (`TBK-02`).
+- Motivo obrigatorio na correcao de rodada fechada (`ARB-01`, parte).
+- Troca de cores via servico com auditoria (`PAR-04`, parte).
+- Destravar round-robin por equipes (constante duplicada) (`PAR-04`, parte).
+- Corrigir `birth_date` da importacao da lista FIDE (`FED-05`).
+- W.O. no lancamento inline do painel (`ARB-02`, parte).
 
 ### Alto impacto / media complexidade
 
-- Snapshots de emparceiramento.
-- Componentes de desempate.
-- Painel do arbitro.
-- QR Code de resultado com fila de aprovacao.
-- API local FastAPI.
-- Portal local responsivo.
-- Formulario de inscricao padronizado (Google Forms) gerado pelo sistema.
-- Assistente de importacao com mapeamento de colunas para planilhas/formularios
-  nao padronizados.
+- Adversario virtual FIDE no motor proprio de desempates (`TBK-03`).
+- Parametros de criterios editaveis + registro 212 fiel (`TBK-04`).
+- Desempates olimpicos de equipes (`TBK-05`).
+- Politica de byes solicitados (`ARB-04`).
+- Aceleracao e entrada tardia no caminho Gacrux (`PAR-02`).
+- TRF16 com `XXR`/`XXC`/`XXA`, Event-ID e modo submissao (`FED-03`).
+- Round-trip TRF fiel (`FED-04`).
+- Normas FIDE corretas + certificado IT3 (`FED-06`).
+- Premiacao conforme edital (Feminino automatico, multi-categoria) (`ORG-02`).
 
 ### Alto impacto / alta complexidade
 
-- Motor de explicacao de pareamento.
-- Equipes com reservas e escalacao por rodada.
-- Sincronizacao multi-dispositivo.
-- Permissoes completas por perfil.
-- TRF25/TRF2026.
+- Retirada e reentrada com historico por rodada (`ARB-05`).
+- Registro disciplinar de incidentes (`ARB-03`).
+- Round-robin com tabela persistida (Berger) e returno (`PAR-01`).
+- Knockout com desempate registrado e Scheveningen robusto (`PAR-03`).
+- Rating com K/piso/ritmo e regulamento CBX (`FED-07`).
+- Categorias configuraveis por torneio (`ORG-01`).
+- Agenda e controle de tempo estruturados (`ORG-03`).
 
 ### Baixa prioridade inicial
 
-- Integracao com relogios.
+- Integracao com relogios (hardware).
 - App nativo Android/iOS.
 - Submissao automatica para federacao.
 - CRDT completo.
 - IA para arbitragem.
+- Aceleracao de Baku (aguardando formula publicada pela FIDE).
 
 ## Primeiras sprints recomendadas
+
+Nota (2026-07-29): as sprints 1 a 5 abaixo foram entregues (fases 0 a 5 e
+EPICs correspondentes). As proximas sprints (7 a 12, Fase 12) estao detalhadas
+em `ESPEC_PAINEL_ARBITRO.md`, secao 7. O historico abaixo fica preservado como
+registro.
 
 ### Sprint 1 - Auditoria e snapshots
 

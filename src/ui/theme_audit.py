@@ -50,6 +50,7 @@ from .theme import (
     THEME_TREE_SELECTED_FG,
     THEME_WARNING,
     THEME_WARNING_TEXT,
+    field_palette,
 )
 
 LIGHT, DARK = 0, 1
@@ -101,6 +102,24 @@ def theme_pairs(accent: str, bg: str, frame: str, face: int) -> list[ContrastPai
         ),
         # --- Componente de interface (não é texto: limite 3:1) ------------ #
         ContrastPair("destaque sobre painel", accent_color, panel, AA_UI_COMPONENT, COMPONENT),
+    ]
+
+    # --- Campos de entrada (F5.1 / P3-2) ---------------------------------- #
+    # Antes da F5.1 o auditor tinha ZERO pares de campo — por isso a borda de
+    # fabrica a 2.74:1 nunca apareceu no relatorio. A paleta e derivada do
+    # painel pela mesma funcao pura que o preset usa: auditor e tema nao podem
+    # divergir. O rotulo do seletor (accent) ja e coberto pelo par do botao
+    # primario, pois desde a F5.1 o corpo do OptionMenu E o accent.
+    campo = field_palette(panel)
+    pares += [
+        ContrastPair(
+            "borda do campo sobre painel", campo["border"], panel, AA_UI_COMPONENT, COMPONENT
+        ),
+        ContrastPair("texto do campo sobre o campo", campo["text"], campo["bg"], kind=SURFACE),
+        # Placeholder e texto de apoio efemero: cobra AA, mas nao entra na
+        # familia SURFACE — exigir AAA dele no alto contraste o tornaria tao
+        # escuro quanto o texto real, e a dica pararia de parecer dica.
+        ContrastPair("placeholder sobre o campo", campo["placeholder"], campo["bg"], kind=FILL),
     ]
 
     for nome, fundo in zebra.items():

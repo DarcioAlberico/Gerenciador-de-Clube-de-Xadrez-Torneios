@@ -20,7 +20,14 @@ from typing import Any, Callable
 
 import customtkinter as ctk
 
-from .contrast import best_ink
+from .contrast import (
+    AA_NORMAL_TEXT,
+    AA_UI_COMPONENT,
+    best_ink,
+    contrast_ratio,
+    mix_hex,
+    relative_luminance,
+)
 
 logger = logging.getLogger("src.ui.theme")
 
@@ -189,6 +196,73 @@ RESULT_STATE_COLORS: dict[str, tuple[ColorToken, ColorToken | None]] = {
 THEME_RESULT_WIN  = ColorToken("#B45309", "#FACC15")
 THEME_RESULT_DRAW = ColorToken("#5A6678", "#94A3B8")
 THEME_RESULT_BYE  = ColorToken("#5C6B80", "#8A97A8")
+
+# ---------------------------------------------------------------------------
+# Campos de entrada (F5.1 / P3-1, P3-2 — ESPEC_UI_UX §4.6).
+#
+# Antes da F5.1 os campos usavam as cores de FABRICA do customtkinter: fundo
+# #F9F9FA/#343638 e borda #979DA2/#565B5E, que nao acompanham preset nenhum —
+# a borda dava 2.74:1 sobre painel claro (reprova os 3:1 de componente) e o
+# campo sumia nos paineis sepia/floresta (1.04:1). Aqui as cores sao DERIVADAS
+# do painel por field_palette(): um preset de painel novo ja nasce com campos
+# coerentes, sem tabela para manter.
+#
+# Tintas do campo (par fixo): as mesmas do texto padrao do app.
+_FIELD_INK_DARK = "#0F172A"
+_FIELD_INK_LIGHT = "#F1F5F9"
+
+
+def _least_mix(base: str, ink: str, over: str, minimum: float) -> str:
+    """A menor mistura de ``ink`` em ``base`` que alcanca ``minimum`` sobre ``over``.
+
+    Procurada, nao escolhida: e o que garante o limite por construcao para
+    qualquer painel — inclusive os que ainda nao existem. A margem de 0.05
+    evita a beirada do arredondamento em duas casas usado pelo auditor.
+    """
+    for passo in range(5, 101, 5):
+        candidata = mix_hex(base, ink, passo / 100)
+        if contrast_ratio(candidata, over) >= minimum + 0.05:
+            return candidata
+    return ink
+
+
+def field_palette(panel: str) -> dict[str, str]:
+    """Paleta de campo derivada de UMA cor de painel. Pura — serve ao preset e a auditoria.
+
+    Regras (ESPEC_UI_UX §4.6):
+
+    - ``bg``: proximo do painel, deslocado para a direcao clara da face — em
+      painel tingido (sepia, floresta) o campo conserva a temperatura em vez do
+      cinza-azulado de fabrica;
+    - ``border``: >= 3:1 sobre o painel (AA de componente de interface);
+    - ``text`` e ``placeholder``: >= 4.5:1 sobre o fundo do campo.
+    """
+    face_clara = relative_luminance(panel) >= 0.4
+    ink = _FIELD_INK_DARK if face_clara else _FIELD_INK_LIGHT
+    bg = mix_hex(panel, "#FFFFFF", 0.85 if face_clara else 0.10)
+    return {
+        "bg": bg,
+        "border": _least_mix(panel, ink, over=panel, minimum=AA_UI_COMPONENT),
+        "text": ink,
+        "placeholder": _least_mix(bg, ink, over=bg, minimum=AA_NORMAL_TEXT),
+    }
+
+
+def _field_tokens_from_panels(panel_light: str, panel_dark: str) -> dict[str, tuple[str, str]]:
+    """As duas faces de cada token de campo, a partir do par de paineis."""
+    claro, escuro = field_palette(panel_light), field_palette(panel_dark)
+    return {chave: (claro[chave], escuro[chave]) for chave in ("bg", "border", "text", "placeholder")}
+
+
+_campos_iniciais = _field_tokens_from_panels("#FFFFFF", "#1E293B")
+THEME_FIELD_BG     = ColorToken(*_campos_iniciais["bg"])
+THEME_FIELD_BORDER = ColorToken(*_campos_iniciais["border"])
+THEME_FIELD_TEXT   = ColorToken(*_campos_iniciais["text"])
+THEME_PLACEHOLDER  = ColorToken(*_campos_iniciais["placeholder"])
+# Foco = accent, erro = perigo: ALIASES do mesmo objeto, de proposito — quando
+# apply_accent_preset muta THEME_ACCENT, o anel de foco acompanha sozinho.
+THEME_FIELD_BORDER_FOCUS = THEME_ACCENT
+THEME_FIELD_BORDER_ERROR = THEME_DANGER
 
 
 def pick(token: Any, mode: str | None = None) -> str:
@@ -386,7 +460,10 @@ def apply_accent_preset(preset_key: str) -> None:
             "CTkSwitch":         {"progress_color": [l_color, d_color]},
             "CTkSlider":         {"progress_color": [l_color, d_color], "button_color": [l_color, d_color], "button_hover_color": [hl_color, hd_color]},
             "CTkProgressBar":    {"progress_color": [l_color, d_color]},
-            "CTkOptionMenu":     {"button_color": [l_color, d_color], "button_hover_color": [hl_color, hd_color]},
+            # F5.1 / P3-1: antes so a "setinha" (button_color) acompanhava o
+            # accent — o CORPO do OptionMenu ficava no azul de fabrica em 141
+            # widgets. Agora corpo e rotulo seguem o accent, com tinta calculada.
+            "CTkOptionMenu":     {"fg_color": [l_color, d_color], "button_color": [hl_color, hd_color], "button_hover_color": [hl_color, hd_color], "text_color": [on_light, on_dark]},
             "CTkComboBox":       {"button_color": [l_color, d_color], "button_hover_color": [hl_color, hd_color]},
             "CTkSegmentedButton":{"selected_color": [l_color, d_color], "selected_hover_color": [hl_color, hd_color]},
             "CTkTabview":        {"segmented_button_selected_color": [l_color, d_color], "segmented_button_selected_hover_color": [hl_color, hd_color]},
@@ -420,11 +497,57 @@ def apply_bg_preset(preset_key: str) -> None:
     notify_theme_change()
 
 
+def _patch_field_defaults() -> None:
+    """Leva os tokens de campo aos padroes do ThemeManager (F5.1 / P3-1).
+
+    Sem isto os campos nascem com as cores de fabrica do customtkinter e nunca
+    acompanham preset nenhum. Com o padrao patchado, campos novos ja nascem
+    certos e o restyle.py repinta os existentes na troca de tema — a
+    infraestrutura ja sabia reestilizar CTkEntry/CTkTextbox e rodava a vazio
+    porque o padrao nunca mudava.
+    """
+    try:
+        import customtkinter as ctk
+        tm = ctk.ThemeManager.theme
+        for widget_cls, overrides in {
+            "CTkEntry": {
+                "fg_color": list(THEME_FIELD_BG),
+                "border_color": list(THEME_FIELD_BORDER),
+                "text_color": list(THEME_FIELD_TEXT),
+                "placeholder_text_color": list(THEME_PLACEHOLDER),
+            },
+            "CTkTextbox": {
+                "fg_color": list(THEME_FIELD_BG),
+                "border_color": list(THEME_FIELD_BORDER),
+                "text_color": list(THEME_FIELD_TEXT),
+            },
+            "CTkComboBox": {
+                "fg_color": list(THEME_FIELD_BG),
+                "border_color": list(THEME_FIELD_BORDER),
+                "text_color": list(THEME_FIELD_TEXT),
+            },
+        }.items():
+            if widget_cls in tm:
+                tm[widget_cls].update(overrides)
+    except Exception:
+        pass
+
+
 def apply_frame_bg_preset(preset_key: str) -> None:
-    """Atualiza THEME_PANEL_BG e THEME_TREE_BG para o preset de fundo dos frames."""
+    """Atualiza THEME_PANEL_BG e THEME_TREE_BG para o preset de fundo dos frames.
+
+    Os tokens de campo (THEME_FIELD_*) sao derivados AQUI, porque o campo vive
+    sobre o painel: trocar o painel e o que muda o que "coerente" significa.
+    """
     preset = FRAME_BG_PRESETS.get(preset_key, FRAME_BG_PRESETS["slate"])
     THEME_PANEL_BG.set(*preset["panel"])
     THEME_TREE_BG.set(*preset["tree"])
+    campos = _field_tokens_from_panels(*preset["panel"])
+    THEME_FIELD_BG.set(*campos["bg"])
+    THEME_FIELD_BORDER.set(*campos["border"])
+    THEME_FIELD_TEXT.set(*campos["text"])
+    THEME_PLACEHOLDER.set(*campos["placeholder"])
+    _patch_field_defaults()
     notify_theme_change()
 
 
