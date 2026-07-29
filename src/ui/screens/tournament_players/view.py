@@ -175,6 +175,9 @@ class TournamentPlayersView:
         self.status_option = pilha.select(t("players.status"), list(PLAYER_STATUS_VALUES.keys()))
         self.status_option.set(PLAYER_STATUSES["active"])
 
+        # Enter em qualquer campo do cadastro adiciona o jogador (F5.10): e o
+        # gesto de quem digita uma lista inteira de inscritos.
+        pilha.submit(self._add_player)
         self._build_scheveningen(form, pilha)
         self._build_buttons(form, pilha.row)
 
