@@ -1,80 +1,10 @@
 from __future__ import annotations
 
 from ..support import *
-from ..components import danger_button
+from ..components import Dialog, FormStack, actions_bar
 
 
 class SettingsUsersMixin:
-    def _open_user_management_dialog(self) -> None:
-        dialog = ctk.CTkToplevel(self)
-        dialog.title("Gerenciar Usuários")
-        dialog.geometry("600x500")
-        dialog.transient(self)
-        dialog.grab_set()
-
-        tree = self._make_tree(
-            dialog,
-            ["id", "username", "role", "created_at"],
-            {"id": "ID", "username": "Usuário", "role": "Perfil", "created_at": "Criado em"},
-            {"id": 40, "username": 150, "role": 120, "created_at": 150},
-            visible_rows=10,
-        )
-        tree.pack(fill="both", expand=True, padx=20, pady=20)
-
-        def load_users():
-            tree.delete(*tree.get_children())
-            for u in self.security_service.list_users():
-                tree.insert("", "end", values=(u["id"], u["username"], OPERATOR_ROLES.get(u["role"], u["role"]), u["created_at"]))
-
-        load_users()
-
-        btn_frame = ctk.CTkFrame(dialog, fg_color="transparent")
-        btn_frame.pack(fill="x", padx=20, pady=10)
-
-        def create_user():
-            add_dlg = ctk.CTkToplevel(dialog)
-            add_dlg.title("Novo Usuário")
-            add_dlg.geometry("300x350")
-            add_dlg.transient(dialog)
-            add_dlg.grab_set()
-
-            ctk.CTkLabel(add_dlg, text="Usuário:").pack(pady=(10, 0))
-            u_entry = ctk.CTkEntry(add_dlg)
-            u_entry.pack(pady=5)
-
-            ctk.CTkLabel(add_dlg, text="Senha:").pack(pady=(10, 0))
-            p_entry = ctk.CTkEntry(add_dlg, show="*")
-            p_entry.pack(pady=5)
-
-            ctk.CTkLabel(add_dlg, text="Perfil:").pack(pady=(10, 0))
-            r_option = ctk.CTkOptionMenu(add_dlg, values=list(OPERATOR_ROLE_VALUES.keys()))
-            r_option.pack(pady=5)
-
-            def save():
-                try:
-                    role_val = OPERATOR_ROLE_VALUES[r_option.get()]
-                    self.security_service.create_user(u_entry.get().strip(), p_entry.get(), role_val)
-                    load_users()
-                    add_dlg.destroy()
-                except Exception as e:
-                    self._show_error(str(e))
-
-            ctk.CTkButton(add_dlg, text="Salvar", command=save).pack(pady=20)
-
-        def delete_user():
-            sel = tree.selection()
-            if not sel:
-                return
-            uid = tree.item(sel[0])["values"][0]
-            try:
-                self.security_service.delete_user(int(uid))
-                load_users()
-            except Exception as e:
-                self._show_error(str(e))
-
-        ctk.CTkButton(btn_frame, text="Novo Usuário", command=create_user).pack(side="left", padx=5)
-        danger_button(btn_frame, "Deletar Usuário", delete_user).pack(side="left", padx=5)
-
     def show_membership_plans(self) -> None:
         self._clear_content()
         self._page_title(
@@ -151,35 +81,19 @@ class SettingsUsersMixin:
             self._show_plan_form(plan)
 
     def _show_plan_form(self, plan: dict[str, Any] | None = None) -> None:
-        dlg = ctk.CTkToplevel(self)
-        dlg.title("Plano de Mensalidade" if plan else "Novo Plano")
-        dlg.geometry("400x450")
-        dlg.transient(self)
-        dlg.grab_set()
+        dlg = Dialog(self, "Plano de Mensalidade" if plan else "Novo Plano", size=(420, 420))
+        pilha = FormStack(dlg)
 
-        frame = ctk.CTkFrame(dlg)
-        frame.pack(fill="both", expand=True, padx=20, pady=20)
-
-        ctk.CTkLabel(frame, text="Nome do Plano:").pack(anchor="w", pady=(0, 5))
-        name_entry = ctk.CTkEntry(frame)
-        name_entry.pack(fill="x", pady=(0, 15))
-
-        ctk.CTkLabel(frame, text="Valor (R$):").pack(anchor="w", pady=(0, 5))
-        amount_entry = ctk.CTkEntry(frame)
-        amount_entry.pack(fill="x", pady=(0, 15))
-
-        ctk.CTkLabel(frame, text="Ciclo de Cobrança:").pack(anchor="w", pady=(0, 5))
+        pilha.section("Plano")
+        name_entry = pilha.text("Nome do Plano", placeholder="Ex.: Mensal Padrão")
+        amount_entry = pilha.text("Valor (R$)", placeholder="Ex.: 120,00")
         cycle_var = ctk.StringVar(value="monthly")
-        cycle_menu = ctk.CTkOptionMenu(
-            frame,
-            variable=cycle_var,
-            values=["monthly", "quarterly", "yearly"]
+        cycle_menu = pilha.select(
+            "Ciclo de Cobrança", ["monthly", "quarterly", "yearly"], variable=cycle_var
         )
-        cycle_menu.pack(fill="x", pady=(0, 15))
-
         active_var = ctk.BooleanVar(value=True)
-        active_cb = ctk.CTkCheckBox(frame, text="Plano Ativo", variable=active_var)
-        active_cb.pack(anchor="w", pady=(0, 15))
+        active_cb = ctk.CTkCheckBox(dlg, text="Plano Ativo", variable=active_var)
+        pilha.place(active_cb, "widget", sticky="w")
 
         if plan:
             name_entry.insert(0, plan["name"])
@@ -216,28 +130,24 @@ class SettingsUsersMixin:
                     notes=""
                 )
             self._load_plans()
-            dlg.destroy()
+            dlg.close()
 
-        ctk.CTkButton(frame, text="Salvar", command=save).pack(pady=20)
+        actions_bar(dlg, primary=("Salvar", save), close_text="Cancelar")
 
     def _show_users_manager(self) -> None:
         if self.security_service.current_operator().get("role") != "admin":
             self._show_error("Apenas o administrador pode gerenciar usuários.")
             return
 
-        dlg = ctk.CTkToplevel(self)
-        dlg.title("Gerenciar Usuários")
-        dlg.geometry("700x500")
-        dlg.grab_set()
+        # O "diálogo sem saída" do P3-10: ele nascia sem Fechar, sem Esc e sem
+        # tratamento do X — quem entrasse aqui só saía fechando o app. E o
+        # `grab_set` sem `transient` deixava a janela sumir atrás da principal.
+        dlg = Dialog(self, "Gerenciar Usuários", size=(700, 500), stretch_rows=(1,))
 
-        frame = ctk.CTkFrame(dlg)
-        frame.pack(fill="both", expand=True, padx=20, pady=20)
-        
-        top_bar = ctk.CTkFrame(frame, fg_color="transparent")
-        top_bar.pack(fill="x", pady=(0, 10))
-
-        tree_frame = ctk.CTkFrame(frame)
-        tree_frame.pack(fill="both", expand=True)
+        tree_frame = ctk.CTkFrame(dlg, fg_color="transparent")
+        tree_frame.grid(row=1, column=0, padx=SPACE_LG, pady=(0, SPACE_SM), sticky="nsew")
+        tree_frame.grid_columnconfigure(0, weight=1)
+        tree_frame.grid_rowconfigure(0, weight=1)
 
         users_tree = self._make_tree(
             tree_frame,
@@ -245,7 +155,6 @@ class SettingsUsersMixin:
             {"username": "Usuário", "role": "Perfil", "created_at": "Criado em"},
             {"username": 200, "role": 150, "created_at": 150}
         )
-        users_tree.pack(fill="both", expand=True)
 
         user_ids = {}
 
@@ -263,23 +172,17 @@ class SettingsUsersMixin:
         load_users()
 
         def add_user():
-            add_dlg = ctk.CTkToplevel(dlg)
-            add_dlg.title("Novo Usuário")
-            add_dlg.geometry("400x400")
-            add_dlg.grab_set()
-
-            ctk.CTkLabel(add_dlg, text="Nome de Usuário").pack(pady=(20, 5))
-            user_entry = ctk.CTkEntry(add_dlg, width=250)
-            user_entry.pack()
-
-            ctk.CTkLabel(add_dlg, text="Senha Provisória").pack(pady=(15, 5))
-            pwd_entry = ctk.CTkEntry(add_dlg, width=250)
-            pwd_entry.pack()
-
-            ctk.CTkLabel(add_dlg, text="Perfil").pack(pady=(15, 5))
+            add_dlg = Dialog(dlg, "Novo Usuário", size=(400, 340))
+            pilha = FormStack(add_dlg)
+            pilha.section("Credenciais")
+            user_entry = pilha.text("Nome de Usuário", placeholder="Ex.: arbitro01")
+            # `show="*"` era o que faltava: a senha provisoria aparecia em
+            # texto limpo, num dialogo aberto na tela do clube.
+            pwd_entry = pilha.text("Senha Provisória", placeholder="Senha inicial", show="*")
             role_var = ctk.StringVar(value="teacher")
-            role_combo = ctk.CTkOptionMenu(add_dlg, variable=role_var, values=list(OPERATOR_ROLE_VALUES.keys()))
-            role_combo.pack()
+            role_combo = pilha.select(
+                "Perfil", list(OPERATOR_ROLE_VALUES.keys()), variable=role_var
+            )
 
             def save():
                 try:
@@ -289,11 +192,11 @@ class SettingsUsersMixin:
                         role=OPERATOR_ROLE_VALUES.get(role_var.get(), "teacher")
                     )
                     load_users()
-                    add_dlg.destroy()
+                    add_dlg.close()
                 except Exception as e:
                     self._show_error(str(e))
 
-            ctk.CTkButton(add_dlg, text="Salvar", command=save).pack(pady=30)
+            actions_bar(add_dlg, primary=("Salvar", save), close_text="Cancelar")
 
         def delete_user():
             selected = users_tree.selection()
@@ -312,25 +215,26 @@ class SettingsUsersMixin:
                 return
             uid = user_ids[selected[0]]
             
-            pwd_dlg = ctk.CTkToplevel(dlg)
-            pwd_dlg.title("Redefinir Senha")
-            pwd_dlg.geometry("400x250")
-            pwd_dlg.grab_set()
-
-            ctk.CTkLabel(pwd_dlg, text="Nova Senha").pack(pady=(20, 5))
-            pwd_entry = ctk.CTkEntry(pwd_dlg, width=250)
-            pwd_entry.pack()
+            pwd_dlg = Dialog(dlg, "Redefinir Senha", size=(400, 240))
+            pilha = FormStack(pwd_dlg)
+            pilha.section("Nova senha")
+            pwd_entry = pilha.text("Nova Senha", placeholder="Digite a nova senha", show="*")
 
             def save():
                 try:
                     self.security_service.update_user_password(uid, pwd_entry.get().strip())
-                    pwd_dlg.destroy()
+                    pwd_dlg.close()
                     self._show_toast("Senha atualizada.", kind="success")
                 except Exception as e:
                     self._show_error(str(e))
 
-            ctk.CTkButton(pwd_dlg, text="Salvar", command=save).pack(pady=30)
+            actions_bar(pwd_dlg, primary=("Salvar", save), close_text="Cancelar")
 
-        ctk.CTkButton(top_bar, text="Novo", command=add_user).pack(side="left", padx=5)
-        danger_button(top_bar, "Excluir", delete_user).pack(side="left", padx=5)
-        ctk.CTkButton(top_bar, text="Redefinir Senha", command=change_pwd).pack(side="left", padx=5)
+        actions_bar(
+            dlg,
+            row=0,
+            primary=("Novo", add_user),
+            danger=("Excluir", delete_user),
+            secondary=[("Redefinir Senha", change_pwd)],
+            close_text="Fechar",
+        )

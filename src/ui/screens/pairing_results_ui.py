@@ -3,7 +3,11 @@ from __future__ import annotations
 from ..support import *
 from ..components import (
     FIELD_HEIGHT,
+    Dialog,
+    FormStack,
     Tooltip,
+    actions_bar,
+    choice_dialog,
     danger_button,
     debounce,
     menu_button,
@@ -1173,81 +1177,32 @@ class PairingResultsMixin:
             self._show_error(exc)
 
     def _prompt_bye_edit_warning(self, default_result: str, chosen_result: str) -> str:
-        choice = "cancel"
-        
-        dialog = ctk.CTkToplevel(self)
-        dialog.title("Aviso: Editar BYE")
-        dialog.geometry("450x230")
-        dialog.resizable(False, False)
-        dialog.transient(self)
-        dialog.grab_set()
-        dialog.grid_columnconfigure(0, weight=1)
-        dialog.grid_rowconfigure(1, weight=1)
-        
-        dialog.update_idletasks()
-        width = dialog.winfo_width()
-        height = dialog.winfo_height()
-        x = self.winfo_x() + (self.winfo_width() // 2) - (width // 2)
-        y = self.winfo_y() + (self.winfo_height() // 2) - (height // 2)
-        dialog.geometry(f"+{x}+{y}")
+        """Aviso de editar um BYE — o diálogo de cores contraditórias do P3-10.
 
-        msg = (
-            "Esta mesa é um BYE (sem oponente).\n"
-            "Alterar o resultado para algo diferente do padrão pode causar inconsistências "
-            "e impedir o fechamento correto da rodada.\n\n"
-            f"Resultado padrão: '{default_result}'\n"
-            f"Resultado escolhido: '{chosen_result or 'pendente'}'"
+        Ele tinha as três coisas que a auditoria apontou juntas: **saída segura
+        pintada de verde** (a cor que o app usa para confirmar), a destrutiva
+        no meio e Cancelar à direita, onde o olho procura a primária. Nada de
+        Esc. Agora os três caminhos são declarados por *papel* e o componente
+        escolhe posição e cor — a saída segura é a primária, "realmente editar"
+        é a de perigo, e Esc cancela.
+        """
+        return str(
+            choice_dialog(
+                self,
+                "Aviso: editar BYE",
+                "Esta mesa é um BYE (sem oponente).\n"
+                "Alterar o resultado para algo diferente do padrão pode causar "
+                "inconsistências e impedir o fechamento correto da rodada.\n\n"
+                f"Resultado padrão: '{default_result}'\n"
+                f"Resultado escolhido: '{chosen_result or 'pendente'}'",
+                options=[
+                    ("Cancelar", "cancel", "secondary"),
+                    ("Realmente editar", "edit", "danger"),
+                    ("Voltar ao padrão", "restore", "primary"),
+                ],
+                default="cancel",
+            )
         )
-        
-        ctk.CTkLabel(
-            dialog,
-            text=msg,
-            justify="left",
-            wraplength=410,
-            font=ctk.CTkFont(family="Segoe UI", size=13),
-        ).grid(row=0, column=0, padx=20, pady=20, sticky="w")
-        
-        actions = ctk.CTkFrame(dialog, fg_color="transparent")
-        actions.grid(row=2, column=0, pady=(0, 20), padx=20, sticky="ew")
-        
-        actions.grid_columnconfigure(0, weight=1)
-        actions.grid_columnconfigure(1, weight=1)
-        actions.grid_columnconfigure(2, weight=1)
-        
-        def set_choice(val):
-            nonlocal choice
-            choice = val
-            dialog.destroy()
-            
-        btn_restore = ctk.CTkButton(
-            actions,
-            text="Voltar ao Padrão",
-            command=lambda: set_choice("restore"),
-            fg_color=THEME_SUCCESS,
-            hover_color=THEME_SUCCESS_HOVER,
-        )
-        btn_restore.grid(row=0, column=0, padx=(0, 6), sticky="ew")
-        
-        btn_edit = ctk.CTkButton(
-            actions,
-            text="Realmente Editar",
-            command=lambda: set_choice("edit"),
-            fg_color=THEME_DANGER,
-            hover_color=THEME_DANGER_HOVER,
-        )
-        btn_edit.grid(row=0, column=1, padx=6, sticky="ew")
-        
-        btn_cancel = ctk.CTkButton(
-            actions,
-            text="Cancelar",
-            command=lambda: set_choice("cancel"),
-            fg_color=THEME_NEUTRAL,
-            hover_color=THEME_NEUTRAL_HOVER,
-        )
-        btn_cancel.grid(row=0, column=2, padx=(6, 0), sticky="ew")
-        
-        self.wait_window(dialog)
-        return choice
 
     def _show_selected_pairing_qr_link(self) -> None:
         try:
@@ -1302,13 +1257,7 @@ class PairingResultsMixin:
             self._show_error(exc)
             return
 
-        window = ctk.CTkToplevel(self)
-        window.title("Submissoes QR")
-        window.geometry("780x420")
-        window.transient(self)
-        window.grab_set()
-        window.grid_columnconfigure(0, weight=1)
-        window.grid_rowconfigure(0, weight=1)
+        window = Dialog(self, "Submissões QR", size=(780, 420), stretch_rows=(0,))
 
         panel = ctk.CTkFrame(window, fg_color="transparent")
         panel.grid(row=0, column=0, padx=16, pady=16, sticky="nsew")
@@ -1353,10 +1302,6 @@ class PairingResultsMixin:
                 ),
             )
 
-        actions = ctk.CTkFrame(window, fg_color="transparent")
-        actions.grid(row=1, column=0, padx=16, pady=(0, 16), sticky="ew")
-        actions.grid_columnconfigure((0, 1, 2), weight=1)
-
         def selected_submission_id() -> int:
             selected = tree.selection()
             if not selected:
@@ -1367,20 +1312,24 @@ class PairingResultsMixin:
         def approve() -> None:
             try:
                 self._approve_qr_submission(selected_submission_id())
-                window.destroy()
+                window.close()
             except Exception as exc:
                 self._show_error(exc)
 
         def reject() -> None:
             try:
                 self._reject_qr_submission(selected_submission_id())
-                window.destroy()
+                window.close()
             except Exception as exc:
                 self._show_error(exc)
 
-        ctk.CTkButton(actions, text="Aprovar", command=approve).grid(row=0, column=0, padx=(0, 6), sticky="ew")
-        ctk.CTkButton(actions, text="Rejeitar", command=reject).grid(row=0, column=1, padx=6, sticky="ew")
-        ctk.CTkButton(actions, text="Fechar", command=window.destroy).grid(row=0, column=2, padx=(6, 0), sticky="ew")
+        actions_bar(
+            window,
+            row=1,
+            primary=("Aprovar", approve),
+            danger=("Rejeitar", reject),
+            close_text="Fechar",
+        )
 
     def _quick_save_result(self, result: str) -> str:
         try:
@@ -1460,37 +1409,15 @@ class PairingResultsMixin:
             if not pairing["is_bye"]:
                 slot_options.append("Pretas")
 
-            dialog = ctk.CTkToplevel(self)
-            dialog.title("Trocar jogador")
-            dialog.geometry("430x260")
-            dialog.resizable(False, False)
-            dialog.transient(self)
-            dialog.grab_set()
-            dialog.grid_columnconfigure(0, weight=1)
-
-            title = (
+            dialog = Dialog(self, "Trocar jogador", size=(460, 320), resizable=False)
+            pilha = FormStack(dialog)
+            pilha.section(
                 f"Mesa {pairing['board_number']}: "
                 f"{pairing['white_display_name']} x "
                 f"{pairing['black_display_name']}"
             )
-            ctk.CTkLabel(
-                dialog,
-                text=title,
-                font=font_section(),
-                wraplength=380,
-                justify="left",
-            ).grid(row=0, column=0, padx=18, pady=(18, 12), sticky="w")
-
-            ctk.CTkLabel(dialog, text="Lado a trocar").grid(row=1, column=0, padx=18, pady=(4, 4), sticky="w")
-            slot_option = ctk.CTkOptionMenu(dialog, values=slot_options, width=180)
-            slot_option.grid(row=2, column=0, padx=18, pady=(0, 12), sticky="w")
-
-            ctk.CTkLabel(dialog, text="Jogador").grid(row=3, column=0, padx=18, pady=(4, 4), sticky="w")
-            player_option = ctk.CTkOptionMenu(dialog, values=player_options, width=360)
-            player_option.grid(row=4, column=0, padx=18, pady=(0, 16), sticky="w")
-
-            actions = ctk.CTkFrame(dialog, fg_color="transparent")
-            actions.grid(row=5, column=0, padx=18, pady=(2, 18), sticky="e")
+            slot_option = pilha.select("Lado a trocar", slot_options)
+            player_option = pilha.select("Jogador", player_options)
 
             def apply_swap() -> None:
                 try:
@@ -1503,16 +1430,12 @@ class PairingResultsMixin:
                         color,
                         replacement_id,
                     )
-                    dialog.destroy()
+                    dialog.close()
                     self._load_selected_round_pairings()
                 except Exception as exc:
                     self._show_error(exc)
 
-            ctk.CTkButton(actions, text="Cancelar", fg_color=THEME_NEUTRAL, hover_color=THEME_NEUTRAL_HOVER, command=dialog.destroy).pack(
-                side="left",
-                padx=(0, 8),
-            )
-            ctk.CTkButton(actions, text="Aplicar", command=apply_swap).pack(side="left")
+            actions_bar(dialog, primary=("Aplicar", apply_swap), close_text="Cancelar")
         except Exception as exc:
             self._show_error(exc)
 
@@ -1538,42 +1461,14 @@ class PairingResultsMixin:
                 player_options.append(option)
                 player_map[option] = int(player["id"])
 
-            dialog = ctk.CTkToplevel(self)
-            dialog.title("Trocar jogador por equipes")
-            dialog.geometry("500x290")
-            dialog.resizable(False, False)
-            dialog.transient(self)
-            dialog.grab_set()
-            dialog.grid_columnconfigure(0, weight=1)
-
-            title = (
+            dialog = Dialog(self, "Trocar jogador por equipes", size=(520, 340), resizable=False)
+            pilha = FormStack(dialog)
+            pilha.section(
                 f"Match {board.get('team_match_id', '')} - Tab. {board['board_number']}: "
                 f"{board.get('white_display_name', '')} x {board.get('black_display_name', '')}"
             )
-            ctk.CTkLabel(
-                dialog,
-                text=title,
-                font=font_section(),
-                wraplength=450,
-                justify="left",
-            ).grid(row=0, column=0, padx=18, pady=(18, 12), sticky="w")
-
-            ctk.CTkLabel(dialog, text="Lado a trocar").grid(row=1, column=0, padx=18, pady=(4, 4), sticky="w")
-            slot_option = ctk.CTkOptionMenu(dialog, values=["Brancas", "Pretas"], width=180)
-            slot_option.grid(row=2, column=0, padx=18, pady=(0, 12), sticky="w")
-
-            ctk.CTkLabel(dialog, text="Jogador da mesma equipe").grid(
-                row=3,
-                column=0,
-                padx=18,
-                pady=(4, 4),
-                sticky="w",
-            )
-            player_option = ctk.CTkOptionMenu(dialog, values=player_options, width=440)
-            player_option.grid(row=4, column=0, padx=18, pady=(0, 16), sticky="w")
-
-            actions = ctk.CTkFrame(dialog, fg_color="transparent")
-            actions.grid(row=5, column=0, padx=18, pady=(2, 18), sticky="e")
+            slot_option = pilha.select("Lado a trocar", ["Brancas", "Pretas"])
+            player_option = pilha.select("Jogador da mesma equipe", player_options)
 
             def apply_swap() -> None:
                 try:
@@ -1586,16 +1481,12 @@ class PairingResultsMixin:
                         color,
                         replacement_id,
                     )
-                    dialog.destroy()
+                    dialog.close()
                     self._load_selected_round_pairings()
                 except Exception as exc:
                     self._show_error(exc)
 
-            ctk.CTkButton(actions, text="Cancelar", fg_color=THEME_NEUTRAL, hover_color=THEME_NEUTRAL_HOVER, command=dialog.destroy).pack(
-                side="left",
-                padx=(0, 8),
-            )
-            ctk.CTkButton(actions, text="Aplicar", command=apply_swap).pack(side="left")
+            actions_bar(dialog, primary=("Aplicar", apply_swap), close_text="Cancelar")
         except Exception as exc:
             self._show_error(exc)
 
@@ -1787,12 +1678,18 @@ class PairingResultsMixin:
                 controls_frame.pack_configure(before=content_frame)
                 
         def exit_fullscreen(event=None):
+            # Esc em dois passos: sai da tela cheia; se ja estava fora dela,
+            # fecha o projetor. Antes o segundo Esc nao fazia nada, e a janela
+            # maximizada sem barra de titulo visivel virava o "modal sem
+            # saida" do P3-10 para quem nao achasse o botao Sair.
             if state["fullscreen"]:
                 state["fullscreen"] = False
                 dialog.attributes("-fullscreen", False)
                 controls_frame.pack(fill="x", side="top", padx=0, pady=0)
                 controls_frame.pack_configure(before=content_frame)
-                
+            else:
+                on_close()  # definido adiante; so e chamado em tempo de execucao
+
         # Configurar Controles
         # Fonte controls
         lbl_font = ctk.CTkLabel(controls_frame, text="Fonte:", text_color=PROJETOR_TEXTO, font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"))
@@ -1841,10 +1738,24 @@ class PairingResultsMixin:
         lbl_page = ctk.CTkLabel(controls_frame, text="Pág: 1/1 (Slide)", text_color=PROJETOR_DESTAQUE, font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"))
         lbl_page.pack(side="left", padx=(15, 10))
         
+        # Saida explicita: o projetor abre maximizado e, em tela cheia, some
+        # com a barra de titulo — sem este botao a unica saida era adivinhar
+        # o Esc (P3-10, "diálogo sem botão de saída").
+        btn_exit = ctk.CTkButton(
+            controls_frame,
+            text="Sair [Esc]",
+            width=100,
+            height=28,
+            fg_color=PROJETOR_BOTAO,
+            hover_color=PROJETOR_BOTAO_HOVER,
+            command=lambda: on_close(),
+        )
+        btn_exit.pack(side="right", padx=(0, 15))
+
         # Tela cheia button
         btn_fs = ctk.CTkButton(controls_frame, text="Tela Cheia [F11]", width=120, height=28, fg_color=PROJETOR_BOTAO, hover_color=PROJETOR_BOTAO_HOVER, command=toggle_fullscreen)
         btn_fs.pack(side="right", padx=15)
-        
+
         # Atalhos
         dialog.bind("<Escape>", exit_fullscreen)
         dialog.bind("<F11>", toggle_fullscreen)

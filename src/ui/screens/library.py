@@ -3,6 +3,10 @@ from typing import Any
 import tkinter as tk
 from tkinter import filedialog
 
+from ..components import Dialog, FormStack, actions_bar
+from ..theme import SPACE_LG
+
+
 class LibraryMixin:
     def show_library(self) -> None:
         self._clear_content()
@@ -91,14 +95,21 @@ class LibraryMixin:
                 def _prev(e=entry):
                     img_path = e.get().strip()
                     if not img_path or not __import__('os').path.exists(img_path): return
-                    top = ctk.CTkToplevel()
-                    top.title("Preview")
+                    # `CTkToplevel()` sem pai: a janela nascia solta, fora da
+                    # hierarquia do app — sem Esc, sem `transient`, e capaz de
+                    # sobreviver ao fechamento da tela que a abriu (P3-10).
+                    top = Dialog(self, "Pré-visualização", size=(360, 400))
                     try:
                         from PIL import Image
                         img = ctk.CTkImage(light_image=Image.open(img_path), size=(300, 300))
-                        ctk.CTkLabel(top, image=img, text="").pack(padx=20, pady=20)
+                        ctk.CTkLabel(top, image=img, text="").grid(
+                            row=0, column=0, padx=SPACE_LG, pady=SPACE_LG
+                        )
                     except Exception as ex:
-                        ctk.CTkLabel(top, text=str(ex)).pack(padx=20, pady=20)
+                        ctk.CTkLabel(top, text=str(ex), wraplength=300).grid(
+                            row=0, column=0, padx=SPACE_LG, pady=SPACE_LG
+                        )
+                    actions_bar(top, row=1, close_text="Fechar")
                 btn_prev = ctk.CTkButton(frame, text="✩", width=30, command=_prev)
                 btn_prev.grid(row=0, column=2, padx=(4,0))
                 entries[key] = entry
@@ -247,16 +258,9 @@ class LibraryMixin:
                 self._show_warning("Nenhuma apostila criada ainda.")
                 return
             
-            dialog = ctk.CTkToplevel(self)
-            dialog.title("Adicionar à Apostila")
-            dialog.geometry("400x200")
-            dialog.transient(self)
-            dialog.grab_set()
-
-            ctk.CTkLabel(dialog, text="Selecione a apostila:").pack(pady=10)
+            dialog = Dialog(self, "Adicionar à Apostila", size=(420, 220))
             col_map = {c["name"]: c["id"] for c in cols}
-            col_opt = ctk.CTkOptionMenu(dialog, values=list(col_map.keys()))
-            col_opt.pack(pady=10)
+            col_opt = FormStack(dialog).select("Selecione a apostila", list(col_map.keys()))
 
             def do_add() -> None:
                 c_id = col_map[col_opt.get()]
@@ -267,9 +271,9 @@ class LibraryMixin:
                         items.append(selected_item_id["value"])
                         self.library_service.save_collection({"name": c_data["name"], "description": c_data["description"], "items": items}, c_id)
                         self._show_toast("Adicionado com sucesso!", kind="success")
-                dialog.destroy()
+                dialog.close()
 
-            ctk.CTkButton(dialog, text="Adicionar", command=do_add).pack(pady=10)
+            actions_bar(dialog, primary=("Adicionar", do_add), close_text="Cancelar")
 
         tree.bind("<<TreeviewSelect>>", on_select)
         search_entry.bind("<Return>", lambda e: load_items())

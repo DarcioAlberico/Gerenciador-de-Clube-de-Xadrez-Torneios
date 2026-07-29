@@ -14,7 +14,7 @@ from typing import Any
 
 import customtkinter as ctk
 
-from ...components import neutral_button, primary_button, secondary_button
+from ...components import Dialog, actions_bar, secondary_button
 from ...i18n import t
 from ...support import THEME_DANGER, THEME_SUCCESS, THEME_SUCCESS_HOVER
 
@@ -27,12 +27,7 @@ def open_closing_checklist(host: Any, controller: Any) -> ctk.CTkToplevel | None
         host._show_error(exc)
         return None
 
-    dialogo = ctk.CTkToplevel(host)
-    dialogo.title(t("arbitration.checklist.title"))
-    dialogo.geometry("560x380")
-    dialogo.transient(host)
-    dialogo.grab_set()
-    dialogo.grid_columnconfigure(0, weight=1)
+    dialogo = Dialog(host, t("arbitration.checklist.title"), size=(560, 380))
 
     ctk.CTkLabel(dialogo, text=t("arbitration.checklist.intro"), anchor="w").grid(
         row=0, column=0, padx=16, pady=(16, 8), sticky="ew"
@@ -59,23 +54,22 @@ def open_closing_checklist(host: Any, controller: Any) -> ctk.CTkToplevel | None
             secondary_button(
                 linha,
                 t("arbitration.checklist.resolve"),
-                lambda c=comando, d=dialogo: (d.destroy(), c()),
+                lambda c=comando, d=dialogo: (d.close(), c()),
                 width=90,
             ).grid(row=0, column=2, padx=(8, 0))
 
-    acoes = ctk.CTkFrame(dialogo, fg_color="transparent")
-    acoes.grid(row=len(itens) + 1, column=0, padx=16, pady=(12, 16), sticky="e")
-    neutral_button(acoes, t("arbitration.checklist.close_dialog"), dialogo.destroy).pack(
-        side="left", padx=(0, 8)
+    acoes = actions_bar(
+        dialogo,
+        row=len(itens) + 1,
+        primary=(
+            t("arbitration.checklist.close_round"),
+            lambda: (dialogo.close(), host._close_current_round_from_panel()),
+        ),
+        close_text=t("arbitration.checklist.close_dialog"),
     )
-    fechar_rodada = primary_button(
-        acoes,
-        t("arbitration.checklist.close_round"),
-        lambda: (dialogo.destroy(), host._close_current_round_from_panel()),
-        fg_color=THEME_SUCCESS,
-        hover_color=THEME_SUCCESS_HOVER,
-    )
-    fechar_rodada.pack(side="left")
+    # A primaria e a ultima da faixa, por construcao da ordem canonica.
+    fechar_rodada = acoes.winfo_children()[-1]
+    fechar_rodada.configure(fg_color=THEME_SUCCESS, hover_color=THEME_SUCCESS_HOVER)
     if not tudo_ok:
         fechar_rodada.configure(state="disabled")
     return dialogo

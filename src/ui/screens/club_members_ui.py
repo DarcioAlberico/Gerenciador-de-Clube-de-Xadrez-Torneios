@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from ..support import *
-from ..components import danger_button, debounce
+from ..components import Dialog, actions_bar, danger_button, debounce
 
 
 # Verde da marca WhatsApp: nao acompanha o tema — e identidade de terceiro.
@@ -944,16 +944,16 @@ class ClubMembersMixin:
             if not file_path:
                 return
 
-            dialog = ctk.CTkToplevel(self)
-            dialog.title("Tipo de Rating")
-            dialog.geometry("320x150")
-            dialog.transient(self)
-            dialog.grab_set()
+            dialog = Dialog(self, "Tipo de Rating", size=(360, 180))
+            ctk.CTkLabel(
+                dialog,
+                text="Selecione o tipo de rating do arquivo CSV:",
+                wraplength=300,
+                justify="left",
+            ).grid(row=0, column=0, padx=SPACE_LG, pady=(SPACE_LG, SPACE_SM), sticky="w")
 
-            ctk.CTkLabel(dialog, text="Selecione o tipo de rating do arquivo CSV:").pack(pady=(20, 10))
-            
             def do_import(rating_type: str) -> None:
-                dialog.destroy()
+                dialog.close()
                 try:
                     result = self.import_service.import_rating_list_csv(file_path, rating_type)
                     msg = (
@@ -970,10 +970,13 @@ class ClubMembersMixin:
                     self._show_error(exc)
 
 
-            btn_frame = ctk.CTkFrame(dialog, fg_color="transparent")
-            btn_frame.pack(pady=10)
-            ctk.CTkButton(btn_frame, text="FIDE", command=lambda: do_import("fide"), width=100).pack(side="left", padx=10)
-            ctk.CTkButton(btn_frame, text="CBX", command=lambda: do_import("cbx"), width=100).pack(side="left", padx=10)
+            actions_bar(
+                dialog,
+                row=1,
+                primary=("FIDE", lambda: do_import("fide")),
+                secondary=[("CBX", lambda: do_import("cbx"))],
+                close_text="Cancelar",
+            )
 
         def import_members() -> None:
             try:

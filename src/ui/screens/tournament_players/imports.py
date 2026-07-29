@@ -210,7 +210,7 @@ class PlayerImportActions(ScreenActions):
         faixa = actions_row(dialog, 2)
 
         def importar() -> None:
-            dialog.destroy()
+            dialog.close()
 
             def concluir(resultado: dict[str, Any]) -> None:
                 self.changed()
@@ -327,7 +327,7 @@ class PlayerImportActions(ScreenActions):
                 self.host._show_error(self._app_error(t("players.mapping.name_required")))
                 return
             tournament_id = self.tournament_id
-            dialog.destroy()
+            dialog.close()
             self.background(
                 lambda: self.import_service.preview_mapped_registrations(
                     tournament_id, source, mapeamento

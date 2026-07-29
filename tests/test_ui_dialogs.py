@@ -21,11 +21,15 @@ import customtkinter as ctk
 import pytest
 
 from src.ui.components.dialogs import (
+    Dialog,
+    actions_bar,
     alert_dialog,
+    choice_dialog,
     confirm_dialog,
     report_dialog,
     tri_state_dialog,
 )
+from src.ui.dialog_layout import MIN_SIZE, centered_position, fitted_size, geometry_string
 from tests.support.ctk_cleanup import (
     cancel_pending_callbacks,
     create_tk_window,
@@ -262,6 +266,131 @@ class DialogsTest(unittest.TestCase):
         self.assertIs(True, estado["aninhado"])
         self.assertIsNotNone(estado["grab"], "o modal pai deveria reaver o grab")
         self.assertIsNone(self.root.grab_current(), "nenhum grab deveria sobrar no fim")
+
+
+class TamanhoEPosicaoTest(unittest.TestCase):
+    """A conta do ``dialog_layout`` — pura, sem abrir janela.
+
+    Marcada fora do ``gui`` de propósito: é aritmética, e é ela que decide se o
+    rodapé do diálogo fica dentro da tela a 160%.
+    """
+
+    def test_a_160_por_cento_o_pedido_encolhe_para_caber(self) -> None:
+        # O caso concreto do P3-10: `geometry("900x700")` num notebook 1366x768.
+        # A 160%, o customtkinter entrega 1440x1120 ao Tk — maior que a tela.
+        largura, altura = fitted_size((900, 700), scale=1.6, screen=(1366, 768))
+        self.assertLessEqual(largura * 1.6, 1366)
+        self.assertLessEqual(altura * 1.6, 768)
+
+    def test_a_100_por_cento_um_dialogo_pequeno_passa_intacto(self) -> None:
+        self.assertEqual((420, 320), fitted_size((420, 320), scale=1.0, screen=(1920, 1080)))
+
+    def test_nunca_encolhe_abaixo_do_piso_de_legibilidade(self) -> None:
+        # Tela minuscula: e melhor o modal vazar um pouco do que virar faixa.
+        self.assertEqual(MIN_SIZE, fitted_size((900, 700), scale=4.0, screen=(320, 240)))
+
+    def test_modal_sobre_janela_na_borda_nao_sai_da_tela(self) -> None:
+        # Centralizar sobre uma janela encostada na borda jogaria metade do
+        # modal para fora — e a metade que sai e sempre a de baixo, a dos botoes.
+        x, y = centered_position((600, 400), owner=(1300, 700, 600, 400), screen=(1366, 768))
+        self.assertLessEqual(x + 600, 1366)
+        self.assertLessEqual(y + 400, 768)
+        self.assertGreaterEqual(min(x, y), 0)
+
+    def test_geometria_sai_no_formato_do_tk(self) -> None:
+        self.assertEqual("600x400", geometry_string((600, 400)))
+        self.assertEqual("600x400+10+20", geometry_string((600, 400), (10, 20)))
+
+
+@pytest.mark.gui
+class DialogCanonicoTest(unittest.TestCase):
+    """O ``Dialog`` da F5.8: Esc, saída e ordem dos botões."""
+
+    root: ctk.CTk
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        try:
+            cls.root = create_tk_window(ctk.CTk)
+        except TclError as exc:  # pragma: no cover - ambiente sem display
+            raise unittest.SkipTest(f"Tk indisponivel: {exc}") from exc
+        cls.root.geometry("400x300+80+80")
+        cls.root.update()
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cancel_pending_callbacks(cls.root)
+        try:
+            cls.root.destroy()
+        except TclError:  # pragma: no cover
+            pass
+        release_dead_ctk_windows()
+
+    def tearDown(self) -> None:
+        for window in list(self.root.winfo_children()):
+            if isinstance(window, ctk.CTkToplevel):
+                try:
+                    window.destroy()
+                except Exception:
+                    pass
+        release_dead_ctk_windows()
+
+    def test_escape_fecha_o_dialogo(self) -> None:
+        # ~16 dos 21 dialogos ad-hoc nao tinham este binding (P3-10).
+        dialogo = Dialog(self.root, "Teste", size=(400, 300))
+        # `wait_visibility` + `focus_force` antes de gerar a tecla: o Tk **nao
+        # entrega evento de teclado a janela que ainda nao foi mapeada**, e um
+        # `update()` solto nao garante o mapeamento. Sem isso o teste passa
+        # sozinho e falha na suite inteira, quando a maquina esta mais ocupada
+        # — mesma familia da pegadinha de foco da B-4.
+        dialogo.wait_visibility()
+        dialogo.focus_force()
+        dialogo.update()
+        dialogo.event_generate("<Escape>")
+        self.root.update()
+        self.assertFalse(dialogo.winfo_exists())
+
+    def test_fechar_devolve_o_grab_ao_modal_pai(self) -> None:
+        pai = Dialog(self.root, "Pai", size=(400, 300))
+        self.root.update()
+        filho = Dialog(pai, "Filho", size=(300, 200))
+        self.root.update()
+        filho.close()
+        self.root.update()
+        self.assertIsNotNone(self.root.grab_current(), "o pai deveria reaver o grab")
+        pai.close()
+        self.root.update()
+
+    def test_ordem_dos_botoes_e_canonica_independente_da_chamada(self) -> None:
+        """[secundário…][perigo][primário] — mesmo declarando fora de ordem."""
+        dialogo = Dialog(self.root, "Ordem", size=(400, 300))
+        barra = actions_bar(
+            dialogo,
+            primary=("Salvar", lambda: None),
+            danger=("Excluir", lambda: None),
+            secondary=[("Revisar", lambda: None)],
+            close_text="Fechar",
+        )
+        self.root.update()
+        rotulos = [w.cget("text") for w in barra.winfo_children()]
+        self.assertEqual(["Fechar", "Revisar", "Excluir", "Salvar"], rotulos)
+
+    def test_saida_segura_pode_ser_pedida_sozinha(self) -> None:
+        """O conserto do "diálogo sem botão de saída": só ``close_text`` basta."""
+        dialogo = Dialog(self.root, "Só fechar", size=(400, 300))
+        barra = actions_bar(dialogo, close_text="Fechar")
+        self.root.update()
+        self.assertEqual(["Fechar"], [w.cget("text") for w in barra.winfo_children()])
+        barra.winfo_children()[0].invoke()
+        self.root.update()
+        self.assertFalse(dialogo.winfo_exists())
+
+    def test_dialogo_cabe_na_tela(self) -> None:
+        tela = (self.root.winfo_screenwidth(), self.root.winfo_screenheight())
+        dialogo = Dialog(self.root, "Grande", size=(4000, 3000))
+        self.root.update()
+        self.assertLessEqual(dialogo.winfo_width(), tela[0])
+        self.assertLessEqual(dialogo.winfo_height(), tela[1])
 
 
 if __name__ == "__main__":  # pragma: no cover
