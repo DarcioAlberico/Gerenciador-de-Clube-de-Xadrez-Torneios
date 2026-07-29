@@ -338,12 +338,16 @@ class DialogCanonicoTest(unittest.TestCase):
     def test_escape_fecha_o_dialogo(self) -> None:
         # ~16 dos 21 dialogos ad-hoc nao tinham este binding (P3-10).
         dialogo = Dialog(self.root, "Teste", size=(400, 300))
-        # `wait_visibility` + `focus_force` antes de gerar a tecla: o Tk **nao
-        # entrega evento de teclado a janela que ainda nao foi mapeada**, e um
-        # `update()` solto nao garante o mapeamento. Sem isso o teste passa
-        # sozinho e falha na suite inteira, quando a maquina esta mais ocupada
-        # — mesma familia da pegadinha de foco da B-4.
-        dialogo.wait_visibility()
+        # O Tk **nao entrega evento de teclado a janela ainda nao mapeada**, e
+        # um `update()` solto nao garante o mapeamento: sozinho o teste passa,
+        # na suite inteira (maquina ocupada) falha. `wait_visibility()` seria a
+        # espera certa, mas **bloqueia para sempre** se o gerenciador de
+        # janelas nao mapear — trocar uma falha intermitente por um travamento
+        # e pior. Dai a espera limitada.
+        for _ in range(50):
+            if dialogo.winfo_ismapped():
+                break
+            dialogo.update()
         dialogo.focus_force()
         dialogo.update()
         dialogo.event_generate("<Escape>")
