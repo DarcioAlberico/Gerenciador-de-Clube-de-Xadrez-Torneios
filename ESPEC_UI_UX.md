@@ -1,8 +1,9 @@
 # ESPEC_UI_UX — Especificação de UI/UX do Albericus
 
-> **Status:** Proposta (v1) · **Data:** 2026-06-25 · **Escopo:** Camada de interface (`src/ui/`)
+> **Status:** v2 (auditoria de campos e adoção) · **Data:** 2026-07-29 · v1: 2026-06-25 · **Escopo:** Camada de interface (`src/ui/`)
 > **Documento irmão:** [ROADMAP_UI_UX.md](ROADMAP_UI_UX.md) — sequenciamento, esforço e critérios de aceite.
 > **Aplicação:** Albericus — Emparceiramento de Xadrez (desktop, CustomTkinter, Windows/PyInstaller).
+> **v2:** revalidação de métricas (§2.3), especificação dos campos de entrada (§4.6) e DoD de adoção (§10). Achados P3-* e Fase 5 no roadmap.
 
 Este documento define o **estado-alvo** da interface: princípios, arquitetura de UI,
 design system e padrões de interação. Ele consolida duas análises independentes
@@ -92,6 +93,43 @@ O diagnóstico foi confirmado rodando o app sobre uma cópia descartável do ban
 - **Configurações do app** — a galeria de temas curados (ponto forte) renderiza bem,
   mas o título "Configuracoes", as abas "Aparencia"/"Seguranca" e a coluna "Descricao"
   aparecem **sem acento** ao usuário. Confirma P2-8.
+
+### 2.3 Revalidação (2026-07-29) — a fundação existe, a adoção não chegou
+
+Auditoria de design completa (código + screenshots de `docs/manual_screenshots/`),
+motivada pela insatisfação declarada com o visual dos **campos de entrada**. Números
+remedidos:
+
+| Métrica | v1 (06-25) | v2 (07-29) | Leitura |
+|---------|-----------:|-----------:|---------|
+| Linhas de UI | ~19.675 | **25.969** | cresceu 32% |
+| `messagebox.*` nativos | 26 | **0** ✅ | F2.2 cumprida |
+| `from ..support import *` | 22 | **20** | quase parado |
+| Mixins da `AlbericusApp` | 14 | **14** | DoD §10.3 aberto |
+| Telas migradas (3 camadas) | 0 | **4** ✅ | DoD §10.4 cumprido |
+| Botões via factory vs. cru | — | **35 vs. 170 (17%)** | DoD §10.6 aberto |
+| `EmptyState` em tabelas | — | **4 de 57** | DoD §10.7 aberto |
+| `CTkEntry`/`CTkOptionMenu`/`CTkTextbox` | — | **150 / 141 / 12** | nenhum no design system |
+
+Conclusões da revalidação:
+
+1. **Os campos de entrada nunca entraram no design system.** O patch de tema cobre
+   botões e frames, mas `CTkEntry`/`CTkTextbox` não são patchados e do `CTkOptionMenu`
+   só a setinha muda — o corpo fica azul de fábrica em 141 widgets, com qualquer
+   accent ([theme.py:382-393](src/ui/theme.py:382)). Todos os campos usam os defaults
+   do CTk: contrastes reprovados pelo próprio [contrast.py](src/ui/contrast.py)
+   (borda 2,74:1 sobre painel claro; rótulo do OptionMenu 2,74:1; placeholder 3,51:1;
+   campo invisível nos presets sépia/floresta), sem foco visível, sem estado de erro
+   em ~145 dos 150, 67 larguras distintas e altura 28px ao lado de botões de 36px.
+   **É a causa raiz da insatisfação com o visual dos campos.** Estado-alvo em §4.6.
+2. **Criação ≠ adoção.** Os componentes canônicos do §4.4 existem e são bons, mas
+   cobrem 17% dos botões, 4 de 57 tabelas e 0 dos 21 diálogos ad-hoc. O usuário sente
+   a adoção, não a criação.
+3. **Evidência visual (screenshots do manual):** muro de 25 botões idênticos em
+   Jogadores; botões com texto cortado no Painel do árbitro ("justes de pontos
+   (TRF25"); campos esticados a ~1.250px na Config. do torneio; valor de data
+   corrompido ("2026-05-182026-06-07"); "None" literal em coluna de tabela; Treeview
+   com visual nativo destoando dos cards.
 
 ---
 
@@ -251,6 +289,66 @@ destinos (§3.2). O `tk.Menu` nativo permanece como _fallback_/acessibilidade, m
 de ser a navegação primária. Mockup de referência aprovado nesta sessão (shell com
 sidebar + barra de ações hierárquica na tela de Rodadas).
 
+### 4.6 Campos de entrada — anatomia, dimensões e estados (v2, 2026-07-29)
+
+Estado-alvo para os 150 `CTkEntry`, 141 `CTkOptionMenu` e 12 `CTkTextbox`. Hoje
+nenhum deles recebe cor, fonte ou altura do design system (§2.3).
+
+**Tokens de campo** (novos em `theme.py`, mutados pelos presets como os demais):
+
+```python
+THEME_FIELD_BG            # fundo do campo — derivado do painel, sempre distinguível (Δ mensurável)
+THEME_FIELD_BORDER        # ≥ 3:1 contra o painel (AA para componente de UI)
+THEME_FIELD_BORDER_FOCUS  # = accent do tema
+THEME_FIELD_BORDER_ERROR  # = THEME_DANGER
+THEME_FIELD_TEXT          # ≥ 4,5:1 contra THEME_FIELD_BG
+THEME_PLACEHOLDER         # ≥ 4,5:1 contra THEME_FIELD_BG
+```
+
+Aplicação em duas frentes: (a) patch dos defaults do `ThemeManager` para `CTkEntry`,
+`CTkTextbox` e `CTkOptionMenu` — com isso o [restyle.py](src/ui/restyle.py) existente
+passa a repintá-los sem mudança de código; (b) tinta do OptionMenu calculada com
+[`best_ink`](src/ui/contrast.py:69). O [theme_audit.py](src/ui/theme_audit.py) ganha
+o bloco de **pares de campo** (fundo×painel, borda×painel, placeholder×fundo,
+texto×fundo, rótulo do select×preenchimento) e trava no gate dos temas curados —
+hoje o auditor tem zero pares de entrada, por isso as reprovações nunca apareceram.
+
+**Anatomia** (factories em `components/fields.py` — proibido `CTkEntry` cru em tela):
+
+| Elemento | Regra |
+|----------|-------|
+| Rótulo | sempre **acima**, `font_field_label()` (SIZE_BODY, `THEME_TEXT_SUB`), `SPACE_XS` até o campo |
+| Campo | altura única **36px** (alinhado a `buttons._DEFAULT_HEIGHT`), raio **6**, borda 1px (2px no foco), `font_field()` |
+| Placeholder | **obrigatório** em campo de texto livre (formato esperado: "Ex.: 90'+30\"", "dd/mm/aaaa") |
+| Ajuda/erro | linha reservada sob o campo, `SIZE_XS`; erro em `THEME_DANGER` com a mensagem, não só borda |
+| Largura | escala fechada: `FIELD_SM=120` (números/datas) · `FIELD_MD=240` (padrão) · `FIELD_LG=360` (nomes/caminhos) · `FULL` (só com `sticky="ew"` **e** teto de coluna `max ~560px`) — elimina as 67 larguras distintas e o campo de 1.250px da Config. do torneio |
+
+**Estados** (todos visíveis e distintos): repouso · **foco** (borda 2px accent —
+hoje inexistente) · **erro** (`set_field_error(widget, msg)` / `clear_field_error`
+únicos, substituindo as 3 implementações locais) · **desabilitado** (fundo do
+painel + texto sub — hoje indistinguível) · somente-leitura.
+
+**Seleção (`select_field`)**: aparência de **campo**, não de botão — fundo claro
+`THEME_FIELD_BG`, borda, chevron discreto e dropdown temado. Implementação sobre
+`CTkComboBox` em `state="readonly"` (que já tem anatomia de campo) ou `CTkOptionMenu`
+reestilizado; o bloco de cor sólida atual fica reservado a botões de ação. Fim da
+linha de formulário que alterna caixa branca / bloco azul.
+
+**Data (`date_field`)**: [`MaskedDateEntry`](src/ui/support.py:459) é a referência de
+comportamento (máscara, clamp, borda de erro) e vira o único campo de data do app —
+nada de `DateEntry` nativo. O calendário popup adota os tokens do tema e
+`best_ink(THEME_ACCENT)` no dia selecionado (hoje `#FFFFFF` cravado).
+
+**Área de texto (`text_area`)**: borda 1px (hoje `border_width=0` a torna invisível
+sobre o painel), mesmo fundo/fonte do campo, `wrap="word"` sempre, altura em passos
+(`80/140/200`).
+
+**Tabelas (leitura)**: a Treeview é o "campo de leitura" mais usado (57 instâncias) e
+segue as mesmas regras de integração — zebra com os tokens `THEME_TREE_EVEN/ODD`
+(existem e nunca foram aplicados), ordenação por clique no cabeçalho, `stretch=True`
+na coluna principal (fim da barra horizontal permanente), `EmptyState` embutido no
+`_make_tree`, e "None"/valores nulos renderizados como vazio.
+
 ---
 
 ## 5. Padrões de interação
@@ -353,6 +451,21 @@ A fase de fundação é considerada concluída quando:
 5. Troca de tema **não** destrói a UI nem perde seleção/scroll.
 6. Catálogo de componentes (§4.4) implementado e adotado nas telas migradas.
 7. Tooltips, empty states e progresso presentes nas telas de maior uso diário.
+
+**DoD de adoção (v2, 2026-07-29)** — a fase de adoção (Fase 5 do roadmap) é
+considerada concluída quando:
+
+8. Todo campo de entrada segue os tokens de campo (§4.6): nenhum widget com cor de
+   fábrica do CTk; pares de campo auditados no `theme_audit` e verdes nos temas
+   curados.
+9. Zero `CTkEntry`/`CTkOptionMenu`/`CTkTextbox` cru em `src/ui/screens` (lint no
+   CI); larguras só pela escala `FIELD_*`; foco e erro visíveis em qualquer campo.
+10. Toda tabela com zebra, ordenação por cabeçalho e estado vazio; todo diálogo
+    fecha com Esc e respeita `ui_scale_percent`.
+11. Nenhuma tela com mais de ~8 ações visíveis no mesmo nível de hierarquia
+    (agrupamento em menus `▾` conforme o molde da F2.1).
+12. Mensagem que precisa ser lida/copiada nunca sai em toast efêmero
+    (`_show_report` com Copiar).
 
 ---
 

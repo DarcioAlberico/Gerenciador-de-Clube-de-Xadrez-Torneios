@@ -3,7 +3,8 @@
 > Documento executivo para evoluir o fluxo operacional de arbitragem do
 > Albericus em torneios presenciais com mais de 100 jogadores.
 >
-> Revisao: 2026-05-31.
+> Revisao: 2026-07-29 (auditoria arbitral completa dos modulos de torneio;
+> novos EPICs F a J na secao 5 e Sprints 7 a 12 na secao 7).
 
 ## 1. Objetivo
 
@@ -47,7 +48,15 @@ Ja existem:
 - correcoes auditadas;
 - publicacao HTML e portal live;
 - validacao e exportacao TRF16;
-- TRF25 mantido como formato em evolucao.
+- TRF25 mantido como formato em evolucao;
+- motor Gacrux (Otto Milvang, homologado FIDE) como padrao de emparceiramento
+  (`pairing_system = gacrux_swiss`) e de desempates (`tiebreak_engine = gacrux`,
+  com adversario virtual FIDE e regras por data de vigencia), com fallback para
+  o motor proprio `albericus-swiss-1`;
+- byes solicitados F/H/Z, W.O. (`1F-0F`, `0F-1F`, `0F-0F`), pareamentos
+  proibidos manuais (registro 260), aceleracao Haley/custom, ajustes de pontos
+  (`point_adjustments`, registro 299) e diagnosticos de pareamento com prova de
+  otimalidade em campos pequenos.
 
 ### 3.2 Benchmark atual
 
@@ -791,6 +800,683 @@ Implementacao:
 - 9 testes novos (inspecao, heuristica, idade->nascimento, split de nome,
   preview/import com mapeamento, nome nao mapeado, perfis).
 
+### EPIC F - Conformidade de desempates e classificacao
+
+Prioridade: bloqueante. Origem: auditoria arbitral de 2026-07-29 (analise dos
+modulos de gestao de torneio sob otica de arbitro FIDE). Estes itens podem
+produzir classificacao publicada incorreta.
+
+#### TBK-01 - Ajustes de pontos aplicados na classificacao
+
+Status: pendente.
+
+Problema:
+
+- `point_adjustments` (penalidades e bonus do arbitro) so alimenta o registro
+  299 do TRF25 (`federation_exporters/trf25.py:436`);
+  `calculate_player_standings` e `calculate_team_standings` ignoram a tabela.
+  Uma deducao de -0,5 aplicada pelo arbitro nao aparece na classificacao da
+  tela, no site HTML, no portal live, no boletim, no podio nem na ata final.
+  A tabela do sistema contradiz a decisao arbitral em todos os documentos.
+
+Escopo:
+
+- somar ajustes de MP e GP em `calculate_player_standings` e
+  `calculate_team_standings` antes da ordenacao;
+- marcador visual na classificacao (asterisco com motivo) e nota nos
+  documentos exportados;
+- manter coerencia com o motor Gacrux quando ativo (pontos ajustados ou
+  registro 299 no TRF usado pelo subprocesso).
+
+Criterios de aceite:
+
+- [ ] penalidade de -0,5 reordena a classificacao na tela e em todas as
+  exportacoes;
+- [ ] o ajuste aparece com motivo na ata final e no relatorio de auditoria;
+- [ ] testes cobrem ajuste individual e por equipes nos dois motores de
+  desempate.
+
+#### TBK-02 - Fallback do motor de desempates visivel
+
+Status: pendente.
+
+Problema:
+
+- se o subprocesso Gacrux falha, `pairing_service.py:1591-1597` apenas loga um
+  warning e a classificacao passa a ser calculada pelo motor proprio, que nao
+  aplica o adversario virtual. O mesmo torneio pode publicar duas
+  classificacoes diferentes entre rodadas sem nenhum aviso ao arbitro.
+
+Escopo:
+
+- badge permanente na tela de classificacao indicando o motor efetivamente
+  usado no ultimo calculo;
+- evento de auditoria e alerta no painel quando ocorrer fallback;
+- opcao de configuracao "falhar em vez de degradar" para torneios FIDE-rated.
+
+Criterios de aceite:
+
+- [ ] fallback gera alerta visivel e evento de auditoria;
+- [ ] classificacao exibe o motor usado;
+- [ ] em modo estrito, falha do Gacrux bloqueia a publicacao em vez de trocar
+  de motor silenciosamente.
+
+#### TBK-03 - Jogos nao disputados conforme FIDE no motor proprio
+
+Status: pendente.
+
+Problema:
+
+- no motor proprio (`pairing/tiebreaks.py`), W.O. contam como partida real em
+  Buchholz, Sonneborn-Berger, ARO e performance (`:697-700`), e byes nao
+  entram no Buchholz (`_opponent_points:232-237`) — contraria as FIDE
+  Tie-Break Regulations (adversario virtual, art. 16);
+- o parametro `unplayed="self"` (`:246-251`) e inalcancavel pela UI;
+- `_direct_encounter_score` (`:281-291`) aplica confronto direto sem verificar
+  se todos os empatados se enfrentaram (condicao obrigatoria FIDE) e nao
+  redefine o grupo de empate apos cada criterio;
+- `wins` conta vitorias por W.O.; o `WON` do Gacrux conta so partidas jogadas —
+  trocar de motor no meio do torneio muda a ordem dos empatados;
+- `_koya_score` usa como total a maior rodada com jogo registrado
+  (`:726-729`), nao o total de rodadas do torneio.
+
+Escopo:
+
+- implementar o adversario virtual e o tratamento de rodadas nao jogadas no
+  motor proprio, alinhado a versao das regras vigente pela data do torneio
+  (mesmo criterio do Gacrux); ou
+- rebaixar formalmente o motor proprio a "modo legado, nao homologavel", com
+  aviso na configuracao e no relatorio de desempates;
+- corrigir confronto direto, `wins` e Koya em qualquer um dos caminhos.
+
+Criterios de aceite:
+
+- [ ] fixture com W.O. e byes produz o mesmo Buchholz/SB nos dois motores (ou
+  o motor proprio exibe aviso de nao conformidade);
+- [ ] confronto direto so e aplicado quando todos os empatados se enfrentaram;
+- [ ] teste de paridade `wins` x `WON` sem restricao de "sem W.O.".
+
+#### TBK-04 - Parametros de criterios editaveis e registro 212 fiel
+
+Status: pendente.
+
+Problema:
+
+- `TiebreakSequenceEditor.get_sequence` devolve sempre `params: {}`
+  (`tournament_widgets.py:42-43`): cortes de Buchholz alem de C1/C2/M1, limiar
+  do Koya, corte do ARO e `unplayed` nao sao configuraveis pelo arbitro;
+- o registro 212 do TRF25 e hardcoded como `PTS,BH,BH/M1,SB,WIN`
+  (`trf25.py:591-601`), ignorando `tiebreak_sequence` — o arquivo enviado a
+  federacao declara criterios diferentes dos usados (e usa `WIN` onde o motor
+  usa `WON`).
+
+Escopo:
+
+- editor de sequencia com parametros por criterio (corte, limiar, unplayed);
+- gerar o 212 a partir de `tiebreak_sequence`/`team_tiebreak_sequence` via
+  `gacrux_tiebreak_map`;
+- expor criterios ja suportados pelo Gacrux e ainda nao registrados
+  (`BH/M2`, `SB` cortado, brancas jogadas, `SNO`, sorteio).
+
+Criterios de aceite:
+
+- [ ] alterar a sequencia no editor muda o 212 exportado;
+- [ ] parametros persistem no JSON e sao aplicados pelos dois motores;
+- [ ] teste valida o 212 contra a sequencia configurada.
+
+#### TBK-05 - Desempates de equipes completos
+
+Status: pendente.
+
+Problema:
+
+- so existem 4 criterios de equipes (match points, game points, Buchholz sobre
+  MP, vitorias). Faltam os desempates usuais de regulamento FIDE/CBX por
+  equipes: Sonneborn-Berger olimpico, confronto direto entre equipes, Buchholz
+  de game points e board count/Berlin.
+
+Escopo:
+
+- registrar os criterios adicionais em `tiebreaks.py` e mapear no
+  `gacrux_tiebreak_map` (TRF-25 ja transporta equipes);
+- disponibilizar no editor de sequencia por equipes.
+
+Criterios de aceite:
+
+- [ ] campeonato por equipes com regulamento olimpico (MP, DE, SB olimpico)
+  ordena corretamente;
+- [ ] paridade com o Gacrux testada para os novos criterios.
+
+### EPIC G - Fluxo arbitral em salao
+
+Prioridade: muito alta. Origem: auditoria arbitral de 2026-07-29.
+
+#### ARB-01 - Correcao com motivo, desbloqueio pontual e alerta de cascata
+
+Status: pendente.
+
+Problema:
+
+- o motivo da correcao em rodada fechada e hardcoded
+  (`pairing_service.py:1062`, "Correcao em rodada fechada."), descumprindo o
+  criterio de aceite da Fase 0 do roadmap;
+- `allow_dangerous_changes` e um toggle global do torneio: ligado uma vez,
+  todas as rodadas fechadas ficam editaveis ate alguem lembrar de desligar;
+- corrigir a rodada N com a rodada N+1 ja pareada nao gera alerta nem sugere
+  repareamento;
+- `standings_snapshots` e `tiebreak_components` nunca sao reconciliados apos
+  correcao — a prova documental de uma apelacao fica permanentemente errada.
+
+Escopo:
+
+- campo de motivo obrigatorio no dialogo de correcao;
+- desbloqueio por acao, com justificativa e expiracao, no lugar do toggle
+  global (ou complementando-o);
+- pendencia de severidade `attention` quando ha rodada posterior pareada sobre
+  o resultado corrigido;
+- regravar ou anotar como "superado" o snapshot das rodadas afetadas.
+
+Criterios de aceite:
+
+- [ ] correcao sem motivo e rejeitada;
+- [ ] correcao com rodada posterior gera alerta de cascata no painel;
+- [ ] snapshot divergente fica marcado e um novo snapshot reconciliado e
+  gravado com auditoria.
+
+#### ARB-02 - Resultados arbitrais completos no painel
+
+Status: pendente.
+
+Problema:
+
+- W.O. (`1F-0F`, `0F-1F`, `0F-0F`) so pode ser lancado na tela `Rodadas`; o
+  lancamento inline do painel (`pairing_arbitration/pending.py:37`) oferece so
+  1-0, 1/2 e 0-1 — justamente no momento em que o arbitro esta em pe no salao;
+- nao existe estado "partida adiada/suspensa" nem os codigos TRF `W`/`D`/`L`
+  (jogo decidido sem lance ratavel, ex.: resultado por decisao do arbitro).
+
+Escopo:
+
+- botoes e atalhos de W.O. no lancamento inline (com confirmacao);
+- estado `adiada` que nao bloqueia o restante do painel mas impede fechar a
+  rodada ate resolucao;
+- suportar codigos `W`/`D`/`L` no modelo de resultado e no TRF16.
+
+Criterios de aceite:
+
+- [ ] W.O. lancavel pelo painel com confirmacao e auditoria;
+- [ ] rodada com partida adiada exibe pendencia especifica;
+- [ ] `W`/`D`/`L` exportam corretamente no TRF16.
+
+#### ARB-03 - Registro disciplinar de incidentes
+
+Status: pendente.
+
+Problema:
+
+- nao existe modulo de incidentes disciplinares: celular (art. 11.3.2), lance
+  ilegal (7.5), atraso/default time (6.7), conduta (12.x). O registro hoje e
+  em papel (tabela do manual operacional). `point_adjustments` existe mas nao
+  tem catalogo de infracoes nem vinculo com o jogador reincidente.
+
+Escopo:
+
+- tabela `incidents` com catalogo de infracoes FIDE, jogador, rodada/mesa,
+  decisao do arbitro, observacoes;
+- vinculo opcional com `point_adjustments` (deducao) e com o resultado
+  (partida perdida);
+- ficha do jogador com reincidencias; relatorio de incidentes do torneio
+  (anexo da ata final);
+- alertas de relogio `flag_fall`/`absence` promoviveis a pendencia bloqueante
+  ate decisao registrada.
+
+Criterios de aceite:
+
+- [ ] incidente com deducao reflete na classificacao (depende de TBK-01);
+- [ ] relatorio de incidentes sai na ata final;
+- [ ] queda de seta registrada exige decisao antes de fechar a rodada.
+
+#### ARB-04 - Politica de byes solicitados
+
+Status: pendente.
+
+Problema:
+
+- nao ha limite de byes por jogador, nem proibicao de bye de meio ponto nas
+  ultimas rodadas (regra comum de regulamento), nem validacao contra rodada ja
+  fechada (o bye e aceito e nunca aplicado, silenciosamente);
+- byes de jogadores inativos sao descartados sem aviso
+  (`pairing_service.py:742-746`);
+- `disable_bye` nao impede byes solicitados (`:754-774`);
+- o bye alocado pode repetir quando todos ja receberam, virando so alerta.
+
+Escopo:
+
+- configuracoes por torneio: maximo de byes H por jogador, ultima rodada
+  permitida, prazo de solicitacao;
+- rejeitar (com mensagem) bye para rodada fechada ou jogador inativo;
+- fazer `disable_bye` cobrir tambem os byes solicitados ou renomear a flag.
+
+Criterios de aceite:
+
+- [ ] pedido acima do limite ou fora do prazo e rejeitado com mensagem clara;
+- [ ] bye para rodada fechada e impossivel;
+- [ ] testes cobrem os limites e o descarte avisado.
+
+#### ARB-05 - Retirada e reentrada com historico por rodada
+
+Status: pendente.
+
+Problema:
+
+- `player_status` e um campo unico sem historico: `withdrawn` e `absent`
+  produzem o mesmo efeito (`active = 0`) e nao ha rastro de "saiu na rodada 3,
+  voltou na 5". No TRF tudo vira `0000 - Z`, sem distincao entre desistencia,
+  ausencia e bye zero solicitado.
+
+Escopo:
+
+- registrar eventos de retirada/reentrada por rodada (tabela propria ou
+  `audit_events` estruturado);
+- pareamento exclui o jogador nas rodadas de ausencia e o reinclui na volta;
+- exportacao TRF diferencia `Z` (ausencia anunciada) de `-` (forfeit) conforme
+  o caso; ata final lista desistencias com rodada.
+
+Criterios de aceite:
+
+- [ ] jogador que sai e volta e pareado corretamente e o historico mostra as
+  rodadas de ausencia;
+- [ ] TRF e tabela cruzada diferenciam os casos;
+- [ ] auditoria registra quem/quando/motivo.
+
+### EPIC H - Motores de pareamento (correcoes)
+
+Prioridade: alta. Origem: auditoria arbitral de 2026-07-29.
+
+#### PAR-01 - Round-robin com tabela persistida e returno
+
+Status: pendente.
+
+Problema:
+
+- `round_robin_pairings` (`pairing/fide_dutch.py:89-147`) recalcula o circulo
+  a cada rodada a partir da lista ativa ordenada por rating: desativar um
+  jogador ou editar um rating no meio do evento muda todo o calendario
+  restante (revanches e confrontos perdidos);
+- o bye do rodizio grava `result = "1-0"` e so pontua certo porque
+  `bye_points` default e 1.0 (`fide_dutch.py:131` x `tiebreaks.py:671`);
+- nao ha duplo turno (returno), formato padrao de fechados e torneios de
+  norma, nem tabelas de Berger (FIDE C.05).
+
+Escopo:
+
+- sortear/atribuir numeros de rodizio uma unica vez e persistir a tabela
+  (Berger) na criacao do torneio;
+- desistencia em RR segue a regra FIDE (anular ou manter resultados conforme
+  percentual jogado), sem recalcular o calendario;
+- opcao de duplo round-robin com cores invertidas no returno;
+- bye do rodizio gravado como bye real (nao `1-0`).
+
+Criterios de aceite:
+
+- [ ] desativar jogador nao altera os confrontos futuros dos demais;
+- [ ] fixture Berger de 6 e 8 jogadores confere com a tabela FIDE;
+- [ ] returno inverte cores corretamente.
+
+#### PAR-02 - Aceleracao e entrada tardia no caminho Gacrux
+
+Status: pendente.
+
+Problema:
+
+- aceleracao so e aplicada no motor proprio (`pairing_service.py:1918`);
+  com `pairing_system = gacrux_swiss` (padrao) ela e silenciosamente ignorada
+  (`:767-769`), sem aviso;
+- `starting_points` de entrada tardia nao chega ao Gacrux: o TRF-16 exporta as
+  rodadas ausentes como `0000 - Z` (0 ponto) (`export_federation.py:713`),
+  entao o Gacrux pareia o entrante tardio com pontuacao diferente da
+  classificacao publicada.
+
+Escopo:
+
+- com aceleracao configurada + Gacrux: aplicar via TRF (XXA/250 quando o
+  formato aceitar) ou cair no motor proprio com aviso explicito ao arbitro —
+  nunca ignorar em silencio;
+- transportar pontos de entrada tardia ao Gacrux (celulas de rodada coerentes
+  com `starting_points`) ou avisar da divergencia.
+
+Criterios de aceite:
+
+- [ ] configurar aceleracao com Gacrux gera aviso ou aplica de fato;
+- [ ] entrante tardio e pareado com os pontos exibidos na classificacao;
+- [ ] teste compara pareamento Gacrux x classificacao com entrada tardia.
+
+#### PAR-03 - Knockout e Scheveningen maduros
+
+Status: pendente.
+
+Problema:
+
+- no mata-mata, empate, duplo W.O. ou resultado vazio promovem o melhor seed
+  silenciosamente (`fide_dutch.py:234-241`), sem desempate nem registro do
+  criterio;
+- Scheveningen exige grupos exatamente iguais e recalcula a escala a cada
+  rodada (`:150-203`) — desistencia quebra o formato.
+
+Escopo:
+
+- desempate de KO configuravel: mini-match, partidas rapidas/blitz, armagedom
+  ou decisao manual do arbitro, com registro do criterio de avanco;
+- disputa de 3o lugar opcional e visualizacao de chave;
+- Scheveningen com escala persistida e tolerancia a desistencia (bye ou
+  substituto).
+
+Criterios de aceite:
+
+- [ ] empate em KO exige decisao registrada antes de gerar a proxima fase;
+- [ ] a chave exibe por que cada jogador avancou;
+- [ ] Scheveningen sobrevive a desistencia sem corromper confrontos passados.
+
+#### PAR-04 - Dividas tecnicas do nucleo de pareamento
+
+Status: pendente.
+
+Problema (itens pontuais confirmados na auditoria):
+
+- `TEAM_PAIRING_METHODS` definido duas vezes (`constants.py:111` e `:123`); a
+  segunda definicao sobrescreve a primeira e torna o round-robin por equipes
+  inalcancavel (validacao rejeita e o menu so mostra Suico);
+- `swap_pairing_colors` e chamado direto da UI (`pairing_results_ui.py:1415`)
+  sem passar pelo `PairingService` — unica mutacao de rodada sem auditoria;
+- `pending` acumulado fora do laco em `_close_team_round`
+  (`pairing_service.py:1170,1190`) pula confrontos completos do sumario;
+- `team_match_summary` levanta `KeyError` bruto com resultado invalido
+  (`team_swiss.py:121`);
+- criterio absoluto C.3 (topscorers) inexistente no motor proprio (cor e
+  sempre soft);
+- `float_histories` conta W.O. como float enquanto cor e repeticao os
+  excluem — tratamento inconsistente do mesmo jogo;
+- `team_pair_penalty` nao penaliza float repetido no Suico por equipes.
+
+Escopo e criterios de aceite:
+
+- [ ] round-robin por equipes volta a ser selecionavel (ou e removido da
+  constante com changelog);
+- [ ] troca de cores passa pelo servico com evento de auditoria;
+- [ ] fechamento de equipes reporta todos os confrontos completos mesmo com
+  pendencia anterior;
+- [ ] resultado invalido em equipes vira `AppError` legivel;
+- [ ] topscorers (C.3) respeitado nas rodadas finais do motor proprio, com
+  teste.
+
+### EPIC I - Submissao federativa (FIDE e CBX)
+
+Prioridade: alta. Origem: auditoria arbitral de 2026-07-29.
+
+#### FED-03 - TRF16 de campo completo
+
+Status: pendente.
+
+Problema:
+
+- o TRF16 nao emite os codigos de extensao de facto `XXR` (total de rodadas),
+  `XXC` (cor inicial) e `XXA` (aceleracao) — emite `142` no lugar de `XXR`,
+  que e registro TRF25; motores/validadores que esperam o dialeto TRF16 ficam
+  sem o total de rodadas;
+- `FIDE Event-ID` e validado mas nunca exportado; FIDE ID dos arbitros nao sai
+  nos registros 102/112;
+- partida pareada sem resultado exporta como `Z` (ausencia conhecida) —
+  semanticamente errado; `082 0` sai em torneio individual; `092` usa texto
+  proprietario;
+- nenhuma validacao de jogador e bloqueante (FIDE ID ausente/duplicado,
+  federacao, nascimento) — o arquivo sai mesmo assim;
+- TRF16 e TRF25 divergem no numero de celulas de rodada emitidas para o mesmo
+  torneio.
+
+Escopo:
+
+- emitir `XXR`/`XXC`/`XXA` no TRF16; restringir `082` a equipes; `092`
+  compativel com Swiss-Manager/Chess-Results;
+- exportar FIDE Event-ID e FIDE ID de arbitros;
+- modo "submissao": validacoes criticas bloqueiam a geracao (com lista clara
+  de pendencias); resultado pendente impede exportar ou exige confirmacao;
+- validacao cruzada de reciprocidade oponente/cor antes de exportar.
+
+Criterios de aceite:
+
+- [ ] TRF16 gerado passa no validador do Gacrux e abre no Swiss-Manager;
+- [ ] modo submissao bloqueia arquivo com FIDE ID duplicado ou resultado
+  pendente;
+- [ ] fixture compara TRF16 x TRF25 do mesmo torneio (mesmo numero de rodadas).
+
+#### FED-04 - Round-trip TRF fiel
+
+Status: pendente.
+
+Problema:
+
+- a importacao TRF trata `U` e `F` como o mesmo bye de ponto inteiro
+  (`trf_import.py:149-151`) — importar do Swiss-Manager pode inflar pontuacao
+  quando `bye_points` difere de 1.0; `Z` e descartado (ausencia some do
+  historico); `W`/`D`/`L` nao sao decodificados; arbitros, datas de rodada,
+  equipes e todos os registros TRF25 sao ignorados.
+
+Escopo:
+
+- distinguir `U` (bye alocado, pontua por `bye_points`) de `F`;
+- preservar `Z` e decodificar `W`/`D`/`L`;
+- importar arbitros, datas (132) e secao de equipes;
+- teste de round-trip export -> import -> export byte-comparavel para os
+  campos suportados.
+
+Criterios de aceite:
+
+- [ ] TRF do proprio Albericus reimporta sem perda de byes/ausencias;
+- [ ] TRF do Swiss-Manager com bye `U` pontua conforme configuracao;
+- [ ] round-trip coberto por teste automatizado.
+
+#### FED-05 - Lista FIDE: data de nascimento e robustez do download
+
+Status: pendente.
+
+Problema:
+
+- a importacao da lista FIDE grava so o ANO em `birth_date`
+  (`rating_service.py:333,351`): o campo 70-79 do 001 sai invalido e todo
+  jogador importado dispara o aviso de nascimento — envenena o TRF do plantel
+  inteiro;
+- download da FIDE sem tratamento de erro (`:310`, `URLError` cru na UI), URL
+  em `http://`, `errors` sempre vazio (linha malformada nunca e reportada),
+  corte de linha em 120 chars le nascimento em 126-131.
+
+Escopo:
+
+- armazenar ano como ano (campo proprio ou `YYYY-00-00` documentado) e emitir
+  o 001 com ano quando for o unico dado (formato aceito pela FIDE);
+- tratar falha de rede com mensagem, `https`, e reportar linhas ignoradas.
+
+Criterios de aceite:
+
+- [ ] importar lista FIDE nao gera avisos falsos de nascimento no TRF;
+- [ ] falha de download mostra erro amigavel;
+- [ ] teste do parser de largura fixa com fixture real.
+
+#### FED-06 - Normas FIDE corretas e certificados IT
+
+Status: pendente.
+
+Problema:
+
+- `_has_title` conta CM/WCM/NM/WNM como "titulado" (`fide_norms.py:21,33-34`);
+  o Handbook exige contagem por nivel (norma de GM: minimo de GMs e de
+  titulados IM+) — um torneio cheio de CMs pode indicar norma indevida;
+- a contagem de federacoes inclui a federacao do proprio candidato
+  (`:122-124`); faltam limites de mesma federacao e de nao ratados, piso de
+  rating de adversario, e a tabela proporcional de 7 a 13 rodadas
+  (`min_games` fixo em 9);
+- nao existem certificados IT1/IT2/IT3 — sem o IT3 o arbitro nao consegue
+  submeter a norma que o proprio sistema diz ter sido atingida.
+
+Escopo:
+
+- corrigir os indicadores conforme o Handbook B.01 (titulos) vigente;
+- gerar IT3 preenchido (PDF) por norma detectada, e apoio ao IT2/relatorio de
+  rating;
+- manter o texto "assistencia ao arbitro, nao homologacao".
+
+Criterios de aceite:
+
+- [ ] fixture de norma conhecida (torneio real) valida os indicadores;
+- [ ] IT3 sai preenchido com os dados do torneio e do candidato;
+- [ ] federacao do candidato fora da contagem de federacoes.
+
+#### FED-07 - Rating: K correto, piso e ritmo
+
+Status: pendente.
+
+Problema:
+
+- K=40 de jogador novo nunca dispara (`build_fide_report_rows` nao passa
+  `games_played`, `fide_rating.py:202-207`); regra dos 400 apenas reportada;
+  sem piso de rating; sem distincao standard/rapid/blitz (lista, K e relatorio
+  usam um unico rating); nao ha calculo de rating inicial de nao ratado;
+- o relatorio CBX e o algoritmo FIDE com outra coluna — o regulamento CBX
+  (K, piso, nao ratados) nao esta modelado e nao existe arquivo de submissao
+  CBX.
+
+Escopo:
+
+- passar `games_played` ao K e aplicar piso configuravel;
+- classificar o torneio em standard/rapid/blitz a partir do controle de tempo
+  estruturado (ver ORG-03) e usar a lista/K corretos;
+- modelar o regulamento CBX de rating e gerar o relatorio de submissao no
+  formato aceito pela CBX.
+
+Criterios de aceite:
+
+- [ ] jogador com menos de 30 partidas recebe K=40 no relatorio;
+- [ ] torneio rapido usa rating rapido dos inscritos;
+- [ ] relatorio CBX documentado contra o regulamento vigente.
+
+### EPIC J - Organizacao do torneio (categorias, premios, agenda)
+
+Prioridade: media-alta. Origem: auditoria arbitral de 2026-07-29. Itens com
+interseccao com `ESPEC_PARIDADE_SWISSMANAGER.md` (E4/E10) — detalhar la quando
+virar implementacao.
+
+#### ORG-01 - Categorias configuraveis por torneio
+
+Status: pendente.
+
+Problema:
+
+- faixas etarias (Sub-08..20, S50+, S65+) e de rating (1400/1800/2200) sao
+  hardcoded em `core/categories.py:6-19`; um edital com Sub-07/09/11/13,
+  Veterano 60+, ou cortes 1600/2000 nao e configuravel;
+- "Feminino" e tag de premio, nao categoria — nao existe classificacao
+  feminina nem premio feminino automatico;
+- a data de referencia da idade nao e parametrizavel (usa o ano do torneio;
+  FIDE/CBX usam 1o de janeiro).
+
+Escopo:
+
+- tabela de categorias por torneio (nome, tipo idade/rating/sexo/tag, faixas,
+  data de referencia);
+- jogador pode pertencer a multiplas categorias premiaveis;
+- classificacao filtravel por categoria e secao na ata/podio.
+
+Criterios de aceite:
+
+- [ ] edital com faixas fora do padrao e configuravel sem texto livre;
+- [ ] classificacao feminina sai automaticamente quando configurada;
+- [ ] data de referencia altera o calculo de idade nos testes.
+
+#### ORG-02 - Premiacao conforme edital
+
+Status: pendente.
+
+Problema:
+
+- o alocador so casa premio de categoria com a categoria primaria unica do
+  jogador (`prizes.py:128` x `categories.py:101`): premio "Feminino" nunca e
+  alocado automaticamente e um Sub-12/Sub-1400 concorre a um so;
+- o Sistema Hort implementado e uma "interpretacao comum" nao auditavel
+  contra o Swiss-Manager (`prizes.py:90-98`);
+- desistentes/W.O. nao sao excluidos da alocacao; premios por equipe e
+  tabuleiro sao apenas manuais; a spec E4 previa `currency` e `cumulative`
+  por premio e a tabela nao os tem.
+
+Escopo:
+
+- alocar tambem por `age_category`, `rating_category` e `prize_tags`;
+- politica por premio (acumula ou nao) e moeda;
+- opcao de excluir desistentes; alocacao automatica por equipes;
+- documentar a formula Hort adotada e validar contra caso conhecido do
+  Swiss-Manager.
+
+Criterios de aceite:
+
+- [ ] premio Feminino e alocado automaticamente;
+- [ ] jogador multi-categoria segue a politica configurada;
+- [ ] fixture de premiacao conhecida (edital real) confere.
+
+#### ORG-03 - Agenda e controle de tempo estruturados
+
+Status: pendente.
+
+Problema:
+
+- `round_schedule` so tem data e hora; faltam local, ritmo por rodada, dia de
+  descanso e tolerancia de atraso (default time);
+- `_validated_schedule` descarta silenciosamente rodadas acima do total
+  (`tournament_service.py:626-627`) — reduzir rodadas apaga datas publicadas;
+- `time_control` e texto livre: nao classifica o evento em
+  standard/rapid/blitz (necessario para lista e K de rating — FED-07), nao
+  alimenta o `222` do TRF25 em grafias comuns (`90'+30"`) e nao valida contra
+  os minimos de norma.
+
+Escopo:
+
+- controle de tempo estruturado (fases, incremento) com apresentacao livre;
+- agenda com ritmo/local por rodada e dias de descanso;
+- aviso (nao descarte) ao reduzir rodadas com agenda preenchida;
+- tolerancia de atraso configuravel exibida no painel da rodada.
+
+Criterios de aceite:
+
+- [ ] `90'+30"` classifica como standard e gera `222` valido;
+- [ ] reduzir rodadas exige confirmacao quando ha agenda;
+- [ ] tolerancia aparece no painel e na sumula.
+
+#### ORG-04 - Configuracao honesta (flags mortas e bloqueios pos-R1)
+
+Status: pendente.
+
+Problema:
+
+- flags exibidas na UI sem nenhum consumidor: `accelerated_system` (o arbitro
+  marca e acredita ter acelerado o torneio), `allow_public_registration`,
+  `allow_player_result_edit`, `hide_color_names`,
+  `show_opponents_in_standings`; `calculate_performance` e so rotulo;
+  `archived` nao filtra a lista de torneios;
+- e possivel trocar `initial_order`, aceleracao e sequencia de desempates no
+  meio do torneio sem aviso nem auditoria;
+- `tournaments.system` (default `'Suico'`) e legado dessincronizado de
+  `pairing_method`.
+
+Escopo:
+
+- remover ou implementar cada flag morta (decisao por flag, com changelog);
+- mudancas estruturais apos a rodada 1 exigem confirmacao com motivo e geram
+  evento de auditoria;
+- `archived` passa a ocultar da lista padrao.
+
+Criterios de aceite:
+
+- [ ] nenhuma opcao visivel na UI e inerte;
+- [ ] trocar desempates com torneio em andamento gera auditoria;
+- [ ] torneio arquivado some da lista padrao e reaparece com filtro.
+
 ## 6. Fora de Escopo
 
 Nao iniciar sem requisito externo concreto:
@@ -869,6 +1555,77 @@ Entregas:
 2. [x] `REG-02` Assistente de importacao com mapeamento de colunas.
 3. [x] Perfis de mapeamento reutilizaveis e testes do servico puro.
 
+### Sprint 7 - Classificacao correta (bloqueantes)
+
+Objetivo: eliminar os casos em que a classificacao publicada pode contradizer
+a decisao arbitral ou mudar sem aviso.
+
+Entregas:
+
+1. [ ] `TBK-01` Ajustes de pontos aplicados na classificacao.
+2. [ ] `TBK-02` Fallback do motor de desempates visivel.
+3. [ ] `ARB-01` Correcao com motivo, desbloqueio pontual e alerta de cascata.
+4. [ ] Correcoes pontuais de `PAR-04` com risco imediato: troca de cores via
+   servico com auditoria e `TEAM_PAIRING_METHODS` duplicado.
+
+### Sprint 8 - Conformidade de desempates
+
+Objetivo: alinhar o motor proprio (ou rebaixa-lo formalmente) e dar ao arbitro
+controle real sobre os criterios.
+
+Entregas:
+
+1. [ ] `TBK-03` Jogos nao disputados conforme FIDE no motor proprio.
+2. [ ] `TBK-04` Parametros de criterios editaveis e registro 212 fiel.
+3. [ ] `TBK-05` Desempates de equipes completos.
+
+### Sprint 9 - Fluxo arbitral em salao
+
+Objetivo: cobrir as situacoes reais de arbitragem que hoje exigem contorno.
+
+Entregas:
+
+1. [ ] `ARB-02` Resultados arbitrais completos no painel (W.O. inline,
+   adiada, W/D/L).
+2. [ ] `ARB-04` Politica de byes solicitados.
+3. [ ] `ARB-05` Retirada e reentrada com historico por rodada.
+4. [ ] `ARB-03` Registro disciplinar de incidentes.
+
+### Sprint 10 - Motores de pareamento
+
+Objetivo: tornar RR/KO/Scheveningen confiaveis e fechar as lacunas do caminho
+Gacrux.
+
+Entregas:
+
+1. [ ] `PAR-02` Aceleracao e entrada tardia no caminho Gacrux.
+2. [ ] `PAR-01` Round-robin com tabela persistida e returno.
+3. [ ] `PAR-03` Knockout e Scheveningen maduros.
+4. [ ] `PAR-04` Demais dividas tecnicas do nucleo.
+
+### Sprint 11 - Submissao federativa
+
+Objetivo: arquivo enviavel sem retrabalho e normas confiaveis.
+
+Entregas:
+
+1. [ ] `FED-05` Lista FIDE: data de nascimento e robustez do download.
+2. [ ] `FED-03` TRF16 de campo completo.
+3. [ ] `FED-04` Round-trip TRF fiel.
+4. [ ] `FED-06` Normas FIDE corretas e certificados IT.
+5. [ ] `FED-07` Rating: K correto, piso e ritmo.
+
+### Sprint 12 - Organizacao do torneio
+
+Objetivo: edital real configuravel sem texto livre nem contorno manual.
+
+Entregas:
+
+1. [ ] `ORG-01` Categorias configuraveis por torneio.
+2. [ ] `ORG-02` Premiacao conforme edital.
+3. [ ] `ORG-03` Agenda e controle de tempo estruturados.
+4. [ ] `ORG-04` Configuracao honesta (flags mortas e bloqueios pos-R1).
+
 ## 8. Definicao de Pronto
 
 Uma entrega so esta pronta quando:
@@ -916,6 +1673,19 @@ Motivo:
 
 `EPIC E - Inscricoes e importacao flexivel` (`REG-01` formulario padronizado
 Google Forms e `REG-02` assistente de importacao com mapeamento de colunas) foi
-concluido em 2026-06-03 (secao 5, Sprint 6 da secao 7). A proxima entrega deve
-partir de um teste piloto presencial e de um novo requisito operacional
-priorizado.
+concluido em 2026-06-03 (secao 5, Sprint 6 da secao 7).
+
+O "novo requisito operacional priorizado" chegou em 2026-07-29 com a auditoria
+arbitral completa dos modulos de gestao de torneio (EPICs F a J na secao 5).
+Ordem recomendada:
+
+1. **Sprint 7 (bloqueantes)** — `TBK-01`, `TBK-02` e `ARB-01` corrigem casos em
+   que a classificacao publicada pode estar errada ou mudar sem rastro; nenhum
+   outro trabalho deve passar na frente.
+2. **Sprint 8 (desempates)** — conformidade FIDE do motor proprio e controle
+   real dos criterios pelo arbitro.
+3. **Sprints 9-12** — fluxo de salao, motores secundarios, submissao
+   federativa e organizacao, nesta ordem, salvo demanda de torneio real.
+
+O teste piloto presencial continua recomendado e pode rodar em paralelo ao
+Sprint 7.
