@@ -7,6 +7,9 @@ import customtkinter as ctk
 
 from src.services.constants import OPERATOR_ROLES
 
+from ..components import report_dialog
+
+
 class AuditPagesMixin:
     def show_audit_logs(self) -> None:
         self.require_permission("settings_write")
@@ -130,17 +133,11 @@ class AuditPagesMixin:
             except Exception:
                 formatted = meta_json
 
-            modal = ctk.CTkToplevel(self)
-            modal.title(f"Metadados - Log #{row_id}")
-            modal.geometry("500x400")
-            modal.grab_set()
-            
-            ctk.CTkLabel(modal, text="JSON Metadados", font=ctk.CTkFont(weight="bold")).pack(pady=10, padx=10, anchor="w")
-            
-            text = ctk.CTkTextbox(modal, wrap="none")
-            text.pack(expand=True, fill="both", padx=10, pady=(0, 10))
-            text.insert("1.0", formatted)
-            text.configure(state="disabled")
+            # Conteudo que se le e se copia: e exatamente o `report_dialog` da
+            # F5.7. O modal a mao aqui nao tinha Esc, nao tinha botao de saida e
+            # nao dava para copiar o JSON — que e a unica coisa util a fazer com
+            # ele (P3-10).
+            report_dialog(self, f"Metadados - Log #{row_id}", formatted)
 
         tree.bind("<Double-1>", view_metadata)
         

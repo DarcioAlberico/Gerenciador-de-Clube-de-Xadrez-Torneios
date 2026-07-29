@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from ..support import *
+from ..components import window_scale
+from ..dialog_layout import centered_position, fitted_size, geometry_string
 
 
 # Mixin do "Modo Livre" (Torneio | Livre) — eventos casuais, escolares ou treinos.
@@ -297,13 +299,23 @@ class FreeTournamentMixin:
         return True, None
 
     def _center_over_self(self, win: ctk.CTkToplevel, width: int, height: int) -> None:
-        """Centraliza horizontalmente sobre a janela principal, levemente acima."""
+        """Centraliza sobre a janela principal, levemente acima, **e cabendo**.
+
+        A conta e a mesma do `Dialog` canonico (F5.8): o pedido passa por
+        `fitted_size` antes, porque o customtkinter multiplica a geometria
+        pela escala da janela e nao olha para o monitor — a 160% um modal de
+        500x430 vira 800x688 e o rodape sai da tela num notebook (P3-10).
+        """
         win.update_idletasks()
         try:
-            px, py = self.winfo_rootx(), self.winfo_rooty()
-            pw, ph = self.winfo_width(), self.winfo_height()
-            x = px + max((pw - width) // 2, 0)
-            y = py + max((ph - height) // 3, 0)
-            win.geometry(f"{width}x{height}+{x}+{y}")
+            tela = (self.winfo_screenwidth(), self.winfo_screenheight())
+            escala = window_scale(win)
+            tamanho = fitted_size((width, height), scale=escala, screen=tela)
+            dono = (self.winfo_rootx(), self.winfo_rooty(), self.winfo_width(), self.winfo_height())
+            posicao = centered_position(
+                (int(tamanho[0] * escala), int(tamanho[1] * escala)), owner=dono, screen=tela
+            )
+            win.geometry(geometry_string(tamanho))
+            win.geometry(f"+{posicao[0]}+{posicao[1]}")
         except Exception:
             win.geometry(f"{width}x{height}")

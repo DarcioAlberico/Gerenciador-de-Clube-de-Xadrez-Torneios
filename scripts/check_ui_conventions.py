@@ -1,6 +1,6 @@
 """Lint das convenções de UI que o ruff não expressa (F1.6 e F3.3).
 
-Duas regras, ambas com a mesma logica: o que ja existe fica registrado numa
+Tres regras, todas com a mesma logica: o que ja existe fica registrado numa
 linha de base explicita, e **qualquer coisa nova reprova**. A divida some pela
 lista encolher, nunca por alguem afrouxar a regra.
 
@@ -12,6 +12,10 @@ lista encolher, nunca por alguem afrouxar a regra.
    regra: **nomear e permitido, embutir nao**. Uma constante de modulo
    (`PROJETOR_FUNDO = "#000000"`) passa; a mesma cor dentro de uma chamada de
    widget reprova — a primeira diz o que a cor significa, a segunda so a esconde.
+
+3. `ctk.CTkToplevel` cru em `src/ui` (achado P3-10). Um modal a mao **parece**
+   certo em revisao: o que falta nele — Esc, centralizacao, tamanho que cabe na
+   tela em 160%, ordem dos botoes — so aparece usando. Mesma linha de base.
 
 Uso:
     python scripts/check_ui_conventions.py           # reprova o que e novo
@@ -94,6 +98,57 @@ def checar_wildcards() -> list[str]:
     return problemas
 
 
+# --- Linha de base: telas que ainda abrem `CTkToplevel` na mao (F5.8) --------
+# Encolhe a cada dialogo migrado para o `Dialog` canonico. Nao cresce.
+#
+# A regra existe porque as quatro coisas que o P3-10 achou faltando — Esc,
+# centralizacao, tamanho que cabe na tela em 160% e ordem de botoes — sao todas
+# invisiveis em revisao de codigo: um `CTkToplevel` cru **parece** correto.
+# Casa canonica do modal: aqui `CTkToplevel` **e** o certo. Nao entra na conta
+# de divida e nunca e cobrada como obsoleta.
+TOPLEVEL_CANONICO = {"components/dialogs.py"}
+
+TOPLEVEL_PERMITIDO = {
+    "components/donation.py",  # modal de doacao, com layout proprio
+    "screens/free_tournament.py",  # aviso do Modo Livre: pack + rodape ancorado
+    "screens/pairing_results_ui.py",  # Modo Projetor: janela de apresentacao
+    "shell.py",  # paleta de comandos (Ctrl+K), que nao e dialogo
+}
+
+_TOPLEVEL = re.compile(r"ctk\.CTkToplevel\s*\(")
+
+
+def checar_dialogos() -> list[str]:
+    problemas = []
+    presentes = set()
+    for arquivo in sorted(UI.rglob("*.py")):
+        texto = arquivo.read_text(encoding="utf-8")
+        # so contam ocorrencias fora de comentario e de anotacao de tipo
+        linhas = [
+            linha
+            for linha in texto.splitlines()
+            if _TOPLEVEL.search(linha.split("#", 1)[0]) and "->" not in linha
+        ]
+        if not linhas:
+            continue
+        nome = _relativo(arquivo)
+        if nome in TOPLEVEL_CANONICO:
+            continue
+        presentes.add(nome)
+        if nome not in TOPLEVEL_PERMITIDO:
+            problemas.append(
+                f"{nome}: `ctk.CTkToplevel` novo. Use `Dialog` de "
+                f"components/dialogs.py — ele traz Esc, centralizacao e tamanho "
+                f"que cabe na tela (P3-10/F5.8)."
+            )
+    for obsoleto in sorted(TOPLEVEL_PERMITIDO - presentes):
+        problemas.append(
+            f"{obsoleto}: nao abre mais `CTkToplevel` — remova-o de "
+            f"TOPLEVEL_PERMITIDO em scripts/check_ui_conventions.py."
+        )
+    return problemas
+
+
 def checar_cores_e_fontes() -> list[str]:
     problemas = []
     for arquivo in sorted(TELAS.rglob("*.py")):
@@ -133,7 +188,7 @@ def main() -> int:
         print("}")
         return 0
 
-    problemas = checar_wildcards() + checar_cores_e_fontes()
+    problemas = checar_wildcards() + checar_cores_e_fontes() + checar_dialogos()
     if problemas:
         print("Convencoes de UI violadas:\n")
         for problema in problemas:

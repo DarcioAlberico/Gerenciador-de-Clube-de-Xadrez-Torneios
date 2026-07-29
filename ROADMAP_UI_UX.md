@@ -859,7 +859,7 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 | ✅ F5.5 | `_make_tree`: zebra (tokens já existentes), ordenação por clique no cabeçalho, `stretch=True` na coluna principal, `EmptyState` embutido, nulos renderizados vazios (P3-9, "None") | 1,5d | A | B | — | 57 tabelas ganham zebra+sort+vazio sem tocar call-sites |
 | ✅ F5.6 | Quebrar o muro de Jogadores (25 → ~5: primárias + `Importar ▾`/`Bases oficiais ▾`/`Publicar ▾` + danger isolada) e aplicar o molde F2.1 aos 15 call-sites de `_grid_form_buttons` (P3-7) | 2d | A | M | — | Nenhuma tela com >8 ações visíveis no mesmo nível |
 | ✅ F5.7 | Separar `_show_info`: toast só p/ confirmação curta; `_show_report(title, body)` rolável com botão **Copiar** p/ relatórios; validações → `_show_warning` (~35 call-sites reclassificados) (P3-8) | 1,5d | A | B | — | URL do QR e narrativa de desempate legíveis e copiáveis |
-| F5.8 | Migrar os 21 diálogos ad-hoc p/ `Dialog` canônico (Esc, centralização, tamanho × `ui_scale_percent`, ordem [secundário][primário]); corrigir o aviso de BYE e o diálogo sem saída de Usuários (P3-10) | 2,5d | M | M | — | Todo diálogo fecha com Esc e cabe na tela em 160% |
+| ✅ F5.8 | Migrar os 21 diálogos ad-hoc p/ `Dialog` canônico (Esc, centralização, tamanho × `ui_scale_percent`, ordem [secundário][primário]); corrigir o aviso de BYE e o diálogo sem saída de Usuários (P3-10) | 2,5d | M | M | — | Todo diálogo fecha com Esc e cabe na tela em 160% |
 | F5.9 | `ProgressOverlay` local sobre o painel em ação + `busy_widget` obrigatório por convenção de lint (P3-11) | 1,5d | M | B | — | Duplo clique não duplica operação; espera visível no local |
 | F5.10 | Teclado: ordem de Tab explícita nos formulários, `Return` → ação primária, `takefocus=False` em botões secundários (P3-13) | 1,5d | M | B | F5.4 | Lançar 20 resultados usando só o teclado |
 | F5.11 | `tk.Menu` gerado do registro `DESTINATIONS`; sidebar vira **rail** (não some) abaixo de 1.040px (P3-14) | 1d | M | B | F1.3 | Menu e sidebar com os mesmos destinos e rótulos |
@@ -1111,6 +1111,52 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 > certificado) passa `width` de propósito. E os `width=` soltos dos campos
 > sumiram: `sticky="ew"` faz o campo ocupar a coluna, que era de onde vinham
 > as 67 larguras distintas do P3-3.
+
+> **Status (2026-07-29): F5.8 CONCLUÍDA.** Nasce o `Dialog` em
+> [`components/dialogs.py`](src/ui/components/dialogs.py) — a casca dos modais
+> que **têm conteúdo próprio** (tabelas, editores, formulários) e por isso não
+> cabiam nas quatro funções que já existiam. Junto vieram `actions_bar` (rodapé)
+> e `choice_dialog` (escolha entre três ou mais caminhos, com estilo por papel).
+>
+> **O tamanho fixo não era teórico.** O customtkinter escala a geometria que
+> recebe (`CTkToplevel.geometry` multiplica pelo *window scaling*) e **não olha
+> para o monitor**. O app nasce em 120% e vai a 160%: um diálogo escrito como
+> `geometry("900x700")` vira 1440×1120 nesse ajuste — maior que a tela inteira
+> de um notebook de 1366×768. O que sai para fora é o rodapé, onde ficam Salvar
+> e Cancelar; sem barra de rolagem e sem poder arrastar para além do topo, o
+> diálogo fica sem saída. A conta que corrige isso mora em
+> [`dialog_layout.py`](src/ui/dialog_layout.py), puro: reduzir o pedido **antes**
+> da escala, e prender a posição à tela (centralizar sobre uma janela encostada
+> na borda joga metade do modal para fora — de novo, a metade de baixo).
+>
+> **A ordem dos botões virou consequência da assinatura.** `actions_bar` recebe
+> *papéis* (`primary`, `danger`, `secondary`, `close_text`) e escolhe a posição:
+> **[secundário…][perigo][primário]**. Não é preferência — a auditoria achou
+> "Cancelar à direita" numa tela e o oposto na outra, e num modal o usuário
+> decora a posição, não o rótulo. `choice_dialog` reordena até o que o chamador
+> passar fora de ordem.
+>
+> **Os dois defeitos nomeados:**
+> - *Usuários sem saída*: o diálogo tinha "Novo" e "Excluir" e mais nada — sem
+>   Fechar, sem Esc, sem tratar o X, e com `grab_set` **sem** `transient`, o que
+>   ainda o deixava sumir atrás da janela principal. Havia **duas** cópias da
+>   tela; a que ninguém chamava foi apagada. De quebra, a senha provisória
+>   aparecia em texto limpo (faltava `show="*"`).
+> - *Aviso de BYE*: tinha os três problemas juntos — saída segura pintada de
+>   **verde** (a cor de confirmar), a destrutiva no meio, Cancelar à direita, e
+>   nenhum Esc. Virou um `choice_dialog` de três papéis.
+>
+> Também: o **Modo Projetor** ganhou botão "Sair" e Esc em dois passos (sai da
+> tela cheia; se já estava fora dela, fecha) — maximizado e sem barra de título,
+> ele era o mesmo problema com outra roupa. E o detalhe técnico de auditoria e
+> de integrações virou `report_dialog`: era conteúdo para **ler e copiar**, que
+> é justamente o que o modal a mão não deixava fazer.
+>
+> **Lint** (`scripts/check_ui_conventions.py`): `ctk.CTkToplevel` cru em
+> `src/ui` reprova, com linha de base que só encolhe — 4 arquivos, todos com
+> motivo anotado (paleta de comandos, projetor, doação, aviso do Modo Livre).
+> A regra existe porque um modal a mão **parece** correto em revisão: o que
+> falta nele só aparece usando.
 
 ---
 

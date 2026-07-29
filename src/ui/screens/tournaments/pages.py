@@ -9,7 +9,7 @@ trocar um diff revisável por um irrevisável.
 from __future__ import annotations
 
 from ...support import *
-from ...components import danger_button
+from ...components import Dialog, actions_bar, danger_button, select_field
 
 from src.services.pairing.acceleration import acceleration_spec
 from src.services.pairing import (
@@ -553,14 +553,10 @@ class TournamentOtherPagesMixin:
         if not self._require_tournament():
             return
             
-        dialog = ctk.CTkToplevel(self)
-        dialog.title("Equipe de Arbitragem")
-        dialog.geometry("900x550")
-        dialog.transient(self)
-        dialog.grab_set()
-        
+        dialog = Dialog(self, "Equipe de Arbitragem", size=(900, 550), stretch_rows=(0,))
+
         main_frame = ctk.CTkFrame(dialog, fg_color="transparent")
-        main_frame.pack(fill="both", expand=True, padx=20, pady=20)
+        main_frame.grid(row=0, column=0, padx=SPACE_XL, pady=SPACE_XL, sticky="nsew")
         
         main_frame.grid_columnconfigure(0, weight=1, minsize=380)
         main_frame.grid_columnconfigure(1, weight=1, minsize=420)
@@ -754,7 +750,7 @@ class TournamentOtherPagesMixin:
         ]
         
         var = ctk.StringVar(value="10 min")
-        menu = ctk.CTkOptionMenu(parent, values=preset_options, variable=var, width=width)
+        menu = select_field(parent, values=preset_options, variable=var)
         
         def on_change(choice: str) -> None:
             if choice == "Personalizado...":
@@ -782,11 +778,7 @@ class TournamentOtherPagesMixin:
         return menu
 
     def _open_time_control_builder(self) -> str | None:
-        dialog = ctk.CTkToplevel(self)
-        dialog.title("Construtor de Ritmo")
-        dialog.geometry("450x440")
-        dialog.transient(self)
-        dialog.grab_set()
+        dialog = Dialog(self, "Construtor de Ritmo", size=(470, 460))
 
         result: list[str | None] = [None]
 
@@ -842,14 +834,11 @@ class TournamentOtherPagesMixin:
                     if inc != "0":
                         out += f" + {inc} s"
                 result[0] = out
-                dialog.destroy()
+                dialog.close()
             except Exception:
                 pass
 
-        btn_frame = ctk.CTkFrame(dialog, fg_color="transparent")
-        btn_frame.grid(row=6, column=0, columnspan=2, pady=20)
-        ctk.CTkButton(btn_frame, text="Cancelar", command=dialog.destroy, width=100, fg_color=THEME_NEUTRAL).pack(side="left", padx=10)
-        ctk.CTkButton(btn_frame, text="Confirmar", command=save, width=100).pack(side="left", padx=10)
+        actions_bar(dialog, row=6, primary=("Confirmar", save), close_text="Cancelar")
 
         dialog.wait_window()
         return result[0]

@@ -5,6 +5,7 @@ import tkinter as tk
 from typing import Any
 
 from ..support import *
+from ..components import Dialog, FormStack, actions_bar, report_dialog
 from src.services.clock_integration_service import CLOCK_EVENT_TYPES
 
 
@@ -207,25 +208,12 @@ class IntegrationPagesMixin:
                 self._show_error(exc)
 
         def register_device() -> None:
-            dialog = ctk.CTkToplevel(self)
-            dialog.title("Autorizar dispositivo")
-            dialog.geometry("420x280")
-            dialog.grab_set()
-            dialog.grid_columnconfigure(0, weight=1)
-
-            form = ctk.CTkFrame(dialog, fg_color="transparent")
-            form.grid(row=0, column=0, padx=18, pady=18, sticky="nsew")
-            form.grid_columnconfigure(0, weight=1)
-
-            ctk.CTkLabel(form, text="Nome").grid(row=0, column=0, sticky="w")
-            name_entry = ctk.CTkEntry(form, width=330)
-            name_entry.grid(row=1, column=0, sticky="ew", pady=(4, 12))
-            ctk.CTkLabel(form, text="Perfil").grid(row=2, column=0, sticky="w")
-            role_option = ctk.CTkOptionMenu(form, values=["assistant", "desktop", "viewer"], width=180)
-            role_option.grid(row=3, column=0, sticky="w", pady=(4, 12))
-            ctk.CTkLabel(form, text="ID do dispositivo").grid(row=4, column=0, sticky="w")
-            device_entry = ctk.CTkEntry(form, width=330, placeholder_text="Opcional")
-            device_entry.grid(row=5, column=0, sticky="ew", pady=(4, 18))
+            dialog = Dialog(self, "Autorizar dispositivo", size=(440, 320))
+            pilha = FormStack(dialog)
+            pilha.section("Dispositivo")
+            name_entry = pilha.text("Nome", placeholder="Ex.: Tablet da mesa 1")
+            role_option = pilha.select("Perfil", ["assistant", "desktop", "viewer"])
+            device_entry = pilha.text("ID do dispositivo", placeholder="Opcional")
 
             def save() -> None:
                 try:
@@ -234,12 +222,12 @@ class IntegrationPagesMixin:
                         role=role_option.get(),
                         device_id=device_entry.get().strip(),
                     )
-                    dialog.destroy()
+                    dialog.close()
                     load_all()
                 except Exception as exc:
                     self._show_error(exc)
 
-            ctk.CTkButton(form, text="Autorizar", command=save).grid(row=6, column=0, sticky="ew")
+            actions_bar(dialog, primary=("Autorizar", save), close_text="Cancelar")
 
         def revoke_selected_device() -> None:
             selected = devices_tree.selection()
@@ -563,25 +551,8 @@ class IntegrationPagesMixin:
         ctk.CTkButton(actions, text="Publicar pasta...", command=publish_album, width=150).pack(side="left")
 
     def _show_json_detail(self, title: str, payload: dict[str, Any]) -> None:
-        formatted = self._format_json_detail(payload)
-        modal = ctk.CTkToplevel(self)
-        modal.title(title)
-        modal.geometry("720x520")
-        modal.grab_set()
-        modal.grid_columnconfigure(0, weight=1)
-        modal.grid_rowconfigure(1, weight=1)
-
-        ctk.CTkLabel(modal, text=title, font=font_section()).grid(
-            row=0,
-            column=0,
-            padx=12,
-            pady=(12, 8),
-            sticky="w",
-        )
-        text = ctk.CTkTextbox(modal, wrap="none")
-        text.grid(row=1, column=0, padx=12, pady=(0, 12), sticky="nsew")
-        text.insert("1.0", formatted)
-        text.configure(state="disabled")
+        """Detalhe tecnico do evento — texto que se le e se copia (F5.7/P3-10)."""
+        report_dialog(self, title, self._format_json_detail(payload))
 
     @staticmethod
     def _format_json_detail(payload: dict[str, Any]) -> str:

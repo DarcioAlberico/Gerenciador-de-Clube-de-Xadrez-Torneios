@@ -129,7 +129,7 @@ class OfficialRatingActions(ScreenActions):
                 self.host._show_error(exc)
                 return
             self.host._show_toast(t("players.foreign.added", codigo=codigo), kind="success")
-            dialog.destroy()
+            dialog.close()
             self.import_foreign_list()
 
         ctk.CTkButton(
@@ -147,7 +147,7 @@ class OfficialRatingActions(ScreenActions):
             )
             if not caminho:
                 return
-            dialog.destroy()
+            dialog.close()
 
             def concluir(resultado: dict[str, Any]) -> None:
                 self.host._show_info(
@@ -263,7 +263,7 @@ class OfficialRatingActions(ScreenActions):
             ]
             if not escolhidos:
                 return
-            dialog.destroy()
+            dialog.close()
             tournament_id = self.tournament_id
 
             def concluir(resultado: dict[str, Any]) -> None:

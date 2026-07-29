@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from ..support import *
-from ..components import WrapRow, danger_button, debounce
+from ..components import Dialog, FormStack, WrapRow, actions_bar, danger_button, debounce
 
 
 # Sub-mixin de Admin: calendario, ranking interno e comunicacoes.
@@ -705,27 +705,16 @@ class CalendarRankingMixin:
                 logger.error(f"Erro ao carregar avisos: {e}")
 
         def add_announcement() -> None:
-            dialog = ctk.CTkToplevel(self)
-            dialog.title("Novo Aviso")
-            dialog.geometry("400x350")
-            dialog.transient(self)
-            dialog.grab_set()
-
-            ctk.CTkLabel(dialog, text="Título:").pack(pady=(10, 0), padx=10, anchor="w")
-            title_entry = ctk.CTkEntry(dialog, width=380)
-            title_entry.pack(pady=(0, 10), padx=10)
-
-            ctk.CTkLabel(dialog, text="Categoria:").pack(pady=(0, 0), padx=10, anchor="w")
-            cat_entry = ctk.CTkEntry(dialog, width=380, placeholder_text="Ex: Importante, Torneio, Geral")
-            cat_entry.pack(pady=(0, 10), padx=10)
-
-            ctk.CTkLabel(dialog, text="Expira em (YYYY-MM-DD):").pack(pady=(0, 0), padx=10, anchor="w")
-            exp_entry = ctk.CTkEntry(dialog, width=380, placeholder_text="Deixe em branco para aviso permanente")
-            exp_entry.pack(pady=(0, 10), padx=10)
-
-            ctk.CTkLabel(dialog, text="Conteúdo:").pack(pady=(0, 0), padx=10, anchor="w")
-            content_text = ctk.CTkTextbox(dialog, width=380, height=80)
-            content_text.pack(pady=(0, 10), padx=10)
+            dialog = Dialog(self, "Novo Aviso", size=(420, 380))
+            pilha = FormStack(dialog)
+            pilha.section("Aviso")
+            title_entry = pilha.text("Título", placeholder="Título do aviso")
+            cat_entry = pilha.text("Categoria", placeholder="Ex.: Importante, Torneio, Geral")
+            exp_entry = pilha.text(
+                "Expira em (AAAA-MM-DD)",
+                placeholder="Deixe em branco para aviso permanente",
+            )
+            content_text = pilha.area("Conteúdo", height=80)
 
             def save():
                 try:
@@ -736,13 +725,13 @@ class CalendarRankingMixin:
                         "content": content_text.get("1.0", "end").strip()
                     }
                     self.communication_service.save_announcement(payload)
-                    dialog.destroy()
+                    dialog.close()
                     load_announcements()
                     self._show_toast("Aviso salvo com sucesso!", kind="success")
                 except Exception as e:
                     self._show_error(e)
 
-            ctk.CTkButton(dialog, text="Salvar", command=save).pack(pady=10)
+            actions_bar(dialog, primary=("Salvar", save), close_text="Cancelar")
 
         def del_announcement() -> None:
             selected = tree.selection()

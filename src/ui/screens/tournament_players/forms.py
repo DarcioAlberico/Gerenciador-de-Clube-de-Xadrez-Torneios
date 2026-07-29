@@ -142,7 +142,7 @@ class RegistrationFormActions(ScreenActions):
             except Exception as exc:  # noqa: BLE001
                 self.host._show_error(exc)
                 return
-            dialog.destroy()
+            dialog.close()
             self.host._show_info(t("players.form.config.saved"))
 
         faixa = actions_row(dialog, 4)

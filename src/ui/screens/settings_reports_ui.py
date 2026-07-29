@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from ..support import *
-from ..components import WrapRow, primary_button, secondary_button
+from ..components import Dialog, WrapRow, actions_bar, primary_button, secondary_button
 
 
 class SettingsReportsMixin:
@@ -645,13 +645,9 @@ class SettingsReportsMixin:
             self._show_error(exc)
             return
 
-        dialog = ctk.CTkToplevel(self)
-        dialog.title("Geracao em lote (multi-destino)")
-        dialog.geometry("560x640")
-        dialog.transient(self)
-        dialog.grab_set()
-        dialog.grid_columnconfigure(0, weight=1)
-        dialog.grid_rowconfigure(1, weight=1)
+        dialog = Dialog(
+            self, "Geração em lote (multi-destino)", size=(560, 640), stretch_rows=(1,)
+        )
 
         ctk.CTkLabel(
             dialog,
@@ -715,7 +711,7 @@ class SettingsReportsMixin:
                 return
             also_html = html_switch.get() == "1"
             printer_cb = self._print_document if printer_switch.get() == "1" else None
-            dialog.destroy()
+            dialog.close()
 
             def show_result(result: dict[str, Any]) -> None:
                 message = f"{result['count']} arquivos gerados em:\n{directory}"
@@ -733,13 +729,6 @@ class SettingsReportsMixin:
                 "Gerando lote multi-destino...",
             )
 
-        buttons = ctk.CTkFrame(dialog, fg_color="transparent")
-        buttons.grid(row=4, column=0, padx=16, pady=(8, 16), sticky="e")
-        ctk.CTkButton(
-            buttons,
-            text="Cancelar",
-            fg_color=THEME_NEUTRAL,
-            hover_color=THEME_NEUTRAL_HOVER,
-            command=dialog.destroy,
-        ).pack(side="left", padx=(0, 8))
-        ctk.CTkButton(buttons, text="Escolher pasta e gerar", command=run).pack(side="left")
+        actions_bar(
+            dialog, row=4, primary=("Escolher pasta e gerar", run), close_text="Cancelar"
+        )
