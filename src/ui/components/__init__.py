@@ -16,7 +16,7 @@ from .action_group import (
 from .busy import BusyIndicator
 from .buttons import danger_button, neutral_button, primary_button, secondary_button
 from .debounce import Debounced, debounce
-from .dialogs import alert_dialog, confirm_dialog, tri_state_dialog
+from .dialogs import alert_dialog, confirm_dialog, report_dialog, tri_state_dialog
 from .donation import show_donation_modal
 from .empty_state import EmptyState
 from .fields import (
@@ -61,6 +61,7 @@ __all__ = [
     "confirm_dialog",
     "tri_state_dialog",
     "alert_dialog",
+    "report_dialog",
     "Tooltip",
     "EmptyState",
     "Debounced",

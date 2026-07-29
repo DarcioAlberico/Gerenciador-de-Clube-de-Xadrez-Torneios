@@ -344,9 +344,12 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
                     lambda result: (
                         load_backups(),
                         load_audit_logs(),
-                        self._show_info(
-                            f"Backup criado:\n{result['path']}\n\n"
-                            f"Nuvem: {_cloud_status_label(result.get('cloud_status', ''))}"
+                        # O caminho e a entrega: quem faz backup precisa poder
+                        # copiar para onde ele foi (F5.7).
+                        self._show_report(
+                            "Backup criado",
+                            f"{result['path']}\n\n"
+                            f"Nuvem: {_cloud_status_label(result.get('cloud_status', ''))}",
                         ),
                     ),
                     "Criando backup...",
@@ -373,7 +376,10 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
                     self._apply_app_settings()
                     load_backups()
                     load_audit_logs()
-                    self._show_info(f"Backup restaurado.\nCopia de seguranca criada em:\n{safety_backup}")
+                    self._show_report(
+                        "Backup restaurado",
+                        f"Copia de seguranca criada em:\n{safety_backup}",
+                    )
                     self.show_club()
 
                 self._run_background(

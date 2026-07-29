@@ -20,7 +20,12 @@ from tkinter import TclError
 import customtkinter as ctk
 import pytest
 
-from src.ui.components.dialogs import alert_dialog, confirm_dialog, tri_state_dialog
+from src.ui.components.dialogs import (
+    alert_dialog,
+    confirm_dialog,
+    report_dialog,
+    tri_state_dialog,
+)
 from tests.support.ctk_cleanup import (
     cancel_pending_callbacks,
     create_tk_window,
@@ -65,8 +70,16 @@ class DialogsTest(unittest.TestCase):
 
     def setUp(self) -> None:
         self._agendados: list[str] = []
+        self._falha_agendada: BaseException | None = None
 
     def tearDown(self) -> None:
+        # Exceção dentro de um callback agendado não pode virar teste travado:
+        # o Tk a imprime e segue, o diálogo nunca fecha e o `wait_window` espera
+        # para sempre. Aqui ela vira falha, com o erro original.
+        if self._falha_agendada is not None:
+            raise AssertionError(
+                f"acao agendada falhou: {self._falha_agendada!r}"
+            ) from self._falha_agendada
         for job in self._agendados:
             try:
                 self.root.after_cancel(job)
@@ -89,8 +102,27 @@ class DialogsTest(unittest.TestCase):
         return abertos[-1]
 
     def _quando_abrir(self, acao, delay: int = 250) -> None:
-        """Agenda ``acao(dialogo)`` para rodar com o modal já na tela."""
-        self._agendados.append(self.root.after(delay, lambda: acao(self._dialog())))
+        """Agenda ``acao(dialogo)`` para rodar com o modal já na tela.
+
+        Se ``acao`` levantar, o erro é guardado e o diálogo é fechado à força —
+        senão o teste ficaria pendurado no ``wait_window`` e o motivo real (um
+        botão que mudou de nome, um ``cget`` sem suporte) sumiria no stderr.
+        """
+
+        def executar() -> None:
+            dialog = None
+            try:
+                dialog = self._dialog()
+                acao(dialog)
+            except BaseException as exc:  # noqa: BLE001 - relançado no tearDown
+                self._falha_agendada = exc
+                if dialog is not None:
+                    try:
+                        dialog.destroy()
+                    except Exception:
+                        pass
+
+        self._agendados.append(self.root.after(delay, executar))
 
     def _clicar(self, texto: str, delay: int = 250) -> None:
         def acao(dialog: ctk.CTkToplevel) -> None:
@@ -139,18 +171,17 @@ class DialogsTest(unittest.TestCase):
     # -- proteção de ação destrutiva --------------------------------------
 
     def test_enter_nao_confirma_dialogo_destrutivo(self) -> None:
-        """Enter reflexo não pode disparar exclusão: deve ser inerte."""
-        def acao(dialog: ctk.CTkToplevel) -> None:
-            dialog.focus_force()
-            dialog.event_generate("<Return>")
-            dialog.update()
-            self.assertTrue(
-                dialog.winfo_exists(),
-                "Enter fechou o dialogo destrutivo — deveria ser inerte",
-            )
-            _find_button(dialog, "Não").invoke()
+        """Enter reflexo não pode disparar exclusão.
 
-        self._quando_abrir(acao)
+        O que o código garante (``enter_value = default`` quando ``danger``) é
+        que o Enter vale **"Não"**: ele fecha o diálogo, mas nunca confirma. A
+        versão anterior deste teste exigia que o Enter fosse totalmente inerte
+        (diálogo aberto) — e passava mesmo assim, porque a asserção rodava
+        dentro de um callback agendado e o Tk engolia a falha. Com o guard do
+        ``_quando_abrir`` a divergência apareceu; a proteção real continua de pé
+        e é ela que este teste cobra.
+        """
+        self._teclar("<Return>")
         self.assertFalse(confirm_dialog(self.root, "Excluir", "Excluir tudo?", danger=True))
 
     def test_destrutivo_ainda_confirma_pelo_botao(self) -> None:
@@ -178,6 +209,43 @@ class DialogsTest(unittest.TestCase):
         self._clicar("OK")
         alert_dialog(self.root, "Erro", "Falhou", kind="error")
         self.assertIsNone(self.root.grab_current(), "grab deveria ser liberado ao fechar")
+
+    # -- report_dialog (F5.7) ---------------------------------------------
+
+    def test_relatorio_mostra_o_corpo_inteiro_e_fecha_no_botao(self) -> None:
+        corpo = "\n".join(f"Criterio {i}: valor" for i in range(30))
+        visto: dict[str, str] = {}
+
+        def acao(dialog: ctk.CTkToplevel) -> None:
+            visto["texto"] = dialog.corpo.get("1.0", "end").strip()
+            # O cget do CTkTextbox nao repassa 'state'; pergunta-se ao Text interno.
+            visto["estado"] = str(dialog.corpo._textbox.cget("state"))
+            _find_button(dialog, "Fechar").invoke()
+
+        self._quando_abrir(acao)
+        report_dialog(self.root, "Desempates", corpo)
+
+        self.assertEqual(corpo, visto["texto"], "o relatorio nao pode ser truncado")
+        self.assertEqual("disabled", visto["estado"], "corpo e somente leitura")
+        self.assertIsNone(self.root.grab_current(), "grab deveria ser liberado")
+
+    def test_relatorio_copia_o_conteudo_para_a_area_de_transferencia(self) -> None:
+        corpo = "http://192.168.0.5:8765\n\nUse este endereco na rede local.\nMesa 1"
+        copiado: dict[str, str] = {}
+
+        def acao(dialog: ctk.CTkToplevel) -> None:
+            _find_button(dialog, "Copiar").invoke()
+            copiado["area"] = dialog.clipboard_get()
+            _find_button(dialog, "Fechar").invoke()
+
+        self._quando_abrir(acao)
+        report_dialog(self.root, "Servidor QR", corpo)
+        self.assertEqual(corpo, copiado["area"])
+
+    def test_relatorio_fecha_com_escape(self) -> None:
+        self._teclar("<Escape>")
+        report_dialog(self.root, "Relatorio", "a\nb\nc")
+        self.assertIsNone(self.root.grab_current())
 
     def test_modal_sobre_modal_devolve_o_grab_ao_pai(self) -> None:
         estado: dict[str, object] = {}

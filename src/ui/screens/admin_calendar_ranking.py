@@ -520,7 +520,7 @@ class CalendarRankingMixin:
                     raise AppError("Selecione um membro.")
                 history = self.internal_rating_service.member_rating_history(member_id)
                 if not history:
-                    self._show_info("Este membro ainda nao possui historico de rating interno.")
+                    self._show_warning("Este membro ainda nao possui historico de rating interno.")
                     return
                 lines = []
                 for item in history:
@@ -747,7 +747,7 @@ class CalendarRankingMixin:
         def del_announcement() -> None:
             selected = tree.selection()
             if not selected:
-                self._show_info("Selecione um aviso para excluir.")
+                self._show_warning("Selecione um aviso para excluir.")
                 return
             item_id = int(tree.item(selected[0], "values")[0])
             try:

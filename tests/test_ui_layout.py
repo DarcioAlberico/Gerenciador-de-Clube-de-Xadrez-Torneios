@@ -76,6 +76,10 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.messages: list[str] = []
         self.app._show_info = self.messages.append
         self.app._show_toast = lambda msg, *a, **kw: self.messages.append(msg)
+        # Relatorio (F5.7) e modal bloqueante: sem captura, o smoke ficaria
+        # parado no wait_window. O corpo entra na mesma lista — o conteudo
+        # continua sendo a entrega, so mudou o canal.
+        self.app._show_report = lambda title, body, **kw: self.messages.append(body)
         self.app._show_error = self._raise_ui_error
         self.app._run_background = self._run_background_now
         
