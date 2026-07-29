@@ -3,7 +3,7 @@ from __future__ import annotations
 import threading
 import tkinter as tk
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Sequence
 from PIL import Image, ImageTk
 
 from .screens.admin import AdminPagesMixin
@@ -17,8 +17,13 @@ from .screens.referees import RefereePagesMixin
 from .screens.settings import SettingsPagesMixin
 from .support import *
 from .components import (
+    ActionGroup,
+    DangerAction,
     EmptyState,
+    FormAction,
     ThemedTreeview,
+    danger_button,
+    menu_button,
     primary_button,
     secondary_button,
     show_donation_modal,
@@ -1039,19 +1044,38 @@ class AlbericusApp(
     def _grid_form_buttons(
         self,
         parent: ctk.CTkBaseClass,
-        buttons: list[tuple[str, Callable[[], None]]],
+        buttons: Sequence[FormAction],
         start_row: int,
         padx: int = 16,
         required_action: str = "",
     ) -> None:
-        for offset, (label, command) in enumerate(buttons):
-            btn = ctk.CTkButton(parent, text=label, command=command)
-            btn.grid(
-                row=start_row + offset,
-                column=0,
-                padx=padx,
-                pady=(8 if offset == 0 else 4, 0),
-                sticky="ew",
-            )
+        """Empilha as acoes do formulario em coluna.
+
+        Aceita ``(rotulo, comando)`` como sempre e, desde a F5.6, tambem
+        ``ActionGroup`` (vira menu recolhido) e ``DangerAction`` (cor de perigo,
+        posicao isolada). Chamadas antigas com lista plana seguem identicas.
+        """
+        autorizado = not required_action or self.security_service.has_permission(required_action)
+        for offset, acao in enumerate(buttons):
+            pady = (8 if offset == 0 else 4, 0)
+            if isinstance(acao, ActionGroup):
+                # Sem permissao, os itens do menu nascem inativos: desabilitar so
+                # o gatilho esconderia a razao atras de um clique.
+                itens = list(acao.items) if autorizado else [
+                    (item[0], None) for item in acao.items if item is not None
+                ]
+                widget = menu_button(parent, acao.label, itens, tip=acao.tip or None)
+                # O gatilho continua clicavel de proposito: o menu abre e mostra
+                # o que existe, acinzentado. Desabilitar o gatilho esconderia a
+                # razao atras de um botao morto.
+                widget.grid(row=start_row + offset, column=0, padx=padx, pady=pady, sticky="ew")
+                continue
+            if isinstance(acao, DangerAction):
+                widget = danger_button(parent, acao.label, acao.command, tip=acao.tip or None)
+                pady = (SPACE_MD, 0)  # respiro extra isola a acao destrutiva
+            else:
+                label, command = acao
+                widget = ctk.CTkButton(parent, text=label, command=command)
+            widget.grid(row=start_row + offset, column=0, padx=padx, pady=pady, sticky="ew")
             if required_action:
-                self._disable_if_unauthorized(btn, required_action)
+                self._disable_if_unauthorized(widget, required_action)

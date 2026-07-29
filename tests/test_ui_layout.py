@@ -1993,11 +1993,25 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.fail(f"Entrada nao encontrada para o campo {label_text!r}")
 
     def _click_button(self, text: str) -> None:
-        for widget in reversed(list(self._walk(self.app.content))):
+        """Aciona a acao pelo rotulo, esteja ela num botao ou dentro de um menu.
+
+        Desde a F5.6 as acoes de apoio ficam recolhidas atras de um
+        ``menu_button`` ("Importar ▾"): continuam alcancaveis pelo usuario, em
+        dois cliques em vez de um. O helper segue o mesmo caminho — o menu real
+        so existe durante o popup, entao usamos os itens que o ``menu_button``
+        expoe justamente para automacao.
+        """
+        widgets = list(reversed(list(self._walk(self.app.content))))
+        for widget in widgets:
             if isinstance(widget, ctk.CTkButton) and widget.cget("text") == text:
                 widget.invoke()
                 return
-        self.fail(f"Botao {text!r} nao encontrado")
+        for widget in widgets:
+            for item in getattr(widget, "_menu_items", None) or ():
+                if item is not None and item[0] == text and item[1] is not None:
+                    item[1]()
+                    return
+        self.fail(f"Acao {text!r} nao encontrada (nem botao, nem item de menu)")
 
     @staticmethod
     def _hover_target(widget: object) -> object:

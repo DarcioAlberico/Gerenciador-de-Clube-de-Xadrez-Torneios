@@ -857,7 +857,7 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 | F5.3 | Estados de campo: anel de foco (borda accent no `FocusIn`), `set_field_error(widget, msg)`/`clear_field_error` únicos com mensagem sob o campo, desabilitado distinto (P3-4) | 1,5d | A | B | F5.2 | Foco visível em navegação por Tab; 3 implementações locais de erro removidas |
 | F5.4 | Migrar formulários p/ `fields.py` + `components/form.py` (promover `_settings_stack`, com seções) — ordem: Config. torneio, Jogadores, Torneios, Arbitragem, Config. app (P3-12) | 3d | A | M | F5.2 | 5 telas com seções visuais e largura de painel unificada |
 | ✅ F5.5 | `_make_tree`: zebra (tokens já existentes), ordenação por clique no cabeçalho, `stretch=True` na coluna principal, `EmptyState` embutido, nulos renderizados vazios (P3-9, "None") | 1,5d | A | B | — | 57 tabelas ganham zebra+sort+vazio sem tocar call-sites |
-| F5.6 | Quebrar o muro de Jogadores (25 → ~5: primárias + `Importar ▾`/`Bases oficiais ▾`/`Publicar ▾` + danger isolada) e aplicar o molde F2.1 aos 15 call-sites de `_grid_form_buttons` (P3-7) | 2d | A | M | — | Nenhuma tela com >8 ações visíveis no mesmo nível |
+| ✅ F5.6 | Quebrar o muro de Jogadores (25 → ~5: primárias + `Importar ▾`/`Bases oficiais ▾`/`Publicar ▾` + danger isolada) e aplicar o molde F2.1 aos 15 call-sites de `_grid_form_buttons` (P3-7) | 2d | A | M | — | Nenhuma tela com >8 ações visíveis no mesmo nível |
 | F5.7 | Separar `_show_info`: toast só p/ confirmação curta; `_show_report(title, body)` rolável com botão **Copiar** p/ relatórios; validações → `_show_warning` (~35 call-sites reclassificados) (P3-8) | 1,5d | A | B | — | URL do QR e narrativa de desempate legíveis e copiáveis |
 | F5.8 | Migrar os 21 diálogos ad-hoc p/ `Dialog` canônico (Esc, centralização, tamanho × `ui_scale_percent`, ordem [secundário][primário]); corrigir o aviso de BYE e o diálogo sem saída de Usuários (P3-10) | 2,5d | M | M | — | Todo diálogo fecha com Esc e cabe na tela em 160% |
 | F5.9 | `ProgressOverlay` local sobre o painel em ação + `busy_widget` obrigatório por convenção de lint (P3-11) | 1,5d | M | B | — | Duplo clique não duplica operação; espera visível no local |
@@ -960,6 +960,42 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 > 9 testes novos (`tests/test_ui_tree.py`, marcados `gui`) + smoke de layout
 > completo verde. Screenshot de Jogadores confirma zebra e "None" eliminado
 > sobre o tema sépia.
+
+> **Status (2026-07-29): F5.6 CONCLUÍDA — 25 controles viraram 8.** O muro da
+> tela de Jogadores era o pior caso do P3-7, e o mais irônico: a F2.1 tinha
+> comemorado a redução de ~18 botões em Rodadas e nunca olhado para os 25 daqui.
+>
+> O `_grid_form_buttons` ganhou **vocabulário** em vez de mais um caso especial
+> ([`components/action_group.py`](src/ui/components/action_group.py), puro, sem
+> Tk): além do `(rótulo, comando)` de sempre, aceita `ActionGroup` (vira
+> `menu_button` recolhido) e `DangerAction` (vira `danger_button` com respiro
+> extra, isolado). **As 16 chamadas existentes seguem idênticas** — quem passa
+> lista plana continua desenhando lista plana.
+>
+> O agrupamento vive em
+> [`tournament_players/menu.py`](src/ui/screens/tournament_players/menu.py),
+> módulo puro que recebe `chave -> callable` e devolve a estrutura. O critério é
+> **de onde o jogador vem**, que é a pergunta que o operador faz: avulso
+> (Adicionar/Atualizar/Limpar soltos) · `Inscrever ▾` (membro, todos ativos,
+> status, os três caminhos de formulário) · `Importar ▾` (modelos, planilha,
+> mapeamento, online, Chess-Results) · `Bases oficiais ▾` (FIDE, CBX, LBX,
+> estrangeira, atualizar, comparar) · Publicar solto (é saída, não entrada) ·
+> **Excluir jogador** isolado em vermelho no fim.
+>
+> **Sem permissão, o gatilho do menu continua clicável e os itens nascem
+> acinzentados** — desabilitar o gatilho esconderia atrás de um botão morto a
+> razão pela qual ele está morto.
+>
+> Três decisões que os testes guardam: `t()` recebe **string literal**, nunca
+> f-string (chave montada em runtime vira órfã no `test_ui_i18n` — mesma
+> armadilha da B-3); nenhum menu nasce com um item só (seria hierarquia sem
+> ganho); e o teste que sustenta tudo compara o `flatten_actions` contra **todas**
+> as chaves `players.action.*` do catálogo — recolher não pode virar sumir.
+> O `_click_button` do smoke passou a alcançar itens de menu (via `_menu_items`,
+> exposto pelo `menu_button` justamente para automação): as três falhas que ele
+> acusou eram honestas — a ação mudou de um clique para dois.
+>
+> 8 testes novos, sem janela. Gate completo verde.
 
 ---
 
