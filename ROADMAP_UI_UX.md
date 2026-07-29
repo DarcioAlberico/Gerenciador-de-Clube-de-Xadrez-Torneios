@@ -862,7 +862,7 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 | ✅ F5.8 | Migrar os 21 diálogos ad-hoc p/ `Dialog` canônico (Esc, centralização, tamanho × `ui_scale_percent`, ordem [secundário][primário]); corrigir o aviso de BYE e o diálogo sem saída de Usuários (P3-10) | 2,5d | M | M | — | Todo diálogo fecha com Esc e cabe na tela em 160% |
 | ✅ F5.9 | `ProgressOverlay` local sobre o painel em ação + `busy_widget` obrigatório por convenção de lint (P3-11) | 1,5d | M | B | — | Duplo clique não duplica operação; espera visível no local |
 | ✅ F5.10 | Teclado: ordem de Tab explícita nos formulários, `Return` → ação primária, `takefocus=False` em botões secundários (P3-13) | 1,5d | M | B | F5.4 | Lançar 20 resultados usando só o teclado |
-| F5.11 | `tk.Menu` gerado do registro `DESTINATIONS`; sidebar vira **rail** (não some) abaixo de 1.040px (P3-14) | 1d | M | B | F1.3 | Menu e sidebar com os mesmos destinos e rótulos |
+| ✅ F5.11 | `tk.Menu` gerado do registro `DESTINATIONS`; sidebar vira **rail** (não some) abaixo de 1.040px (P3-14) | 1d | M | B | F1.3 | Menu e sidebar com os mesmos destinos e rótulos |
 | F5.12 | Lint de acentuação em `text=`/`t()` + correção dos ~26 rótulos; caça aos defeitos pontuais: truncamento dos botões do painel, data corrompida na Config. do torneio (P3-15, P3-16) | 1d | M | B | — | Grep de palavras-alvo zerado no CI; screenshots do manual re-tirados |
 
 > **Status (2026-07-29): F5.1 CONCLUÍDA.** As cores dos campos deixaram de ser
@@ -1222,6 +1222,30 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 > O anel de foco da F5.3 passou a alcançar selects e caixas na mesma tacada: o
 > `attach_field_states` agora liga os eventos de foco ao canvas quando não há
 > `_entry`/`_textbox`.
+
+> **Status (2026-07-29): F5.11 CONCLUÍDA.** O `tk.Menu` era **31 itens escritos
+> à mão**, em paralelo a `DESTINATIONS` — e os rótulos já tinham divergido da
+> sidebar, que lê o mesmo registro pelo catálogo. Duas listas da mesma coisa só
+> ficam iguais por disciplina; agora ficam por construção. O menu ganhou de
+> quebra o que faltava nele (Início, Biblioteca) e perdeu o risco de esquecer
+> um destino novo. O teste que sustenta isso compara os rótulos do menu real
+> com os do registro **e** com os da sidebar.
+>
+> Os aceleradores viraram uma tabela só (`MENU_ACCELERATORS`), lida pelo menu —
+> antes o texto "Ctrl+4" era escrito à mão no item e o binding à mão no shell,
+> sem nada garantindo que combinassem. Os dois itens "(em breve)" continuam
+> explícitos, porque são exceção: não são destinos navegáveis. Os rótulos deles
+> são resolvidos com `t("chave")` **literal** — chave vinda de variável é
+> invisível para o `test_ui_i18n`, e chave órfã hoje é texto perdido amanhã.
+>
+> **O rail virou o piso.** Abaixo de 1.040px reais a barra ficava *oculta* e
+> sobrava o menu nativo — que ninguém procura depois de ter uma barra. Não
+> existe largura em que "some" seja melhor que "encolhe": o rail custa 52px e
+> não tem rótulo para espremer. O modo `hidden` continua existindo para quem
+> quiser escondê-la de propósito; o que mudou é que a **largura** não a esconde
+> mais sozinha. O smoke de layout ganhou a faixa de 800px pedidos (960 reais) —
+> as 23 telas foram verificadas com o rail ligado, e nenhuma empurra controle
+> para fora.
 
 ---
 

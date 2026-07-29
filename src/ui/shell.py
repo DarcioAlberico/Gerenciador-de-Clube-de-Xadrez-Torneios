@@ -27,9 +27,6 @@ from .components.sidebar import (
     MODE_FULL as SIDEBAR_FULL,
 )
 from .components.sidebar import (
-    MODE_HIDDEN as SIDEBAR_HIDDEN,
-)
-from .components.sidebar import (
     MODE_RAIL as SIDEBAR_RAIL,
 )
 from .components.sidebar import (
@@ -388,13 +385,21 @@ class AppShell:
     # barra completa cabe em 1.027px com o rail. Nao e conta no papel — o smoke
     # de layout cobra as duas larguras, tela por tela.
     #
-    # Abaixo do menor limiar a barra some e o menu nativo volta a ser a
-    # navegacao (P1-7): melhor perder a barra do que empurrar botao para fora.
+    # Abaixo do menor limiar a barra virava OCULTA — e era esse o achado P3-14:
+    # a navegacao primaria sumia e sobrava o menu nativo, que ninguem procura
+    # depois de ter uma barra. A F5.11 tira o modo `hidden` do caminho
+    # responsivo: o **rail e o piso**. Ele custa 52px e nao tem rotulo para
+    # espremer, entao nao existe largura em que "some" seja melhor que "encolhe"
+    # — e o smoke de layout cobra as telas em 800px pedidos (960 reais) para
+    # provar que nada e empurrado para fora com ele ligado.
+    #
+    # `set_mode(SIDEBAR_HIDDEN)` continua existindo para quem quiser esconder a
+    # barra de proposito (uma futura tela de apresentacao, por exemplo); o que
+    # mudou e que a LARGURA nao a esconde mais sozinha.
     #
     # Pixels REAIS: o CTk multiplica a geometria pela escala de UI (120% por
     # padrao), entao uma janela pedida em 1000 mede 1200 na tela.
     _SIDEBAR_FULL_FROM = 1200
-    _SIDEBAR_RAIL_FROM = 1040
 
     def _sync_sidebar_mode(self, event: Any = None) -> None:
         sidebar = getattr(self, "sidebar", None)
@@ -411,12 +416,7 @@ class AppShell:
         relayout = getattr(self, "_layout_tournament_nav", None)
         if callable(relayout):
             relayout()
-        if largura >= self._SIDEBAR_FULL_FROM:
-            sidebar.set_mode(SIDEBAR_FULL)
-        elif largura >= self._SIDEBAR_RAIL_FROM:
-            sidebar.set_mode(SIDEBAR_RAIL)
-        else:
-            sidebar.set_mode(SIDEBAR_HIDDEN)
+        sidebar.set_mode(SIDEBAR_FULL if largura >= self._SIDEBAR_FULL_FROM else SIDEBAR_RAIL)
 
     def _clear_content(self) -> None:
         self._pairing_shortcuts_enabled = False
