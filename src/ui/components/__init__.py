@@ -6,6 +6,13 @@ de UI — telas migradas passam a montar a interface a partir daqui.
 """
 from __future__ import annotations
 
+from .action_group import (
+    ActionGroup,
+    DangerAction,
+    FormAction,
+    flatten_actions,
+    visible_controls,
+)
 from .busy import BusyIndicator
 from .buttons import danger_button, neutral_button, primary_button, secondary_button
 from .debounce import Debounced, debounce
@@ -46,6 +53,11 @@ __all__ = [
     "FIELD_MD",
     "FIELD_LG",
     "menu_button",
+    "ActionGroup",
+    "DangerAction",
+    "FormAction",
+    "visible_controls",
+    "flatten_actions",
     "confirm_dialog",
     "tri_state_dialog",
     "alert_dialog",

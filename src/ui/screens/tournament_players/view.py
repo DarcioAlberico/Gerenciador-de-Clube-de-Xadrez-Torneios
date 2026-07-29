@@ -24,6 +24,7 @@ from .chess_results import ChessResultsActions
 from .controller import TournamentPlayersController
 from .forms import RegistrationFormActions
 from .imports import PlayerImportActions
+from .menu import player_actions
 from .ratings import OfficialRatingActions
 from .state import (
     OFFICIAL_ID_FIELDS,
@@ -194,36 +195,42 @@ class TournamentPlayersView:
         botao.grid(row=row + 2, column=0, padx=16, pady=(0, 8), sticky="ew")
         self.host._disable_if_unauthorized(botao, "tournament_write")
 
+    def _action_handlers(self) -> dict[str, Any]:
+        """Mapa ``chave -> callable`` das 25 acoes. O agrupamento fica em menu.py."""
+        return {
+            "add_guest": self._add_player,
+            "update": self._update_player,
+            "clear": self.clear_form,
+            "update_status": self._update_status,
+            "delete": self._delete_player,
+            "register_member": self._register_member,
+            "register_all": self._register_all_members,
+            "template_players": lambda: self.imports.export_template("players"),
+            "template_online": lambda: self.imports.export_template("online"),
+            "import_spreadsheet": self.imports.import_spreadsheet,
+            "import_online": self.imports.import_online_file,
+            "import_online_url": self.imports.import_online_url,
+            "import_mapped": self.imports.import_mapped_file,
+            "import_mapped_url": self.imports.import_mapped_url,
+            "share_form": self.forms.share,
+            "configure_form": self.forms.configure,
+            "generate_form": self.forms.generate,
+            "import_fide": lambda: self.ratings.import_list("FIDE"),
+            "import_cbx": lambda: self.ratings.import_list("CBX"),
+            "import_lbx": lambda: self.ratings.import_list("LBX"),
+            "import_foreign": self.ratings.import_foreign_list,
+            "update_lbx": self.ratings.update_lbx_from_internet,
+            "compare_official": self.ratings.compare_with_players,
+            "import_chess_results": self.chess_results.import_entries,
+            "publish_chess_results": self.chess_results.prepare_upload,
+        }
+
     def _build_buttons(self, form: Any, row: int) -> None:
-        especificacoes: list[tuple[str, Any]] = [
-            (t("players.action.add_guest"), self._add_player),
-            (t("players.action.update"), self._update_player),
-            (t("players.action.update_status"), self._update_status),
-            (t("players.action.delete"), self._delete_player),
-            (t("players.action.clear"), self.clear_form),
-            (t("players.action.register_member"), self._register_member),
-            (t("players.action.register_all"), self._register_all_members),
-            (t("players.action.template_players"), lambda: self.imports.export_template("players")),
-            (t("players.action.import_spreadsheet"), self.imports.import_spreadsheet),
-            (t("players.action.template_online"), lambda: self.imports.export_template("online")),
-            (t("players.action.share_form"), self.forms.share),
-            (t("players.action.configure_form"), self.forms.configure),
-            (t("players.action.generate_form"), self.forms.generate),
-            (t("players.action.import_online"), self.imports.import_online_file),
-            (t("players.action.import_online_url"), self.imports.import_online_url),
-            (t("players.action.import_mapped"), self.imports.import_mapped_file),
-            (t("players.action.import_mapped_url"), self.imports.import_mapped_url),
-            (t("players.action.import_fide"), lambda: self.ratings.import_list("FIDE")),
-            (t("players.action.import_cbx"), lambda: self.ratings.import_list("CBX")),
-            (t("players.action.import_lbx"), lambda: self.ratings.import_list("LBX")),
-            (t("players.action.import_foreign"), self.ratings.import_foreign_list),
-            (t("players.action.update_lbx"), self.ratings.update_lbx_from_internet),
-            (t("players.action.compare_official"), self.ratings.compare_with_players),
-            (t("players.action.import_chess_results"), self.chess_results.import_entries),
-            (t("players.action.publish_chess_results"), self.chess_results.prepare_upload),
-        ]
         self.host._grid_form_buttons(
-            form, especificacoes, row, required_action="tournament_write"
+            form,
+            player_actions(self._action_handlers()),
+            row,
+            required_action="tournament_write",
         )
 
     def _label(self, form: Any, text: str, row: int, pady: tuple[int, int] = (12, 0)) -> None:
