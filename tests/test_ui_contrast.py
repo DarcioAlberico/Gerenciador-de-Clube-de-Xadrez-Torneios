@@ -13,6 +13,7 @@ import unittest
 
 from src.ui.contrast import (
     AA_NORMAL_TEXT,
+    AA_UI_COMPONENT,
     INK_DARK,
     INK_LIGHT,
     SURFACE,
@@ -20,6 +21,7 @@ from src.ui.contrast import (
     best_ink,
     contrast_ratio,
     failures,
+    mix_hex,
     parse_hex,
     relative_luminance,
 )
@@ -32,6 +34,7 @@ from src.ui.theme import (
     THEME_TEXT_MAIN,
     THEME_TEXT_SUB,
     apply_bg_preset,
+    field_palette,
 )
 from src.ui.theme_audit import all_combination_pairs, curated_pairs
 
@@ -92,6 +95,62 @@ class TintaCalculadaTest(unittest.TestCase):
                 with self.subTest(accent=nome, face=face):
                     razao = contrast_ratio(best_ink(cor), cor)
                     self.assertGreaterEqual(round(razao, 2), AA_NORMAL_TEXT)
+
+
+class MisturaDeCorTest(unittest.TestCase):
+    def test_extremos_devolvem_as_proprias_cores(self) -> None:
+        self.assertEqual("#112233", mix_hex("#112233", "#FFFFFF", 0.0))
+        self.assertEqual("#FFFFFF", mix_hex("#112233", "#FFFFFF", 1.0))
+
+    def test_meio_do_caminho(self) -> None:
+        self.assertEqual("#808080", mix_hex("#000000", "#FFFFFF", 0.5))
+
+    def test_fora_da_faixa_e_grampeado(self) -> None:
+        self.assertEqual("#000000", mix_hex("#000000", "#FFFFFF", -1))
+        self.assertEqual("#FFFFFF", mix_hex("#000000", "#FFFFFF", 2))
+
+
+class CamposDeEntradaTest(unittest.TestCase):
+    """F5.1 / P3-2: a paleta de campo é derivada e cumpre os limites por construção."""
+
+    def test_paleta_cumpre_os_limites_em_todo_painel(self) -> None:
+        """Borda ≥3:1 sobre o painel; texto e placeholder ≥4.5:1 sobre o campo.
+
+        Vale para os 13 presets de frame nas duas faces — é a garantia que as
+        cores de fábrica do customtkinter nunca deram (borda a 2.74:1).
+        """
+        for nome, preset in FRAME_BG_PRESETS.items():
+            for face, painel in (("clara", preset["panel"][0]), ("escura", preset["panel"][1])):
+                with self.subTest(preset=nome, face=face):
+                    campo = field_palette(painel)
+                    self.assertGreaterEqual(
+                        round(contrast_ratio(campo["border"], painel), 2), AA_UI_COMPONENT
+                    )
+                    self.assertGreaterEqual(
+                        round(contrast_ratio(campo["text"], campo["bg"]), 2), AA_NORMAL_TEXT
+                    )
+                    self.assertGreaterEqual(
+                        round(contrast_ratio(campo["placeholder"], campo["bg"]), 2),
+                        AA_NORMAL_TEXT,
+                    )
+
+    def test_campo_conserva_a_temperatura_do_painel(self) -> None:
+        """No painel sépia o campo sai quente (R>B) — não o cinza-azulado de fábrica."""
+        campo = field_palette(FRAME_BG_PRESETS["sepia"]["panel"][0])
+        r, _g, b = parse_hex(campo["bg"])
+        self.assertGreater(r, b)
+
+    def test_auditoria_inclui_os_pares_de_campo(self) -> None:
+        """Antes da F5.1 o auditor tinha zero pares de entrada — o ponto cego
+        que deixou a borda de fábrica reprovada passar despercebida."""
+        esperados = {
+            "borda do campo sobre painel",
+            "texto do campo sobre o campo",
+            "placeholder sobre o campo",
+        }
+        for chave, _face, pares in curated_pairs():
+            with self.subTest(tema=chave):
+                self.assertTrue(esperados <= {p.role for p in pares})
 
 
 class TemasCuradosTest(unittest.TestCase):
