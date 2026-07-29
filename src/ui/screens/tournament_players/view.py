@@ -12,7 +12,7 @@ from typing import Any
 
 import customtkinter as ctk
 
-from ...components import debounce
+from ...components import FormStack, debounce, secondary_button
 from ...i18n import t
 from ...support import (
     FIDE_CATEGORIES,
@@ -29,15 +29,16 @@ from .ratings import OfficialRatingActions
 from .state import (
     OFFICIAL_ID_FIELDS,
     PLAYER_FIELDS,
+    PLAYER_SECTIONS,
     PlayerForm,
     autofill_updates,
+    field_hints,
     field_labels,
     form_from_player,
     normalize_scheveningen_group,
     scheveningen_labels,
+    section_titles,
 )
-
-FIELD_WIDTH = 240
 
 
 def columns() -> dict[str, tuple[str, int]]:
@@ -128,71 +129,65 @@ class TournamentPlayersView:
         self.refresh()
 
     def _build_form(self, body: ctk.CTkFrame, tournament: dict[str, Any] | None) -> None:
+        """Coluna do cadastro — ``FormStack``, sem a soma de linhas (F5.4).
+
+        A aritmética que sustentava esta coluna (``indice * 2 + 1`` e depois um
+        ``linha + 10``) já tinha cobrado o preço uma vez: a versão anterior
+        começava os botões em ``+7`` e empilhava três deles **por cima** dos
+        seletores do Scheveningen, na mesma célula do grid. Com a pilha, a
+        próxima linha é a próxima linha — não há o que somar errado.
+        """
         host = self.host
-        form = host._make_scrollable_panel(body, width=280)
+        form = host._make_scrollable_panel(body)
         form.grid(row=0, column=0, sticky="ns", padx=(0, 16))
+        pilha = FormStack(form)
 
         rotulos = field_labels()
-        for indice, chave in enumerate(PLAYER_FIELDS):
-            self._label(form, rotulos[chave], indice * 2)
-            if chave == "birth_date":
-                campo: Any = host._make_date_entry(form, width=28)
-            elif chave == "category":
-                campo = ctk.CTkOptionMenu(form, values=FIDE_CATEGORIES, width=FIELD_WIDTH)
-                campo.set("")
-            else:
-                campo = ctk.CTkEntry(form, width=FIELD_WIDTH)
-            campo.grid(row=indice * 2 + 1, column=0, padx=16, pady=(4, 2), sticky="ew")
-            self.entries[chave] = campo
-            if chave in OFFICIAL_ID_FIELDS:
-                campo.bind(
-                    "<FocusOut>", lambda _e, origem=chave: self._autofill_from_official(origem)
-                )
+        titulos = section_titles()
+        dicas = field_hints()
+        for chave_secao, campos in PLAYER_SECTIONS:
+            pilha.section(titulos[chave_secao])
+            for chave in campos:
+                if chave == "birth_date":
+                    campo: Any = pilha.date(rotulos[chave])
+                elif chave == "category":
+                    campo = pilha.select(rotulos[chave], list(FIDE_CATEGORIES))
+                    campo.set("")
+                else:
+                    campo = pilha.text(rotulos[chave], placeholder=dicas.get(chave, ""))
+                self.entries[chave] = campo
+                if chave in OFFICIAL_ID_FIELDS:
+                    campo.bind(
+                        "<FocusOut>", lambda _e, origem=chave: self._autofill_from_official(origem)
+                    )
 
-        linha = len(PLAYER_FIELDS) * 2
-        self._label(form, t("players.search"), linha, pady=(16, 0))
-        self.search_entry = ctk.CTkEntry(
-            form, width=FIELD_WIDTH, placeholder_text=t("players.search.hint")
-        )
-        self.search_entry.grid(row=linha + 1, column=0, padx=16, pady=(4, 8), sticky="ew")
+        pilha.section(t("players.section.list"))
+        self.search_entry = pilha.text(t("players.search"), placeholder=t("players.search.hint"))
         self.search_entry.bind("<KeyRelease>", debounce(self.search_entry, self.reload))
 
-        self._label(form, self.controller.member_source_label(tournament), linha + 2, pady=(8, 0))
-        self.member_option = ctk.CTkOptionMenu(
-            form, values=[t("players.member.none")], width=FIELD_WIDTH
+        self.member_option = pilha.select(
+            self.controller.member_source_label(tournament), [t("players.member.none")]
         )
-        self.member_option.grid(row=linha + 3, column=0, padx=16, pady=(4, 4), sticky="ew")
         self.include_out_of_scope = ctk.CTkCheckBox(form, text=t("players.member.include_others"))
-        self.include_out_of_scope.grid(row=linha + 4, column=0, padx=16, pady=(8, 4), sticky="w")
+        pilha.place(self.include_out_of_scope, "widget", sticky="w")
         self.include_out_of_scope.configure(command=self.reload_members)
 
-        self._label(form, t("players.status"), linha + 5, pady=(8, 0))
-        self.status_option = ctk.CTkOptionMenu(
-            form, values=list(PLAYER_STATUS_VALUES.keys()), width=FIELD_WIDTH
-        )
-        self.status_option.grid(row=linha + 6, column=0, padx=16, pady=(4, 4), sticky="ew")
+        self.status_option = pilha.select(t("players.status"), list(PLAYER_STATUS_VALUES.keys()))
         self.status_option.set(PLAYER_STATUSES["active"])
 
-        self._build_scheveningen(form, linha + 7)
-        # +10 e não +7: os três widgets do Scheveningen ocupam 7, 8 e 9. A tela
-        # antiga começava os botões em +7 e empilhava três deles **por cima**
-        # dos seletores, na mesma célula do grid.
-        self._build_buttons(form, linha + 10)
+        self._build_scheveningen(form, pilha)
+        self._build_buttons(form, pilha.row)
 
-    def _build_scheveningen(self, form: Any, row: int) -> None:
+    def _build_scheveningen(self, form: Any, pilha: FormStack) -> None:
         """Grupo do sistema Scheveningen — só faz sentido em torneio de dois times."""
-        self._label(form, t("players.scheveningen"), row, pady=(8, 0))
         self.scheveningen_labels = scheveningen_labels()
         self.scheveningen_codes = {rotulo: codigo for codigo, rotulo in self.scheveningen_labels.items()}
-        self.scheveningen_option = ctk.CTkOptionMenu(
-            form, values=list(self.scheveningen_labels.values()), width=FIELD_WIDTH
+        self.scheveningen_option = pilha.select(
+            t("players.scheveningen"), list(self.scheveningen_labels.values())
         )
-        self.scheveningen_option.grid(row=row + 1, column=0, padx=16, pady=(4, 4), sticky="ew")
         self.scheveningen_option.set(self.scheveningen_labels[""])
-        botao = ctk.CTkButton(
-            form, text=t("players.scheveningen.set"), command=self._set_scheveningen_group
-        )
-        botao.grid(row=row + 2, column=0, padx=16, pady=(0, 8), sticky="ew")
+        botao = secondary_button(form, t("players.scheveningen.set"), self._set_scheveningen_group)
+        pilha.place(botao, "widget")
         self.host._disable_if_unauthorized(botao, "tournament_write")
 
     def _action_handlers(self) -> dict[str, Any]:
@@ -232,9 +227,6 @@ class TournamentPlayersView:
             row,
             required_action="tournament_write",
         )
-
-    def _label(self, form: Any, text: str, row: int, pady: tuple[int, int] = (12, 0)) -> None:
-        ctk.CTkLabel(form, text=text).grid(row=row, column=0, padx=16, pady=pady, sticky="w")
 
     def _build_table(self, body: ctk.CTkFrame) -> None:
         host = self.host

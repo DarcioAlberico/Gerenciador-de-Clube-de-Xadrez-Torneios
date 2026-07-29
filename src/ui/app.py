@@ -29,6 +29,7 @@ from .components import (
     show_donation_modal,
 )
 from .components.dialogs import alert_dialog
+from .form_layout import FORM_PANEL_WIDTH
 from .layout import wrap_positions
 from .shell import AppShell
 from .screens.tournaments import TournamentPagesMixin
@@ -717,8 +718,12 @@ class AlbericusApp(
     def _make_scrollable_panel(
         self,
         parent: ctk.CTkBaseClass | None = None,
-        width: int = 292,
+        width: int = FORM_PANEL_WIDTH,
     ) -> ctk.CTkScrollableFrame:
+        """Coluna de formulario. A largura e uma so (F5.4): antes o mesmo painel
+        media 272, 280, 292, 300 ou 302 conforme a tela — cinco ajustes no olho
+        para a mesma coisa (P3-12). Quem precisa de outra largura passa `width`
+        de proposito (a redacao de mensagem, o editor de certificado)."""
         panel = ctk.CTkScrollableFrame(
             parent or self.content,
             fg_color=THEME_PANEL_BG,

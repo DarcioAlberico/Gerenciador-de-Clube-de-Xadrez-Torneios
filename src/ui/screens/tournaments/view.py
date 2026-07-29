@@ -24,7 +24,7 @@ from ...support import (
     TOURNAMENT_SCOPES,
     filedialog,
 )
-from ...components import danger_button
+from ...components import FormStack, danger_button, primary_button, secondary_button
 from .controller import TournamentListController
 from .state import TournamentForm, TournamentListState, scope_fields
 
@@ -42,14 +42,27 @@ COLUMNS: dict[str, tuple[str, int]] = {
     "status": ("Status", 95),
 }
 
-FORM_FIELDS: tuple[tuple[str, str], ...] = (
-    ("name", "Nome do torneio"),
-    ("location", "Local"),
-    ("start_date", "Data inicial"),
-    ("end_date", "Data final"),
-    ("rounds_count", "Rodadas"),
-    ("time_control", "Ritmo"),
-    ("bye_points", "Pontos do bye"),
+# Campos do formulário de criação, agrupados em seções (F5.4/P3-12): chave,
+# rótulo e placeholder. O placeholder é parte da anatomia desde a F5.2 — a
+# caixa vazia sem dica de formato era a regra em 94 dos 150 campos do app.
+FORM_SECTIONS: tuple[tuple[str, tuple[tuple[str, str, str], ...]], ...] = (
+    (
+        "Identificação",
+        (
+            ("name", "Nome do torneio", "Ex.: Aberto de Verão 2026"),
+            ("location", "Local", "Ex.: Clube Municipal de Xadrez"),
+        ),
+    ),
+    (
+        "Calendário e ritmo",
+        (
+            ("start_date", "Data inicial", ""),
+            ("end_date", "Data final", ""),
+            ("rounds_count", "Rodadas", "Ex.: 7"),
+            ("time_control", "Ritmo", ""),
+            ("bye_points", "Pontos do bye", "Ex.: 0,5"),
+        ),
+    ),
 )
 
 
@@ -88,65 +101,54 @@ class TournamentListView:
         self.reload()
 
     def _build_form(self, body: ctk.CTkFrame) -> None:
+        """Coluna de criação — hoje uma ``FormStack``, sem aritmética de linha.
+
+        A conta de linha (``row=index * 2 + 1`` e um ``linha + 8`` no fim) era
+        o que impedia inserir um campo no meio sem renumerar o resto: qualquer
+        edição aqui pedia a soma inteira de novo. A pilha avança sozinha.
+        """
         host = self.host
-        form = host._make_scrollable_panel(body, width=272)
+        form = host._make_scrollable_panel(body)
         form.grid(row=0, column=0, sticky="ns", padx=(0, 16))
+        pilha = FormStack(form)
 
         self.entries: dict[str, Any] = {}
-        for index, (key, label) in enumerate(FORM_FIELDS):
-            ctk.CTkLabel(form, text=label).grid(
-                row=index * 2, column=0, padx=16, pady=(12, 0), sticky="w"
-            )
-            if key in ("start_date", "end_date"):
-                entry = host._make_date_entry(form, width=28)
-            elif key == "time_control":
-                entry = host._make_time_control_menu(form, width=230)
-            else:
-                entry = ctk.CTkEntry(form, width=230)
-            entry.grid(row=index * 2 + 1, column=0, padx=16, pady=(4, 2), sticky="ew")
-            self.entries[key] = entry
+        for titulo, campos in FORM_SECTIONS:
+            pilha.section(titulo)
+            for key, label, dica in campos:
+                if key in ("start_date", "end_date"):
+                    entry = pilha.date(label)
+                elif key == "time_control":
+                    entry = pilha.field(label, host._make_time_control_menu)
+                else:
+                    entry = pilha.text(label, placeholder=dica)
+                self.entries[key] = entry
         self.entries["rounds_count"].insert(0, TournamentForm().rounds_count)
         self.entries["bye_points"].insert(0, TournamentForm().bye_points)
 
-        linha = len(FORM_FIELDS) * 2
-        self.scope_option = self._labeled_menu(
-            form, "Escopo", list(TOURNAMENT_SCOPE_VALUES.keys()), linha
-        )
+        pilha.section("Abrangência")
+        self.scope_option = pilha.select("Escopo", list(TOURNAMENT_SCOPE_VALUES.keys()))
         self.scope_option.set(TOURNAMENT_SCOPES["standalone"])
-        self.competition_option = self._labeled_menu(
-            form, "Formato", list(COMPETITION_TYPE_VALUES.keys()), linha + 2
-        )
+        self.competition_option = pilha.select("Formato", list(COMPETITION_TYPE_VALUES.keys()))
         self.competition_option.set(COMPETITION_TYPES["individual"])
 
         self.club_map = self.controller.club_options(CLUB_KIND_LABELS)
-        self.club_option = self._labeled_menu(
-            form, "Clube/Escola", list(self.club_map.keys()), linha + 4
-        )
+        self.club_option = pilha.select("Clube/Escola", list(self.club_map.keys()))
         self.class_map: dict[str, int | None] = {"Sem turma": None}
-        self.class_option = self._labeled_menu(form, "Turma", ["Sem turma"], linha + 6)
+        self.class_option = pilha.select("Turma", ["Sem turma"])
 
         self.scope_option.configure(command=lambda _v=None: self._apply_scope())
         self.club_option.configure(command=lambda _v=None: self._reload_classes())
         self._reload_classes()
         self._apply_scope()
 
-        btn_create = ctk.CTkButton(form, text="Criar torneio", command=self._create)
-        btn_create.grid(row=linha + 8, column=0, padx=16, pady=(18, 4), sticky="ew")
+        btn_create = primary_button(form, "Criar torneio", self._create)
+        pilha.place(btn_create, "section")
         host._disable_if_unauthorized(btn_create, "tournament_write")
 
-        btn_import = ctk.CTkButton(
-            form, text="Importar TRF (Swiss-Manager)", command=self._import_trf
-        )
-        btn_import.grid(row=linha + 9, column=0, padx=16, pady=(0, 14), sticky="ew")
+        btn_import = secondary_button(form, "Importar TRF (Swiss-Manager)", self._import_trf)
+        pilha.place(btn_import, "widget")
         host._disable_if_unauthorized(btn_import, "tournament_write")
-
-    def _labeled_menu(
-        self, form: Any, label: str, values: list[str], row: int
-    ) -> ctk.CTkOptionMenu:
-        ctk.CTkLabel(form, text=label).grid(row=row, column=0, padx=16, pady=(12, 0), sticky="w")
-        menu = ctk.CTkOptionMenu(form, values=values, width=230)
-        menu.grid(row=row + 1, column=0, padx=16, pady=(4, 2), sticky="ew")
-        return menu
 
     def _build_list(self, body: ctk.CTkFrame) -> None:
         host = self.host

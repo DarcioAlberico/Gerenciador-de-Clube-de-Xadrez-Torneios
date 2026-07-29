@@ -34,7 +34,7 @@ class LibraryMixin:
         parent.grid_rowconfigure(0, weight=1)
 
         # PAINEL ESQUERDO: Cadastro / Edição
-        form = self._make_scrollable_panel(parent, width=320)
+        form = self._make_scrollable_panel(parent)
         form.grid(row=0, column=0, sticky="ns", padx=(0, 16))
 
         selected_item_id: dict[str, int | None] = {"value": None}
@@ -294,7 +294,7 @@ class LibraryMixin:
         parent.grid_columnconfigure(1, weight=1)
         parent.grid_rowconfigure(0, weight=1)
 
-        form = self._make_scrollable_panel(parent, width=320)
+        form = self._make_scrollable_panel(parent)
         form.grid(row=0, column=0, sticky="ns", padx=(0, 16))
 
         selected_col_id: dict[str, int | None] = {"value": None}

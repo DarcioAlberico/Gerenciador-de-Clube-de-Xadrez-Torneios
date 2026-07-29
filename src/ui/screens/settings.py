@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from ..support import *
-from ..components import clear_field_error, secondary_button, set_field_error
+from ..components import clear_field_error, form_of, secondary_button, set_field_error
 
 from .settings_certificates_ui import SettingsCertificatesMixin
 from .settings_reports_ui import SettingsReportsMixin
@@ -42,7 +42,6 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
         tab_appearance = self._settings_tab(settings_tabs, "Aparência")
         tab_folders = self._settings_tab(settings_tabs, "Pastas e backup")
         tab_tools = self._settings_tab(settings_tabs, "Segurança e dados")
-        stack = self._settings_stack
 
         # --- Aba: Aparencia ---
         # Galeria de temas curados (paletas combinadas) + modo avancado.
@@ -55,8 +54,16 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
         ui_scale_entry = appearance_ctl["ui_scale_entry"]
 
         # --- Aba: Pastas e backup ---
-        export_dir_entry = ctk.CTkEntry(tab_folders, width=320)
-        stack(tab_folders, export_dir_entry, label="Pasta de exportação")
+        # Tres pastas + retencao, cada uma com o proprio botao "Escolher...":
+        # sem secao, o botao de uma pasta encostava no rotulo da seguinte e o
+        # olho tinha de decidir a quem ele pertencia (P3-12).
+        form_folders = form_of(tab_folders)
+        form_tools = form_of(tab_tools)
+
+        form_folders.section("Pastas de trabalho")
+        export_dir_entry = form_folders.text(
+            "Pasta de exportação", placeholder="Pasta onde os arquivos são gravados"
+        )
         export_dir_entry.insert(0, str(settings.get("default_export_dir") or default_export_dir()))
 
         def choose_export_dir() -> None:
@@ -68,10 +75,13 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
                 export_dir_entry.delete(0, "end")
                 export_dir_entry.insert(0, directory)
 
-        stack(tab_folders, ctk.CTkButton(tab_folders, text="Escolher exportação", command=choose_export_dir))
+        form_folders.place(
+            secondary_button(tab_folders, "Escolher exportação", choose_export_dir), "widget"
+        )
 
-        backup_dir_entry = ctk.CTkEntry(tab_folders, width=320)
-        stack(tab_folders, backup_dir_entry, label="Pasta de backups")
+        backup_dir_entry = form_folders.text(
+            "Pasta de backups", placeholder="Pasta das cópias de segurança"
+        )
         backup_dir_entry.insert(0, str(settings.get("backup_dir") or self.db.backup_dir))
 
         def choose_backup_dir() -> None:
@@ -83,10 +93,13 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
                 backup_dir_entry.delete(0, "end")
                 backup_dir_entry.insert(0, directory)
 
-        stack(tab_folders, ctk.CTkButton(tab_folders, text="Escolher backups", command=choose_backup_dir))
+        form_folders.place(
+            secondary_button(tab_folders, "Escolher backups", choose_backup_dir), "widget"
+        )
 
-        cloud_dir_entry = ctk.CTkEntry(tab_folders, width=320)
-        stack(tab_folders, cloud_dir_entry, label="Pasta de Nuvem (Google Drive/Dropbox)")
+        cloud_dir_entry = form_folders.text(
+            "Pasta de Nuvem (Google Drive/Dropbox)", placeholder="Pasta sincronizada"
+        )
         cloud_dir_entry.insert(0, str(settings.get("cloud_sync_dir", "")))
 
         def choose_cloud_dir() -> None:
@@ -98,21 +111,26 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
                 cloud_dir_entry.delete(0, "end")
                 cloud_dir_entry.insert(0, directory)
 
-        stack(tab_folders, ctk.CTkButton(tab_folders, text="Escolher nuvem", command=choose_cloud_dir))
+        form_folders.place(
+            secondary_button(tab_folders, "Escolher nuvem", choose_cloud_dir), "widget"
+        )
 
-        retention_entry = ctk.CTkEntry(tab_folders, width=120)
-        stack(tab_folders, retention_entry, label="Manter últimos backups")
+        form_folders.section("Retenção")
+        retention_entry = form_folders.text(
+            "Manter últimos backups",
+            placeholder="Ex.: 10",
+            help_text="Backups mais antigos que este total são apagados na rotina.",
+        )
         retention_entry.insert(0, str(settings.get("backup_retention_count") or "10"))
 
         # --- Aba: Seguranca e dados ---
         def open_users_manager() -> None:
             self._show_users_manager()
 
-        stack(
-            tab_tools,
-            ctk.CTkButton(tab_tools, text="Gerenciar Usuários do Sistema", command=open_users_manager),
-            label="Segurança operacional",
-            section=True,
+        form_tools.section("Segurança operacional")
+        form_tools.place(
+            secondary_button(tab_tools, "Gerenciar Usuários do Sistema", open_users_manager),
+            "widget",
         )
 
         def download_fide() -> None:
@@ -135,7 +153,8 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
             fg_color=THEME_SUCCESS,
             hover_color=THEME_SUCCESS_HOVER,
         )
-        stack(tab_tools, fide_button, label="Sincronização de Ratings", section=True)
+        form_tools.section("Sincronização de ratings")
+        form_tools.place(fide_button, "widget")
 
         def _import_cbx_file(path: str) -> dict:
             """Parte pesada da importacao CBX — roda fora da thread da UI."""
@@ -159,7 +178,7 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
             )
 
         cbx_button = ctk.CTkButton(tab_tools, text="Importar Lista CBX (Excel / CSV / XML)", command=import_cbx)
-        stack(tab_tools, cbx_button)
+        form_tools.place(cbx_button, "widget")
 
         backup_panel = self._make_panel(body)
         backup_panel.grid(row=0, column=1, sticky="nsew")
@@ -429,7 +448,7 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
         de verdade dos valores; os cartoes de tema apenas os preenchem. Devolve
         os controles que ``persist_settings`` consome.
         """
-        stack = self._settings_stack
+        form = form_of(tab)
         state = {"theme": "custom"}
 
         appearance_labels = {"System": "Sistema", "Light": "Claro", "Dark": "Escuro"}
@@ -499,7 +518,8 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
             card = self._curated_theme_card(gallery, key, lambda k=key: select_curated(k))
             card.grid(row=row, column=0, sticky="ew", pady=(0, 8))
             cards[key] = card
-        stack(tab, gallery, label="Tema visual")
+        form.section("Tema visual")
+        form.place(gallery, "widget")
 
         # --- Alternancia para o modo avancado ---
         def toggle_advanced() -> None:
@@ -510,9 +530,9 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
             else:
                 advanced.grid_remove()
 
-        advanced_switch = ctk.CTkSwitch(tab, text="Personalizar cores (avancado)", command=toggle_advanced)
-        stack(tab, advanced_switch)
-        stack(tab, advanced)
+        advanced_switch = ctk.CTkSwitch(tab, text="Personalizar cores (avançado)", command=toggle_advanced)
+        form.place(advanced_switch, "widget", sticky="w")
+        form.place(advanced, "widget")
 
         def on_advanced_change(_value: Any = None) -> None:
             state["theme"] = "custom"
@@ -522,15 +542,22 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
             opt.configure(command=on_advanced_change)
 
         # --- Tamanho da fonte/interface ---
-        ui_scale_entry = ctk.CTkEntry(tab, width=120)
-        stack(tab, ui_scale_entry, label="Tamanho da fonte/interface (%)")
+        form.section("Escala da interface")
+        ui_scale_entry = form.text(
+            "Tamanho da fonte/interface (%)",
+            placeholder="Ex.: 120",
+            help_text="Vale para toda a janela; 100% e o tamanho de fabrica.",
+        )
         ui_scale_entry.insert(0, str(settings.get("ui_scale_percent") or "120"))
 
         # --- Largura das colunas (B-1): a saida de quem se perdeu arrastando ---
         # Arrastar largura nao tem "desfazer" proprio, e o usuario pode espremer
         # uma coluna ate ela sumir. Este botao e a volta ao estado conhecido.
-        stack(
-            tab,
+        form.section(
+            "Tabelas",
+            help_text="As larguras que voce ajusta arrastando ficam guardadas por usuario.",
+        )
+        form.place(
             secondary_button(
                 tab,
                 text="Restaurar largura das colunas",
@@ -538,9 +565,7 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
                 width=260,
                 tip="Volta todas as tabelas a largura padrao (so para o seu usuario).",
             ),
-            label="Tabelas",
-            section=True,
-            help_text="As larguras que voce ajusta arrastando ficam guardadas por usuario.",
+            "widget",
         )
 
         # --- Selecao inicial: tema curado correspondente, senao modo avancado ---

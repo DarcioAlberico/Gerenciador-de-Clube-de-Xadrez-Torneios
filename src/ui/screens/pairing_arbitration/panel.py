@@ -19,7 +19,7 @@ from typing import Any
 
 import customtkinter as ctk
 
-from ...components import primary_button, secondary_button
+from ...components import FormStack, primary_button, secondary_button
 from ...i18n import t
 from ...support import (
     THEME_DANGER,
@@ -270,52 +270,41 @@ class ArbitrationPanelView:
         host = self.host
         controles = ctk.CTkFrame(painel, fg_color="transparent")
         controles.grid(row=linha, column=0, columnspan=colunas, padx=14, pady=(4, 12), sticky="ew")
-        controles.grid_columnconfigure(1, weight=1)
+        # Empilhar continua sendo a decisao da B-8; o que muda na F5.4 e QUEM
+        # empilha: a mesma FormStack das outras telas, com os dois seletores
+        # ganhando a anatomia de campo (rotulo acima, altura de 36px) em vez do
+        # par rotulo-a-esquerda / bloco-de-cor-a-direita que so existia aqui.
+        pilha = FormStack(controles, padx=0)
 
         auto = ctk.CTkCheckBox(
             controles,
             text=t("arbitration.control.auto_refresh"),
             command=host._toggle_arbitration_auto_refresh,
         )
-        auto.grid(row=0, column=0, columnspan=2, sticky="w")
+        pilha.place(auto, "widget", sticky="w")
         if host._arbitration_auto_refresh_enabled:
             auto.select()
 
-        secondary_button(
-            controles,
-            t("arbitration.control.refresh_now"),
-            host.show_arbitration_panel,
-            width=130,
-        ).grid(row=1, column=0, columnspan=2, pady=(8, 0), sticky="w")
+        pilha.place(
+            secondary_button(
+                controles,
+                t("arbitration.control.refresh_now"),
+                host.show_arbitration_panel,
+                width=130,
+            ),
+            "widget",
+            sticky="w",
+        )
 
-        intervalo = self._option_row(
-            controles,
-            2,
+        intervalo = pilha.select(
             t("arbitration.control.interval"),
-            REFRESH_INTERVAL_CHOICES,
-            host._set_arbitration_refresh_interval,
+            list(REFRESH_INTERVAL_CHOICES),
+            command=host._set_arbitration_refresh_interval,
         )
         intervalo.set(str(host._arbitration_refresh_interval_seconds))
-        limite = self._option_row(
-            controles,
-            3,
+        limite = pilha.select(
             t("arbitration.control.inline_limit"),
-            INLINE_LIMIT_CHOICES,
-            host._set_arbitration_inline_tables_limit,
+            list(INLINE_LIMIT_CHOICES),
+            command=host._set_arbitration_inline_tables_limit,
         )
         limite.set(str(host._arbitration_inline_tables_limit))
-
-    @staticmethod
-    def _option_row(
-        controles: ctk.CTkFrame,
-        linha: int,
-        rotulo: str,
-        valores: tuple[str, ...],
-        comando: Any,
-    ) -> ctk.CTkOptionMenu:
-        ctk.CTkLabel(controles, text=rotulo, text_color=THEME_TEXT_SUB).grid(
-            row=linha, column=0, pady=(8, 0), sticky="w"
-        )
-        seletor = ctk.CTkOptionMenu(controles, values=list(valores), width=80, command=comando)
-        seletor.grid(row=linha, column=1, padx=(6, 0), pady=(8, 0), sticky="w")
-        return seletor

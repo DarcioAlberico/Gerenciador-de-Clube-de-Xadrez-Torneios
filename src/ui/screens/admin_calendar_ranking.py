@@ -18,7 +18,7 @@ class CalendarRankingMixin:
         body.grid_columnconfigure(1, weight=1)
         body.grid_rowconfigure(0, weight=1)
 
-        form = self._make_scrollable_panel(body, width=302)
+        form = self._make_scrollable_panel(body)
         form.grid(row=0, column=0, sticky="ns", padx=(0, 16))
 
         entries: dict[str, ctk.CTkEntry] = {}

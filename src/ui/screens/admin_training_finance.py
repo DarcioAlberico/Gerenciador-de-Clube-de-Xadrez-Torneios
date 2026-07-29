@@ -18,7 +18,7 @@ class TrainingFinanceMixin:
         body.grid_columnconfigure(1, weight=1)
         body.grid_rowconfigure(0, weight=1)
 
-        form = self._make_scrollable_panel(body, width=302)
+        form = self._make_scrollable_panel(body)
         form.grid(row=0, column=0, sticky="ns", padx=(0, 16))
 
         entries: dict[str, ctk.CTkEntry] = {}
@@ -531,7 +531,7 @@ class TrainingFinanceMixin:
         body.grid_columnconfigure(1, weight=1)
         body.grid_rowconfigure(0, weight=1)
 
-        form = self._make_scrollable_panel(body, width=302)
+        form = self._make_scrollable_panel(body)
         form.grid(row=0, column=0, sticky="ns", padx=(0, 16))
 
         selected_plan_id: dict[str, int | None] = {"value": None}
@@ -1056,7 +1056,7 @@ class TrainingFinanceMixin:
         caixa_body.grid_columnconfigure(1, weight=1)
         caixa_body.grid_rowconfigure(0, weight=1)
 
-        caixa_form = self._make_scrollable_panel(caixa_body, width=302)
+        caixa_form = self._make_scrollable_panel(caixa_body)
         caixa_form.grid(row=0, column=0, sticky="ns", padx=(0, 16))
 
         selected_transaction_id: dict[str, int | None] = {"value": None}
@@ -1171,7 +1171,7 @@ class TrainingFinanceMixin:
         sponsors_body.grid_columnconfigure(1, weight=1)
         sponsors_body.grid_rowconfigure(0, weight=1)
 
-        spon_form = self._make_scrollable_panel(sponsors_body, width=302)
+        spon_form = self._make_scrollable_panel(sponsors_body)
         spon_form.grid(row=0, column=0, sticky="ns", padx=(0, 16))
 
         selected_sponsor_id: dict[str, int | None] = {"value": None}
