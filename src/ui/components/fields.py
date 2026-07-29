@@ -23,8 +23,10 @@ from typing import Any, Callable
 import customtkinter as ctk
 
 from ..theme import (
+    SIZE_BODY,
     SPACE_XS,
     THEME_ACCENT,
+    THEME_DANGER,
     THEME_FIELD_BG,
     THEME_FIELD_BORDER,
     THEME_FIELD_TEXT,
@@ -32,6 +34,7 @@ from ..theme import (
     THEME_TEXT_MAIN,
     THEME_TEXT_SUB,
     THEME_TREE_EVEN,
+    THEME_WARNING_TEXT,
     font_field,
     font_field_label,
 )
@@ -48,14 +51,166 @@ FIELD_MD = 240
 FIELD_LG = 360
 
 
+# ---------------------------------------------------------------------------
+# Estados do campo (F5.3 / P3-4): repouso, foco, erro, aviso, desabilitado.
+#
+# Antes existiam TRES implementacoes locais de "pintar a borda de vermelho"
+# (MaskedDateEntry, Config. do app, Config. do torneio), nenhuma com mensagem
+# sob o campo; foco visivel nao existia (zero bindings de <FocusIn> no app) e
+# campo desabilitado era indistinguivel do habilitado, porque o CTkEntry so
+# esmaece o texto — nao tem `text_color_disabled` nem muda o fundo.
+#
+# A precedencia e uma so, e mora em _apply_field_state: erro > aviso > foco >
+# repouso. Sem isso, focar um campo em erro apagaria o erro.
+# ---------------------------------------------------------------------------
+_STATE_ATTR = "_albericus_field_state"
+
+
+def _field_state(widget: Any) -> dict[str, Any] | None:
+    return getattr(widget, _STATE_ATTR, None)
+
+
+def _apply_field_state(widget: Any) -> None:
+    """Repinta o campo conforme o estado atual. Usa o ``configure`` original."""
+    estado = _field_state(widget)
+    if estado is None:
+        return
+    raw = estado["raw_configure"]
+    if estado["disabled"]:
+        # Sem fundo proprio o campo vira um contorno chapado sobre o painel:
+        # some a afordancia de "da para digitar aqui", que e o ponto.
+        visual = {"border_color": THEME_FIELD_BORDER, "fg_color": THEME_PANEL_BG, "border_width": 1}
+    elif estado["error"]:
+        visual = {"border_color": THEME_DANGER, "fg_color": THEME_FIELD_BG, "border_width": 2}
+    elif estado["warning"]:
+        visual = {"border_color": THEME_WARNING_TEXT, "fg_color": THEME_FIELD_BG, "border_width": 2}
+    elif estado["focused"]:
+        visual = {"border_color": THEME_ACCENT, "fg_color": THEME_FIELD_BG, "border_width": 2}
+    else:
+        visual = {"border_color": THEME_FIELD_BORDER, "fg_color": THEME_FIELD_BG, "border_width": 1}
+    for opcao, valor in visual.items():
+        try:
+            raw(**{opcao: valor})
+        except (ValueError, TypeError):
+            continue  # opcao inexistente nesta classe (ex.: border_width no select)
+
+
+def _update_hint(widget: Any) -> None:
+    """Escreve a mensagem sob o campo, quando ``labeled_field`` reservou a linha."""
+    estado = _field_state(widget)
+    if estado is None or estado["hint"] is None:
+        return
+    if estado["error"]:
+        texto, cor = estado["message"], THEME_DANGER
+    elif estado["warning"]:
+        texto, cor = estado["message"], THEME_WARNING_TEXT
+    else:
+        texto, cor = estado["help"], THEME_TEXT_SUB
+    estado["hint"].configure(text=texto or "", text_color=cor)
+
+
+def attach_field_states(widget: Any) -> Any:
+    """Liga anel de foco e API de erro/aviso/desabilitado ao campo. Idempotente.
+
+    O ``configure`` da instancia e embrulhado para que ``state="disabled"``
+    vindo de qualquer lugar — inclusive das ~36 chamadas cruas que ainda
+    existem nas telas — passe pela mesma pintura. Sem isso, "desabilitado
+    distinto" so valeria para quem soubesse chamar o helper novo.
+    """
+    if _field_state(widget) is not None:
+        return widget
+    estado: dict[str, Any] = {
+        "raw_configure": widget.configure,
+        "error": False,
+        "warning": False,
+        "focused": False,
+        "disabled": False,
+        "message": "",
+        "help": "",
+        "hint": None,
+    }
+    setattr(widget, _STATE_ATTR, estado)
+
+    def configure_wrapper(**kwargs: Any) -> Any:
+        resultado = estado["raw_configure"](**kwargs)
+        if "state" in kwargs:
+            estado["disabled"] = str(kwargs["state"]) == "disabled"
+            _apply_field_state(widget)
+        return resultado
+
+    widget.configure = configure_wrapper  # type: ignore[method-assign]
+
+    def on_focus_in(_event: Any) -> None:
+        estado["focused"] = True
+        _apply_field_state(widget)
+
+    def on_focus_out(_event: Any) -> None:
+        estado["focused"] = False
+        _apply_field_state(widget)
+
+    # O bind vai no widget Tk de DENTRO: no CTkEntry o foco chega ao tk.Entry
+    # interno, nao ao frame CTk (mesma pegadinha documentada na B-4).
+    alvo = getattr(widget, "_entry", None) or getattr(widget, "_textbox", None) or widget
+    try:
+        alvo.bind("<FocusIn>", on_focus_in, add="+")
+        alvo.bind("<FocusOut>", on_focus_out, add="+")
+    except Exception:  # pragma: no cover - widget sem bind (nao deve acontecer)
+        pass
+    _apply_field_state(widget)
+    return widget
+
+
+def set_field_error(widget: Any, message: str = "") -> None:
+    """Marca o campo como invalido: borda de perigo + mensagem sob o campo."""
+    estado = _field_state(widget)
+    if estado is None:
+        estado = _field_state(attach_field_states(widget))
+    estado["error"] = True
+    estado["warning"] = False
+    estado["message"] = message
+    _apply_field_state(widget)
+    _update_hint(widget)
+
+
+def set_field_warning(widget: Any, message: str = "") -> None:
+    """Marca o campo como suspeito, sem impedir salvar (ex.: rodadas demais)."""
+    estado = _field_state(widget)
+    if estado is None:
+        estado = _field_state(attach_field_states(widget))
+    estado["warning"] = True
+    estado["error"] = False
+    estado["message"] = message
+    _apply_field_state(widget)
+    _update_hint(widget)
+
+
+def clear_field_error(widget: Any) -> None:
+    """Devolve o campo ao repouso (ou ao foco, se ele estiver focado)."""
+    estado = _field_state(widget)
+    if estado is None:
+        return
+    estado["error"] = False
+    estado["warning"] = False
+    estado["message"] = ""
+    _apply_field_state(widget)
+    _update_hint(widget)
+
+
+def field_has_error(widget: Any) -> bool:
+    """Se o campo esta marcado como invalido — usado por testes e por validacao."""
+    estado = _field_state(widget)
+    return bool(estado and estado["error"])
+
+
 def text_field(master: Any, *, placeholder: str, **kwargs: Any) -> ctk.CTkEntry:
     """Campo de texto de uma linha. ``placeholder`` é obrigatório (P3-6):
     a dica de formato ("Ex.: 90'+30\"", "dd/mm/aaaa") faz parte da anatomia."""
     kwargs.setdefault("width", FIELD_MD)
     kwargs.setdefault("height", FIELD_HEIGHT)
     kwargs.setdefault("corner_radius", FIELD_RADIUS)
+    kwargs.setdefault("border_width", 1)
     kwargs.setdefault("font", font_field())
-    return ctk.CTkEntry(master, placeholder_text=placeholder, **kwargs)
+    return attach_field_states(ctk.CTkEntry(master, placeholder_text=placeholder, **kwargs))
 
 
 def select_field(
@@ -86,7 +241,9 @@ def select_field(
     kwargs.setdefault("dropdown_fg_color", THEME_PANEL_BG)
     kwargs.setdefault("dropdown_text_color", THEME_TEXT_MAIN)
     kwargs.setdefault("dropdown_hover_color", THEME_TREE_EVEN)
-    return ctk.CTkOptionMenu(master, values=values, command=command, variable=variable, **kwargs)
+    return attach_field_states(
+        ctk.CTkOptionMenu(master, values=values, command=command, variable=variable, **kwargs)
+    )
 
 
 def text_area(master: Any, *, height: int = 110, **kwargs: Any) -> ctk.CTkTextbox:
@@ -97,7 +254,7 @@ def text_area(master: Any, *, height: int = 110, **kwargs: Any) -> ctk.CTkTextbo
     kwargs.setdefault("border_width", 1)
     kwargs.setdefault("wrap", "word")
     kwargs.setdefault("font", font_field())
-    return ctk.CTkTextbox(master, height=height, **kwargs)
+    return attach_field_states(ctk.CTkTextbox(master, height=height, **kwargs))
 
 
 def date_field(master: Any, **kwargs: Any) -> Any:
@@ -109,14 +266,17 @@ def date_field(master: Any, **kwargs: Any) -> Any:
     kwargs.setdefault("width", FIELD_SM)
     kwargs.setdefault("height", FIELD_HEIGHT)
     kwargs.setdefault("corner_radius", FIELD_RADIUS)
+    kwargs.setdefault("border_width", 1)
     kwargs.setdefault("font", font_field())
-    return MaskedDateEntry(master, **kwargs)
+    return attach_field_states(MaskedDateEntry(master, **kwargs))
 
 
 def labeled_field(
     master: Any,
     label: str,
     builder: Callable[[ctk.CTkFrame], Any],
+    *,
+    help_text: str = "",
     **kwargs: Any,
 ) -> tuple[ctk.CTkFrame, Any]:
     """Rótulo ACIMA do campo como unidade única (container transparente).
@@ -125,6 +285,11 @@ def labeled_field(
     ``select_field``, ...). Devolve ``(container, campo)`` — a tela posiciona o
     container e guarda o campo. Fecha o espaçamento rótulo→campo em
     ``SPACE_XS``, que solto variava em mais de dez combinações de ``pady``.
+
+    A **linha de mensagem** sob o campo é criada aqui e fica reservada mesmo
+    vazia: é nela que ``set_field_error`` escreve. Reservar evita que o
+    formulário inteiro pule para baixo quando o primeiro erro aparece — o
+    salto é o que faz o usuário perder de vista o campo que errou.
     """
     box = ctk.CTkFrame(master, fg_color="transparent", **kwargs)
     box.grid_columnconfigure(0, weight=1)
@@ -134,4 +299,16 @@ def labeled_field(
     rotulo.grid(row=0, column=0, sticky="w")
     campo = builder(box)
     campo.grid(row=1, column=0, sticky="ew", pady=(SPACE_XS, 0))
+    hint = ctk.CTkLabel(
+        box,
+        text=help_text,
+        font=ctk.CTkFont(size=SIZE_BODY - 1),
+        text_color=THEME_TEXT_SUB,
+        anchor="w",
+        justify="left",
+    )
+    hint.grid(row=2, column=0, sticky="ew")
+    estado = _field_state(campo) or _field_state(attach_field_states(campo))
+    estado["hint"] = hint
+    estado["help"] = help_text
     return box, campo

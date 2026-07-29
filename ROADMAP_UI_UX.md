@@ -854,7 +854,7 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 |----|--------|---------|---------|-------|---------|--------|
 | ✅ F5.1 | Tokens de campo (`THEME_FIELD_*`, `THEME_PLACEHOLDER`) + patch do `ThemeManager` p/ `CTkEntry`/`CTkTextbox`/`CTkOptionMenu` (corpo + tinta via `best_ink`) + bloco de pares de campo no `theme_audit` (P3-1, P3-2) | 2d | A | M | F1.1 | 141 selects e 162 campos seguem o preset; auditor reprova par de campo abaixo de AA; Alto Contraste alcança campos |
 | ✅ F5.2 | `components/fields.py`: `text_field`/`select_field`/`text_area`/`date_field`/`labeled_field` — altura única 36px, raio único, escala `FIELD_SM/MD/LG/FULL`, placeholder obrigatório, `font_field()` (P3-3, P3-5, P3-6) | 2d | A | B | F5.1 | Campo e botão alinhados na mesma linha; escala de larguras fechada |
-| F5.3 | Estados de campo: anel de foco (borda accent no `FocusIn`), `set_field_error(widget, msg)`/`clear_field_error` únicos com mensagem sob o campo, desabilitado distinto (P3-4) | 1,5d | A | B | F5.2 | Foco visível em navegação por Tab; 3 implementações locais de erro removidas |
+| ✅ F5.3 | Estados de campo: anel de foco (borda accent no `FocusIn`), `set_field_error(widget, msg)`/`clear_field_error` únicos com mensagem sob o campo, desabilitado distinto (P3-4) | 1,5d | A | B | F5.2 | Foco visível em navegação por Tab; 3 implementações locais de erro removidas |
 | F5.4 | Migrar formulários p/ `fields.py` + `components/form.py` (promover `_settings_stack`, com seções) — ordem: Config. torneio, Jogadores, Torneios, Arbitragem, Config. app (P3-12) | 3d | A | M | F5.2 | 5 telas com seções visuais e largura de painel unificada |
 | ✅ F5.5 | `_make_tree`: zebra (tokens já existentes), ordenação por clique no cabeçalho, `stretch=True` na coluna principal, `EmptyState` embutido, nulos renderizados vazios (P3-9, "None") | 1,5d | A | B | — | 57 tabelas ganham zebra+sort+vazio sem tocar call-sites |
 | ✅ F5.6 | Quebrar o muro de Jogadores (25 → ~5: primárias + `Importar ▾`/`Bases oficiais ▾`/`Publicar ▾` + danger isolada) e aplicar o molde F2.1 aos 15 call-sites de `_grid_form_buttons` (P3-7) | 2d | A | M | — | Nenhuma tela com >8 ações visíveis no mesmo nível |
@@ -1044,6 +1044,38 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 > feedback novo precisa nascer com o dublê do smoke**, senão a suíte trava em
 > vez de falhar.
 
+> **Status (2026-07-29): F5.3 CONCLUÍDA — fecha o assunto "campos de entrada".**
+> Os tokens de foco e erro existiam desde a F5.1 (aliases vivos de accent e
+> perigo) e ninguém os consumia. Agora há uma **máquina de estados única** em
+> [`fields.py`](src/ui/components/fields.py) com precedência explícita —
+> **erro > aviso > foco > repouso** —, e é ela que justifica o componente: sem
+> precedência, focar um campo em erro apagaria o erro.
+>
+> - **Anel de foco**: `<FocusIn>` pinta a borda no accent e engrossa para 2px.
+>   O bind vai no widget Tk **de dentro** (`_entry`/`_textbox`), porque é lá que
+>   o foco chega — a mesma pegadinha registrada na B-4. Antes não havia **um**
+>   binding de `<FocusIn>` no app inteiro: navegar por Tab era invisível.
+> - **Erro e aviso componentizados**: `set_field_error` / `set_field_warning` /
+>   `clear_field_error` substituem as **três cópias locais** (`MaskedDateEntry`,
+>   Config. do app, Config. do torneio), que pintavam a borda à mão, guardavam a
+>   cor padrão cada uma do seu jeito e **não tinham mensagem no campo**. A
+>   mensagem agora aparece sob o campo, na linha que o `labeled_field` reserva
+>   mesmo vazia — reservar evita que o formulário salte quando o primeiro erro
+>   aparece, que é o que faz o usuário perder de vista o campo que errou.
+> - **Desabilitado distinto**: o `CTkEntry` não tem `text_color_disabled` e só
+>   esmaece o texto, então habilitado e desabilitado eram quase idênticos. O
+>   campo desabilitado passa a perder o fundo próprio (fica chapado sobre o
+>   painel), sumindo a afordância de "dá para digitar aqui". Para alcançar as
+>   ~36 chamadas cruas de `configure(state=...)` que ainda existem nas telas, o
+>   `configure` da instância é embrulhado — assim o estado vale para quem nunca
+>   ouviu falar do helper novo.
+>
+> 12 testes novos, incluindo os dois que sustentam o desenho: *foco não apaga
+> erro* e *erro sobrevive a desabilitar/reabilitar*. Um deles falhou primeiro
+> por um motivo instrutivo: o widget não estava mapeado, e o Tk **não entrega
+> evento de foco a widget fora da tela** — mesma família da B-4, agora anotada
+> no teste.
+
 ---
 
 ## 3. Sequenciamento recomendado
@@ -1077,16 +1109,20 @@ tabelas, sem tocar call-sites) → `F5.6` (muro de Jogadores) → `F5.7` (relat�
 copiável). É o menor corte que ataca diretamente a reclamação de origem — o visual
 dos campos de entrada — e as telas de uso diário.
 
-> **Status (2026-07-29): MVP de percepção v2 CONCLUÍDO.** Entregues `F5.1`,
-> `F5.2`, `F5.5`, `F5.6` e `F5.7` (a `F5.3` ficou para a sequência: os tokens de
-> foco/erro já existem desde a F5.1, falta consumi-los nos widgets). O que muda
-> na tela, em uma frase por tarefa: os campos passaram a seguir o tema escolhido;
-> ganharam anatomia única de 36px e escala fechada de largura; as 57 tabelas
-> ganharam zebra, ordenação e estado vazio; o muro de 25 botões virou 8
-> controles; e o que precisa ser lido/copiado parou de sumir em 3,5 segundos.
-> Restam da Fase 5: `F5.3`, `F5.4` (migração ampla dos formulários), `F5.8`
-> (diálogos ad-hoc), `F5.9` (progresso local), `F5.10` (teclado), `F5.11`
-> (menu/rail) e `F5.12` (lint de acentuação).
+> **Status (2026-07-29): MVP de percepção v2 CONCLUÍDO, e a F5.3 fechou junto.**
+> Entregues `F5.1`, `F5.2`, `F5.3`, `F5.5`, `F5.6` e `F5.7`. O que muda na tela,
+> em uma frase por tarefa: os campos passaram a seguir o tema escolhido;
+> ganharam anatomia única de 36px e escala fechada de largura; ganharam foco
+> visível, erro com mensagem e desabilitado distinto; as 57 tabelas ganharam
+> zebra, ordenação e estado vazio; o muro de 25 botões virou 8 controles; e o
+> que precisa ser lido/copiado parou de sumir em 3,5 segundos. **O assunto
+> "campos de entrada" — a reclamação que originou a auditoria — está fechado
+> ponta a ponta: cor, anatomia e estados.**
+>
+> Restam da Fase 5, em ordem de retorno: `F5.4` (migração ampla dos formulários
+> para o `fields.py` — é o que leva o ganho às telas que ainda montam campo à
+> mão), `F5.8` (21 diálogos ad-hoc), `F5.9` (progresso local), `F5.10`
+> (teclado), `F5.11` (menu/rail) e `F5.12` (lint de acentuação).
 
 ---
 

@@ -514,10 +514,10 @@ class MaskedDateEntry(ctk.CTkEntry):
         kwargs.setdefault("placeholder_text", "dd/mm/aaaa")
         super().__init__(master, **kwargs)
         self._cal_popup: Toplevel | None = None
-        try:
-            self._default_border = self.cget("border_color")
-        except Exception:
-            self._default_border = None
+        # Estados (foco/erro/desabilitado) vem do componente unico (F5.3).
+        from .components.fields import attach_field_states
+
+        attach_field_states(self)
         try:
             self._entry.bind("<KeyPress>", self._on_key)
             self._entry.bind("<FocusOut>", self._on_blur, add="+")
@@ -568,12 +568,19 @@ class MaskedDateEntry(ctk.CTkEntry):
         self._set_valid(True)
 
     def _set_valid(self, ok: bool) -> None:
-        if self._default_border is None:
-            return
-        try:
-            self.configure(border_color=self._default_border if ok else THEME_DANGER)
-        except Exception:
-            pass
+        """Delega ao estado de campo unico (F5.3).
+
+        Antes esta classe guardava a borda padrao e a repintava a mao — uma das
+        tres copias da mesma ideia espalhadas pelo app. Agora quem decide a cor
+        e o `fields.set_field_error`, que ja sabe conviver com foco e com
+        campo desabilitado.
+        """
+        from .components.fields import clear_field_error, set_field_error
+
+        if ok:
+            clear_field_error(self)
+        else:
+            set_field_error(self, "Data invalida. Use dd/mm/aaaa.")
 
     # -- eventos -----------------------------------------------------------
     def _on_key(self, event: Any) -> str | None:

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from ..support import *
-from ..components import secondary_button
+from ..components import clear_field_error, secondary_button, set_field_error
 
 from .settings_certificates_ui import SettingsCertificatesMixin
 from .settings_reports_ui import SettingsReportsMixin
@@ -250,24 +250,14 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
                 )
 
         def persist_settings() -> None:
-            try:
-                _default_border = ctk.ThemeManager.theme["CTkEntry"]["border_color"]
-            except Exception:
-                _default_border = None
-
             def _flag_field(entry: Any, message: str) -> None:
-                try:
-                    entry.configure(border_color=THEME_DANGER)
-                except Exception:
-                    pass
+                # Estado de campo unico (F5.3): a borda e a mensagem sob o campo
+                # saem do mesmo lugar, e o foco nao apaga o erro.
+                set_field_error(entry, message)
                 raise AppError(message)
 
             for _entry in (ui_scale_entry, retention_entry):
-                if _default_border is not None:
-                    try:
-                        _entry.configure(border_color=_default_border)
-                    except Exception:
-                        pass
+                clear_field_error(_entry)
 
             export_dir = Path(export_dir_entry.get().strip() or default_export_dir())
             backup_dir = Path(backup_dir_entry.get().strip() or default_backup_dir())
