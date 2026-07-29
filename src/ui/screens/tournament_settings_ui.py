@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from ..support import *
+from ..components import clear_field_error, set_field_error, set_field_warning
 
 from src.services.pairing.acceleration import acceleration_spec
 from src.services.constants import PAIRING_SYSTEMS, TIEBREAK_ENGINES
@@ -582,24 +583,13 @@ class TournamentSettingsMixin:
             settings_payload = {key: entry.get() for key, entry in setting_entries.items()}
 
             # Validacao client-side: destaca o campo invalido antes de persistir.
-            try:
-                default_border = ctk.ThemeManager.theme["CTkEntry"]["border_color"]
-            except Exception:
-                default_border = None
-
+            # Estado de campo unico desde a F5.3 — esta tela guardava a terceira
+            # copia da mesma ideia (borda salva a mao, sem mensagem no campo).
             def _reset_border(entry: Any) -> None:
-                if default_border is None:
-                    return
-                try:
-                    entry.configure(border_color=default_border)
-                except Exception:
-                    pass
+                clear_field_error(entry)
 
             def _flag_invalid(entry: Any, message: str) -> None:
-                try:
-                    entry.configure(border_color=THEME_DANGER)
-                except Exception:
-                    pass
+                set_field_error(entry, message)
                 raise AppError(message)
 
             def _parse_date(value: str) -> datetime | None:
@@ -629,10 +619,10 @@ class TournamentSettingsMixin:
             _n_active = len(self.db.list_players(self.current_tournament_id, active_only=True))
             _rounds_int = int(rounds_raw)
             if _pairing_method == "swiss" and _n_active >= 2 and _rounds_int > _n_active - 1:
-                try:
-                    tournament_entries["rounds_count"].configure(border_color=THEME_WARNING)
-                except Exception:
-                    pass
+                set_field_warning(
+                    tournament_entries["rounds_count"],
+                    f"Maximo sem repeticao: {_n_active - 1} rodada(s).",
+                )
                 self._show_toast(
                     f"Aviso: {_n_active} jogador(es) ativo(s). O maximo sem repeticao de "
                     f"adversario e {_n_active - 1} rodada(s); com {_rounds_int}, a ultima "

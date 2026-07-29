@@ -19,13 +19,25 @@ from src.ui.components.fields import (
     FIELD_MD,
     FIELD_RADIUS,
     FIELD_SM,
+    clear_field_error,
     date_field,
+    field_has_error,
     labeled_field,
     select_field,
+    set_field_error,
+    set_field_warning,
     text_area,
     text_field,
 )
-from src.ui.theme import THEME_FIELD_BG, THEME_FIELD_BORDER, THEME_FIELD_TEXT
+from src.ui.theme import (
+    THEME_ACCENT,
+    THEME_DANGER,
+    THEME_FIELD_BG,
+    THEME_FIELD_BORDER,
+    THEME_FIELD_TEXT,
+    THEME_PANEL_BG,
+    THEME_WARNING_TEXT,
+)
 
 
 class ContratosPurosTest(unittest.TestCase):
@@ -106,16 +118,130 @@ class AnatomiaDosCamposTest(unittest.TestCase):
         self.assertEqual(FIELD_HEIGHT, campo.cget("height"))
         campo.destroy()
 
-    def test_labeled_field_une_rotulo_e_campo(self) -> None:
+    def test_labeled_field_une_rotulo_campo_e_linha_de_mensagem(self) -> None:
         box, campo = labeled_field(
             self.root, "Local", lambda parent: text_field(parent, placeholder="Clube")
         )
         rotulos = [w for w in box.winfo_children() if isinstance(w, ctk.CTkLabel)]
-        self.assertEqual(1, len(rotulos))
+        # Rotulo (linha 0) + linha de mensagem reservada (linha 2).
+        self.assertEqual(2, len(rotulos))
         self.assertEqual("Local", rotulos[0].cget("text"))
         self.assertIs(box, campo.master)
         self.assertEqual(1, int(campo.grid_info()["row"]))
         box.destroy()
+
+
+@pytest.mark.gui
+class EstadosDoCampoTest(unittest.TestCase):
+    """F5.3 / P3-4: foco, erro, aviso e desabilitado — visíveis e distintos."""
+
+    root: ctk.CTk
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        from tests.support.ctk_cleanup import create_tk_window
+
+        try:
+            cls.root = create_tk_window(ctk.CTk)
+        except TclError as exc:  # pragma: no cover - ambiente sem display
+            raise unittest.SkipTest(f"Tk indisponivel: {exc}") from exc
+        cls.root.update()
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        from tests.support.ctk_cleanup import (
+            cancel_pending_callbacks,
+            release_dead_ctk_windows,
+        )
+
+        cancel_pending_callbacks(cls.root)
+        try:
+            cls.root.destroy()
+        except TclError:  # pragma: no cover
+            pass
+        release_dead_ctk_windows()
+
+    def setUp(self) -> None:
+        self.box, self.campo = labeled_field(
+            self.root,
+            "Rodadas",
+            lambda parent: text_field(parent, placeholder="Ex.: 7"),
+            help_text="Entre 1 e 30.",
+        )
+        # Mapeado de verdade: o Tk nao entrega evento de foco a widget que nao
+        # esta na tela (mesma familia da pegadinha registrada na B-4).
+        self.box.pack(fill="x")
+        self.root.update()
+        self.hint = [w for w in self.box.winfo_children() if isinstance(w, ctk.CTkLabel)][-1]
+
+    def tearDown(self) -> None:
+        try:
+            self.box.destroy()
+        except TclError:  # pragma: no cover
+            pass
+
+    def test_repouso_usa_a_borda_do_tema(self) -> None:
+        self.assertEqual(list(THEME_FIELD_BORDER), list(self.campo.cget("border_color")))
+        self.assertEqual(1, self.campo.cget("border_width"))
+
+    def test_foco_desenha_anel_no_accent(self) -> None:
+        """P3-4: antes não havia UM binding de <FocusIn> no app inteiro."""
+        self.campo._entry.event_generate("<FocusIn>")
+        self.root.update_idletasks()
+        self.assertEqual(list(THEME_ACCENT), list(self.campo.cget("border_color")))
+        self.assertEqual(2, self.campo.cget("border_width"))
+
+        self.campo._entry.event_generate("<FocusOut>")
+        self.root.update_idletasks()
+        self.assertEqual(list(THEME_FIELD_BORDER), list(self.campo.cget("border_color")))
+
+    def test_erro_pinta_a_borda_e_escreve_sob_o_campo(self) -> None:
+        set_field_error(self.campo, "Informe um numero inteiro.")
+        self.assertTrue(field_has_error(self.campo))
+        self.assertEqual(list(THEME_DANGER), list(self.campo.cget("border_color")))
+        self.assertEqual("Informe um numero inteiro.", self.hint.cget("text"))
+
+    def test_foco_nao_apaga_o_erro(self) -> None:
+        """A precedência que justifica a máquina de estados: erro > foco."""
+        set_field_error(self.campo, "Invalido.")
+        self.campo._entry.event_generate("<FocusIn>")
+        self.root.update_idletasks()
+        self.assertEqual(list(THEME_DANGER), list(self.campo.cget("border_color")))
+
+    def test_limpar_devolve_a_dica_original(self) -> None:
+        set_field_error(self.campo, "Invalido.")
+        clear_field_error(self.campo)
+        self.assertFalse(field_has_error(self.campo))
+        self.assertEqual("Entre 1 e 30.", self.hint.cget("text"))
+        self.assertEqual(list(THEME_FIELD_BORDER), list(self.campo.cget("border_color")))
+
+    def test_aviso_e_distinto_de_erro_e_nao_bloqueia(self) -> None:
+        set_field_warning(self.campo, "Rodadas demais para o campo atual.")
+        self.assertFalse(field_has_error(self.campo), "aviso nao e erro")
+        self.assertEqual(list(THEME_WARNING_TEXT), list(self.campo.cget("border_color")))
+        self.assertEqual("Rodadas demais para o campo atual.", self.hint.cget("text"))
+
+    def test_desabilitado_perde_o_fundo_de_campo(self) -> None:
+        """P3-4: o CTkEntry desabilitado só esmaece o texto — era indistinguível."""
+        self.campo.configure(state="disabled")
+        self.assertEqual(list(THEME_PANEL_BG), list(self.campo.cget("fg_color")))
+        self.campo.configure(state="normal")
+        self.assertEqual(list(THEME_FIELD_BG), list(self.campo.cget("fg_color")))
+
+    def test_erro_sobrevive_a_reabilitacao(self) -> None:
+        set_field_error(self.campo, "Invalido.")
+        self.campo.configure(state="disabled")
+        self.campo.configure(state="normal")
+        self.assertEqual(list(THEME_DANGER), list(self.campo.cget("border_color")))
+
+    def test_campo_de_data_usa_o_estado_unico(self) -> None:
+        """A MaskedDateEntry era uma das três cópias locais (F5.3)."""
+        campo = date_field(self.root)
+        campo.insert(0, "99/99/9999")
+        campo._on_blur()
+        self.assertTrue(field_has_error(campo))
+        self.assertEqual(list(THEME_DANGER), list(campo.cget("border_color")))
+        campo.destroy()
 
 
 if __name__ == "__main__":  # pragma: no cover
