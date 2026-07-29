@@ -33,7 +33,7 @@ class ClubMembersMixin:
         tab_integracao = tabview.add("Integração")
         tab_contato = tabview.add("Contato")
 
-        form = self._make_scrollable_panel(tab_dados, width=300)
+        form = self._make_scrollable_panel(tab_dados)
         form.pack(fill="both", expand=True)
 
         financial_alert_label = ctk.CTkLabel(
@@ -288,7 +288,7 @@ class ClubMembersMixin:
                 )
 
         # Integração Online Tab
-        integracao_frame = self._make_scrollable_panel(tab_integracao, width=300)
+        integracao_frame = self._make_scrollable_panel(tab_integracao)
         integracao_frame.pack(fill="both", expand=True)
 
         ctk.CTkLabel(integracao_frame, text="Lichess Username").grid(row=0, column=0, padx=16, pady=(16, 0), sticky="w")
@@ -359,7 +359,7 @@ class ClubMembersMixin:
         sync_button.grid(row=8, column=0, padx=16, pady=16, sticky="ew")
 
         # Contato Tab
-        contato_frame = self._make_scrollable_panel(tab_contato, width=300)
+        contato_frame = self._make_scrollable_panel(tab_contato)
         contato_frame.pack(fill="both", expand=True)
 
         ctk.CTkLabel(contato_frame, text="Acoes Rapidas", font=ctk.CTkFont(weight="bold")).grid(row=0, column=0, padx=16, pady=(16, 8), sticky="w")

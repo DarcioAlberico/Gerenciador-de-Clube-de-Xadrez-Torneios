@@ -18,7 +18,7 @@ class ExercisesInventoryMixin:
         body.grid_columnconfigure(1, weight=1)
         body.grid_rowconfigure(0, weight=1)
 
-        form = self._make_scrollable_panel(body, width=302)
+        form = self._make_scrollable_panel(body)
         form.grid(row=0, column=0, sticky="ns", padx=(0, 16))
 
         selected_exercise_id: dict[str, int | None] = {"value": None}
@@ -602,7 +602,7 @@ class ExercisesInventoryMixin:
         body.grid_columnconfigure(1, weight=1)
         body.grid_rowconfigure(0, weight=1)
 
-        form = self._make_scrollable_panel(body, width=302)
+        form = self._make_scrollable_panel(body)
         form.grid(row=0, column=0, sticky="ns", padx=(0, 16))
 
         selected_item_id: dict[str, int | None] = {"value": None}

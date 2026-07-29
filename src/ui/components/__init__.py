@@ -36,6 +36,7 @@ from .fields import (
     text_area,
     text_field,
 )
+from .form import FormStack, form_of
 from .menu_button import menu_button
 from .toast import ToastStack
 from .tooltip import Tooltip
@@ -62,6 +63,8 @@ __all__ = [
     "FIELD_SM",
     "FIELD_MD",
     "FIELD_LG",
+    "FormStack",
+    "form_of",
     "menu_button",
     "ActionGroup",
     "DangerAction",

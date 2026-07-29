@@ -40,7 +40,7 @@ class RefereePagesMixin:
         body.grid_columnconfigure(1, weight=1)
         body.grid_rowconfigure(0, weight=1)
 
-        form_panel = self._make_scrollable_panel(body, width=292)
+        form_panel = self._make_scrollable_panel(body)
         form_panel.grid(row=0, column=0, sticky="ns", padx=(0, 16))
 
         entries: dict[str, ctk.CTkEntry] = {}

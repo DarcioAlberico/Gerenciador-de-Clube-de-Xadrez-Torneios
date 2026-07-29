@@ -41,6 +41,18 @@ PLAYER_FIELDS: tuple[str, ...] = (
     "birth_date",
 )
 
+# Agrupamento visual do cadastro (F5.4 / P3-12): quatorze campos numa coluna
+# corrida eram quatorze decisões sem hierarquia. São quatro perguntas — quem é,
+# quanto vale, onde está registrado, por quem joga — e a ordem de `PLAYER_FIELDS`
+# já as respeitava; faltava dizer isso na tela. A divisão é dado puro de
+# propósito: quem decide o agrupamento não precisa de janela para ser testado.
+PLAYER_SECTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("players.section.identity", ("name", "surname", "given_name", "title", "sex", "birth_date")),
+    ("players.section.ratings", ("rating", "national_rating", "international_rating")),
+    ("players.section.official", ("fide_id", "cbx_id", "lbx_id")),
+    ("players.section.affiliation", ("club", "category")),
+)
+
 # Campos numéricos: o formulário guarda texto, o banco guarda inteiro.
 RATING_FIELDS: tuple[str, ...] = ("rating", "national_rating", "international_rating")
 
@@ -74,6 +86,35 @@ def field_labels() -> dict[str, str]:
         "club": t("players.field.club"),
         "category": t("players.field.category"),
         "birth_date": t("players.field.birth_date"),
+    }
+
+
+def section_titles() -> dict[str, str]:
+    """Chave da seção → título do catálogo. Escrito à mão pelo mesmo motivo
+    de ``field_labels``: chave montada em f-string escapa do ``test_ui_i18n``."""
+    return {
+        "players.section.identity": t("players.section.identity"),
+        "players.section.ratings": t("players.section.ratings"),
+        "players.section.official": t("players.section.official"),
+        "players.section.affiliation": t("players.section.affiliation"),
+    }
+
+
+def field_hints() -> dict[str, str]:
+    """Chave do campo → placeholder. Vazio quando o rótulo já basta."""
+    return {
+        "name": t("players.hint.name"),
+        "surname": t("players.hint.surname"),
+        "given_name": t("players.hint.given_name"),
+        "title": t("players.hint.title"),
+        "sex": t("players.hint.sex"),
+        "rating": t("players.hint.rating"),
+        "national_rating": t("players.hint.rating"),
+        "international_rating": t("players.hint.rating"),
+        "fide_id": t("players.hint.official_id"),
+        "cbx_id": t("players.hint.official_id"),
+        "lbx_id": t("players.hint.official_id"),
+        "club": t("players.hint.club"),
     }
 
 

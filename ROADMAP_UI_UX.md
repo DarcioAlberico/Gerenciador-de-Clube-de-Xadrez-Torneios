@@ -855,7 +855,7 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 | ✅ F5.1 | Tokens de campo (`THEME_FIELD_*`, `THEME_PLACEHOLDER`) + patch do `ThemeManager` p/ `CTkEntry`/`CTkTextbox`/`CTkOptionMenu` (corpo + tinta via `best_ink`) + bloco de pares de campo no `theme_audit` (P3-1, P3-2) | 2d | A | M | F1.1 | 141 selects e 162 campos seguem o preset; auditor reprova par de campo abaixo de AA; Alto Contraste alcança campos |
 | ✅ F5.2 | `components/fields.py`: `text_field`/`select_field`/`text_area`/`date_field`/`labeled_field` — altura única 36px, raio único, escala `FIELD_SM/MD/LG/FULL`, placeholder obrigatório, `font_field()` (P3-3, P3-5, P3-6) | 2d | A | B | F5.1 | Campo e botão alinhados na mesma linha; escala de larguras fechada |
 | ✅ F5.3 | Estados de campo: anel de foco (borda accent no `FocusIn`), `set_field_error(widget, msg)`/`clear_field_error` únicos com mensagem sob o campo, desabilitado distinto (P3-4) | 1,5d | A | B | F5.2 | Foco visível em navegação por Tab; 3 implementações locais de erro removidas |
-| F5.4 | Migrar formulários p/ `fields.py` + `components/form.py` (promover `_settings_stack`, com seções) — ordem: Config. torneio, Jogadores, Torneios, Arbitragem, Config. app (P3-12) | 3d | A | M | F5.2 | 5 telas com seções visuais e largura de painel unificada |
+| ✅ F5.4 | Migrar formulários p/ `fields.py` + `components/form.py` (promover `_settings_stack`, com seções) — ordem: Config. torneio, Jogadores, Torneios, Arbitragem, Config. app (P3-12) | 3d | A | M | F5.2 | 5 telas com seções visuais e largura de painel unificada |
 | ✅ F5.5 | `_make_tree`: zebra (tokens já existentes), ordenação por clique no cabeçalho, `stretch=True` na coluna principal, `EmptyState` embutido, nulos renderizados vazios (P3-9, "None") | 1,5d | A | B | — | 57 tabelas ganham zebra+sort+vazio sem tocar call-sites |
 | ✅ F5.6 | Quebrar o muro de Jogadores (25 → ~5: primárias + `Importar ▾`/`Bases oficiais ▾`/`Publicar ▾` + danger isolada) e aplicar o molde F2.1 aos 15 call-sites de `_grid_form_buttons` (P3-7) | 2d | A | M | — | Nenhuma tela com >8 ações visíveis no mesmo nível |
 | ✅ F5.7 | Separar `_show_info`: toast só p/ confirmação curta; `_show_report(title, body)` rolável com botão **Copiar** p/ relatórios; validações → `_show_warning` (~35 call-sites reclassificados) (P3-8) | 1,5d | A | B | — | URL do QR e narrativa de desempate legíveis e copiáveis |
@@ -1075,6 +1075,42 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 > por um motivo instrutivo: o widget não estava mapeado, e o Tk **não entrega
 > evento de foco a widget fora da tela** — mesma família da B-4, agora anotada
 > no teste.
+
+> **Status (2026-07-29): F5.4 CONCLUÍDA — os campos da F5.2/F5.3 chegam às
+> telas.** O `_settings_stack`, que vivia dentro da Config. do torneio, virou
+> [`components/form.py`](src/ui/components/form.py). Ele já era a melhor das
+> **três** formas de montar formulário no app — empilhava sozinho, sem
+> `row=index * 2 + 1` —, e por isso foi ele que virou componente, em vez de um
+> quarto padrão novo.
+>
+> A aritmética de linha não era estética: a versão anterior da tela de
+> Jogadores somava `linha + 7` onde precisava de `+10` e empilhava **três
+> botões por cima dos seletores do Scheveningen**, na mesma célula do grid.
+> Com a pilha, a próxima linha é a próxima linha; há teste para isso.
+>
+> O ritmo vertical saiu para [`form_layout.py`](src/ui/form_layout.py), que é
+> **puro** (molde da F1.5): quem decide espaço não abre widget, e as regras
+> ficam testáveis por aritmética. São poucas de propósito — campo carrega o
+> respiro de cima e nada embaixo (a linha de mensagem do `labeled_field` já é
+> o rodapé), seção abre com o dobro disso (é essa diferença que agrupa, não
+> régua nem cor), e a primeira linha do painel nunca recebe respiro de cima.
+>
+> **Seções nas cinco telas** (P3-12: formulários de 14 a 25 campos não tinham
+> nenhuma): Config. do torneio ganhou 3 + 4 + 4 grupos nas abas de dados
+> gerais, oficiais e regras; Jogadores passou a agrupar os 14 campos do
+> cadastro em Identificação / Ratings / Registros oficiais / Clube e categoria
+> — divisão que é **dado puro** em `state.py`, com teste cobrando que as
+> seções cubram exatamente `PLAYER_FIELDS` (campo fora de seção seria campo
+> que some da tela, porque a montagem percorre as seções); Torneios, Config.
+> do app e o painel de Arbitragem seguiram o mesmo molde.
+>
+> **Largura de painel unificada**: o mesmo painel de formulário media 272,
+> 280, 292, 300 ou 302 conforme a tela — cinco ajustes no olho para a mesma
+> coisa. Agora é `FORM_PANEL_WIDTH`, com `_make_scrollable_panel` usando-a por
+> padrão; quem precisa de outra largura (a redação de mensagem, o editor de
+> certificado) passa `width` de propósito. E os `width=` soltos dos campos
+> sumiram: `sticky="ew"` faz o campo ocupar a coluna, que era de onde vinham
+> as 67 larguras distintas do P3-3.
 
 ---
 
