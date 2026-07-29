@@ -315,7 +315,7 @@ class ClubMembersMixin:
             lichess_user = lichess_entry.get().strip()
             chesscom_user = chesscom_entry.get().strip()
             if not lichess_user and not chesscom_user:
-                self._show_info("Informe pelo menos um username (Lichess ou Chess.com).")
+                self._show_warning("Informe pelo menos um username (Lichess ou Chess.com).")
                 return
             
             def fetch_ratings() -> tuple[int, int]:
@@ -370,7 +370,7 @@ class ClubMembersMixin:
                 return
             num = "".join(filter(str.isdigit, phone.get()))
             if not num:
-                self._show_info("Membro nao possui telefone valido.")
+                self._show_warning("Membro nao possui telefone valido.")
                 return
             if not num.startswith("55"):
                 num = "55" + num
@@ -383,7 +383,7 @@ class ClubMembersMixin:
                 return
             email = email_field.get().strip()
             if not email:
-                self._show_info("Membro nao possui email.")
+                self._show_warning("Membro nao possui email.")
                 return
             import webbrowser
             webbrowser.open(f"mailto:{email}")
@@ -676,7 +676,7 @@ class ClubMembersMixin:
                 return
             results = self.member_service.tournament_results(member_id, tournament_id)
             if not results:
-                self._show_info("Este membro ainda nao possui resultados neste torneio.")
+                self._show_warning("Este membro ainda nao possui resultados neste torneio.")
                 return
             lines = []
             for result in results:
@@ -803,7 +803,7 @@ class ClubMembersMixin:
                     raise AppError("Selecione um membro.")
                 history = self.internal_rating_service.member_rating_history(int(member["id"]))
                 if not history:
-                    self._show_info("Este membro ainda nao possui historico de rating interno.")
+                    self._show_warning("Este membro ainda nao possui historico de rating interno.")
                     return
                 lines = []
                 for item in history:

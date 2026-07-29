@@ -129,7 +129,7 @@ class PairingPagesMixin(ArbitrationPagesMixin, PairingResultsMixin):
             def show_team_crosstable_detail() -> None:
                 selected = tree.selection()
                 if not selected:
-                    self._show_info("Selecione uma equipe na classificacao.")
+                    self._show_warning("Selecione uma equipe na classificacao.")
                     return
                 team_id = row_team_ids.get(selected[0])
                 payload = self.pairing_service.team_crosstable(int(self.current_tournament_id))
@@ -147,7 +147,7 @@ class PairingPagesMixin(ArbitrationPagesMixin, PairingResultsMixin):
                             f"{board.get('black_player_name') or ''} "
                             f"{board.get('result') or ''}"
                         )
-                self._show_info("\n".join(lines))
+                self._show_report("Detalhe dos tabuleiros", "\n".join(lines))
 
             ctk.CTkButton(
                 toolbar,
@@ -259,7 +259,7 @@ class PairingPagesMixin(ArbitrationPagesMixin, PairingResultsMixin):
         def show_tiebreak_detail(criterion: str = "") -> None:
             selected = tree.selection()
             if not selected:
-                self._show_info("Selecione um jogador na classificacao.")
+                self._show_warning("Selecione um jogador na classificacao.")
                 return
             player_id = row_player_ids.get(selected[0])
             if not player_id:
@@ -269,7 +269,7 @@ class PairingPagesMixin(ArbitrationPagesMixin, PairingResultsMixin):
                 player_id=player_id,
             )
             if not standings:
-                self._show_info("Nao ha componentes de desempate para este jogador.")
+                self._show_warning("Nao ha componentes de desempate para este jogador.")
                 return
 
             narrative = self.pairing_service.tiebreak_narrative(
@@ -313,7 +313,7 @@ class PairingPagesMixin(ArbitrationPagesMixin, PairingResultsMixin):
                 lines.append("— Detalhes técnicos —")
                 lines.extend(detail_lines)
 
-            self._show_info("\n".join(lines))
+            self._show_report("Por que esta posicao?", "\n".join(lines))
 
         ctk.CTkButton(
             toolbar,

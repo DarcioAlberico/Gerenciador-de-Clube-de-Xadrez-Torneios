@@ -95,6 +95,8 @@ from src.core.services import (
 # Tokens e presets vivem em theme.py (fonte única). Re-exportados aqui porque as
 # telas ainda fazem `from ..support import *` — some quando elas migrarem para
 # imports explícitos (F1.6). Código novo deve importar de `..theme`.
+from .feedback import REPORT, plan_feedback
+from .i18n import t
 from .theme import (  # noqa: F401
     ACCENT_PRESET_LABELS,
     ACCENT_PRESETS,
@@ -322,15 +324,49 @@ class ErrorCatchingMixin:
             return False
 
     def _feedback(self, message: str, kind: str, title: str) -> None:
-        """Feedback nao-bloqueante (toast); se ha um modal aberto por cima, usa um
-        alerta bloqueante -- senao o toast ficaria escondido atras do modal."""
+        """Manda o recado pelo canal que o formato pede (F5.7).
+
+        Uma linha vira toast, como sempre. Duas viram toast **com Copiar** — o
+        segundo pedaco quase sempre e um caminho ou endereco. Tres ou mais viram
+        relatorio rolavel: um texto desses num toast de 320px que some em 3,5
+        segundos e pior do que o messagebox que a F2.2 aposentou. A regra mora
+        em `feedback.plan_feedback`, pura e testavel sem janela.
+        """
+        plano = plan_feedback(message, kind)
+        if plano.channel == REPORT and not self._modal_is_open():
+            self._show_report(title, message, kind=kind)
+            return
         if self._modal_is_open() or not hasattr(self, "_show_toast"):
             from .components.dialogs import alert_dialog
 
             alert_dialog(self, title, message, kind=kind)
-        else:
-            duration = 5000 if kind in ("error", "warning") else 3500
-            self._show_toast(message, kind=kind, duration_ms=duration)
+            return
+        duration = 5000 if kind in ("error", "warning") else 3500
+        action = (t("dialog.copy"), lambda: self._copy_to_clipboard(message))
+        self._show_toast(
+            message,
+            kind=kind,
+            duration_ms=duration,
+            action=action if plano.copyable else None,
+        )
+
+    def _copy_to_clipboard(self, text: str) -> None:
+        """Leva ``text`` para a area de transferencia (acao Copiar do toast)."""
+        try:
+            self.clipboard_clear()
+            self.clipboard_append(text)
+        except Exception:  # pragma: no cover - area de transferencia indisponivel
+            logger.warning("Nao foi possivel copiar para a area de transferencia")
+
+    def _show_report(self, title: str, body: str, *, kind: str = "info") -> None:
+        """Relatorio que o usuario le com calma e copia: dialogo rolavel (F5.7).
+
+        Use quando o conteudo **e** a entrega — narrativa de desempate, endereco
+        do servidor QR, caminho do backup. Mensagens curtas continuam no toast.
+        """
+        from .components.dialogs import report_dialog
+
+        report_dialog(self, title, body, kind=kind)
 
     def _show_error(self, message_or_exception: str | Exception) -> None:
         error_id = datetime.now().strftime("%Y%m%d-%H%M%S")

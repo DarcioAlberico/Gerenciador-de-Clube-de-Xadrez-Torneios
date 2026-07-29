@@ -858,7 +858,7 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 | F5.4 | Migrar formulários p/ `fields.py` + `components/form.py` (promover `_settings_stack`, com seções) — ordem: Config. torneio, Jogadores, Torneios, Arbitragem, Config. app (P3-12) | 3d | A | M | F5.2 | 5 telas com seções visuais e largura de painel unificada |
 | ✅ F5.5 | `_make_tree`: zebra (tokens já existentes), ordenação por clique no cabeçalho, `stretch=True` na coluna principal, `EmptyState` embutido, nulos renderizados vazios (P3-9, "None") | 1,5d | A | B | — | 57 tabelas ganham zebra+sort+vazio sem tocar call-sites |
 | ✅ F5.6 | Quebrar o muro de Jogadores (25 → ~5: primárias + `Importar ▾`/`Bases oficiais ▾`/`Publicar ▾` + danger isolada) e aplicar o molde F2.1 aos 15 call-sites de `_grid_form_buttons` (P3-7) | 2d | A | M | — | Nenhuma tela com >8 ações visíveis no mesmo nível |
-| F5.7 | Separar `_show_info`: toast só p/ confirmação curta; `_show_report(title, body)` rolável com botão **Copiar** p/ relatórios; validações → `_show_warning` (~35 call-sites reclassificados) (P3-8) | 1,5d | A | B | — | URL do QR e narrativa de desempate legíveis e copiáveis |
+| ✅ F5.7 | Separar `_show_info`: toast só p/ confirmação curta; `_show_report(title, body)` rolável com botão **Copiar** p/ relatórios; validações → `_show_warning` (~35 call-sites reclassificados) (P3-8) | 1,5d | A | B | — | URL do QR e narrativa de desempate legíveis e copiáveis |
 | F5.8 | Migrar os 21 diálogos ad-hoc p/ `Dialog` canônico (Esc, centralização, tamanho × `ui_scale_percent`, ordem [secundário][primário]); corrigir o aviso de BYE e o diálogo sem saída de Usuários (P3-10) | 2,5d | M | M | — | Todo diálogo fecha com Esc e cabe na tela em 160% |
 | F5.9 | `ProgressOverlay` local sobre o painel em ação + `busy_widget` obrigatório por convenção de lint (P3-11) | 1,5d | M | B | — | Duplo clique não duplica operação; espera visível no local |
 | F5.10 | Teclado: ordem de Tab explícita nos formulários, `Return` → ação primária, `takefocus=False` em botões secundários (P3-13) | 1,5d | M | B | F5.4 | Lançar 20 resultados usando só o teclado |
@@ -997,6 +997,53 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 >
 > 8 testes novos, sem janela. Gate completo verde.
 
+> **Status (2026-07-29): F5.7 CONCLUÍDA — MVP de percepção v2 fechado.** A F2.2
+> acertou ao aposentar os 26 `messagebox` nativos, mas mandou tudo para o mesmo
+> canal: `_show_info` virava toast de 320px que some em 3,5 segundos. Serve para
+> "Torneio salvo"; não serve para o que se **lê** e se **copia** — e aí o toast
+> ficou pior que o `messagebox` que substituiu, porque o antigo ao menos
+> esperava um clique.
+>
+> A decisão virou **regra pura** em [`feedback.py`](src/ui/feedback.py)
+> (`plan_feedback`), que olha o formato porque é o formato que denuncia a
+> intenção: **1 linha** → toast, como sempre; **2 linhas** → toast **com ação
+> Copiar** (o segundo pedaço quase sempre é um caminho ou endereço); **3+** →
+> `report_dialog` rolável, selecionável e copiável. Erro e aviso ficam fora da
+> regra (são curtos, e o inesperado já tem modal com código e caminho do log).
+> Como a regra vive no `_feedback`, os 77 call-sites de `_show_info` foram
+> corrigidos **sem tocar em 77 lugares**.
+>
+> Migrações explícitas para `_show_report`, onde o conteúdo *é* a entrega: link
+> e servidor QR, backup criado e restaurado, narrativa "Por que esta posição?" e
+> detalhe de tabuleiros da tabela cruzada. E **10 validações que apareciam em
+> verde de sucesso** ("Selecione um jogador...", "Membro nao possui email.")
+> viraram `_show_warning` — dizer "sucesso" para quem errou é o tipo de detalhe
+> que corrói a confiança na interface inteira.
+>
+> **Dois achados de infraestrutura de teste, e o segundo é sério.** (1) O
+> `cget` do `CTkTextbox` não repassa `state`/`wrap` — pergunta-se ao `Text`
+> interno. (2) Exceção dentro de um callback agendado por `_quando_abrir` era
+> **impressa e engolida** pelo Tk: o diálogo nunca fechava e o teste ficava
+> pendurado no `wait_window` — foi assim que o primeiro teste desta tarefa
+> travou por 100s sem dizer por quê. Agora o erro é guardado, o diálogo é
+> fechado à força e o `tearDown` o relança. O guard **imediatamente expôs um
+> teste verde pelo motivo errado**: `test_enter_nao_confirma_dialogo_destrutivo`
+> exigia que o Enter fosse totalmente inerte, essa asserção falhava em silêncio
+> havia tempo, e o teste passava pelo `assertFalse` final. O que o código
+> garante — e que agora é cobrado — é que o Enter vale "Não": fecha sem
+> confirmar. Mesma família do achado da B-4.
+>
+> 9 testes puros de roteamento + 3 de janela para o `report_dialog` (corpo
+> íntegro, cópia real para a área de transferência, Esc).
+>
+> **Terceiro achado, na mesma família:** o smoke de layout capturava
+> `_show_info` e `_show_toast`, mas nada capturava o canal novo — dois testes
+> passaram a travar no `wait_window` de um modal que ninguém fecharia. O
+> `setUp` agora captura `_show_report` na mesma lista de mensagens (o conteúdo
+> segue sendo a entrega; só mudou o canal). Vale como regra: **canal de
+> feedback novo precisa nascer com o dublê do smoke**, senão a suíte trava em
+> vez de falhar.
+
 ---
 
 ## 3. Sequenciamento recomendado
@@ -1029,6 +1076,17 @@ Semana 7   ██ folga/estabilização + início do backlog B-6 (telas-monstro)
 tabelas, sem tocar call-sites) → `F5.6` (muro de Jogadores) → `F5.7` (relatório
 copiável). É o menor corte que ataca diretamente a reclamação de origem — o visual
 dos campos de entrada — e as telas de uso diário.
+
+> **Status (2026-07-29): MVP de percepção v2 CONCLUÍDO.** Entregues `F5.1`,
+> `F5.2`, `F5.5`, `F5.6` e `F5.7` (a `F5.3` ficou para a sequência: os tokens de
+> foco/erro já existem desde a F5.1, falta consumi-los nos widgets). O que muda
+> na tela, em uma frase por tarefa: os campos passaram a seguir o tema escolhido;
+> ganharam anatomia única de 36px e escala fechada de largura; as 57 tabelas
+> ganharam zebra, ordenação e estado vazio; o muro de 25 botões virou 8
+> controles; e o que precisa ser lido/copiado parou de sumir em 3,5 segundos.
+> Restam da Fase 5: `F5.3`, `F5.4` (migração ampla dos formulários), `F5.8`
+> (diálogos ad-hoc), `F5.9` (progresso local), `F5.10` (teclado), `F5.11`
+> (menu/rail) e `F5.12` (lint de acentuação).
 
 ---
 

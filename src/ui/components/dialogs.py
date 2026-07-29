@@ -11,6 +11,7 @@ outro modal sem quebrar a modalidade do pai.
     confirm_dialog(parent, "Excluir?", "...", danger=True)  -> bool
     tri_state_dialog(parent, "...", "...")                  -> True | False | None
     alert_dialog(parent, "Erro", "...", kind="error")       -> None
+    report_dialog(parent, "Desempates", corpo_longo)        -> None
 """
 from __future__ import annotations
 
@@ -21,6 +22,7 @@ import customtkinter as ctk
 from ..i18n import t
 from ..theme import (
     SPACE_LG,
+    SPACE_MD,
     SPACE_SM,
     SPACE_XL,
     THEME_DANGER,
@@ -30,7 +32,8 @@ from ..theme import (
     THEME_WARNING_TEXT,
     font_section,
 )
-from .buttons import danger_button, primary_button, secondary_button
+from .buttons import danger_button, neutral_button, primary_button, secondary_button
+from .fields import text_area
 
 # kind do alerta -> cor do título (demais ficam na cor de texto principal)
 _TITLE_COLOR = {
@@ -227,3 +230,98 @@ def alert_dialog(
         default=None,
         title_color=_TITLE_COLOR.get(kind, THEME_TEXT_MAIN),
     )
+
+
+class _ReportDialog(ctk.CTkToplevel):
+    """Relatório longo: corpo rolável, selecionável e com ``Copiar`` (F5.7).
+
+    Existe porque o toast é o canal errado para conteúdo que se **lê** e se
+    **copia**: 320px de largura, sem rolagem, e some em 3,5 segundos. Aqui o
+    corpo é um campo de texto somente-leitura — o usuário rola, seleciona um
+    trecho, ou leva tudo com um clique.
+    """
+
+    def __init__(self, parent: Any, title: str, body: str, *, kind: str = "info") -> None:
+        super().__init__(parent)
+        try:
+            self._previous_grab = self.grab_current()
+        except Exception:
+            self._previous_grab = None
+
+        self.title(title)
+        self.configure(fg_color=THEME_PANEL_BG)
+
+        wrapper = ctk.CTkFrame(self, fg_color="transparent")
+        wrapper.pack(fill="both", expand=True, padx=SPACE_XL, pady=SPACE_LG)
+        ctk.CTkLabel(
+            wrapper,
+            text=title,
+            font=font_section(),
+            text_color=_TITLE_COLOR.get(kind, THEME_TEXT_MAIN),
+            justify="left",
+        ).pack(anchor="w")
+
+        # Altura pelo conteúdo, com teto: um relatório de 60 linhas não pode
+        # nascer maior que a tela (os diálogos de tamanho fixo do P3-10 são
+        # justamente o que não se quer repetir).
+        linhas = max(6, min(24, body.count("\n") + 2))
+        self.corpo = text_area(wrapper, height=linhas * 18, width=560)
+        self.corpo.pack(fill="both", expand=True, pady=(SPACE_SM, SPACE_MD))
+        self.corpo.insert("1.0", body)
+        # Somente leitura, mas ainda selecionável com o mouse/teclado.
+        self.corpo.configure(state="disabled")
+
+        bar = ctk.CTkFrame(wrapper, fg_color="transparent")
+        bar.pack(anchor="e")
+        self.copy_button = neutral_button(bar, t("dialog.copy"), self._copy)
+        self.copy_button.pack(side="left", padx=(0, SPACE_SM))
+        primary_button(bar, t("dialog.close"), self._close).pack(side="left")
+
+        self.bind("<Escape>", lambda _e: self._close())
+        self.protocol("WM_DELETE_WINDOW", self._close)
+        self._center_over(parent)
+        try:
+            self.transient(parent.winfo_toplevel())
+        except Exception:
+            pass
+        self.grab_set()
+        self._body = body
+
+    def _copy(self) -> None:
+        try:
+            self.clipboard_clear()
+            self.clipboard_append(self._body)
+            self.copy_button.configure(text=t("dialog.copied"))
+        except Exception:  # pragma: no cover - area de transferencia indisponivel
+            pass
+
+    def _close(self) -> None:
+        try:
+            self.grab_release()
+        except Exception:
+            pass
+        self.destroy()
+        if self._previous_grab is not None:
+            try:
+                self._previous_grab.grab_set()
+            except Exception:
+                pass
+
+    def _center_over(self, parent: Any) -> None:
+        self.update_idletasks()
+        width, height = self.winfo_reqwidth(), self.winfo_reqheight()
+        try:
+            owner = self.grab_current() or parent
+            px, py = owner.winfo_rootx(), owner.winfo_rooty()
+            pw, ph = owner.winfo_width(), owner.winfo_height()
+            x = px + max((pw - width) // 2, 0)
+            y = py + max((ph - height) // 3, 0)
+        except Exception:
+            x = y = 120
+        self.geometry(f"+{x}+{y}")
+
+
+def report_dialog(parent: Any, title: str, body: str, *, kind: str = "info") -> None:
+    """Mostra ``body`` num diálogo rolável com ``Copiar``. Bloqueia até fechar."""
+    dialog = _ReportDialog(parent, title, body, kind=kind)
+    dialog.wait_window()

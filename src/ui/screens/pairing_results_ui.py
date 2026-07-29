@@ -1257,10 +1257,12 @@ class PairingResultsMixin:
             if getattr(self, "pairing_team_mode", False):
                 raise AppError("QR de resultado por tabuleiro de equipes sera tratado na fase de equipes avancadas.")
             payload = self.qr_result_service.result_url_for_pairing(int(self.current_tournament_id), int(pairing_id))
-            self._show_info(
-                "Link para envio por QR:\n"
+            # Relatorio, nao confirmacao: o endereco e a entrega, e precisa ser
+            # copiado para chegar ao celular do jogador (F5.7).
+            self._show_report(
+                "Link para envio por QR",
                 f"{payload['url']}\n\n"
-                "O resultado enviado fica pendente ate aprovacao do arbitro."
+                "O resultado enviado fica pendente ate aprovacao do arbitro.",
             )
         except Exception as exc:
             self._show_error(exc)
@@ -1271,7 +1273,10 @@ class PairingResultsMixin:
                 self.local_result_server = LocalResultServer(self.qr_result_service)
             url = self.local_result_server.start()
             self.db.save_app_settings({"local_result_server_url": url})
-            self._show_info(f"Servidor QR ativo em:\n{url}\n\nUse este endereco na mesma rede local.")
+            self._show_report(
+                "Servidor QR ativo",
+                f"{url}\n\nUse este endereco na mesma rede local.",
+            )
         except Exception as exc:
             self._show_error(exc)
 

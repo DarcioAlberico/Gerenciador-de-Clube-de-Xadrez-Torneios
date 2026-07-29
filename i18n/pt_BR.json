@@ -206,6 +206,8 @@
   "arbitration.subtitle": "Torneio: {torneio}",
   "dialog.cancel": "Cancelar",
   "dialog.close": "Fechar",
+  "dialog.copied": "Copiado!",
+  "dialog.copy": "Copiar",
   "dialog.no": "Não",
   "dialog.ok": "OK",
   "dialog.yes": "Sim",
