@@ -83,6 +83,7 @@ SIZE_SUBSECTION = 13       # Mini-cabeçalho dentro de painel
 SIZE_KPI_VALUE = 22        # Valor numérico em card de KPI
 SIZE_MODAL_TITLE = 18      # Título dentro de modal (maior que seção, menor que página)
 SIZE_BODY = 12             # Texto corrido
+SIZE_FIELD = 13            # Texto digitado em campo — um ponto acima do corpo: é dado, não prosa
 
 # Escala de espaçamento — use estes tokens em pady/padx no lugar de literais soltos.
 # Padroniza o ritmo vertical/horizontal entre telas (ver ESPEC_UI_UX §4.3).
@@ -103,6 +104,16 @@ def font_subsection() -> ctk.CTkFont:
 
 def font_kpi_value() -> ctk.CTkFont:
     return ctk.CTkFont(size=SIZE_KPI_VALUE, weight="bold")
+
+
+def font_field() -> ctk.CTkFont:
+    """Fonte do conteúdo digitado/selecionado num campo (F5.2 / ESPEC §4.6)."""
+    return ctk.CTkFont(size=SIZE_FIELD)
+
+
+def font_field_label() -> ctk.CTkFont:
+    """Fonte do rótulo acima do campo — corpo, sem negrito; a cor vem de THEME_TEXT_SUB."""
+    return ctk.CTkFont(size=SIZE_BODY)
 
 
 # ---------------------------------------------------------------------------

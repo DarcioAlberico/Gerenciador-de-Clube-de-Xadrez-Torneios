@@ -853,7 +853,7 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 | ID | Tarefa | Esforço | Impacto | Risco | Depende | Aceite |
 |----|--------|---------|---------|-------|---------|--------|
 | ✅ F5.1 | Tokens de campo (`THEME_FIELD_*`, `THEME_PLACEHOLDER`) + patch do `ThemeManager` p/ `CTkEntry`/`CTkTextbox`/`CTkOptionMenu` (corpo + tinta via `best_ink`) + bloco de pares de campo no `theme_audit` (P3-1, P3-2) | 2d | A | M | F1.1 | 141 selects e 162 campos seguem o preset; auditor reprova par de campo abaixo de AA; Alto Contraste alcança campos |
-| F5.2 | `components/fields.py`: `text_field`/`select_field`/`text_area`/`date_field`/`labeled_field` — altura única 36px, raio único, escala `FIELD_SM/MD/LG/FULL`, placeholder obrigatório, `font_field()` (P3-3, P3-5, P3-6) | 2d | A | B | F5.1 | Campo e botão alinhados na mesma linha; escala de larguras fechada |
+| ✅ F5.2 | `components/fields.py`: `text_field`/`select_field`/`text_area`/`date_field`/`labeled_field` — altura única 36px, raio único, escala `FIELD_SM/MD/LG/FULL`, placeholder obrigatório, `font_field()` (P3-3, P3-5, P3-6) | 2d | A | B | F5.1 | Campo e botão alinhados na mesma linha; escala de larguras fechada |
 | F5.3 | Estados de campo: anel de foco (borda accent no `FocusIn`), `set_field_error(widget, msg)`/`clear_field_error` únicos com mensagem sob o campo, desabilitado distinto (P3-4) | 1,5d | A | B | F5.2 | Foco visível em navegação por Tab; 3 implementações locais de erro removidas |
 | F5.4 | Migrar formulários p/ `fields.py` + `components/form.py` (promover `_settings_stack`, com seções) — ordem: Config. torneio, Jogadores, Torneios, Arbitragem, Config. app (P3-12) | 3d | A | M | F5.2 | 5 telas com seções visuais e largura de painel unificada |
 | F5.5 | `_make_tree`: zebra (tokens já existentes), ordenação por clique no cabeçalho, `stretch=True` na coluna principal, `EmptyState` embutido, nulos renderizados vazios (P3-9, "None") | 1,5d | A | B | — | 57 tabelas ganham zebra+sort+vazio sem tocar call-sites |
@@ -897,6 +897,36 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 > temperatura preservada (sépia sai quente), tokens mutados no lugar, patch do
 > `ThemeManager` verificado, e os dois gates existentes (curados AA + 5.070
 > combinações) agora cobrem os campos automaticamente.
+
+> **Status (2026-07-29): F5.2 CONCLUÍDA.** Nasce
+> [`components/fields.py`](src/ui/components/fields.py) com as cinco factories
+> (`text_field`, `select_field`, `text_area`, `date_field`, `labeled_field`) e
+> a anatomia fechada: **altura 36px** — a mesma de `buttons._DEFAULT_HEIGHT`,
+> com teste que quebra se um dos lados mudar sozinho —, raio único, fonte
+> `font_field()` (novo token `SIZE_FIELD=13`; rótulo em `font_field_label()` =
+> `SIZE_BODY`), e a escala de larguras `FIELD_SM/MD/LG` (120/240/360; FULL não
+> é largura, é `sticky="ew"` com o `width` virando mínimo). `placeholder` é
+> **keyword obrigatória** do `text_field` — campo sem dica de formato não
+> compila mais (P3-6, eram 94 caixas mudas).
+>
+> `select_field` encerra o dilema do P3-5: seleção com anatomia de **campo**
+> (corpo em `THEME_FIELD_BG`, tinta de campo, chevron na cor da borda, dropdown
+> no painel), não o bloco de accent — que desde a F5.1 ficou correto para o
+> `CTkOptionMenu` cru, mas continua linguagem de botão. As cores são os tokens
+> vivos, então o `restyle` propaga a troca de tema. `text_area` nasce com
+> `border_width=1` (o de fábrica é 0 = área invisível) e `wrap="word"`;
+> `date_field` embrulha o `MaskedDateEntry` na escala (import tardio — o
+> `support` importa `components`, não o contrário); `labeled_field` fecha o
+> espaçamento rótulo→campo em `SPACE_XS`.
+>
+> **Piloto do aceite** na linha de lançamento de Rodadas
+> ([`pairing_results_ui.py`](src/ui/screens/pairing_results_ui.py)): os dois
+> seletores crus (28px, azul de fábrica) viraram `select_field`, e os botões
+> rápidos 1-0/1/2/0-1 subiram para `FIELD_HEIGHT` — a linha inteira (campo,
+> campo, primária, rápidos) alinhada nos mesmos 36px, verificado em screenshot
+> sobre o tema sépia. A migração ampla dos formulários é a F5.4.
+> Testes: contratos puros (paridade de altura com botão, escala fechada,
+> placeholder obrigatório) + anatomia real com janela (marcados `gui`).
 
 ---
 

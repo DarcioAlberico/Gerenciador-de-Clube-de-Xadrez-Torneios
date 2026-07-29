@@ -1,7 +1,16 @@
 from __future__ import annotations
 
 from ..support import *
-from ..components import Tooltip, danger_button, debounce, menu_button, primary_button, secondary_button
+from ..components import (
+    FIELD_HEIGHT,
+    Tooltip,
+    danger_button,
+    debounce,
+    menu_button,
+    primary_button,
+    secondary_button,
+    select_field,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -89,7 +98,9 @@ class PairingResultsMixin:
         entry = ctk.CTkFrame(toolbar, fg_color="transparent")
         entry.grid(row=1, column=0, padx=SPACE_MD, pady=(0, SPACE_SM), sticky="ew")
         entry.grid_columnconfigure(4, weight=1)
-        self.round_option = ctk.CTkOptionMenu(
+        # Piloto da F5.2: seletores com anatomia de CAMPO (select_field) — mesma
+        # altura dos botoes da linha; sao dados a escolher, nao acoes.
+        self.round_option = select_field(
             entry,
             values=["Sem rodadas"],
             command=lambda _value: self._load_selected_round_pairings(),
@@ -97,7 +108,7 @@ class PairingResultsMixin:
         )
         self.round_option.grid(row=0, column=0, padx=(0, SPACE_SM))
         Tooltip(self.round_option, "Escolhe qual rodada visualizar/editar.")
-        self.result_option = ctk.CTkOptionMenu(entry, values=RESULTS, width=130)
+        self.result_option = select_field(entry, values=RESULTS, width=130)
         self.result_option.grid(row=0, column=1, padx=(0, SPACE_SM))
         Tooltip(self.result_option, "Resultado a aplicar na mesa selecionada ao salvar.")
         primary_button(
@@ -119,6 +130,7 @@ class PairingResultsMixin:
                 quick_results,
                 text=label,
                 width=64,
+                height=FIELD_HEIGHT,
                 command=lambda value=result: self._quick_save_result(value),
             )
             quick.pack(side="left", padx=(0, SPACE_XS))
