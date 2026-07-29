@@ -27,6 +27,7 @@ from .fields import (
 from .menu_button import menu_button
 from .toast import ToastStack
 from .tooltip import Tooltip
+from .tree import ThemedTreeview
 from .wrap_row import WrapRow
 
 __all__ = [
@@ -53,6 +54,7 @@ __all__ = [
     "Debounced",
     "debounce",
     "BusyIndicator",
+    "ThemedTreeview",
     "ToastStack",
     "WrapRow",
     "show_donation_modal",
