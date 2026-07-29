@@ -1,6 +1,6 @@
 """Lint das convenções de UI que o ruff não expressa (F1.6 e F3.3).
 
-Tres regras, todas com a mesma logica: o que ja existe fica registrado numa
+Quatro regras, todas com a mesma logica: o que ja existe fica registrado numa
 linha de base explicita, e **qualquer coisa nova reprova**. A divida some pela
 lista encolher, nunca por alguem afrouxar a regra.
 
@@ -17,12 +17,17 @@ lista encolher, nunca por alguem afrouxar a regra.
    certo em revisao: o que falta nele — Esc, centralizacao, tamanho que cabe na
    tela em 160%, ordem dos botoes — so aparece usando. Mesma linha de base.
 
+4. `_run_background(...)` sem `busy_widget=` (achado P3-11). Aqui a linha de
+   base e um **numero por arquivo**, e ele so pode cair: sao 33 chamadas, e
+   exigir todas de uma vez pararia a fase.
+
 Uso:
     python scripts/check_ui_conventions.py           # reprova o que e novo
     python scripts/check_ui_conventions.py --baseline # reimprime a linha de base
 """
 from __future__ import annotations
 
+import ast
 import re
 import sys
 from pathlib import Path
@@ -149,6 +154,66 @@ def checar_dialogos() -> list[str]:
     return problemas
 
 
+# --- Linha de base: `_run_background` sem `busy_widget` (F5.9) ---------------
+# O veu de progresso (components/progress.py) ja impede o clique repetido por
+# construcao: ele cobre o painel em acao. O `busy_widget` e a segunda camada —
+# o botao esmaecido diz "essa acao ja esta rodando" e continua dizendo depois
+# de o veu sair. Aqui a linha de base e um NUMERO por arquivo, e ele so cai.
+BUSY_WIDGET_PENDENTE: dict[str, int] = {
+    "screens/admin_calendar_ranking.py": 3,
+    "screens/admin_training_finance.py": 2,
+    "screens/club_members_ui.py": 3,
+    "screens/integrations.py": 2,
+    "screens/pairing_arbitration/exports.py": 4,
+    "screens/pairing_results_ui.py": 7,
+    "screens/settings.py": 2,
+    "screens/settings_certificates_ui.py": 2,
+    "screens/settings_reports_ui.py": 6,
+    "screens/tournament_players/actions.py": 1,
+}
+
+
+def _sem_busy_widget() -> dict[str, int]:
+    """Quantas chamadas de `_run_background` sem `busy_widget=` por arquivo."""
+    atuais: dict[str, int] = {}
+    for arquivo in sorted(UI.rglob("*.py")):
+        try:
+            arvore = ast.parse(arquivo.read_text(encoding="utf-8"))
+        except SyntaxError:  # pragma: no cover - arquivo em edicao
+            continue
+        faltando = sum(
+            1
+            for no in ast.walk(arvore)
+            if isinstance(no, ast.Call)
+            and getattr(no.func, "attr", "") == "_run_background"
+            and not any(k.arg == "busy_widget" for k in no.keywords)
+        )
+        if faltando:
+            atuais[_relativo(arquivo)] = faltando
+    return atuais
+
+
+def checar_busy_widget() -> list[str]:
+    problemas = []
+    atuais = _sem_busy_widget()
+    for nome, quantidade in sorted(atuais.items()):
+        teto = BUSY_WIDGET_PENDENTE.get(nome, 0)
+        if quantidade > teto:
+            problemas.append(
+                f"{nome}: {quantidade} chamada(s) de `_run_background` sem "
+                f"`busy_widget=` (limite {teto}). Passe o botao que disparou a "
+                f"acao — ele fica esmaecido enquanto ela roda (P3-11/F5.9)."
+            )
+    for nome, teto in sorted(BUSY_WIDGET_PENDENTE.items()):
+        if atuais.get(nome, 0) < teto:
+            problemas.append(
+                f"{nome}: hoje sao {atuais.get(nome, 0)} chamada(s) sem "
+                f"`busy_widget` e a linha de base ainda permite {teto} — baixe "
+                f"o numero em BUSY_WIDGET_PENDENTE."
+            )
+    return problemas
+
+
 def checar_cores_e_fontes() -> list[str]:
     problemas = []
     for arquivo in sorted(TELAS.rglob("*.py")):
@@ -188,7 +253,12 @@ def main() -> int:
         print("}")
         return 0
 
-    problemas = checar_wildcards() + checar_cores_e_fontes() + checar_dialogos()
+    problemas = (
+        checar_wildcards()
+        + checar_cores_e_fontes()
+        + checar_dialogos()
+        + checar_busy_widget()
+    )
     if problemas:
         print("Convencoes de UI violadas:\n")
         for problema in problemas:

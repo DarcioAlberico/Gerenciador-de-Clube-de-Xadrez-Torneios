@@ -29,6 +29,7 @@ from .components import (
     show_donation_modal,
 )
 from .components.dialogs import alert_dialog
+from .components.progress import overlay_of
 from .form_layout import FORM_PANEL_WIDTH
 from .layout import wrap_positions
 from .shell import AppShell
@@ -987,6 +988,23 @@ class AlbericusApp(
             fallback.mkdir(parents=True, exist_ok=True)
             return fallback
 
+    def _busy_target(self, busy_widget: Any | None) -> Any:
+        """Painel que o veu de progresso cobre (F5.9).
+
+        Regra: a acao disparada de dentro de um modal cobre o **modal**; as
+        demais cobrem a area de conteudo. Cobrir `self.content` quando o clique
+        veio de um dialogo deixaria o dialogo livre para receber o segundo
+        clique — que e justamente o que o veu existe para impedir.
+        """
+        if busy_widget is not None:
+            try:
+                topo = busy_widget.winfo_toplevel()
+                if topo is not self:
+                    return topo
+            except Exception:
+                pass
+        return getattr(self, "content", self)
+
     def _run_background(
         self,
         work: Callable[[], Any],
@@ -1004,6 +1022,10 @@ class AlbericusApp(
         indicator = getattr(self, "busy_indicator", None)
         if indicator is not None:
             indicator.start()
+        # O veu vem depois do indicador de propósito: se montar o veu falhar
+        # (janela em destruicao), a statusbar ainda registra a tarefa.
+        overlay = overlay_of(self._busy_target(busy_widget))
+        overlay.start(busy_message)
 
         def run() -> None:
             try:
@@ -1016,6 +1038,7 @@ class AlbericusApp(
         def finish(result: Any = None, error: Exception | None = None) -> None:
             if indicator is not None:
                 indicator.stop()
+            overlay.stop()
             if busy_widget is not None:
                 try:
                     busy_widget.configure(state="normal")
