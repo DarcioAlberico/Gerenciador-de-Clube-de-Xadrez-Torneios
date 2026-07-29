@@ -46,11 +46,15 @@ class PairingPagesMixin(ArbitrationPagesMixin, PairingResultsMixin):
                 padx=12,
                 pady=12,
             )
-            ctk.CTkButton(
-                toolbar,
-                text="Exportar tabela cruzada",
-                command=self._export_crosstable_from_standings,
-            ).pack(side="left", padx=(0, 12), pady=12)
+            botao_cruzada = ctk.CTkButton(toolbar, text="Exportar tabela cruzada")
+            # O botao entra no proprio comando (F5.9): e ele que o
+            # `_run_background` esmaece enquanto a exportacao roda. Sem isso a
+            # espera so aparecia na barra de 6px do rodape, longe de onde o
+            # clique aconteceu (P3-11).
+            botao_cruzada.configure(
+                command=lambda b=botao_cruzada: self._export_crosstable_from_standings(b)
+            )
+            botao_cruzada.pack(side="left", padx=(0, 12), pady=12)
 
             table_panel = self._make_panel(body)
             table_panel.grid(row=1, column=0, sticky="nsew")
@@ -181,11 +185,11 @@ class PairingPagesMixin(ArbitrationPagesMixin, PairingResultsMixin):
             text="Atualizar rating interno",
             command=apply_internal_rating,
         ).pack(side="left", padx=(0, 12), pady=12)
-        ctk.CTkButton(
-            toolbar,
-            text="Exportar tabela cruzada",
-            command=self._export_crosstable_from_standings,
-        ).pack(side="left", padx=(0, 12), pady=12)
+        botao_cruzada = ctk.CTkButton(toolbar, text="Exportar tabela cruzada")
+        botao_cruzada.configure(
+            command=lambda b=botao_cruzada: self._export_crosstable_from_standings(b)
+        )
+        botao_cruzada.pack(side="left", padx=(0, 12), pady=12)
         categories = sorted(
             {
                 str(player["category"]).strip()
@@ -366,7 +370,7 @@ class PairingPagesMixin(ArbitrationPagesMixin, PairingResultsMixin):
         category_option.configure(command=lambda _value: load_standings())
         load_standings()
 
-    def _export_crosstable_from_standings(self) -> None:
+    def _export_crosstable_from_standings(self, botao: Any | None = None) -> None:
         try:
             if not self.current_tournament_id:
                 raise AppError("Selecione um torneio.")
@@ -395,6 +399,7 @@ class PairingPagesMixin(ArbitrationPagesMixin, PairingResultsMixin):
                 lambda: self.export_service.export_crosstable(int(self.current_tournament_id), path),
                 lambda _result: self._show_info(f"Tabela cruzada exportada:\n{path}"),
                 "Exportando tabela cruzada...",
+                busy_widget=botao,
             )
         except Exception as exc:
             self._show_error(exc)

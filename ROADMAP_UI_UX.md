@@ -860,7 +860,7 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 | ✅ F5.6 | Quebrar o muro de Jogadores (25 → ~5: primárias + `Importar ▾`/`Bases oficiais ▾`/`Publicar ▾` + danger isolada) e aplicar o molde F2.1 aos 15 call-sites de `_grid_form_buttons` (P3-7) | 2d | A | M | — | Nenhuma tela com >8 ações visíveis no mesmo nível |
 | ✅ F5.7 | Separar `_show_info`: toast só p/ confirmação curta; `_show_report(title, body)` rolável com botão **Copiar** p/ relatórios; validações → `_show_warning` (~35 call-sites reclassificados) (P3-8) | 1,5d | A | B | — | URL do QR e narrativa de desempate legíveis e copiáveis |
 | ✅ F5.8 | Migrar os 21 diálogos ad-hoc p/ `Dialog` canônico (Esc, centralização, tamanho × `ui_scale_percent`, ordem [secundário][primário]); corrigir o aviso de BYE e o diálogo sem saída de Usuários (P3-10) | 2,5d | M | M | — | Todo diálogo fecha com Esc e cabe na tela em 160% |
-| F5.9 | `ProgressOverlay` local sobre o painel em ação + `busy_widget` obrigatório por convenção de lint (P3-11) | 1,5d | M | B | — | Duplo clique não duplica operação; espera visível no local |
+| ✅ F5.9 | `ProgressOverlay` local sobre o painel em ação + `busy_widget` obrigatório por convenção de lint (P3-11) | 1,5d | M | B | — | Duplo clique não duplica operação; espera visível no local |
 | F5.10 | Teclado: ordem de Tab explícita nos formulários, `Return` → ação primária, `takefocus=False` em botões secundários (P3-13) | 1,5d | M | B | F5.4 | Lançar 20 resultados usando só o teclado |
 | F5.11 | `tk.Menu` gerado do registro `DESTINATIONS`; sidebar vira **rail** (não some) abaixo de 1.040px (P3-14) | 1d | M | B | F1.3 | Menu e sidebar com os mesmos destinos e rótulos |
 | F5.12 | Lint de acentuação em `text=`/`t()` + correção dos ~26 rótulos; caça aos defeitos pontuais: truncamento dos botões do painel, data corrompida na Config. do torneio (P3-15, P3-16) | 1d | M | B | — | Grep de palavras-alvo zerado no CI; screenshots do manual re-tirados |
@@ -1157,6 +1157,34 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 > motivo anotado (paleta de comandos, projetor, doação, aviso do Modo Livre).
 > A regra existe porque um modal a mão **parece** correto em revisão: o que
 > falta nele só aparece usando.
+
+> **Status (2026-07-29): F5.9 CONCLUÍDA.** O app já tinha indicador de tarefa
+> longa — uma barra de **6px na statusbar**, no rodapé da janela. Ela responde
+> "há algo rodando", mas deixava duas coisas de fora: **onde** (quem clicou
+> "Importar lista CBX" no meio da tela procura a resposta ali, não a 700px de
+> distância) e **o clique seguinte** — o `busy_widget` que desabilita o botão
+> era *opcional*, e em **33 das 40** chamadas ninguém o passava. Sem ele, o
+> segundo clique dispara a operação de novo: dois backups, duas importações,
+> duas exportações para o mesmo arquivo.
+>
+> [`components/progress.py`](src/ui/components/progress.py) resolve os dois, e
+> o segundo **por construção**: o véu é um painel posicionado por cima da área
+> em ação, então o clique repetido acerta o véu, não o botão. Não depende de
+> ninguém lembrar de passar parâmetro — e o teste correspondente pergunta ao
+> próprio Tk quem está sob o ponto do botão, em vez de confiar no binding.
+>
+> **Qual painel o véu cobre** é a única decisão do `_run_background`, e ela
+> tem regra: ação disparada de dentro de um modal cobre o **modal**; as demais
+> cobrem a área de conteúdo. Cobrir `self.content` quando o clique veio de um
+> diálogo deixaria o diálogo livre para o segundo clique — exatamente o que o
+> véu existe para impedir. A regra é testada com dublês, sem abrir janela.
+>
+> O `busy_widget` continua valendo como **segunda camada** (o botão esmaecido
+> diz "essa ação já está rodando" e continua dizendo depois de o véu sair), e
+> virou convenção de lint: a linha de base é um **número por arquivo**, e ele
+> só pode cair. As duas chamadas da tabela cruzada já saíram da lista — o
+> botão entra no próprio comando (`lambda b=botao: ...`), padrão para as
+> demais. Contagem de partida: 33 chamadas em 11 arquivos.
 
 ---
 

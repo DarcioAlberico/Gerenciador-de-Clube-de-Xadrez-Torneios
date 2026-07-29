@@ -47,6 +47,7 @@ from .fields import (
 )
 from .form import FormStack, form_of
 from .menu_button import menu_button
+from .progress import ProgressOverlay, overlay_of
 from .toast import ToastStack
 from .tooltip import Tooltip
 from .tree import ThemedTreeview
@@ -93,6 +94,8 @@ __all__ = [
     "Debounced",
     "debounce",
     "BusyIndicator",
+    "ProgressOverlay",
+    "overlay_of",
     "ThemedTreeview",
     "ToastStack",
     "WrapRow",
