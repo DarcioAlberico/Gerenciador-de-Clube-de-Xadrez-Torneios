@@ -229,11 +229,12 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.assertEqual(depois_da_primeira, self._content_configure_handlers())
 
     def test_main_pages_keep_controls_inside_window_at_supported_sizes(self) -> None:
-        # As duas ultimas larguras sao os limiares da sidebar (continuacao da
-        # B-8): 1000 pedidos = 1.200px reais, onde a barra COMPLETA aparece, e
-        # 867 = 1.040px, onde entra o rail. Se uma tela deixar de caber ali, o
-        # limiar envelheceu — e este teste avisa antes do usuario.
-        for width, height in [(1360, 720), (1180, 640), (1050, 700), (1000, 700), (867, 700)]:
+        # As tres ultimas larguras sao o que a sidebar impoe: 1000 pedidos =
+        # 1.200px reais, onde a barra COMPLETA aparece; 867 = 1.040px, onde ela
+        # ja era rail; e 800 = 960px reais, onde ela **sumia** antes da F5.11 e
+        # agora continua como rail. Se uma tela deixar de caber ali, o limiar
+        # envelheceu — e este teste avisa antes do usuario.
+        for width, height in [(1360, 720), (1180, 640), (1050, 700), (1000, 700), (867, 700), (800, 700)]:
             with self.subTest(size=f"{width}x{height}"):
                 self.app.geometry(f"{width}x{height}+0+0")
                 self.app.update()
@@ -243,6 +244,40 @@ class UiLayoutSmokeTest(unittest.TestCase):
                         self.app.update()
                         offenders = self._widgets_past_right_edge()
                         self.assertEqual([], offenders)
+
+    def test_menu_nativo_e_sidebar_mostram_os_mesmos_destinos(self) -> None:
+        """Aceite da F5.11 (P3-14): o menu era 31 itens escritos a mao em
+        paralelo ao registro, e os rotulos ja tinham divergido da sidebar.
+        Agora os dois saem de `DESTINATIONS` — este teste e o que impede a
+        divergencia de voltar."""
+        from src.ui.navigation import DESTINATIONS
+
+        menubar = self.app.nametowidget(self.app.cget("menu"))
+        rotulos_menu: set[str] = set()
+        for indice in range(menubar.index("end") + 1):
+            if menubar.type(indice) != "cascade":
+                continue
+            submenu = self.app.nametowidget(menubar.entrycget(indice, "menu"))
+            fim = submenu.index("end")
+            for item in range(0, (fim if fim is not None else -1) + 1):
+                if submenu.type(item) == "command":
+                    rotulos_menu.add(str(submenu.entrycget(item, "label")))
+
+        rotulos_registro = {destino.label for destino in DESTINATIONS}
+        faltando = rotulos_registro - rotulos_menu
+        self.assertEqual(set(), faltando, f"destinos ausentes do menu: {sorted(faltando)}")
+
+        # E os rotulos da sidebar sao exatamente os mesmos objetos de texto.
+        rotulos_sidebar = set(self.app.sidebar._labels.values())
+        self.assertEqual(rotulos_registro, rotulos_sidebar)
+
+    def test_sidebar_vira_rail_e_nao_some_em_janela_estreita(self) -> None:
+        """P3-14: abaixo de 1.040px reais a barra sumia e sobrava o menu nativo
+        — que ninguem procura depois de ter uma barra. O rail e o piso."""
+        self.app.geometry("800x700+0+0")
+        self.app.update()
+        self.assertEqual("rail", self.app.sidebar.mode)
+        self.assertTrue(self.app.sidebar.frame.winfo_ismapped())
 
     def test_free_tournament_mode_mostra_aviso_e_cancela(self) -> None:
         before_tournament = self.app.current_tournament_id

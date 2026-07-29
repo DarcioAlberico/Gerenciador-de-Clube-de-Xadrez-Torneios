@@ -31,6 +31,7 @@ from .components import (
 from .components.dialogs import alert_dialog
 from .components.progress import overlay_of
 from .form_layout import FORM_PANEL_WIDTH
+from .navigation import by_group as nav_by_group
 from .layout import wrap_positions
 from .shell import AppShell
 from .screens.tournaments import TournamentPagesMixin
@@ -423,80 +424,84 @@ class AlbericusApp(
         )
 
 
+    # Atalhos exibidos no menu. A MESMA tabela alimenta os bindings globais em
+    # `shell._register_shortcuts`: antes o acelerador era escrito a mao no menu
+    # e o binding a mao no shell, sem nada garantindo que combinassem.
+    MENU_ACCELERATORS = {
+        "show_visual_dashboard": "Ctrl+1",
+        "show_tournaments": "Ctrl+2",
+        "show_tournament_dashboard": "Ctrl+3",
+        "show_pairings": "Ctrl+4",
+        "show_standings": "Ctrl+5",
+        "show_app_settings": "Ctrl+,",
+    }
+
+    @staticmethod
+    def _menu_em_breve() -> dict[str, tuple[tuple[str, str, str], ...]]:
+        """Itens do menu que NAO sao destinos navegaveis: as duas telas
+        pedagogicas desativadas. Ficam explicitas porque sao excecao — o rotulo
+        "(em breve)" evita a leitura de "quebrado" que um item cinza sem
+        explicacao passa (P1-12 / F3.4).
+
+        Os rotulos sao resolvidos aqui, com `t("chave")` literal: chave vinda
+        de variavel e invisivel para o `test_ui_i18n`, que cobra que toda chave
+        do catalogo tenha uso — e uma chave orfa hoje e um texto perdido amanha.
+        """
+        return {
+            "training": (
+                (t("menu.soon.classes"), "show_training", "aulas"),
+                (t("menu.soon.exercises"), "show_exercises", "biblioteca"),
+            ),
+        }
+
     def _build_menu(self) -> None:
+        """Menu nativo **gerado** do registro de destinos (F5.11 / P3-14).
+
+        Ele era 31 itens escritos a mao, em paralelo a `DESTINATIONS` — e os
+        rotulos ja tinham divergido da sidebar, que le o mesmo registro pelo
+        catalogo. Duas listas da mesma coisa so ficam iguais por disciplina;
+        aqui passam a ficar por construcao. O menu tambem ganhou o que faltava
+        (Inicio, Biblioteca) e perdeu o risco de esquecer um destino novo.
+        """
         menubar = tk.Menu(self)
         self.config(menu=menubar)
-        
-        def get_ico(name: str):
-            return self._menu_icons.get(name)
+        icone = self._menu_icons.get
 
-        # 1. Clube
-        club_menu = tk.Menu(menubar, tearoff=0)
-        menubar.add_cascade(label="Clube", menu=club_menu)
-        club_menu.add_command(label="Dashboard Visual", command=self.show_visual_dashboard, accelerator="Ctrl+1", image=get_ico("dashboard"), compound="left")
-        club_menu.add_command(label="Perfil do Clube", command=self.show_club, image=get_ico("clube"), compound="left")
-        club_menu.add_command(label="Membros", command=self.show_members, image=get_ico("membros"), compound="left")
-        club_menu.add_command(label="Níveis", command=self.show_learning_levels, image=get_ico("aulas"), compound="left")
-        club_menu.add_command(label="Responsáveis", command=self.show_guardians, image=get_ico("membros"), compound="left")
+        for grupo, destinos in nav_by_group().items():
+            if not grupo:
+                continue
+            submenu = tk.Menu(menubar, tearoff=0)
+            menubar.add_cascade(label=grupo, menu=submenu)
+            for destino in destinos:
+                submenu.add_command(
+                    label=destino.label,
+                    command=lambda chave=destino.key: self.navigator.go(chave),
+                    accelerator=self.MENU_ACCELERATORS.get(destino.method, ""),
+                    image=icone(destino.icon) if destino.icon else None,
+                    compound="left",
+                )
+            for rotulo, metodo, nome_icone in self._menu_em_breve().get(
+                destinos[0].group_key, ()
+            ):
+                submenu.add_separator()
+                submenu.add_command(
+                    label=rotulo,
+                    command=getattr(self, metodo, lambda: None),
+                    image=icone(nome_icone),
+                    compound="left",
+                    state="disabled",
+                )
 
-        # 2. Treinamento
-        training_menu = tk.Menu(menubar, tearoff=0)
-        menubar.add_cascade(label="Treinamento", menu=training_menu)
-        # Aulas e Exercícios temporariamente DESATIVADOS (não excluídos):
-        # itens visíveis porém acinzentados/não-clicáveis. Para reativar,
-        # remover state="disabled". Métodos/telas permanecem intactos.
-        # O rotulo "(em breve)" evita a leitura de "quebrado": item cinza sem
-        # explicacao passa a impressao de erro, e nao de escopo (P1-12 / F3.4).
-        training_menu.add_command(label="Aulas (em breve)", command=self.show_training, image=get_ico("aulas"), compound="left", state="disabled")
-        training_menu.add_command(label="Exercícios (em breve)", command=self.show_exercises, image=get_ico("biblioteca"), compound="left", state="disabled")
-        training_menu.add_separator()
-        training_menu.add_command(label="Torneio | Livre", command=self.show_free_tournament_mode, image=get_ico("torneios"), compound="left")
-
-        # 3. Gestão
-        mgmt_menu = tk.Menu(menubar, tearoff=0)
-        menubar.add_cascade(label="Gestão", menu=mgmt_menu)
-        mgmt_menu.add_command(label="Árbitros", command=self.show_referees, image=get_ico("arbitros"), compound="left")
-        mgmt_menu.add_command(label="Inventário", command=self.show_inventory, image=get_ico("integracoes"), compound="left")
-        mgmt_menu.add_command(label="Financeiro", command=self.show_finance, image=get_ico("financeiro"), compound="left")
-        mgmt_menu.add_command(label="Calendário", command=self.show_calendar, image=get_ico("calendario"), compound="left")
-        mgmt_menu.add_command(label="Ranking Interno", command=self.show_internal_ranking, image=get_ico("dashboard"), compound="left")
-
-        # 4. Torneio
-        tourn_menu = tk.Menu(menubar, tearoff=0)
-        menubar.add_cascade(label="Torneio", menu=tourn_menu)
-        tourn_menu.add_command(label="Torneios", command=self.show_tournaments, accelerator="Ctrl+2", image=get_ico("torneios"), compound="left")
-        tourn_menu.add_command(label="Central do Torneio", command=self.show_tournament_dashboard, accelerator="Ctrl+3", image=get_ico("emparceiramento"), compound="left")
-        tourn_menu.add_command(label="Painel do Árbitro", command=self.show_arbitration_panel, image=get_ico("arbitros"), compound="left")
-        tourn_menu.add_command(label="Config. Torneio", command=self.show_tournament_settings, image=get_ico("configuracoes"), compound="left")
-        tourn_menu.add_separator()
-        tourn_menu.add_command(label="Jogadores", command=self.show_players, image=get_ico("membros"), compound="left")
-        tourn_menu.add_command(label="Equipes", command=self.show_teams, image=get_ico("clube"), compound="left")
-        tourn_menu.add_command(label="Rodadas", command=self.show_pairings, accelerator="Ctrl+4", image=get_ico("emparceiramento"), compound="left")
-        tourn_menu.add_command(label="Classificação", command=self.show_standings, accelerator="Ctrl+5", image=get_ico("dashboard"), compound="left")
-        tourn_menu.add_command(label="Diplomas", command=self.show_certificates, image=get_ico("relatorios"), compound="left")
-
-        # 5. Ferramentas
-        tools_menu = tk.Menu(menubar, tearoff=0)
-        menubar.add_cascade(label="Ferramentas", menu=tools_menu)
-        tools_menu.add_command(label="Exportar", command=self.show_export, image=get_ico("integracoes"), compound="left")
-        tools_menu.add_command(label="Relatórios Administrativos", command=self.show_administrative_reports, image=get_ico("relatorios"), compound="left")
-        tools_menu.add_command(label="DRE Financeiro", command=self.show_financial_reports, image=get_ico("financeiro"), compound="left")
-        tools_menu.add_command(label="Comunicação", command=self.show_communication, image=get_ico("comunicacao"), compound="left")
-        tools_menu.add_command(label="Integrações Operacionais", command=self.show_integrations, image=get_ico("integracoes"), compound="left")
-
-        # 6. Configurações
-        settings_menu = tk.Menu(menubar, tearoff=0)
-        menubar.add_cascade(label="Configurações", menu=settings_menu)
-        settings_menu.add_command(label="Config. App", command=self.show_app_settings, accelerator="Ctrl+,", image=get_ico("configuracoes"), compound="left")
-        settings_menu.add_command(label="Auditoria Completa", command=self.show_audit_logs, image=get_ico("auditoria"), compound="left")
-
-        # 7. Ajuda
         help_menu = tk.Menu(menubar, tearoff=0)
-        menubar.add_cascade(label="Ajuda", menu=help_menu)
-        
-        help_menu.add_command(label="Buscar ação...", command=self._show_command_palette, accelerator="Ctrl+K")
+        menubar.add_cascade(label=t("menu.help"), menu=help_menu)
+        help_menu.add_command(
+            label=t("menu.search_action"),
+            command=self._show_command_palette,
+            accelerator="Ctrl+K",
+        )
         help_menu.add_separator()
-        help_menu.add_command(label="❤ Apoie o Projeto", command=lambda: show_donation_modal(self))
+        help_menu.add_command(label=t("menu.donate"), command=lambda: show_donation_modal(self))
+
     def require_permission(self, action: str) -> None:
         self.security_service.require_permission(action)
 
