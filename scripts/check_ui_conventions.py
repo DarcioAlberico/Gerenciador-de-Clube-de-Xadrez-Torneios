@@ -49,7 +49,7 @@ WILDCARD_PERMITIDO = {
     "screens/communication.py",
     "screens/free_tournament.py",
     "screens/integrations.py",
-    "screens/pairing_results_ui.py",
+    "screens/pairing_results/view.py",
     "screens/pairings.py",
     "screens/settings.py",
     "screens/settings_certificates_ui.py",
@@ -116,7 +116,7 @@ TOPLEVEL_CANONICO = {"components/dialogs.py"}
 TOPLEVEL_PERMITIDO = {
     "components/donation.py",  # modal de doacao, com layout proprio
     "screens/free_tournament.py",  # aviso do Modo Livre: pack + rodape ancorado
-    "screens/pairing_results_ui.py",  # Modo Projetor: janela de apresentacao
+    "screens/pairing_results/projector.py",  # Modo Projetor: janela de apresentacao
     "shell.py",  # paleta de comandos (Ctrl+K), que nao e dialogo
 }
 
@@ -165,7 +165,8 @@ BUSY_WIDGET_PENDENTE: dict[str, int] = {
     "screens/club_members_ui.py": 3,
     "screens/integrations.py": 2,
     "screens/pairing_arbitration/exports.py": 4,
-    "screens/pairing_results_ui.py": 7,
+    "screens/pairing_results/exports.py": 5,
+    "screens/pairing_results/initial_call.py": 2,
     "screens/settings.py": 2,
     "screens/settings_certificates_ui.py": 2,
     "screens/settings_reports_ui.py": 6,

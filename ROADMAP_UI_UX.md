@@ -384,8 +384,8 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 - ✅ **B-4** `Treeview` grande (P2-13) — medida e adiada; ver o status abaixo.
 - ✅ **B-5** Cache de figuras matplotlib quando dados não mudam (P2-14).
 - 🔄 **B-6** Migrar telas-monstro para 3 camadas (continuação de F1.5) — **em
-  execução**: Torneios, **Jogadores** e **Arbitragem** migradas; a fila está no
-  status abaixo, em ordem.
+  execução**: Torneios, **Jogadores**, **Arbitragem** e **Rodadas** migradas; a
+  fila está no status abaixo, em ordem.
 - ✅ **B-7** Acentuar cabeçalhos/títulos de `src/services/export_*` (F3.5) — a
   decisão de compatibilidade foi tomada: acentuar **inclusive CSV/XLSX**, com
   fronteira ASCII no pacote Access, TRF e PGN. Ver o status abaixo.
@@ -611,9 +611,9 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 > `import *` re-exportava o nome de lá; agora aponta para quem de fato o usa.
 >
 > **Fila da B-6**, por ordem de valor sobre risco:
-> 1. `pairing_results_ui` (1.922) — a maior e a mais usada; entra depois de
->    alguma outra pagar o aprendizado, porque é a que mais dói se quebrar. É
->    também o **dono atual do gargalo de largura** (1.220px, no "Limpar");
+> 1. ✅ `pairing_results_ui` (1.850) — **migrada** (ver o status de 2026-07-30);
+>    era também o dono do gargalo de largura (1.220px, no "Limpar"), resolvido
+>    no mesmo passo;
 > 2. ✅ `tournament_players_ui` (1.613) — **migrada** (ver o status abaixo);
 > 3. ✅ `pairing_arbitration_ui` (1.527) — **migrada** (ver o status de 2026-07-27);
 > 4. `admin_training_finance` (1.226), `admin_exercises_inventory` (1.126),
@@ -1299,6 +1299,52 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 >   campos de data para o `date_field`. Confirmado no screenshot novo.
 > - *"None" literal em coluna* — resolvido na F5.5, que faz nulo (e a string
 >   "None") virar célula vazia no `ThemedTreeview`.
+
+> **Status (2026-07-30): B-6 — Rodadas migrada; a maior das sete.** 1.850 linhas
+> num arquivo só viraram o pacote
+> [`screens/pairing_results/`](src/ui/screens/pairing_results/), e a lição das
+> duas anteriores se confirmou: **quando o arquivo é várias telas, o pacote
+> ganha um módulo por tela**. A tela de Rodadas era seis coisas.
+>
+> | módulo | o que é | linhas |
+> |---|---|---|
+> | `state.py` | dado puro: estado do resultado, resultados aceitos, rodadas recomendadas, prévia, paginação do projetor | 290 |
+> | `view.py` | o que a tela **é**: barra da rodada, tabela de mesas, lançamento | 957 |
+> | `projector.py` | Modo Projetor — uma tela inteira, com cores próprias | 379 |
+> | `initial_call.py` | a chamada inicial: a *outra* tela, antes da 1ª rodada | 289 |
+> | `exports.py` | as cinco exportações/impressões da rodada | 180 |
+> | `qr.py` | link da mesa, servidor local, fila de aprovação | 158 |
+> | `swaps.py` | inverter cores, substituir jogador (individual e equipes) | 160 |
+>
+> **O que a extração expôs.** O Modo Projetor tinha a paginação em **três
+> closures** dentro de um método de 290 linhas — e era ela que decidia se a
+> última mesa aparecia na parede. Agora é função pura com teste: "31 mesas em
+> páginas de 30" tem resposta antes de ligar o projetor. A fila de aprovação do
+> QR abria seu diálogo com `Dialog(self, ...)` onde `self` já era o objeto de
+> ações e não a janela — um pai errado que o `ruff` só apontou depois da
+> extração, porque antes `self` **era** o app e o código funcionava por acidente.
+>
+> **O gargalo de largura morreu com a tela.** A linha de lançamento — dois
+> seletores, "Salvar resultado" e os quatro botões rápidos — exigia 1.220px,
+> medidos no **"Limpar"**: o último da fila e, por isso, o primeiro a sair da
+> tela. O que ficava inacessível era justamente a ação de desfazer um resultado
+> lançado por engano. Ela virou uma `WrapRow` (continuação da B-8), e aqui a
+> faixa **funciona** — ao contrário do painel de arbitragem — porque mede o
+> `content`, que tem largura própria vinda da janela, e não uma coluna estreita
+> cuja largura depende da própria faixa. Teste novo cobra as duas pontas: uma
+> linha em janela larga, mais de uma em 900px, e nada para fora da borda.
+>
+> **Cobertura:** 41 testes sem janela em
+> [tests/test_ui_pairing_results.py](tests/test_ui_pairing_results.py) — a
+> precedência dos estados (correção de auditoria vence QR, QR vence rodada
+> fechada), os resultados que só um bye aceita, a busca da primeira mesa
+> pendente com a **coluna certa em cada modo**, as rodadas recomendadas e a
+> paginação do projetor. Mais a suíte de janela inteira, que passou sem
+> alteração de comportamento.
+>
+> **Próxima da fila:** as quatro telas administrativas densas
+> (`admin_training_finance`, `admin_exercises_inventory`, `club_members_ui`,
+> `settings_certificates_ui`), e depois as três de `tournaments/pages.py`.
 
 ---
 

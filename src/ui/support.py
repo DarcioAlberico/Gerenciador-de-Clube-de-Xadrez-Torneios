@@ -469,7 +469,7 @@ class ErrorCatchingMixin:
                 subprocess.Popen(["open", str(document_path)])
             else:
                 webbrowser.open(document_path.resolve().as_uri())
-            self._show_info("Nao encontrei comando de impressao. O documento foi aberto para impressao manual.")
+            self._show_info("Não encontrei comando de impressão. O documento foi aberto para impressão manual.")
         except Exception as exc:
             self._show_error(f"Não foi possível iniciar a impressão: {exc}")
 
