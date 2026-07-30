@@ -617,6 +617,131 @@ class SyncAuditMixin(_DatabaseInfra):
             ).fetchall()
             return self.rows_to_dicts(rows)
 
+    def supersede_standings_snapshot(
+        self,
+        tournament_id: int,
+        round_id: int,
+        reason: str,
+    ) -> str:
+        """Move o retrato vigente da rodada para o historico (ARB-01).
+
+        Devolve o hash do retrato arquivado, ou ``""`` quando nao havia retrato.
+        Quem chama grava o novo em seguida — e o hash devolvido e o que entra no
+        `before` do evento de auditoria, para a comparacao ficar registrada.
+        """
+        with self.connect() as connection:
+            row = connection.execute(
+                """
+                SELECT *
+                FROM standings_snapshots
+                WHERE tournament_id = ? AND round_id = ?
+                """,
+                (int(tournament_id), int(round_id)),
+            ).fetchone()
+            if not row:
+                return ""
+            connection.execute(
+                """
+                INSERT INTO standings_snapshot_history (
+                    tournament_id, round_id, round_number, standings_json,
+                    snapshot_hash, created_at, superseded_at, superseded_reason
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    int(row["tournament_id"]),
+                    int(row["round_id"]),
+                    int(row["round_number"]),
+                    str(row["standings_json"]),
+                    str(row["snapshot_hash"]),
+                    str(row["created_at"]),
+                    self.now(),
+                    str(reason or "").strip(),
+                ),
+            )
+            return str(row["snapshot_hash"])
+
+    def list_superseded_standings_snapshots(
+        self, tournament_id: int
+    ) -> list[dict[str, Any]]:
+        with self.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT *
+                FROM standings_snapshot_history
+                WHERE tournament_id = ?
+                ORDER BY round_number ASC, superseded_at ASC, id ASC
+                """,
+                (int(tournament_id),),
+            ).fetchall()
+            return self.rows_to_dicts(rows)
+
+    # ---- Desbloqueio pontual de correcao (ARB-01) ----------------------- #
+
+    def create_correction_unlock(
+        self,
+        tournament_id: int,
+        round_id: int,
+        *,
+        reason: str,
+        expires_at: str,
+        actor: str = "",
+        role: str = "",
+    ) -> int:
+        resolved_actor, resolved_role = (actor.strip(), role.strip())
+        if not resolved_actor and not resolved_role:
+            resolved_actor, resolved_role = self._operator_context()
+        with self.connect() as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO correction_unlocks (
+                    tournament_id, round_id, reason, actor, role,
+                    granted_at, expires_at, revoked_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, '')
+                """,
+                (
+                    int(tournament_id),
+                    int(round_id),
+                    str(reason or "").strip(),
+                    resolved_actor,
+                    resolved_role,
+                    self.now(),
+                    str(expires_at),
+                ),
+            )
+            return int(cursor.lastrowid)
+
+    def list_correction_unlocks(
+        self,
+        tournament_id: int,
+        round_id: int | None = None,
+    ) -> list[dict[str, Any]]:
+        query = """
+            SELECT *
+            FROM correction_unlocks
+            WHERE tournament_id = ?
+        """
+        params: list[Any] = [int(tournament_id)]
+        if round_id is not None:
+            query += " AND round_id = ?"
+            params.append(int(round_id))
+        query += " ORDER BY granted_at DESC, id DESC"
+        with self.connect() as connection:
+            rows = connection.execute(query, tuple(params)).fetchall()
+            return self.rows_to_dicts(rows)
+
+    def revoke_correction_unlocks(self, tournament_id: int, round_id: int) -> int:
+        """Revoga os desbloqueios vigentes da rodada. Devolve quantos caíram."""
+        with self.connect() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE correction_unlocks
+                SET revoked_at = ?
+                WHERE tournament_id = ? AND round_id = ? AND revoked_at = ''
+                """,
+                (self.now(), int(tournament_id), int(round_id)),
+            )
+            return int(cursor.rowcount or 0)
+
     def replace_tiebreak_components(
         self,
         tournament_id: int,

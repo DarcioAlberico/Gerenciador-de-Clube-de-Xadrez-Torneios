@@ -235,6 +235,7 @@ def issue_filter_labels() -> dict[str, str]:
         t("arbitration.issues.filter.sync"): "sync",
         t("arbitration.issues.filter.clock"): "clock",
         t("arbitration.issues.filter.tiebreak"): "tiebreak",
+        t("arbitration.issues.filter.correction"): "correction",
     }
 
 

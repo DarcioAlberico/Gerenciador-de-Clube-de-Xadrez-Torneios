@@ -17,6 +17,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from src.services.pairing.corrections import clean_reason
 from src.services.pairing.point_adjustments import AdjustmentEntry, describe_entry
 
 from ...i18n import t
@@ -110,8 +111,27 @@ class ArbitrationController:
 
     # ---- Painel ----------------------------------------------------------- #
 
-    def save_result(self, tournament_id: int, pairing_id: int, result: str) -> None:
-        self.pairing_service.update_result(int(tournament_id), int(pairing_id), result)
+    def save_result(
+        self, tournament_id: int, pairing_id: int, result: str, reason: str = ""
+    ) -> None:
+        """Lançamento inline do painel. `reason` só é exigido em rodada fechada.
+
+        O painel trabalha na rodada em andamento, então o motivo vem vazio; o
+        parâmetro existe para que o caminho de correção (ARB-01) não tenha uma
+        porta de trás por aqui.
+
+        Rodada fechada sem motivo é recusada **aqui**, com o recado do painel: o
+        serviço diria "descreva o motivo", e a faixa de lançamento rápido não tem
+        onde escrever um. O árbitro precisa saber para onde ir, não o que
+        preencher numa tela que não tem o campo.
+        """
+        if not clean_reason(reason):
+            pareamento = self.db.get_pairing(int(pairing_id)) or {}
+            if str(pareamento.get("round_status") or "") == "closed":
+                raise self._app_error(t("arbitration.error.closed_round_inline"))
+        self.pairing_service.update_result(
+            int(tournament_id), int(pairing_id), result, reason
+        )
 
     def acknowledge_issue(self, tournament_id: int, issue_key: str) -> None:
         self.pairing_service.acknowledge_arbitration_issue(int(tournament_id), str(issue_key))

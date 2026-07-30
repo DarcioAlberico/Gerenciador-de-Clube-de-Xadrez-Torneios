@@ -75,6 +75,7 @@ class ArbitrationIssuesView:
             (t("arbitration.issues.card.sync"), metrics["sync_conflicts"]),
             (t("arbitration.issues.card.clock"), metrics["clock_alerts"]),
             (t("arbitration.issues.card.tiebreak"), metrics["tiebreak_alerts"]),
+            (t("arbitration.issues.card.correction"), metrics["correction_alerts"]),
             (t("arbitration.issues.card.decision"), metrics["decision_required"]),
         ]
         for coluna, (rotulo, valor) in enumerate(cartoes):

@@ -26,6 +26,7 @@ create_certificate_template
 create_class
 create_clock_event
 create_club_event
+create_correction_unlock
 create_exercise
 create_exercise_attempt
 create_financial_transaction
@@ -132,6 +133,7 @@ list_classes
 list_clock_events
 list_club_events
 list_clubs
+list_correction_unlocks
 list_devices
 list_exercise_attempts
 list_exercises
@@ -171,6 +173,7 @@ list_session_attendance
 list_session_members_for_attendance
 list_sponsors
 list_standings_snapshots
+list_superseded_standings_snapshots
 list_sync_outbox
 list_team_boards
 list_team_lineup_boards
@@ -203,6 +206,7 @@ replace_tournament_prizes
 replace_training_list_exercises
 restore_backup
 revoke_certificate_issuance
+revoke_correction_unlocks
 rows_to_dicts
 save_app_settings
 save_attendance
@@ -226,6 +230,7 @@ set_player_active
 set_player_scheveningen_group
 set_player_status
 set_tournament_parent
+supersede_standings_snapshot
 swap_pairing_colors
 swap_team_board_colors
 unlink_guardian_from_member

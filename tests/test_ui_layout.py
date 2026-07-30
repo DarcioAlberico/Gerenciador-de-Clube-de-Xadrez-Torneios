@@ -1239,7 +1239,9 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.app.update()
         self.db.close_round(int(round_data["id"]))
 
-        with self.assertRaisesRegex(AssertionError, "rodada fechada"):
+        # ARB-01: o painel recusa com o recado DELE — o lancamento rapido nao tem
+        # campo de motivo, entao ele aponta para a tela Rodadas em vez de pedir um.
+        with self.assertRaisesRegex(AssertionError, "tela Rodadas"):
             self.app._save_arbitration_panel_result("1-0")
 
         self.assertEqual("", self.db.get_pairing(int(pairing["id"]))["result"])
@@ -1382,7 +1384,10 @@ class UiLayoutSmokeTest(unittest.TestCase):
         settings = self.db.get_tournament_settings(self.tournament_id) or {}
         settings["allow_dangerous_changes"] = 1
         self.db.save_tournament_settings(self.tournament_id, settings)
-        self.app.pairing_service.update_result(self.tournament_id, int(pairing["id"]), "0-1")
+        # ARB-01: correcao em rodada fechada exige o motivo do arbitro.
+        self.app.pairing_service.update_result(
+            self.tournament_id, int(pairing["id"]), "0-1", "Sumula trocada pelo arbitro"
+        )
         self.app.show_pairings()
         self.app.update()
         self.assertIn("corrigido", self._pairing_row_values())

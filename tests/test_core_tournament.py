@@ -108,8 +108,13 @@ class TournamentSetupTest(CoreServiceTestCase):
         self.db.update_pairing_result(pairing["id"], "1-0")
         self.service.close_round(self.tournament_id, first_round["id"])
 
+        # ARB-01: a rodada fechada agora recusa por DOIS motivos independentes —
+        # falta de motivo e falta de permissao. Este teste cobra o segundo, entao
+        # o motivo vem preenchido e a recusa que sobra e a da permissao.
         with self.assertRaises(AppError):
-            self.service.update_result(self.tournament_id, pairing["id"], "0-1")
+            self.service.update_result(
+                self.tournament_id, pairing["id"], "0-1", "Sumula trocada pelo arbitro"
+            )
 
         self.tournament_service.save_profile(
             self.tournament_id,
@@ -129,9 +134,30 @@ class TournamentSetupTest(CoreServiceTestCase):
             },
             [],
         )
-        self.service.update_result(self.tournament_id, pairing["id"], "0-1")
+        self.service.update_result(
+            self.tournament_id, pairing["id"], "0-1", "Sumula trocada pelo arbitro"
+        )
 
         self.assertEqual(self.db.get_pairing(pairing["id"])["result"], "0-1")
+
+    def test_closed_result_edit_requires_a_reason(self) -> None:
+        """ARB-01: permissao nao dispensa o registro do porque.
+
+        O par deste teste com o de cima: la a permissao falta e o motivo esta; aqui
+        a permissao esta (interruptor global ligado) e o motivo falta.
+        """
+        self._create_players(2)
+        first_round = self.service.generate_next_round(self.tournament_id)
+        pairing = self.db.get_pairings_for_round(first_round["id"])[0]
+        self.db.update_pairing_result(pairing["id"], "1-0")
+        self.service.close_round(self.tournament_id, first_round["id"])
+        self.db.save_tournament_settings(self.tournament_id, {"allow_dangerous_changes": 1})
+
+        with self.assertRaises(AppError) as erro:
+            self.service.update_result(self.tournament_id, pairing["id"], "0-1")
+
+        self.assertIn("motivo", str(erro.exception).casefold())
+        self.assertEqual("1-0", self.db.get_pairing(pairing["id"])["result"])
 
     def test_tournament_settings_and_schedule_are_saved(self) -> None:
         self.tournament_service.save_profile(

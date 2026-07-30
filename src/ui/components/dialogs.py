@@ -33,6 +33,7 @@ from ..theme import (
     SPACE_MD,
     SPACE_SM,
     SPACE_XL,
+    SPACE_XS,
     THEME_DANGER,
     THEME_PANEL_BG,
     THEME_TEXT_MAIN,
@@ -522,6 +523,67 @@ def actions_bar(
         except Exception:  # pragma: no cover - dialogo sem bind
             pass
     return barra
+
+
+def reason_dialog(
+    parent: Any,
+    title: str,
+    message: str,
+    *,
+    validate: Callable[[str], str] | None = None,
+    confirm_text: str | None = None,
+    danger: bool = False,
+) -> str | None:
+    """Pede um texto obrigatório (motivo, justificativa). ``None`` = cancelou.
+
+    O quinto tipo de diálogo, e nasce porque a ARB-01 precisa de um: confirmar
+    não basta quando o registro é a prova documental de uma decisão arbitral.
+
+    ``validate`` é a **mesma** função pura que o serviço usa. A tela não
+    reescreve a regra: ela a aplica antes de o árbitro perder o clique, e o
+    serviço continua sendo quem decide — a tela pode ser burlada, o serviço não.
+    O recado do erro aparece no próprio diálogo, sem fechá-lo, porque fechar
+    apagaria o que já foi digitado.
+    """
+    dialog = Dialog(parent, title, size=(560, 320), stretch_rows=(1,))
+    resultado: dict[str, str | None] = {"value": None}
+
+    ctk.CTkLabel(
+        dialog,
+        text=message,
+        text_color=THEME_TEXT_SUB,
+        anchor="w",
+        justify="left",
+        wraplength=490,
+    ).grid(row=0, column=0, padx=SPACE_LG, pady=(SPACE_LG, SPACE_SM), sticky="ew")
+
+    campo = text_area(dialog, height=90)
+    campo.grid(row=1, column=0, padx=SPACE_LG, pady=(0, SPACE_SM), sticky="nsew")
+
+    aviso = ctk.CTkLabel(dialog, text="", text_color=THEME_DANGER, anchor="w", justify="left")
+    aviso.grid(row=2, column=0, padx=SPACE_LG, pady=(0, SPACE_XS), sticky="ew")
+
+    def confirmar() -> None:
+        texto = " ".join(campo.get("1.0", "end").split())
+        erro = validate(texto) if validate else ("" if texto else t("dialog.reason.required"))
+        if erro:
+            aviso.configure(text=erro)
+            campo.focus_set()
+            return
+        resultado["value"] = texto
+        dialog.close()
+
+    rotulo = confirm_text or t("dialog.ok")
+    actions_bar(
+        dialog,
+        row=3,
+        primary=None if danger else (rotulo, confirmar),
+        danger=(rotulo, confirmar) if danger else None,
+        secondary=[(t("dialog.cancel"), dialog.close)],
+    )
+    campo.focus_set()
+    dialog.wait_window()
+    return resultado["value"]
 
 
 def window_scale(window: Any) -> float:

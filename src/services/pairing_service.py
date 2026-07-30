@@ -70,6 +70,19 @@ from src.services.pairing.point_adjustments import (
     aggregate_player_adjustments as _aggregate_player_adjustments,
     aggregate_team_adjustments as _aggregate_team_adjustments,
 )
+from src.services.pairing.corrections import (
+    DEFAULT_UNLOCK_MINUTES,
+    UnlockState,
+    cascade_message as _cascade_message,
+    cascade_rounds as _cascade_rounds,
+    clean_reason as _clean_reason,
+    correction_reason_error as _correction_reason_error,
+    expiry_from as _expiry_from,
+    reconcilable_rounds as _reconcilable_rounds,
+    unlock_minutes as _unlock_minutes,
+    unlock_reason_error as _unlock_reason_error,
+    unlock_state as _unlock_state,
+)
 from src.services.pairing.tiebreak_engine import (
     ENGINE_GACRUX,
     EngineOutcome,
@@ -494,6 +507,19 @@ class PairingService:
                 _audit_issue(
                     event, "tiebreak", "engine_blocked",
                     "Classificacao bloqueada (modo estrito)", severity="attention",
+                )
+            )
+
+        # Cascata de correcao (ARB-01): corrigiu uma rodada que ja alimentou o
+        # pareamento das seguintes. `attention` — quem decide se repareia e o
+        # arbitro, e travar o fechamento nao ajudaria em nada.
+        for event in self.db.list_audit_events(
+            tournament_id, action="result_correction_cascade", limit=safe_limit
+        ):
+            issues.append(
+                _audit_issue(
+                    event, "correction", "cascade",
+                    "Correcao afeta rodada ja pareada", severity="attention",
                 )
             )
 
@@ -1071,10 +1097,18 @@ class PairingService:
         tournament_id: int,
         pairing_id: int,
         result: str,
+        reason: str = "",
     ) -> None:
+        """Lanca ou corrige o resultado de uma mesa.
+
+        `reason` e OBRIGATORIO quando a rodada esta fechada (ARB-01): antes o
+        motivo era uma constante no codigo, e a trilha registrava que houve
+        correcao sem nunca dizer por que — inutil na hora de sustentar a decisao
+        numa apelacao.
+        """
         tournament = self.db.get_tournament(tournament_id)
         if tournament and tournament.get("competition_type") == "team":
-            self._update_team_board_result(tournament_id, pairing_id, result)
+            self._update_team_board_result(tournament_id, pairing_id, result, reason)
             return
 
         pairing = self.db.get_pairing(pairing_id)
@@ -1090,23 +1124,25 @@ class PairingService:
             "result": pairing.get("result", ""),
             "round_status": pairing.get("round_status", ""),
         }
-        if pairing["round_status"] == "closed":
-            settings = self.db.get_tournament_settings(tournament_id) or {}
-            if not settings.get("allow_dangerous_changes"):
-                raise AppError("Resultado de rodada fechada so pode ser alterado com mudancas perigosas habilitadas.")
+        is_correction = pairing["round_status"] == "closed"
+        round_id = int(pairing["round_id"])
+        if is_correction:
+            reason = self._authorize_correction(tournament_id, round_id, reason)
         self.db.update_pairing_result(pairing_id, result)
-        action = "result_corrected" if pairing["round_status"] == "closed" else "result_updated"
+        action = "result_corrected" if is_correction else "result_updated"
         self.db.create_audit_event(
             action=action,
             tournament_id=tournament_id,
-            round_id=int(pairing["round_id"]),
+            round_id=round_id,
             entity_type="pairing",
             entity_id=int(pairing_id),
-            reason="Correcao em rodada fechada." if action == "result_corrected" else "",
+            reason=reason if is_correction else "",
             before=before,
             after={"pairing_id": int(pairing_id), "result": result, "round_status": pairing.get("round_status", "")},
         )
         logger.info("Resultado da mesa %s atualizado para %s", pairing_id, result or "pendente")
+        if is_correction:
+            self._after_correction(tournament_id, round_id, reason)
 
     def close_round(self, tournament_id: int, round_id: int) -> None:
         tournament = self.db.get_tournament(tournament_id)
@@ -1167,7 +1203,13 @@ class PairingService:
         else:
             self.db.update_tournament_status(tournament_id, "running")
 
-    def _update_team_board_result(self, tournament_id: int, team_board_id: int, result: str) -> None:
+    def _update_team_board_result(
+        self,
+        tournament_id: int,
+        team_board_id: int,
+        result: str,
+        reason: str = "",
+    ) -> None:
         board = self.db.get_team_board(team_board_id)
         if not board or int(board["tournament_id"]) != int(tournament_id):
             raise AppError("Tabuleiro nao encontrado para o torneio selecionado.")
@@ -1178,23 +1220,239 @@ class PairingService:
             "result": board.get("result", ""),
             "round_status": board.get("round_status", ""),
         }
-        if board["round_status"] == "closed":
-            settings = self.db.get_tournament_settings(tournament_id) or {}
-            if not settings.get("allow_dangerous_changes"):
-                raise AppError("Resultado de rodada fechada so pode ser alterado com mudancas perigosas habilitadas.")
+        is_correction = board["round_status"] == "closed"
+        round_id = int(board["round_id"])
+        if is_correction:
+            reason = self._authorize_correction(tournament_id, round_id, reason)
         self.db.update_team_board_result(team_board_id, result)
-        action = "team_result_corrected" if board["round_status"] == "closed" else "team_result_updated"
+        action = "team_result_corrected" if is_correction else "team_result_updated"
         self.db.create_audit_event(
             action=action,
             tournament_id=tournament_id,
-            round_id=int(board["round_id"]),
+            round_id=round_id,
             entity_type="team_board",
             entity_id=int(team_board_id),
-            reason="Correcao em rodada fechada." if action == "team_result_corrected" else "",
+            reason=reason if is_correction else "",
             before=before,
             after={"team_board_id": int(team_board_id), "result": result, "round_status": board.get("round_status", "")},
         )
         logger.info("Resultado do tabuleiro de equipe %s atualizado para %s", team_board_id, result or "pendente")
+        if is_correction:
+            self._after_correction(tournament_id, round_id, reason, is_team=True)
+
+    # ------------------------------------------------------------------ #
+    # Correcao em rodada fechada: motivo, desbloqueio, cascata, retratos
+    # (ARB-01)
+    # ------------------------------------------------------------------ #
+
+    def correction_unlock_state(self, tournament_id: int, round_id: int) -> UnlockState:
+        """Pode corrigir esta rodada agora? De onde vem a permissao?"""
+        settings = self.db.get_tournament_settings(tournament_id) or {}
+        return _unlock_state(
+            self.db.list_correction_unlocks(tournament_id, round_id),
+            self.db.now(),
+            dangerous_changes=bool(settings.get("allow_dangerous_changes")),
+        )
+
+    def unlock_round_for_correction(
+        self,
+        tournament_id: int,
+        round_id: int,
+        reason: str,
+        minutes: int = DEFAULT_UNLOCK_MINUTES,
+    ) -> dict[str, Any]:
+        """Abre a rodada fechada para correcao, com justificativa e prazo.
+
+        Substitui o habito de ligar `allow_dangerous_changes` e esquecer: aqui a
+        permissao e de UMA rodada e morre sozinha. Devolve o retrato para a tela.
+        """
+        round_data = self.db.get_round(round_id)
+        if not round_data or int(round_data["tournament_id"]) != int(tournament_id):
+            raise AppError("Rodada nao encontrada para o torneio selecionado.")
+        erro = _unlock_reason_error(reason)
+        if erro:
+            raise AppError(erro)
+        cleaned = _clean_reason(reason)
+        janela = _unlock_minutes(minutes)
+        expires_at = _expiry_from(self.db.now(), janela)
+        unlock_id = self.db.create_correction_unlock(
+            tournament_id,
+            round_id,
+            reason=cleaned,
+            expires_at=expires_at,
+        )
+        self.db.create_audit_event(
+            action="round_correction_unlocked",
+            tournament_id=tournament_id,
+            round_id=round_id,
+            entity_type="round",
+            entity_id=round_id,
+            reason=cleaned,
+            after={"unlock_id": unlock_id, "expires_at": expires_at, "minutes": janela},
+        )
+        logger.info(
+            "Rodada %s desbloqueada para correcao por %s min (torneio %s)",
+            round_id,
+            janela,
+            tournament_id,
+        )
+        return {
+            "unlock_id": unlock_id,
+            "expires_at": expires_at,
+            "minutes": janela,
+            "reason": cleaned,
+        }
+
+    def revoke_round_correction_unlock(self, tournament_id: int, round_id: int) -> int:
+        """Fecha a rodada de novo antes do prazo. Devolve quantos desbloqueios caíram."""
+        revogados = self.db.revoke_correction_unlocks(tournament_id, round_id)
+        if revogados:
+            self.db.create_audit_event(
+                action="round_correction_relocked",
+                tournament_id=tournament_id,
+                round_id=round_id,
+                entity_type="round",
+                entity_id=round_id,
+                reason="Desbloqueio de correcao revogado pelo arbitro.",
+                after={"revoked": revogados},
+            )
+        return revogados
+
+    def _authorize_correction(self, tournament_id: int, round_id: int, reason: str) -> str:
+        """Motivo valido + permissao vigente, ou `AppError`. Devolve o motivo limpo.
+
+        A ordem importa: o motivo e checado ANTES da permissao. Quem chegou sem
+        motivo precisa saber disso mesmo que a rodada esteja desbloqueada, senao
+        desbloqueia, tenta nao nomear a razao e leva um recado sobre outra coisa.
+        """
+        erro = _correction_reason_error(reason)
+        if erro:
+            raise AppError(erro)
+        estado = self.correction_unlock_state(tournament_id, round_id)
+        if not estado.allowed:
+            raise AppError(
+                "Rodada fechada. Desbloqueie a rodada para correcao (com motivo e "
+                "prazo) ou habilite mudancas perigosas nas configuracoes do torneio."
+            )
+        return _clean_reason(reason)
+
+    def _after_correction(
+        self,
+        tournament_id: int,
+        round_id: int,
+        reason: str,
+        *,
+        is_team: bool = False,
+    ) -> None:
+        """O que a correcao contamina: pareamento posterior e retratos publicados."""
+        round_data = self.db.get_round(round_id)
+        corrected_number = int((round_data or {}).get("number") or 0)
+        rounds = self.db.list_rounds(tournament_id)
+        self._register_correction_cascade(tournament_id, round_id, corrected_number, rounds)
+        self._reconcile_standings_snapshots(
+            tournament_id, corrected_number, rounds, reason, is_team=is_team
+        )
+
+    def _register_correction_cascade(
+        self,
+        tournament_id: int,
+        round_id: int,
+        corrected_number: int,
+        rounds: list[dict[str, Any]],
+    ) -> None:
+        """Evento de cascata quando ja existe rodada posterior pareada.
+
+        Sem isto, corrigir a rodada 3 com a rodada 4 ja pareada nao dizia nada: o
+        pareamento da 4 nasceu do placar antigo, e quem tinha de decidir se
+        repareia nunca era avisado.
+        """
+        afetadas = _cascade_rounds(rounds, corrected_number)
+        if not afetadas:
+            return
+        self.db.create_audit_event(
+            action="result_correction_cascade",
+            tournament_id=tournament_id,
+            round_id=round_id,
+            entity_type="round",
+            entity_id=round_id,
+            reason=_cascade_message(corrected_number, afetadas),
+            after={"corrected_round": corrected_number, "affected_rounds": afetadas},
+        )
+        logger.warning(
+            "Correcao na rodada %s do torneio %s afeta rodadas ja pareadas: %s",
+            corrected_number,
+            tournament_id,
+            afetadas,
+        )
+
+    def _reconcile_standings_snapshots(
+        self,
+        tournament_id: int,
+        corrected_number: int,
+        rounds: list[dict[str, Any]],
+        reason: str,
+        *,
+        is_team: bool,
+    ) -> None:
+        """Regrava os retratos de classificacao que a correcao invalidou.
+
+        O retrato antigo NAO e apagado: vai para `standings_snapshot_history` com
+        data e motivo, porque e ele que foi publicado e e ele que uma apelacao
+        vai querer ver. A linha viva passa a ser a reconciliada.
+
+        Cada rodada e recalculada com os pareamentos ATE ela — nao com o torneio
+        inteiro. Sem esse corte, o retrato da rodada 3 receberia a classificacao
+        de hoje, o que seria uma segunda informacao errada no lugar da primeira.
+        """
+        for round_data in _reconcilable_rounds(rounds, corrected_number):
+            round_id = int(round_data["id"])
+            round_number = int(round_data["number"])
+            antes = self.db.supersede_standings_snapshot(
+                tournament_id,
+                round_id,
+                f"Correcao na rodada {corrected_number}: {reason}",
+            )
+            standings = (
+                self._team_standings(tournament_id, up_to_round=round_number)
+                if is_team
+                else self._standings(tournament_id, up_to_round=round_number)
+            )
+            self.db.create_standings_snapshot(
+                tournament_id=tournament_id,
+                round_id=round_id,
+                round_number=round_number,
+                standings=standings,
+            )
+            if not is_team:
+                self._persist_tiebreak_components(
+                    tournament_id=tournament_id,
+                    round_id=round_id,
+                    round_number=round_number,
+                    standings=standings,
+                )
+            depois = next(
+                (
+                    str(item.get("snapshot_hash") or "")
+                    for item in self.db.list_standings_snapshots(tournament_id)
+                    if int(item.get("round_id") or 0) == round_id
+                ),
+                "",
+            )
+            self.db.create_audit_event(
+                action="standings_snapshot_reconciled",
+                tournament_id=tournament_id,
+                round_id=round_id,
+                entity_type="standings_snapshot",
+                entity_id=round_id,
+                reason=f"Retrato da rodada {round_number} regravado apos correcao: {reason}",
+                before={"snapshot_hash": antes},
+                after={"snapshot_hash": depois, "superseded": bool(antes)},
+            )
+        logger.info(
+            "Retratos de classificacao reconciliados no torneio %s a partir da rodada %s",
+            tournament_id,
+            corrected_number,
+        )
 
     def _close_team_round(
         self,
@@ -1566,7 +1824,11 @@ class PairingService:
         return self._standings(tournament_id, honor_strict=True)
 
     def _standings(
-        self, tournament_id: int, *, honor_strict: bool = False
+        self,
+        tournament_id: int,
+        *,
+        honor_strict: bool = False,
+        up_to_round: int | None = None,
     ) -> list[dict[str, Any]]:
         """Motor da classificacao individual. `honor_strict` diz para que serve.
 
@@ -1577,6 +1839,10 @@ class PairingService:
         o torneio (nao se fecharia rodada nem se gerariam pares) por causa de um
         problema de RELATORIO — trocaria um risco de publicacao por um risco de
         operacao, que e maior. O registro e o alerta acontecem de qualquer forma.
+
+        `up_to_round` recorta a classificacao "como estava depois da rodada N",
+        que e o que um retrato de rodada guarda (ARB-01). Sem o corte, reconciliar
+        o retrato da rodada 3 gravaria nele a classificacao de hoje.
         """
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
@@ -1584,11 +1850,17 @@ class PairingService:
 
         players = self.db.list_players(tournament_id, active_only=False)
         closed_pairings = self.db.get_pairings_for_tournament(tournament_id, closed_only=True)
+        if up_to_round is not None:
+            closed_pairings = [
+                pairing
+                for pairing in closed_pairings
+                if int(pairing.get("round_number") or 0) <= int(up_to_round)
+            ]
         settings = self.db.get_tournament_settings(tournament_id) or {}
         sequence = _parse_player_tiebreak_sequence(settings.get("tiebreak_sequence"))
         gacrux_tiebreaks = self._gacrux_player_tiebreaks(
             tournament_id, tournament, settings, sequence, players, closed_pairings,
-            honor_strict=honor_strict,
+            honor_strict=honor_strict, current_round=up_to_round,
         )
         return _calculate_player_standings(
             tournament,
@@ -1611,6 +1883,7 @@ class PairingService:
         closed_pairings: list[dict[str, Any]],
         *,
         honor_strict: bool = False,
+        current_round: int | None = None,
     ) -> dict[int, dict[str, Any]] | None:
         """Desempates pelo motor FIDE (Gacrux), ou None para usar o motor proprio.
 
@@ -1653,7 +1926,12 @@ class PairingService:
             )
             for player in players
         ))
-        cache_key = (int(tournament_id), tuple(codes), results_sig, players_sig)
+        # `current_round` entra na chave: a classificacao "ate a rodada N" e outro
+        # calculo, e sem isso o retrato de uma rodada leria o cache de outra.
+        cache_key = (
+            int(tournament_id), tuple(codes), results_sig, players_sig,
+            int(current_round or 0),
+        )
 
         from src.services.pairing.gacrux_tiebreak_engine import GacruxTiebreakEngine
         return self._run_tiebreak_engine(
@@ -1661,7 +1939,9 @@ class PairingService:
             engine_name,
             settings,
             cache_key,
-            lambda: GacruxTiebreakEngine(self.db).compute(tournament_id, codes),
+            lambda: GacruxTiebreakEngine(self.db).compute(
+                tournament_id, codes, current_round=current_round
+            ),
             honor_strict=honor_strict,
         )
 
@@ -2007,18 +2287,29 @@ class PairingService:
         return self._team_standings(tournament_id, honor_strict=True)
 
     def _team_standings(
-        self, tournament_id: int, *, honor_strict: bool = False
+        self,
+        tournament_id: int,
+        *,
+        honor_strict: bool = False,
+        up_to_round: int | None = None,
     ) -> list[dict[str, Any]]:
+        """Ver `_standings`: mesmos dois parametros, mesmas razoes."""
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
             return []
         settings = self.db.get_tournament_settings(tournament_id) or {}
         teams = self.db.list_teams(tournament_id, active_only=False)
         closed_matches = self.db.list_team_matches_for_tournament(tournament_id, closed_only=True)
+        if up_to_round is not None:
+            closed_matches = [
+                match
+                for match in closed_matches
+                if int(match.get("round_number") or 0) <= int(up_to_round)
+            ]
         sequence = _parse_team_tiebreak_sequence(settings.get("team_tiebreak_sequence"))
         gacrux_tiebreaks = self._gacrux_team_tiebreaks(
             tournament_id, tournament, settings, sequence, teams, closed_matches,
-            honor_strict=honor_strict,
+            honor_strict=honor_strict, current_round=up_to_round,
         )
         return _calculate_team_standings(
             settings,
@@ -2041,6 +2332,7 @@ class PairingService:
         closed_matches: list[dict[str, Any]],
         *,
         honor_strict: bool = False,
+        current_round: int | None = None,
     ) -> dict[int, dict[str, Any]] | None:
         """Desempates de EQUIPES pelo motor FIDE (Gacrux), ou None p/ o proprio.
 
@@ -2082,7 +2374,10 @@ class PairingService:
             for match in closed_matches
         ))
         teams_sig = tuple(sorted(int(team["id"]) for team in teams))
-        cache_key = ("team", int(tournament_id), tuple(codes), results_sig, teams_sig)
+        cache_key = (
+            "team", int(tournament_id), tuple(codes), results_sig, teams_sig,
+            int(current_round or 0),
+        )
 
         from src.services.pairing.gacrux_tiebreak_engine import GacruxTiebreakEngine
         return self._run_tiebreak_engine(
@@ -2090,7 +2385,9 @@ class PairingService:
             engine_name,
             settings,
             cache_key,
-            lambda: GacruxTiebreakEngine(self.db).compute_teams(tournament_id, codes),
+            lambda: GacruxTiebreakEngine(self.db).compute_teams(
+                tournament_id, codes, current_round=current_round
+            ),
             honor_strict=honor_strict,
         )
 

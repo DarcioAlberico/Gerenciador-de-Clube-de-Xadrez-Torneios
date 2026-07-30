@@ -80,7 +80,7 @@ class TestDatabasePublicInterface(DatabaseTestCase):
 
 class TestDatabaseSchema(DatabaseTestCase):
     def test_schema_version(self) -> None:
-        self.assertEqual(Database.SCHEMA_VERSION, 45)
+        self.assertEqual(Database.SCHEMA_VERSION, 46)
 
     def test_core_tables_exist(self) -> None:
         with self.db.connect() as conn:

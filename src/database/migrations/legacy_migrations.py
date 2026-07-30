@@ -57,6 +57,7 @@ class LegacyMigrations:
             43: self._migrate_to_v43,
             44: self._migrate_to_v44,
             45: self._migrate_to_v45,
+            46: self._migrate_to_v46,
         }
 
     def _run_schema_migrations(self, connection: sqlite3.Connection) -> None:
@@ -165,6 +166,8 @@ class LegacyMigrations:
             self._migrate_to_v44(connection)
         if self.db.SCHEMA_VERSION >= 45:
             self._migrate_to_v45(connection)
+        if self.db.SCHEMA_VERSION >= 46:
+            self._migrate_to_v46(connection)
 
     def _migrate_to_v1(self, connection: sqlite3.Connection) -> None:
         now = self.db.now()
@@ -1881,3 +1884,59 @@ class LegacyMigrations:
             connection.execute(
                 "ALTER TABLE tournament_settings ADD COLUMN tiebreak_strict INTEGER NOT NULL DEFAULT 0"
             )
+
+    def _migrate_to_v46(self, connection: sqlite3.Connection) -> None:
+        """Correcao em rodada fechada: desbloqueio pontual + retratos superados.
+
+        ARB-01. Duas tabelas novas, nenhuma coluna alterada:
+
+        - `correction_unlocks`: permissao POR RODADA, com justificativa e
+          expiracao, no lugar de deixar `allow_dangerous_changes` ligado no
+          torneio inteiro. O interruptor global continua funcionando — nao se
+          tira um caminho que torneios em andamento ja usam.
+        - `standings_snapshot_history`: o `standings_snapshots` faz upsert por
+          (torneio, rodada), entao reconciliar depois de uma correcao apagaria a
+          prova documental. O retrato antigo vem para ca antes de ser reescrito.
+        """
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS correction_unlocks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tournament_id INTEGER NOT NULL,
+                round_id INTEGER NOT NULL,
+                reason TEXT NOT NULL DEFAULT '',
+                actor TEXT NOT NULL DEFAULT '',
+                role TEXT NOT NULL DEFAULT '',
+                granted_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                revoked_at TEXT NOT NULL DEFAULT ''
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS standings_snapshot_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tournament_id INTEGER NOT NULL,
+                round_id INTEGER NOT NULL,
+                round_number INTEGER NOT NULL,
+                standings_json TEXT NOT NULL,
+                snapshot_hash TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                superseded_at TEXT NOT NULL,
+                superseded_reason TEXT NOT NULL DEFAULT ''
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_correction_unlocks_round
+                ON correction_unlocks(tournament_id, round_id, expires_at)
+            """
+        )
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_snapshot_history_round
+                ON standings_snapshot_history(tournament_id, round_number, superseded_at)
+            """
+        )
