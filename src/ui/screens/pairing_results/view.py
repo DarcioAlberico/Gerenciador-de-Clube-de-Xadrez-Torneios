@@ -23,10 +23,19 @@ from ...components import (
     debounce,
     menu_button,
     primary_button,
+    reason_dialog,
     secondary_button,
     select_field,
 )
 from ...components.wrap_row import WrapRow
+
+from src.services.pairing.corrections import (
+    DEFAULT_UNLOCK_MINUTES,
+    cascade_message,
+    cascade_rounds,
+    correction_reason_error,
+    unlock_reason_error,
+)
 
 from .exports import RoundExportActions
 from .initial_call import InitialCallSection
@@ -759,25 +768,89 @@ class PairingResultsMixin:
                         result = default_result
                         self.result_option.set(result)
 
+            motivo = ""
             if self.current_round_id:
                 round_data = self.db.get_round(self.current_round_id)
                 if round_data and round_data["status"] == "closed":
-                    settings = self.db.get_tournament_settings(self.current_tournament_id) or {}
-                    if not settings.get("allow_dangerous_changes"):
-                        raise AppError(
-                            "Habilite mudancas perigosas nas configuracoes do torneio para alterar rodada fechada."
-                        )
-                    confirmed = self._confirm_action(
-                        "Confirmar",
-                        "Esta rodada já está fechada. Alterar o resultado mesmo assim?",
-                        danger=True,
-                    )
-                    if not confirmed:
+                    motivo = self._prompt_closed_round_correction(int(self.current_round_id))
+                    if not motivo:
                         return
-            self.pairing_service.update_result(self.current_tournament_id, pairing_id, result)
+            self.pairing_service.update_result(
+                self.current_tournament_id, pairing_id, result, motivo
+            )
             self._load_selected_round_pairings()
+            if motivo:
+                self._warn_correction_cascade()
         except Exception as exc:
             self._show_error(exc)
+
+    def _warn_correction_cascade(self) -> None:
+        """Avisa na hora quando a correção alcança rodadas já pareadas (ARB-01).
+
+        A pendência do painel guarda o mesmo recado, mas o árbitro que acabou de
+        corrigir está **aqui** — e a decisão de reparear é agora, não na próxima
+        vez que ele abrir a Central. Usa a mesma função pura do serviço, então os
+        dois lugares não podem divergir.
+        """
+        rodada = self.db.get_round(int(self.current_round_id or 0))
+        afetadas = cascade_rounds(
+            self.db.list_rounds(int(self.current_tournament_id)),
+            int((rodada or {}).get("number") or 0),
+        )
+        if afetadas:
+            self._show_warning(cascade_message(int(rodada["number"]), afetadas))
+
+    def _prompt_closed_round_correction(self, round_id: int) -> str:
+        """Desbloqueio (se preciso) + motivo da correção. ``""`` = desistiu.
+
+        Duas perguntas, e nessa ordem, porque são duas decisões diferentes:
+        *abrir a rodada* (permissão, com prazo) e *o que aconteceu* (o registro
+        que sustenta a decisão). Antes havia só um "Alterar mesmo assim?" — e a
+        permissão vinha de um interruptor global do torneio que, ligado uma vez,
+        deixava todas as rodadas fechadas editáveis.
+        """
+        estado = self.pairing_service.correction_unlock_state(
+            int(self.current_tournament_id), round_id
+        )
+        if not estado.allowed:
+            justificativa = reason_dialog(
+                self,
+                "Desbloquear rodada fechada",
+                "Esta rodada está fechada. Para corrigir um resultado é preciso "
+                f"desbloqueá-la: a permissão vale {DEFAULT_UNLOCK_MINUTES} minutos, "
+                "fica registrada na auditoria e não afeta as outras rodadas.\n\n"
+                "Por que a rodada precisa ser reaberta?",
+                validate=unlock_reason_error,
+                confirm_text="Desbloquear",
+                danger=True,
+            )
+            if justificativa is None:
+                return ""
+            aberta = self.pairing_service.unlock_round_for_correction(
+                int(self.current_tournament_id), round_id, justificativa
+            )
+            self._show_warning(
+                f"Rodada desbloqueada para correção até {aberta['expires_at']}."
+            )
+            estado = self.pairing_service.correction_unlock_state(
+                int(self.current_tournament_id), round_id
+            )
+
+        return reason_dialog(
+            self,
+            "Corrigir resultado de rodada fechada",
+            # A primeira linha diz de onde vem a permissão e até quando ela vale:
+            # numa segunda correção da mesma súmula o árbitro já entra aqui, e
+            # precisa saber se está usando a janela ou o interruptor global.
+            f"{estado.label()}\n\n"
+            "A rodada está fechada e o resultado já entrou na classificação "
+            "publicada. O motivo abaixo vai para a trilha de auditoria e para a "
+            "ata — é o que sustenta a decisão numa apelação.\n\n"
+            "O que aconteceu?",
+            validate=correction_reason_error,
+            confirm_text="Corrigir",
+            danger=True,
+        ) or ""
 
     def _prompt_bye_edit_warning(self, default_result: str, chosen_result: str) -> str:
         """Aviso de editar um BYE — o diálogo de cores contraditórias do P3-10.

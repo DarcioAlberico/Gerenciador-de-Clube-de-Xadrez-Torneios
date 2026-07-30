@@ -744,6 +744,42 @@ CREATE TABLE IF NOT EXISTS standings_snapshots (
     FOREIGN KEY (round_id) REFERENCES rounds(id) ON DELETE CASCADE
 );
 
+-- Retratos SUPERADOS da classificacao (ARB-01). O `standings_snapshots` tem
+-- UNIQUE (tournament_id, round_id) e faz upsert, entao reconciliar depois de uma
+-- correcao sobrescreveria a prova documental. O retrato antigo vem para ca antes
+-- de ser reescrito: a linha viva e sempre a reconciliada, e o historico guarda o
+-- que foi publicado, quando deixou de valer e por que.
+CREATE TABLE IF NOT EXISTS standings_snapshot_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tournament_id INTEGER NOT NULL,
+    round_id INTEGER NOT NULL,
+    round_number INTEGER NOT NULL,
+    standings_json TEXT NOT NULL,
+    snapshot_hash TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    superseded_at TEXT NOT NULL,
+    superseded_reason TEXT NOT NULL DEFAULT '',
+    FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
+    FOREIGN KEY (round_id) REFERENCES rounds(id) ON DELETE CASCADE
+);
+
+-- Desbloqueio PONTUAL de correcao em rodada fechada (ARB-01), no lugar de
+-- deixar `allow_dangerous_changes` ligado no torneio inteiro. Tem justificativa
+-- e expiracao: vale para a correcao que o arbitro esta fazendo agora.
+CREATE TABLE IF NOT EXISTS correction_unlocks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tournament_id INTEGER NOT NULL,
+    round_id INTEGER NOT NULL,
+    reason TEXT NOT NULL DEFAULT '',
+    actor TEXT NOT NULL DEFAULT '',
+    role TEXT NOT NULL DEFAULT '',
+    granted_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    revoked_at TEXT NOT NULL DEFAULT '',
+    FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
+    FOREIGN KEY (round_id) REFERENCES rounds(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS tiebreak_components (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     tournament_id INTEGER NOT NULL,
@@ -1242,4 +1278,10 @@ CREATE INDEX IF NOT EXISTS idx_certificate_issuances_context
 
 CREATE INDEX IF NOT EXISTS idx_certificate_issuances_recipient
     ON certificate_issuances(recipient_name, issued_at);
+
+CREATE INDEX IF NOT EXISTS idx_correction_unlocks_round
+    ON correction_unlocks(tournament_id, round_id, expires_at);
+
+CREATE INDEX IF NOT EXISTS idx_snapshot_history_round
+    ON standings_snapshot_history(tournament_id, round_number, superseded_at);
 """

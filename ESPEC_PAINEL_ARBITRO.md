@@ -1042,9 +1042,66 @@ Prioridade: muito alta. Origem: auditoria arbitral de 2026-07-29.
 
 #### ARB-01 - Correcao com motivo, desbloqueio pontual e alerta de cascata
 
-Status: pendente.
+Status: CONCLUIDO (2026-07-30). Fecha a Sprint 7.
 
-Problema:
+Como ficou:
+
+- modulo puro `src/services/pairing/corrections.py`: valida motivo (minimo de 5
+  caracteres — "ok" numa ata de apelacao vale tanto quanto o campo vazio),
+  calcula expiracao, decide a permissao (`UnlockState`) e descobre as rodadas que
+  a correcao contamina. O "agora" chega como parametro, entao a expiracao e
+  testavel sem esperar quinze minutos;
+- `update_result(..., reason)` exige o motivo quando a rodada esta fechada. **O
+  motivo e checado ANTES da permissao**: quem chegou sem motivo precisa saber
+  disso mesmo com a rodada desbloqueada, senao desbloqueia, tenta de novo sem
+  nomear a razao e leva um recado sobre outra coisa;
+- **desbloqueio pontual** (`correction_unlocks`, schema v46): permissao de UMA
+  rodada, com justificativa e prazo de 15 min, que morre sozinha. Substitui o
+  habito de ligar `allow_dangerous_changes` e esquecer — o interruptor global
+  continua valendo, porque nao se tira um caminho que torneios em andamento ja
+  usam, mas fica em segundo lugar e a tela diz que ele e o amplo. O diálogo de
+  correcao abre dizendo de onde vem a permissao e ate quando ela vale, porque
+  numa segunda correcao da mesma sumula o arbitro ja entra direto nele.
+  `revoke_round_correction_unlock` existe e e testado, mas **sem botao**: a janela
+  expira sozinha em 15 minutos, e um controle para reduzir esse prazo a mao seria
+  ruido — quando fizer falta (ARB-03, incidentes), o servico ja esta pronto;
+- **cascata**: correcao com rodada posterior ja pareada (inclusive apenas
+  gerada — o pareamento dela nasceu do placar antigo) gera evento
+  `result_correction_cascade` e pendencia `attention` no painel, com o recado
+  dizendo o que fazer, nao so o que houve. `attention` e nao `decision` porque
+  quem decide se repareia e o arbitro, e travar o fechamento nao ajudaria;
+- **retratos reconciliados**: `standings_snapshots` faz upsert por (torneio,
+  rodada), entao regravar apagaria a prova documental. O retrato antigo vai para
+  `standings_snapshot_history` com data, hash e motivo; a linha viva passa a ser
+  a reconciliada; e um evento `standings_snapshot_reconciled` guarda os dois
+  hashes. Os `tiebreak_components` da rodada sao regravados junto;
+- para reconciliar sem plantar um segundo erro no lugar do primeiro, nasceu o
+  corte `up_to_round` em `_standings`/`_team_standings` (e `current_round` no
+  caminho Gacrux, que entra na chave do cache): o retrato da rodada 3 recebe a
+  classificacao **como estava depois da rodada 3**, nao a de hoje;
+- na tela, o "Alterar mesmo assim?" virou duas perguntas, porque sao duas
+  decisoes: *abrir a rodada* (permissao, com prazo) e *o que aconteceu* (o
+  registro). Nasce o quinto tipo de dialogo, `reason_dialog`, que usa a MESMA
+  funcao pura de validacao do servico — a tela nao reescreve a regra, so a
+  aplica antes de o arbitro perder o clique;
+- secao "Correcoes em rodada fechada" na ata final, com rodada, `1-0 -> 0-1`,
+  operador, motivo e data. A trilha de auditoria e tela de diagnostico; quem
+  revisa uma apelacao le a ata. A secao sai da propria trilha, para nao existirem
+  duas versoes do mesmo fato — e sai omitida quando nao houve correcao;
+- o lancamento rapido do painel recusa rodada fechada com o recado DELE, e nao
+  com o do servico: a faixa inline nao tem campo de motivo, entao pedir um seria
+  mandar o arbitro preencher o que a tela nao oferece. Ela aponta para a tela
+  Rodadas, onde vivem o desbloqueio e o motivo.
+
+Criterios de aceite: todos atendidos. Cobertura: 42 testes em
+`tests/test_core_corrections.py` (motivo, expiracao, permissao, cascata,
+retratos, ata, individual e equipes), 5 em `tests/test_ui_dialogs.py` (o
+`reason_dialog`) e 2 em `tests/test_ui_arbitration.py` (a recusa do lancamento
+inline). Cinco testes existentes que corrigiam rodada fechada sem motivo foram
+ajustados — e reforcados: um deles virou um par, um cobrando a falta de permissao
+com motivo presente e o outro a falta de motivo com permissao presente.
+
+Problema original:
 
 - o motivo da correcao em rodada fechada e hardcoded
   (`pairing_service.py:1062`, "Correcao em rodada fechada."), descumprindo o
@@ -1067,9 +1124,9 @@ Escopo:
 
 Criterios de aceite:
 
-- [ ] correcao sem motivo e rejeitada;
-- [ ] correcao com rodada posterior gera alerta de cascata no painel;
-- [ ] snapshot divergente fica marcado e um novo snapshot reconciliado e
+- [x] correcao sem motivo e rejeitada;
+- [x] correcao com rodada posterior gera alerta de cascata no painel;
+- [x] snapshot divergente fica marcado e um novo snapshot reconciliado e
   gravado com auditoria.
 
 #### ARB-02 - Resultados arbitrais completos no painel
@@ -1653,7 +1710,7 @@ Entregas:
 
 1. [x] `TBK-01` Ajustes de pontos aplicados na classificacao.
 2. [x] `TBK-02` Fallback do motor de desempates visivel.
-3. [ ] `ARB-01` Correcao com motivo, desbloqueio pontual e alerta de cascata.
+3. [x] `ARB-01` Correcao com motivo, desbloqueio pontual e alerta de cascata.
 4. [ ] Correcoes pontuais de `PAR-04` com risco imediato: troca de cores via
    servico com auditoria e `TEAM_PAIRING_METHODS` duplicado.
 

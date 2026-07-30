@@ -108,6 +108,7 @@ def issue_metrics(issues: list[dict[str, Any]]) -> dict[str, int]:
         "clock_alerts": sum(1 for item in issues if item["source"] == "clock"),
         "pairing_alerts": sum(1 for item in issues if item["source"] == "pairing"),
         "tiebreak_alerts": sum(1 for item in issues if item["source"] == "tiebreak"),
+        "correction_alerts": sum(1 for item in issues if item["source"] == "correction"),
         "decision_required": sum(1 for item in issues if item["severity"] == "decision"),
     }
 

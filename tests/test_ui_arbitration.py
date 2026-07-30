@@ -354,6 +354,27 @@ class ControladorTest(unittest.TestCase):
         controlador.add_adjustment(7, state.AdjustmentForm(3, 2, "", "", "-0,5", "Celular"))
         self.assertEqual(["add_point_adjustment"], db.nomes_chamados())
 
+    def test_lancamento_inline_em_rodada_fechada_aponta_para_a_tela_certa(self) -> None:
+        """ARB-01: a faixa rápida não tem campo de motivo — então não pede um.
+
+        O serviço diria "descreva o motivo", que é inútil numa tela sem o campo. O
+        painel recusa antes e diz para onde ir. O banco não é tocado.
+        """
+        controlador, db = self.controlador(
+            get_pairing={"id": 5, "round_status": "closed", "round_id": 1}
+        )
+        with self.assertRaises(AppError) as erro:
+            controlador.save_result(1, 5, "1-0")
+        self.assertIn("tela Rodadas", str(erro.exception))
+        self.assertEqual(["get_pairing"], db.nomes_chamados())
+
+    def test_lancamento_inline_em_rodada_aberta_segue_direto(self) -> None:
+        controlador, db = self.controlador(
+            get_pairing={"id": 5, "round_status": "generated", "round_id": 1}
+        )
+        controlador.save_result(1, 5, "1-0")
+        self.assertEqual(["get_pairing"], db.nomes_chamados(), "o servico e outro duble")
+
     def test_sem_rodada_gerada_o_pacote_recusa_com_recado(self) -> None:
         controlador, _db = self.controlador(list_rounds=[])
         with self.assertRaises(AppError):

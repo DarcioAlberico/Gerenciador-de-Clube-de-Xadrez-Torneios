@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 from typing import Any, Mapping
@@ -891,6 +892,9 @@ class ReportSectionsMixin:
         adjustments = self._point_adjustments_section(tournament_id)
         if adjustments:
             sections.append(adjustments)
+        corrections = self._closed_round_corrections_section(tournament_id)
+        if corrections:
+            sections.append(corrections)
         if tournament.get("competition_type") != "team":
             sections.append(self._category_winners_section(tournament_id))
         # Premiacao e taxas sao opcionais: AppError quando nao se aplicam.
@@ -906,6 +910,58 @@ class ReportSectionsMixin:
             ("Árbitros e assinaturas", ["Nome", "Função", "FIDE ID", "Categoria", "Assinatura"], arbiter_rows)
         )
         return sections
+
+    def _closed_round_corrections_section(
+        self, tournament_id: int
+    ) -> tuple[str, list[str], list[list[Any]]] | None:
+        """Correções em rodada fechada, com motivo (ARB-01). ``None`` se não há.
+
+        A trilha de auditoria já guarda cada correção, mas ela é uma tela de
+        diagnóstico — quem revisa uma apelação lê a ata. Aqui a decisão aparece no
+        documento que o árbitro assina: rodada, o que mudou e por quê.
+
+        Sai da própria trilha (`result_corrected` e o equivalente de equipes) para
+        não haver duas versões do mesmo fato em lugares diferentes.
+        """
+        eventos: list[dict[str, Any]] = []
+        for action in ("result_corrected", "team_result_corrected"):
+            eventos.extend(
+                self.db.list_audit_events(tournament_id, action=action, limit=1000)
+            )
+        if not eventos:
+            return None
+
+        rodada_por_id = {
+            int(item["id"]): int(item["number"]) for item in self.db.list_rounds(tournament_id)
+        }
+        eventos.sort(key=lambda item: str(item.get("created_at") or ""))
+        rows = [
+            [
+                rodada_por_id.get(int(evento.get("round_id") or 0), ""),
+                self._correction_result_change(evento),
+                evento.get("actor", ""),
+                evento.get("reason", ""),
+                evento.get("created_at", ""),
+            ]
+            for evento in eventos
+        ]
+        return (
+            "Correções em rodada fechada",
+            ["Rodada", "Resultado", "Operador", "Motivo", "Registrado em"],
+            rows,
+        )
+
+    @staticmethod
+    def _correction_result_change(event: Mapping[str, Any]) -> str:
+        """``"1-0 → 0-1"`` a partir do before/after do evento de auditoria."""
+        def resultado(raw: Any) -> str:
+            try:
+                payload = json.loads(str(raw) or "{}")
+            except (TypeError, ValueError):
+                return "?"
+            return str(payload.get("result") or "").strip() or "pendente"
+
+        return f"{resultado(event.get('before_json'))} → {resultado(event.get('after_json'))}"
 
     def _point_adjustments_section(
         self, tournament_id: int

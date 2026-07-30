@@ -26,6 +26,7 @@ from src.ui.components.dialogs import (
     alert_dialog,
     choice_dialog,
     confirm_dialog,
+    reason_dialog,
     report_dialog,
     tri_state_dialog,
 )
@@ -303,6 +304,75 @@ class DialogsTest(unittest.TestCase):
         self.assertIsNotNone(estado["grab"], "o modal pai deveria reaver o grab")
         self.assertIsNone(self.root.grab_current(), "nenhum grab deveria sobrar no fim")
 
+    # -- reason_dialog (ARB-01) -------------------------------------------
+
+    def _campo(self, dialog: ctk.CTkToplevel) -> ctk.CTkTextbox:
+        campos = [w for w in self._walk(dialog) if isinstance(w, ctk.CTkTextbox)]
+        self.assertTrue(campos, "diálogo de motivo sem área de texto")
+        return campos[0]
+
+    def test_texto_digitado_volta_limpo(self) -> None:
+        def acao(dialog: ctk.CTkToplevel) -> None:
+            self._campo(dialog).insert("1.0", "  Sumula   trocada\n pelo arbitro ")
+            _find_button(dialog, "Confirmar").invoke()
+
+        self._quando_abrir(acao)
+        self.assertEqual(
+            "Sumula trocada pelo arbitro",
+            reason_dialog(self.root, "Motivo", "Por quê?", confirm_text="Confirmar"),
+        )
+
+    def test_cancelar_devolve_none(self) -> None:
+        self._clicar("Cancelar")
+        self.assertIsNone(reason_dialog(self.root, "Motivo", "Por quê?"))
+
+    def test_escape_devolve_none(self) -> None:
+        self._teclar("<Escape>")
+        self.assertIsNone(reason_dialog(self.root, "Motivo", "Por quê?"))
+
+    def test_texto_invalido_nao_fecha_o_dialogo(self) -> None:
+        """Fechar apagaria o que o árbitro já escreveu — o recado fica no modal.
+
+        Duas invocações do mesmo botão: a primeira é recusada pelo `validate` e a
+        segunda passa, com o texto corrigido no mesmo campo.
+        """
+
+        def acao(dialog: ctk.CTkToplevel) -> None:
+            campo = self._campo(dialog)
+            botao = _find_button(dialog, "Confirmar")
+            campo.insert("1.0", "ok")
+            botao.invoke()
+            self.assertTrue(dialog.winfo_exists(), "recusa nao pode fechar o dialogo")
+            self.assertTrue(
+                any(
+                    "curto" in str(w.cget("text"))
+                    for w in self._walk(dialog)
+                    if isinstance(w, ctk.CTkLabel)
+                ),
+                "o recado da recusa nao apareceu no dialogo",
+            )
+            campo.delete("1.0", "end")
+            campo.insert("1.0", "motivo suficientemente descritivo")
+            botao.invoke()
+
+        def validar(texto: str) -> str:
+            return "" if len(texto) >= 5 else "Motivo curto demais."
+
+        self._quando_abrir(acao)
+        self.assertEqual(
+            "motivo suficientemente descritivo",
+            reason_dialog(
+                self.root, "Motivo", "Por quê?", validate=validar, confirm_text="Confirmar"
+            ),
+        )
+
+    def test_modo_perigo_nao_confirma_com_enter(self) -> None:
+        """Mesma regra do `_ModalDialog`: Enter reflexo não decide nada grave."""
+        self._teclar("<Return>")
+        self._clicar("Cancelar", delay=500)
+        self.assertIsNone(
+            reason_dialog(self.root, "Corrigir", "Por quê?", danger=True, confirm_text="Corrigir")
+        )
 
 class TamanhoEPosicaoTest(unittest.TestCase):
     """A conta do ``dialog_layout`` — pura, sem abrir janela.

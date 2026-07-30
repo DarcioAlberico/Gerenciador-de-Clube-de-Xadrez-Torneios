@@ -367,7 +367,16 @@ Status: em execucao (auditoria arbitral de 2026-07-29). Sprint 7 iniciada em
   warning no log: faixa permanente com o motor que assinou a tabela, evento de
   auditoria, pendencia no painel e modo estrito ("falhar em vez de degradar")
   para torneios FIDE-rated. No caminho, um bug do proprio Gacrux (registro 299
-  derrubava o calculo) foi corrigido.
+  derrubava o calculo) foi corrigido;
+- `ARB-01` entregue — correcao em rodada fechada passou a exigir motivo do
+  arbitro (era constante no codigo), a permissao virou desbloqueio POR RODADA com
+  justificativa e prazo de 15 min (no lugar de deixar `allow_dangerous_changes`
+  ligado no torneio), correcao com rodada posterior pareada gera alerta de
+  cascata, e os retratos de classificacao afetados sao arquivados e regravados
+  com a classificacao **da epoca de cada rodada**.
+
+**Os tres bloqueantes da Sprint 7 estao fechados.** Resta da sprint apenas o
+item 4 (correcoes pontuais de `PAR-04`).
 
 Objetivo: fechar as lacunas encontradas na auditoria completa dos modulos de
 gestao de torneio feita sob otica de arbitro FIDE. Detalhamento executivo em
@@ -379,8 +388,9 @@ Entregas, em ordem de prioridade:
    arbitro aplicados na classificacao (`TBK-01` — ENTREGUE em 2026-07-30),
    fallback do motor Gacrux de desempates com aviso e auditoria (`TBK-02` —
    ENTREGUE em 2026-07-30), correcao de resultado com motivo obrigatorio,
-   desbloqueio pontual e alerta de cascata (`ARB-01`), troca de cores com
-   auditoria e round-robin por equipes destravado (`PAR-04` parcial).
+   desbloqueio pontual e alerta de cascata (`ARB-01` — ENTREGUE em 2026-07-30),
+   troca de cores com auditoria e round-robin por equipes destravado
+   (`PAR-04` parcial, pendente).
 2. **Desempates conformes (Sprint 8)**: adversario virtual FIDE no motor
    proprio ou rebaixamento formal a modo legado (`TBK-03`), parametros de
    criterios editaveis e registro 212 fiel a sequencia configurada
@@ -425,7 +435,8 @@ colunas, TRF25) foram entregues nas fases 0 a 11 e nos EPICs A a E da
 - ~~Aplicar `point_adjustments` na classificacao (`TBK-01`).~~ FEITO 2026-07-30.
 - ~~Aviso e auditoria no fallback do motor de desempates (`TBK-02`).~~ FEITO
   2026-07-30.
-- Motivo obrigatorio na correcao de rodada fechada (`ARB-01`, parte).
+- ~~Motivo obrigatorio na correcao de rodada fechada (`ARB-01`).~~ FEITO
+  2026-07-30 (com desbloqueio pontual, cascata e retratos reconciliados).
 - Troca de cores via servico com auditoria (`PAR-04`, parte).
 - Destravar round-robin por equipes (constante duplicada) (`PAR-04`, parte).
 - Corrigir `birth_date` da importacao da lista FIDE (`FED-05`).

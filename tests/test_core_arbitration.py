@@ -84,7 +84,11 @@ class ArbitrationPhasesTest(CoreServiceTestCase):
         settings = self.db.get_tournament_settings(self.tournament_id) or {}
         settings["allow_dangerous_changes"] = 1
         self.db.save_tournament_settings(self.tournament_id, settings)
-        self.service.update_result(self.tournament_id, int(pairing["id"]), "0-1")
+        # ARB-01: corrigir rodada fechada passou a exigir motivo. O interruptor
+        # global continua servindo de permissao, mas o registro nao e opcional.
+        self.service.update_result(
+            self.tournament_id, int(pairing["id"]), "0-1", "Sumula trocada pelo arbitro"
+        )
 
         corrected_dashboard = self.service.arbitration_dashboard(self.tournament_id)
         self.assertEqual(1, corrected_dashboard["metrics"]["corrections"])
@@ -223,7 +227,9 @@ class ArbitrationPhasesTest(CoreServiceTestCase):
         settings["allow_dangerous_changes"] = 1
         self.db.save_tournament_settings(self.tournament_id, settings)
 
-        self.service.update_result(self.tournament_id, int(pairing["id"]), "0-1")
+        self.service.update_result(
+            self.tournament_id, int(pairing["id"]), "0-1", "Sumula trocada pelo arbitro"
+        )
 
         corrections = self.db.list_audit_events(
             self.tournament_id,
@@ -235,6 +241,8 @@ class ArbitrationPhasesTest(CoreServiceTestCase):
         self.assertIn("0-1", corrections[0]["after_json"])
         self.assertTrue(corrections[0]["before_hash"])
         self.assertTrue(corrections[0]["after_hash"])
+        # ARB-01: o motivo do arbitro, e nao mais a constante do codigo.
+        self.assertEqual("Sumula trocada pelo arbitro", corrections[0]["reason"])
 
     def test_phase8_audit_events_enqueue_sync_outbox_and_network_failure_keeps_pending(self) -> None:
         self._create_players(2)
