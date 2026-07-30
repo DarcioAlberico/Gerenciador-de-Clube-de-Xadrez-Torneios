@@ -66,6 +66,10 @@ from src.services.pairing import (
     team_color_histories as _team_color_histories,
     team_played_pairs as _team_played_pairs,
 )
+from src.services.pairing.point_adjustments import (
+    aggregate_player_adjustments as _aggregate_player_adjustments,
+    aggregate_team_adjustments as _aggregate_team_adjustments,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -1532,6 +1536,9 @@ class PairingService:
             closed_pairings,
             sequence=sequence,
             gacrux_tiebreaks=gacrux_tiebreaks,
+            adjustments=_aggregate_player_adjustments(
+                self.db.list_point_adjustments(tournament_id)
+            ),
         )
 
     def _gacrux_player_tiebreaks(
@@ -1805,7 +1812,14 @@ class PairingService:
             tournament_id, tournament, settings, sequence, teams, closed_matches
         )
         return _calculate_team_standings(
-            settings, teams, closed_matches, sequence=sequence, gacrux_tiebreaks=gacrux_tiebreaks
+            settings,
+            teams,
+            closed_matches,
+            sequence=sequence,
+            gacrux_tiebreaks=gacrux_tiebreaks,
+            adjustments=_aggregate_team_adjustments(
+                self.db.list_point_adjustments(tournament_id)
+            ),
         )
 
     def _gacrux_team_tiebreaks(

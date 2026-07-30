@@ -22,6 +22,7 @@ from src.services.constants import *
 from src.services.fide_norms import build_norm_report
 from src.services.fide_rating import build_fide_report_rows
 from src.services.list_layouts import STANDINGS_COLUMNS, resolve_column_specs, resolve_columns
+from src.services.pairing.point_adjustments import has_adjustment, mark_adjusted
 from src.services.prizes import PRIZE_KINDS, PRIZE_POLICIES, allocate_prizes
 from src.services.trf_import import build_trf_rounds, parse_trf
 
@@ -623,7 +624,17 @@ class ReportRenderersMixin:
             self.db.get_report_layout_columns(tournament_id, "standings"), "standings"
         )
         headers = [STANDINGS_COLUMNS[key] for key in columns]
-        rows = [[item.get(key, "") for key in columns] for item in standings]
+        # O asterisco vai na coluna de pontos porque é ela que o ajuste move; a
+        # ata (única saída com espaço para prosa) detalha motivo e rodada.
+        rows = [
+            [
+                mark_adjusted(item.get(key, ""), float(item.get("adjustment_points") or 0.0))
+                if key == "points"
+                else item.get(key, "")
+                for key in columns
+            ]
+            for item in standings
+        ]
         return ("Classificação", headers, rows)
 
     def _crosstable_section(self, tournament_id: int) -> tuple[str, list[str], list[list[Any]]]:
@@ -728,8 +739,14 @@ class ReportRenderersMixin:
                 item["name"],
                 item.get("club", ""),
                 item.get("captain", ""),
-                self._format_report_number(item["match_points"]),
-                self._format_report_number(item["game_points"]),
+                mark_adjusted(
+                    self._format_report_number(item["match_points"]),
+                    float(item.get("adjustment_match_points") or 0.0),
+                ),
+                mark_adjusted(
+                    self._format_report_number(item["game_points"]),
+                    float(item.get("adjustment_game_points") or 0.0),
+                ),
                 item["wins"],
                 item["draws"],
                 item["losses"],

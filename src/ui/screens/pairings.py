@@ -2,6 +2,14 @@ from __future__ import annotations
 
 from ..support import *
 
+from tkinter import TclError
+
+from src.services.pairing.point_adjustments import (
+    ADJUSTMENT_LEGEND,
+    has_adjustment,
+    mark_adjusted,
+)
+
 from .pairing_arbitration import ArbitrationPagesMixin
 from .pairing_results import PairingResultsMixin
 
@@ -109,7 +117,8 @@ class PairingPagesMixin(ArbitrationPagesMixin, PairingResultsMixin):
             self.standings_tree = tree
             row_team_ids: dict[str, int] = {}
 
-            for item in self.pairing_service.team_standings(self.current_tournament_id):
+            team_standings = self.pairing_service.team_standings(self.current_tournament_id)
+            for item in team_standings:
                 row_id = tree.insert(
                     "",
                     "end",
@@ -118,8 +127,14 @@ class PairingPagesMixin(ArbitrationPagesMixin, PairingResultsMixin):
                         item["name"],
                         item.get("club", ""),
                         item.get("captain", ""),
-                        item["match_points"],
-                        item["game_points"],
+                        mark_adjusted(
+                            item["match_points"],
+                            float(item.get("adjustment_match_points") or 0.0),
+                        ),
+                        mark_adjusted(
+                            item["game_points"],
+                            float(item.get("adjustment_game_points") or 0.0),
+                        ),
                         item["wins"],
                         item["draws"],
                         item["losses"],
@@ -129,6 +144,8 @@ class PairingPagesMixin(ArbitrationPagesMixin, PairingResultsMixin):
                     ),
                 )
                 row_team_ids[row_id] = int(item["team_id"])
+
+            self._standings_adjustment_legend(table_panel, team_standings)
 
             def show_team_crosstable_detail() -> None:
                 selected = tree.selection()
@@ -342,9 +359,11 @@ class PairingPagesMixin(ArbitrationPagesMixin, PairingResultsMixin):
             tree.delete(*tree.get_children())
             row_player_ids.clear()
             category = category_option.get()
+            visible = []
             for item in self.pairing_service.standings(self.current_tournament_id):
                 if category != "Todas" and item["category"] != category:
                     continue
+                visible.append(item)
                 row_id = tree.insert(
                     "",
                     "end",
@@ -355,7 +374,7 @@ class PairingPagesMixin(ArbitrationPagesMixin, PairingResultsMixin):
                         item.get("age_category", ""),
                         item.get("rating_category", ""),
                         item.get("prize_tags", ""),
-                        item["points"],
+                        mark_adjusted(item["points"], float(item.get("adjustment_points") or 0.0)),
                         item["buchholz"],
                         item["buchholz_median"],
                         item["sonneborn_berger"],
@@ -367,8 +386,39 @@ class PairingPagesMixin(ArbitrationPagesMixin, PairingResultsMixin):
                 )
                 row_player_ids[row_id] = int(item["player_id"])
 
+            self._standings_adjustment_legend(table_panel, visible)
+
         category_option.configure(command=lambda _value: load_standings())
         load_standings()
+
+    def _standings_adjustment_legend(self, painel: Any, standings: list[dict[str, Any]]) -> None:
+        """Legenda do asterisco, só quando existe asterisco na tabela (TBK-01).
+
+        Uma linha embaixo do painel da tabela; recriada a cada carga (o filtro
+        de categoria pode esconder justamente o jogador ajustado), por isso a
+        anterior é destruída antes. Sem ajuste, nenhuma legenda — o rodapé
+        permanente viraria ruído nos 99% dos torneios que não têm ajuste.
+        """
+        anterior = getattr(self, "_standings_legend_label", None)
+        if anterior is not None:
+            # A referência sobrevive ao `_clear_content` que destruiu o widget;
+            # perguntar ao Tk por um filho que já morreu é TclError, não False.
+            try:
+                if anterior.winfo_exists():
+                    anterior.destroy()
+            except TclError:
+                pass
+        self._standings_legend_label = None
+        if not any(has_adjustment(item) for item in standings):
+            return
+        legenda = ctk.CTkLabel(
+            painel,
+            text=ADJUSTMENT_LEGEND,
+            text_color=THEME_TEXT_SUB,
+            anchor="w",
+        )
+        legenda.grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 10))
+        self._standings_legend_label = legenda
 
     def _export_crosstable_from_standings(self, botao: Any | None = None) -> None:
         try:

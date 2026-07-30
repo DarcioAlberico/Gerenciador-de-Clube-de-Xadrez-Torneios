@@ -357,7 +357,10 @@ implementado.
 
 ## Fase 12 - Conformidade arbitral e federativa
 
-Status: planejado (auditoria arbitral de 2026-07-29).
+Status: em execucao (auditoria arbitral de 2026-07-29). Sprint 7 iniciada em
+2026-07-30 com o `TBK-01` entregue — os ajustes de pontos do arbitro deixaram de
+ser um registro que so o TRF25 via e passaram a somar na classificacao, com
+marcador na tabela, motivo por extenso na ata e trilha de auditoria.
 
 Objetivo: fechar as lacunas encontradas na auditoria completa dos modulos de
 gestao de torneio feita sob otica de arbitro FIDE. Detalhamento executivo em
@@ -366,8 +369,8 @@ gestao de torneio feita sob otica de arbitro FIDE. Detalhamento executivo em
 Entregas, em ordem de prioridade:
 
 1. **Classificacao correta (bloqueante, Sprint 7)**: ajustes de pontos do
-   arbitro aplicados na classificacao (`TBK-01` — hoje uma penalidade so
-   aparece no TRF25), fallback do motor Gacrux de desempates com aviso e
+   arbitro aplicados na classificacao (`TBK-01` — ENTREGUE em 2026-07-30),
+   fallback do motor Gacrux de desempates com aviso e
    auditoria (`TBK-02`), correcao de resultado com motivo obrigatorio,
    desbloqueio pontual e alerta de cascata (`ARB-01`), troca de cores com
    auditoria e round-robin por equipes destravado (`PAR-04` parcial).
@@ -412,7 +415,7 @@ colunas, TRF25) foram entregues nas fases 0 a 11 e nos EPICs A a E da
 
 ### Muito alto impacto / baixa complexidade
 
-- Aplicar `point_adjustments` na classificacao (`TBK-01`).
+- ~~Aplicar `point_adjustments` na classificacao (`TBK-01`).~~ FEITO 2026-07-30.
 - Aviso e auditoria no fallback do motor de desempates (`TBK-02`).
 - Motivo obrigatorio na correcao de rodada fechada (`ARB-01`, parte).
 - Troca de cores via servico com auditoria (`PAR-04`, parte).

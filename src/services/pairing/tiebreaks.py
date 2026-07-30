@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Mapping
 
 from src.services.constants import (
     REQUESTED_BYE_POINTS,
@@ -16,6 +16,7 @@ from src.services.constants import (
     player_full_name,
 )
 from src.services.fide_rating import fide_performance
+from src.services.pairing.point_adjustments import AdjustmentTotal, adjustment_note
 
 
 # ---------------------------------------------------------------------------
@@ -596,10 +597,20 @@ def order_player_standings(
     ele é a fonte de verdade: o cid/SNo que o Gacrux usa para desempatar empates
     finais embute a ordem rating→nome, então basta ordenar por esse rank (com
     rating/nome como critério técnico final defensivo).
+
+    Exceção: quando o árbitro lançou ajuste de pontos (TBK-01), o rank do Gacrux
+    está desatualizado — o motor não conhece a tabela `point_adjustments`. Aí os
+    pontos **já ajustados** entram na frente e o rank do motor vira o desempate
+    de quem ficou com a mesma soma. Sem ajuste no torneio a chave é a de antes,
+    byte a byte: PTS é o primeiro critério do Gacrux, então acrescentar os
+    pontos à frente não reordenaria nada — mas também não se paga o risco.
     """
     if any("_gacrux_rank" in item for item in stats.values()):
+        adjusted = any(float(item.get("adjustment_points") or 0.0) for item in stats.values())
+
         def gacrux_key(item: dict[str, Any]) -> tuple[Any, ...]:
-            return (
+            head = (-float(item.get("points", 0.0) or 0.0),) if adjusted else ()
+            return head + (
                 int(item.get("_gacrux_rank") or 0),
                 -float(item.get("rating", 0) or 0),
                 str(item.get("name", "")).casefold(),
@@ -630,6 +641,7 @@ def calculate_player_standings(
     closed_pairings: list[dict[str, Any]],
     sequence: list[dict[str, Any]] | None = None,
     gacrux_tiebreaks: dict[int, dict[str, Any]] | None = None,
+    adjustments: Mapping[int, AdjustmentTotal] | None = None,
 ) -> list[dict[str, Any]]:
     stats: dict[int, dict[str, Any]] = {}
     for player in players:
@@ -791,7 +803,91 @@ def calculate_player_standings(
             value_override=gx_scores,
         )
 
+    _apply_player_adjustments(stats, adjustments)
     return order_player_standings(stats, sequence)
+
+
+def _apply_player_adjustments(
+    stats: dict[int, dict[str, Any]],
+    adjustments: Mapping[int, AdjustmentTotal] | None,
+) -> None:
+    """Soma os ajustes do árbitro ao total de cada jogador (TBK-01).
+
+    Roda **depois** dos desempates de propósito, e a razão é de mérito: a
+    penalidade é uma decisão sobre aquele jogador, não sobre a força de quem o
+    enfrentou. Buchholz, Sonneborn-Berger e performance continuam medindo
+    pontos conquistados no tabuleiro — que é também o que o Gacrux mede, já que
+    ele não recebe a tabela de ajustes. Só a soma que ordena muda.
+
+    Todo jogador recebe os campos (zerados quando não há ajuste): a tela e os
+    relatórios leem sem `get` defensivo e sem saber se o torneio tem ajustes.
+    """
+    adjustments = adjustments or {}
+    for player_stat in stats.values():
+        total = adjustments.get(int(player_stat["player_id"]))
+        delta = float(total.game_points) if total else 0.0
+        player_stat["adjustment_points"] = delta
+        player_stat["adjustment_note"] = adjustment_note(total)
+        if not delta:
+            continue
+        player_stat["points"] = round(float(player_stat["points"]) + delta, 2)
+        # Sequência exótica que declare `points` como critério: o valor cacheado
+        # em tiebreak_values é anterior ao ajuste e ordenaria pelo número velho.
+        values = player_stat.get("tiebreak_values")
+        if isinstance(values, dict) and "points" in values:
+            values["points"] = player_stat["points"]
+
+
+_ADJUSTABLE_TEAM_CODES = ("match_points", "game_points")
+
+
+def _apply_team_adjustments(
+    stats: dict[int, dict[str, Any]],
+    adjustments: Mapping[int, AdjustmentTotal] | None,
+) -> None:
+    """Soma os ajustes do árbitro aos pontos de cada equipe (TBK-01).
+
+    Espelha `_apply_player_adjustments`, com as duas grandezas de equipe: match
+    points e game points. O Buchholz de equipes soma os match points dos
+    adversários e é calculado antes — mesma razão do individual.
+    """
+    adjustments = adjustments or {}
+    for team_stat in stats.values():
+        total = adjustments.get(int(team_stat["team_id"]))
+        match_delta = float(total.match_points) if total else 0.0
+        game_delta = float(total.game_points) if total else 0.0
+        team_stat["adjustment_match_points"] = match_delta
+        team_stat["adjustment_game_points"] = game_delta
+        team_stat["adjustment_note"] = adjustment_note(total)
+        if match_delta:
+            team_stat["match_points"] = round(float(team_stat["match_points"]) + match_delta, 2)
+        if game_delta:
+            team_stat["game_points"] = round(float(team_stat["game_points"]) + game_delta, 2)
+
+
+def _adjusted_team_prefix(
+    codes: list[str],
+    stats: dict[int, dict[str, Any]],
+) -> list[str]:
+    """Critérios que precisam ser reordenados por cima do rank do Gacrux.
+
+    Sem ajuste no torneio, nenhum: o rank do motor continua sendo a ordem. Com
+    ajuste, o prefixo vai até o ÚLTIMO critério que um ajuste pode mover (match
+    points ou game points) — os critérios do meio entram com o valor do próprio
+    Gacrux, então quando nada muda a ordem resultante é a dele. Do prefixo em
+    diante o rank decide, que é onde ele continua valendo.
+    """
+    if not any(
+        float(item.get("adjustment_match_points") or 0.0)
+        or float(item.get("adjustment_game_points") or 0.0)
+        for item in stats.values()
+    ):
+        return []
+    last = max(
+        (index for index, code in enumerate(codes) if code in _ADJUSTABLE_TEAM_CODES),
+        default=-1,
+    )
+    return codes[: last + 1]
 
 
 def calculate_team_standings(
@@ -800,6 +896,7 @@ def calculate_team_standings(
     closed_matches: list[dict[str, Any]],
     sequence: list[dict[str, Any]] | None = None,
     gacrux_tiebreaks: dict[int, dict[str, Any]] | None = None,
+    adjustments: Mapping[int, AdjustmentTotal] | None = None,
 ) -> list[dict[str, Any]]:
     stats: dict[int, dict[str, Any]] = {}
     for team in teams:
@@ -881,11 +978,15 @@ def calculate_team_standings(
                     team_stat[code] = gx_scores[code]
             team_stat["_gacrux_rank"] = int(gx.get("rank") or 0)
 
+    _apply_team_adjustments(stats, adjustments)
+
     codes = _resolve_team_codes(settings, sequence)
     if any("_gacrux_rank" in item for item in stats.values()):
+        prefix = _adjusted_team_prefix(codes, stats)
         ordered_stats = sorted(
             stats.values(),
-            key=lambda item: (int(item.get("_gacrux_rank") or 0), str(item["name"]).casefold()),
+            key=lambda item: tuple(-team_standing_value(item, code) for code in prefix)
+            + (int(item.get("_gacrux_rank") or 0), str(item["name"]).casefold()),
         )
     else:
         ordered_stats = sorted(
