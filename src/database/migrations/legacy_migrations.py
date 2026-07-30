@@ -56,6 +56,7 @@ class LegacyMigrations:
             42: self._migrate_to_v42,
             43: self._migrate_to_v43,
             44: self._migrate_to_v44,
+            45: self._migrate_to_v45,
         }
 
     def _run_schema_migrations(self, connection: sqlite3.Connection) -> None:
@@ -162,6 +163,8 @@ class LegacyMigrations:
             self._migrate_to_v43(connection)
         if self.db.SCHEMA_VERSION >= 44:
             self._migrate_to_v44(connection)
+        if self.db.SCHEMA_VERSION >= 45:
+            self._migrate_to_v45(connection)
 
     def _migrate_to_v1(self, connection: sqlite3.Connection) -> None:
         now = self.db.now()
@@ -1864,3 +1867,17 @@ class LegacyMigrations:
                 ON ui_column_layouts(user_id, table_key)
             """
         )
+
+    def _migrate_to_v45(self, connection: sqlite3.Connection) -> None:
+        """Modo estrito do motor de desempate: tournament_settings.tiebreak_strict.
+
+        TBK-02. Nasce DESLIGADO, inclusive nos torneios existentes: ligado, uma
+        falha do Gacrux passa a barrar a classificacao em vez de degradar para o
+        motor proprio, e essa e uma decisao do arbitro do torneio — nao um padrao
+        que uma migracao deva impor a bases que ja rodavam sem ele.
+        """
+        columns = self.db._table_columns(connection, "tournament_settings")
+        if "tiebreak_strict" not in columns:
+            connection.execute(
+                "ALTER TABLE tournament_settings ADD COLUMN tiebreak_strict INTEGER NOT NULL DEFAULT 0"
+            )

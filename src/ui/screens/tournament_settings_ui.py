@@ -374,6 +374,7 @@ class TournamentSettingsMixin:
             "calculate_performance": "Calcular desempenho do jogador",
             "hide_color_names": "Ocultar nomes de cores",
             "show_opponents_in_standings": "Mostrar adversarios na classificacao",
+            "tiebreak_strict": "Falhar em vez de degradar (motor de desempate)",
             "archived": "Arquivado",
         }
         flag_checks: dict[str, ctk.CTkCheckBox] = {}

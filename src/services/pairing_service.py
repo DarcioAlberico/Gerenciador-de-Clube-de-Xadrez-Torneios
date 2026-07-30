@@ -3,7 +3,7 @@ import json
 import logging
 from collections import OrderedDict
 from datetime import datetime
-from typing import Any
+from typing import Any, Callable
 
 from src.core.database import Database
 from src.core.database_tournament_core import default_tiebreak_engine
@@ -70,6 +70,17 @@ from src.services.pairing.point_adjustments import (
     aggregate_player_adjustments as _aggregate_player_adjustments,
     aggregate_team_adjustments as _aggregate_team_adjustments,
 )
+from src.services.pairing.tiebreak_engine import (
+    ENGINE_GACRUX,
+    EngineOutcome,
+    EngineReport,
+    engine_badge as _engine_badge,
+    fallback_audit_reason as _fallback_audit_reason,
+    report_engine_blocked as _report_engine_blocked,
+    report_engine_fallback as _report_engine_fallback,
+    report_engine_ok as _report_engine_ok,
+    strict_block_message as _strict_block_message,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -78,8 +89,11 @@ logger = logging.getLogger(__name__)
 # chamado com frequencia e cada calculo dispara um subprocesso; a chave embute a
 # assinatura do estado (resultados + jogadores + criterios), invalidando-se
 # naturalmente quando algo muda.
-_GACRUX_TIEBREAK_CACHE: "OrderedDict[tuple, dict[int, dict[str, Any]]]" = OrderedDict()
+_GACRUX_TIEBREAK_CACHE: "OrderedDict[tuple, EngineOutcome]" = OrderedDict()
 _GACRUX_TIEBREAK_CACHE_MAX = 64
+# Ultimo motor que efetivamente assinou a classificacao de cada torneio (TBK-02).
+# Alimenta a faixa permanente da tela: quem pergunta nao roda o motor de novo.
+_LAST_TIEBREAK_ENGINE: dict[int, EngineReport] = {}
 # Guarda de reentrancia: o calculo do Gacrux exporta o TRF e o export chama
 # standings() de novo. Nessa chamada aninhada usamos o motor proprio (as colunas
 # de rank/pontos do TRF nao alimentam o desempate FIDE — o Gacrux recalcula a
@@ -458,6 +472,31 @@ class PairingService:
             if issue is not None:
                 issues.append(issue)
 
+        # Troca de motor de desempate (TBK-02). Reusa a mesma porta dos eventos de
+        # sync: o fallback ja virou evento de auditoria, e o painel so o le.
+        #
+        # Severidade "attention", nao "decision": decision BLOQUEIA o fechamento
+        # da rodada, e um problema de relatorio nao pode parar o torneio. Quem
+        # segura a publicacao e o modo estrito, dentro de standings().
+        for event in self.db.list_audit_events(
+            tournament_id, action="tiebreak_engine_fallback", limit=safe_limit
+        ):
+            issues.append(
+                _audit_issue(
+                    event, "tiebreak", "engine_fallback",
+                    "Motor de desempate substituido", severity="attention",
+                )
+            )
+        for event in self.db.list_audit_events(
+            tournament_id, action="tiebreak_engine_blocked", limit=safe_limit
+        ):
+            issues.append(
+                _audit_issue(
+                    event, "tiebreak", "engine_blocked",
+                    "Classificacao bloqueada (modo estrito)", severity="attention",
+                )
+            )
+
         issues.extend(self._pairing_arbitration_issues(tournament_id, tournament))
 
         issues = _finalize_issues(issues, acknowledged_keys, safe_limit)
@@ -490,7 +529,7 @@ class PairingService:
             _played_pairs(closed_pairings),
             _bye_player_ids(closed_pairings),
             players=self.db.list_players(tournament_id, active_only=True),
-            standings={int(item["player_id"]): item for item in self.standings(tournament_id)},
+            standings={int(item["player_id"]): item for item in self._standings(tournament_id)},
             float_histories=self._float_histories(tournament_id),
         )
 
@@ -814,7 +853,7 @@ class PairingService:
         float_histories = self._float_histories(tournament_id)
         played_pairs = self._played_pairs(tournament_id)
         bye_player_ids = self._bye_player_ids(tournament_id)
-        standings = {int(item["player_id"]): item for item in self.standings(tournament_id)}
+        standings = {int(item["player_id"]): item for item in self._standings(tournament_id)}
         return _individual_preview_payload(
             tournament_id=tournament_id,
             tournament=tournament,
@@ -999,7 +1038,7 @@ class PairingService:
         settings: dict[str, Any],
         round_number: int,
     ) -> list[dict[str, Any]]:
-        standings = {int(item["team_id"]): item for item in self.team_standings(tournament_id)}
+        standings = {int(item["team_id"]): item for item in self._team_standings(tournament_id)}
         played_pairs = self._team_played_pairs(tournament_id)
         prohibited = _prohibited_pairs_for_round(
             self.db.list_prohibited_team_pairings(tournament_id),
@@ -1098,7 +1137,7 @@ class PairingService:
         logger.info("Backup criado antes de fechar rodada %s: %s", round_id, backup_path)
 
         self.db.close_round(round_id)
-        standings = self.standings(tournament_id)
+        standings = self._standings(tournament_id)
         self.db.create_standings_snapshot(
             tournament_id=tournament_id,
             round_id=round_id,
@@ -1236,7 +1275,7 @@ class PairingService:
             )
 
         self.db.close_round(round_id)
-        standings = self.team_standings(tournament_id)
+        standings = self._team_standings(tournament_id)
         self.db.create_standings_snapshot(
             tournament_id=tournament_id,
             round_id=round_id,
@@ -1519,6 +1558,26 @@ class PairingService:
         return _find_team_board_player_slot(boards, player_id)
 
     def standings(self, tournament_id: int) -> list[dict[str, Any]]:
+        """Classificacao para PUBLICAR — tela, exportacao, premio, podio, ata.
+
+        Em modo estrito (TBK-02), motor FIDE caido levanta `AppError` aqui: e o
+        "bloquear a publicacao" do criterio de aceite.
+        """
+        return self._standings(tournament_id, honor_strict=True)
+
+    def _standings(
+        self, tournament_id: int, *, honor_strict: bool = False
+    ) -> list[dict[str, Any]]:
+        """Motor da classificacao individual. `honor_strict` diz para que serve.
+
+        Com `honor_strict=False` — pareamento, previa, snapshot de rodada,
+        diagnostico do painel — a falha do motor FIDE degrada para o motor
+        proprio mesmo em modo estrito, e de proposito: esses usos so precisam da
+        ORDEM POR PONTOS, que os dois motores calculam igual. Barrar aqui pararia
+        o torneio (nao se fecharia rodada nem se gerariam pares) por causa de um
+        problema de RELATORIO — trocaria um risco de publicacao por um risco de
+        operacao, que e maior. O registro e o alerta acontecem de qualquer forma.
+        """
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
             return []
@@ -1528,7 +1587,8 @@ class PairingService:
         settings = self.db.get_tournament_settings(tournament_id) or {}
         sequence = _parse_player_tiebreak_sequence(settings.get("tiebreak_sequence"))
         gacrux_tiebreaks = self._gacrux_player_tiebreaks(
-            tournament_id, tournament, settings, sequence, players, closed_pairings
+            tournament_id, tournament, settings, sequence, players, closed_pairings,
+            honor_strict=honor_strict,
         )
         return _calculate_player_standings(
             tournament,
@@ -1549,22 +1609,30 @@ class PairingService:
         sequence: list[dict[str, Any]] | None,
         players: list[dict[str, Any]],
         closed_pairings: list[dict[str, Any]],
+        *,
+        honor_strict: bool = False,
     ) -> dict[int, dict[str, Any]] | None:
         """Desempates pelo motor FIDE (Gacrux), ou None para usar o motor proprio.
 
         Retorna None quando: o motor configurado nao e o Gacrux; e torneio por
-        equipes (Fase 5); nao ha rodada fechada; ou o motor falhou (fallback
-        seguro ao Albericus). O resultado e cacheado por assinatura do estado.
+        equipes (Fase 5); nao ha rodada fechada; ou o motor falhou (fallback ao
+        Albericus, hoje registrado e visivel — ver `_run_tiebreak_engine`). O
+        resultado e cacheado por assinatura do estado.
         """
         engine_name = str(settings.get("tiebreak_engine") or default_tiebreak_engine())
-        if engine_name != "gacrux":
+        if engine_name != ENGINE_GACRUX:
+            self._remember_engine(tournament_id, _report_engine_ok(engine_name))
             return None
         if tournament.get("competition_type") == "team":
             return None
         if not closed_pairings:
+            # Nada calculado ainda: o motor configurado segue valendo.
+            self._remember_engine(tournament_id, _report_engine_ok(engine_name))
             return None
         # Chamada aninhada vinda do export do TRF: usa o motor proprio (evita
-        # recursao standings -> Gacrux -> export -> standings).
+        # recursao standings -> Gacrux -> export -> standings). NAO e fallback —
+        # nao registra nada, nao alerta e nao vale o modo estrito, senao o export
+        # que o proprio motor pediu ficaria impossivel.
         if int(tournament_id) in _GACRUX_TIEBREAK_INFLIGHT:
             return None
 
@@ -1586,18 +1654,78 @@ class PairingService:
             for player in players
         ))
         cache_key = (int(tournament_id), tuple(codes), results_sig, players_sig)
+
+        from src.services.pairing.gacrux_tiebreak_engine import GacruxTiebreakEngine
+        return self._run_tiebreak_engine(
+            tournament_id,
+            engine_name,
+            settings,
+            cache_key,
+            lambda: GacruxTiebreakEngine(self.db).compute(tournament_id, codes),
+            honor_strict=honor_strict,
+        )
+
+    # ------------------------------------------------------------------ #
+    # Motor de desempate: qual foi, e o que dizer quando trocou (TBK-02)
+    # ------------------------------------------------------------------ #
+
+    def _run_tiebreak_engine(
+        self,
+        tournament_id: int,
+        engine_name: str,
+        settings: dict[str, Any],
+        cache_key: tuple,
+        compute: Callable[[], dict[int, dict[str, Any]]],
+        *,
+        honor_strict: bool,
+    ) -> dict[int, dict[str, Any]] | None:
+        """Roda o motor FIDE e responde pelo que aconteceu.
+
+        Antes da TBK-02 esta falha era um `logger.warning` e um `return None`: o
+        mesmo torneio podia publicar duas classificacoes diferentes entre rodadas
+        sem nenhum aviso ao arbitro. Agora ela deixa retrato (para a faixa da
+        tela), evento de auditoria (para o relatorio e para o painel) e, em modo
+        estrito, barra a publicacao em vez de degradar.
+
+        O retrato e o registro NAO dependem de `honor_strict`: a falha e a mesma,
+        e o modo estrito do torneio e que diz se ela bloqueia. `honor_strict` so
+        decide se ESTE chamador recebe a excecao — quem so precisa da ordem por
+        pontos (pareamento, snapshot) segue pelo motor proprio.
+        """
+        strict = bool(settings.get("tiebreak_strict"))
         cached = _GACRUX_TIEBREAK_CACHE.get(cache_key)
         if cached is not None:
             _GACRUX_TIEBREAK_CACHE.move_to_end(cache_key)
-            return cached
+            self._remember_engine(tournament_id, cached.report)
+            if cached.report.blocked and honor_strict:
+                raise AppError(_strict_block_message(engine_name, cached.report.error))
+            return cached.tiebreaks
 
         _GACRUX_TIEBREAK_INFLIGHT.add(int(tournament_id))
         try:
-            from src.services.pairing.gacrux_tiebreak_engine import GacruxTiebreakEngine
-            result = GacruxTiebreakEngine(self.db).compute(tournament_id, codes)
+            tiebreaks = compute()
         except AppError as exc:
+            report = (
+                _report_engine_blocked(engine_name, str(exc))
+                if strict
+                else _report_engine_fallback(engine_name, str(exc))
+            )
+            self._store_engine_outcome(tournament_id, cache_key, report, None)
+            self._audit_engine_failure(tournament_id, report)
+            if report.blocked:
+                logger.error(
+                    "Motor %s de desempate falhou no torneio %s e o modo estrito barra a "
+                    "publicacao da classificacao. (%s)",
+                    engine_name,
+                    tournament_id,
+                    exc,
+                )
+                if honor_strict:
+                    raise AppError(_strict_block_message(engine_name, str(exc))) from exc
+                return None
             logger.warning(
-                "Motor Gacrux de desempate falhou no torneio %s; usando o motor proprio. (%s)",
+                "Motor %s de desempate falhou no torneio %s; usando o motor proprio. (%s)",
+                engine_name,
                 tournament_id,
                 exc,
             )
@@ -1605,11 +1733,85 @@ class PairingService:
         finally:
             _GACRUX_TIEBREAK_INFLIGHT.discard(int(tournament_id))
 
-        _GACRUX_TIEBREAK_CACHE[cache_key] = result
+        self._store_engine_outcome(
+            tournament_id, cache_key, _report_engine_ok(engine_name), tiebreaks
+        )
+        return tiebreaks
+
+    def _store_engine_outcome(
+        self,
+        tournament_id: int,
+        cache_key: tuple,
+        report: EngineReport,
+        tiebreaks: dict[int, dict[str, Any]] | None,
+    ) -> None:
+        _GACRUX_TIEBREAK_CACHE[cache_key] = EngineOutcome(report=report, tiebreaks=tiebreaks)
         _GACRUX_TIEBREAK_CACHE.move_to_end(cache_key)
         while len(_GACRUX_TIEBREAK_CACHE) > _GACRUX_TIEBREAK_CACHE_MAX:
             _GACRUX_TIEBREAK_CACHE.popitem(last=False)
-        return result
+        self._remember_engine(tournament_id, report)
+
+    @staticmethod
+    def _remember_engine(tournament_id: int, report: EngineReport) -> EngineReport:
+        _LAST_TIEBREAK_ENGINE[int(tournament_id)] = report
+        return report
+
+    def _audit_engine_failure(self, tournament_id: int, report: EngineReport) -> None:
+        """Evento na trilha do torneio — mesma porta do `export_tournament_audit`.
+
+        Uma falha por ESTADO do torneio, nao por chamada: o cache guarda o
+        fracasso junto com o sucesso, entao fechar uma rodada nova gera um evento
+        novo (o arbitro precisa saber que aconteceu de novo) e repintar a tela
+        nao gera nenhum.
+        """
+        try:
+            self.db.create_audit_event(
+                action="tiebreak_engine_blocked" if report.blocked else "tiebreak_engine_fallback",
+                tournament_id=int(tournament_id),
+                entity_type="tiebreak_engine",
+                reason=_fallback_audit_reason(report)
+                if report.fallback
+                else f"Motor {report.configured} falhou em modo estrito: {report.error}",
+                metadata={
+                    "configured": report.configured,
+                    "used": report.used,
+                    "error": report.error,
+                },
+            )
+        except Exception:  # pragma: no cover - trilha nunca bloqueia o calculo
+            logger.exception("Falha ao registrar a troca de motor de desempate")
+
+    def tiebreak_engine_report(self, tournament_id: int) -> EngineReport:
+        """Retrato do ultimo calculo de desempate deste torneio.
+
+        Sem calculo registrado, devolve o motor configurado como usado — que e a
+        verdade disponivel ("nada foi calculado ainda") e permite a faixa dizer
+        de saida qual motor vai assinar a tabela.
+        """
+        stored = _LAST_TIEBREAK_ENGINE.get(int(tournament_id))
+        if stored is not None:
+            return stored
+        settings = self.db.get_tournament_settings(tournament_id) or {}
+        return _report_engine_ok(
+            str(settings.get("tiebreak_engine") or default_tiebreak_engine())
+        )
+
+    def tiebreak_engine_badge(self, tournament_id: int) -> dict[str, str]:
+        """A faixa pronta para a tela: rotulo, tom e detalhe."""
+        return _engine_badge(self.tiebreak_engine_report(tournament_id))
+
+    def reset_tiebreak_engine(self, tournament_id: int) -> None:
+        """Esquece o calculo cacheado deste torneio e tenta o motor de novo.
+
+        Falha cacheada e o que evita a enxurrada de subprocessos, mas tambem
+        prende o torneio numa falha que pode ter sido passageira. O "Recalcular"
+        da tela de classificacao chama aqui: e o caminho explicito de volta ao
+        motor configurado, sem precisar mexer em resultado nenhum.
+        """
+        target = int(tournament_id)
+        for key in [key for key in _GACRUX_TIEBREAK_CACHE if target in key]:
+            _GACRUX_TIEBREAK_CACHE.pop(key, None)
+        _LAST_TIEBREAK_ENGINE.pop(target, None)
 
     def crosstable(self, tournament_id: int) -> dict[str, Any]:
         tournament = self.db.get_tournament(tournament_id)
@@ -1801,6 +2003,12 @@ class PairingService:
         return _tiebreak_narrative_from_standings(full, player_id)
 
     def team_standings(self, tournament_id: int) -> list[dict[str, Any]]:
+        """Classificacao de EQUIPES para publicar. Ver `standings` (TBK-02)."""
+        return self._team_standings(tournament_id, honor_strict=True)
+
+    def _team_standings(
+        self, tournament_id: int, *, honor_strict: bool = False
+    ) -> list[dict[str, Any]]:
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
             return []
@@ -1809,7 +2017,8 @@ class PairingService:
         closed_matches = self.db.list_team_matches_for_tournament(tournament_id, closed_only=True)
         sequence = _parse_team_tiebreak_sequence(settings.get("team_tiebreak_sequence"))
         gacrux_tiebreaks = self._gacrux_team_tiebreaks(
-            tournament_id, tournament, settings, sequence, teams, closed_matches
+            tournament_id, tournament, settings, sequence, teams, closed_matches,
+            honor_strict=honor_strict,
         )
         return _calculate_team_standings(
             settings,
@@ -1830,19 +2039,24 @@ class PairingService:
         sequence: list[dict[str, Any]] | None,
         teams: list[dict[str, Any]],
         closed_matches: list[dict[str, Any]],
+        *,
+        honor_strict: bool = False,
     ) -> dict[int, dict[str, Any]] | None:
         """Desempates de EQUIPES pelo motor FIDE (Gacrux), ou None p/ o proprio.
 
-        Espelha _gacrux_player_tiebreaks: None quando o motor nao e o Gacrux, nao
-        ha confronto fechado, ou o motor falhou; cache por assinatura + guarda de
-        reentrancia (o export TRF-25 chama team_standings() de novo).
+        Espelha _gacrux_player_tiebreaks, inclusive no registro da troca de motor
+        (TBK-02): None quando o motor nao e o Gacrux, nao ha confronto fechado, ou
+        o motor falhou; cache por assinatura + guarda de reentrancia (o export
+        TRF-25 chama team_standings() de novo).
         """
         engine_name = str(settings.get("tiebreak_engine") or default_tiebreak_engine())
-        if engine_name != "gacrux":
+        if engine_name != ENGINE_GACRUX:
+            self._remember_engine(tournament_id, _report_engine_ok(engine_name))
             return None
         if tournament.get("competition_type") != "team":
             return None
         if not closed_matches:
+            self._remember_engine(tournament_id, _report_engine_ok(engine_name))
             return None
         if int(tournament_id) in _GACRUX_TIEBREAK_INFLIGHT:
             return None
@@ -1869,30 +2083,16 @@ class PairingService:
         ))
         teams_sig = tuple(sorted(int(team["id"]) for team in teams))
         cache_key = ("team", int(tournament_id), tuple(codes), results_sig, teams_sig)
-        cached = _GACRUX_TIEBREAK_CACHE.get(cache_key)
-        if cached is not None:
-            _GACRUX_TIEBREAK_CACHE.move_to_end(cache_key)
-            return cached
 
-        _GACRUX_TIEBREAK_INFLIGHT.add(int(tournament_id))
-        try:
-            from src.services.pairing.gacrux_tiebreak_engine import GacruxTiebreakEngine
-            result = GacruxTiebreakEngine(self.db).compute_teams(tournament_id, codes)
-        except AppError as exc:
-            logger.warning(
-                "Motor Gacrux de desempate (equipes) falhou no torneio %s; usando o motor proprio. (%s)",
-                tournament_id,
-                exc,
-            )
-            return None
-        finally:
-            _GACRUX_TIEBREAK_INFLIGHT.discard(int(tournament_id))
-
-        _GACRUX_TIEBREAK_CACHE[cache_key] = result
-        _GACRUX_TIEBREAK_CACHE.move_to_end(cache_key)
-        while len(_GACRUX_TIEBREAK_CACHE) > _GACRUX_TIEBREAK_CACHE_MAX:
-            _GACRUX_TIEBREAK_CACHE.popitem(last=False)
-        return result
+        from src.services.pairing.gacrux_tiebreak_engine import GacruxTiebreakEngine
+        return self._run_tiebreak_engine(
+            tournament_id,
+            engine_name,
+            settings,
+            cache_key,
+            lambda: GacruxTiebreakEngine(self.db).compute_teams(tournament_id, codes),
+            honor_strict=honor_strict,
+        )
 
     def _knockout_pairings(self, tournament_id: int, players: list[dict[str, Any]], next_number: int, settings: dict[str, Any]) -> list[dict[str, Any]]:
         previous_pairings = None
@@ -1916,7 +2116,7 @@ class PairingService:
         players: list[dict[str, Any]],
         round_number: int,
     ) -> list[dict[str, Any]]:
-        standings = {item["player_id"]: item for item in self.standings(tournament_id)}
+        standings = {item["player_id"]: item for item in self._standings(tournament_id)}
         settings = self.db.get_tournament_settings(tournament_id) or {}
         initial_order = str(settings.get("initial_order") or "rating")
         seeding = [

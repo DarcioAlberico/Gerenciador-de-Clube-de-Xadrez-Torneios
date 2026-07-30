@@ -275,6 +275,7 @@ TOURNAMENT_FLAG_FIELDS = {
     "calculate_performance",
     "hide_color_names",
     "show_opponents_in_standings",
+    "tiebreak_strict",
     "archived",
 }
 
