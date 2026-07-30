@@ -7,6 +7,7 @@ from typing import Any, Mapping
 from src.services.constants import *
 from src.services.fide_norms import build_norm_report
 from src.services.fide_rating import build_fide_report_rows
+from src.services.pairing.point_adjustments import format_signed
 from src.services.prizes import PRIZE_KINDS, PRIZE_POLICIES, allocate_prizes
 from src.services.export_federation import FederationReportsMixin
 
@@ -887,6 +888,9 @@ class ReportSectionsMixin:
             ("Ata final do torneio", ["Campo", "Valor"], header_rows),
             self._standings_section(tournament_id),
         ]
+        adjustments = self._point_adjustments_section(tournament_id)
+        if adjustments:
+            sections.append(adjustments)
         if tournament.get("competition_type") != "team":
             sections.append(self._category_winners_section(tournament_id))
         # Premiacao e taxas sao opcionais: AppError quando nao se aplicam.
@@ -902,6 +906,37 @@ class ReportSectionsMixin:
             ("Árbitros e assinaturas", ["Nome", "Função", "FIDE ID", "Categoria", "Assinatura"], arbiter_rows)
         )
         return sections
+
+    def _point_adjustments_section(
+        self, tournament_id: int
+    ) -> tuple[str, list[str], list[list[Any]]] | None:
+        """Ajustes de pontos do árbitro, com motivo (TBK-01). ``None`` se não há.
+
+        A classificação mostra só o asterisco — o número somado já está lá. É
+        aqui, na ata, que a decisão fica registrada por extenso: quem, quando,
+        quanto e **por quê**. Seção omitida quando o torneio não teve ajuste,
+        para não plantar na ata uma tabela vazia que sugere pendência.
+        """
+        adjustments = self.db.list_point_adjustments(tournament_id)
+        if not adjustments:
+            return None
+        rows = [
+            [
+                adjustment.get("round_number") or "Todas",
+                adjustment.get("player_name") or adjustment.get("team_name") or "—",
+                adjustment.get("aat_type") or "—",
+                format_signed(adjustment.get("match_points") or 0.0),
+                format_signed(adjustment.get("game_points") or 0.0),
+                adjustment.get("reason") or "",
+                adjustment.get("created_at") or "",
+            ]
+            for adjustment in adjustments
+        ]
+        return (
+            "Ajustes de pontos do árbitro (TRF25 §7.3)",
+            ["Rodada", "Competidor", "Tipo", "Match points", "Game points", "Motivo", "Lançado em"],
+            rows,
+        )
 
     @staticmethod
     def _format_currency(value: Any) -> str:

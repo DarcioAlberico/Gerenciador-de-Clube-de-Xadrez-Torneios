@@ -17,6 +17,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from src.services.pairing.point_adjustments import AdjustmentEntry, describe_entry
+
 from ...i18n import t
 from .state import (
     AdjustmentForm,
@@ -126,14 +128,37 @@ class ArbitrationController:
         erro = form.validation_error()
         if erro:
             raise self._app_error(erro)
-        self.db.add_point_adjustment(tournament_id, **form.payload())
+        payload = form.payload()
+        payload["id"] = self.db.add_point_adjustment(tournament_id, **payload)
+        # Desde a TBK-01 o ajuste MOVE a classificação. Um lançamento que muda o
+        # pódio precisa de trilha: sem isto, o registro do "por quê" vivia só na
+        # tabela do painel, que o próprio árbitro pode apagar.
+        self._audit(
+            "point_adjustment_added",
+            tournament_id,
+            f"Ajuste de pontos lançado: {self._adjustment_digest(payload)}",
+            payload,
+        )
         logger.info("Ajuste de pontos lancado no torneio %s", tournament_id)
 
     def find_adjustment(self, tournament_id: int, adjustment_id: int) -> dict[str, Any] | None:
         return self._by_id(self.list_adjustments(tournament_id), adjustment_id)
 
-    def delete_adjustment(self, adjustment_id: int) -> None:
+    def delete_adjustment(self, tournament_id: int, adjustment_id: int) -> None:
+        """Exclui e registra. Apagar um ajuste também reordena a classificação.
+
+        Recebe o torneio (e não só o id do ajuste) porque a auditoria precisa
+        dizer de onde o lançamento saiu — e porque uma única porta de exclusão,
+        sempre auditada, é mais segura que duas com uma delas muda.
+        """
+        registro = self.find_adjustment(tournament_id, adjustment_id) or {"id": adjustment_id}
         self.db.delete_point_adjustment(int(adjustment_id))
+        self._audit(
+            "point_adjustment_removed",
+            tournament_id,
+            f"Ajuste de pontos excluído: {self._adjustment_digest(registro)}",
+            registro,
+        )
 
     def restore_adjustment(self, tournament_id: int, record: dict[str, Any]) -> None:
         self.db.add_point_adjustment(
@@ -145,6 +170,12 @@ class ArbitrationController:
             match_points=float(record.get("match_points") or 0.0),
             game_points=float(record.get("game_points") or 0.0),
             reason=str(record.get("reason") or ""),
+        )
+        self._audit(
+            "point_adjustment_restored",
+            tournament_id,
+            f"Ajuste de pontos restaurado: {self._adjustment_digest(record)}",
+            record,
         )
 
     # ---- Byes solicitados (TRF25) ----------------------------------------- #
@@ -275,3 +306,53 @@ class ArbitrationController:
         from src.services.constants import AppError
 
         return AppError(message)
+
+    @staticmethod
+    def _adjustment_digest(record: dict[str, Any]) -> str:
+        """Uma linha legível do ajuste, para a descrição do evento de auditoria."""
+        alvo = record.get("player_name") or record.get("team_name")
+        if not alvo:
+            alvo = f"#{record.get('player_id') or record.get('team_id') or '?'}"
+        entrada = AdjustmentEntry(
+            round_number=int(record.get("round_number") or 0),
+            aat_type=str(record.get("aat_type") or ""),
+            match_points=float(record.get("match_points") or 0.0),
+            game_points=float(record.get("game_points") or 0.0),
+            reason=str(record.get("reason") or ""),
+        )
+        return f"{alvo} — {describe_entry(entrada)}"
+
+    def _audit(
+        self,
+        action: str,
+        tournament_id: int,
+        description: str,
+        record: dict[str, Any],
+    ) -> None:
+        """Evento na trilha do torneio — a mesma de ``round_generated``.
+
+        Vai para `audit_events` (e não para o log de segurança) porque é onde o
+        `export_tournament_audit` procura: assim o motivo escrito pelo árbitro
+        sai no relatório de auditoria com operador, data e hora.
+
+        Falha de auditoria não desfaz o que o árbitro já decidiu — o lançamento
+        está gravado, e derrubar a tela por causa da trilha trocaria um problema
+        de registro por um de operação em pleno salão. Vai para o log.
+        """
+        campos = ("round_number", "player_id", "team_id", "aat_type",
+                  "match_points", "game_points")
+        metadata: dict[str, Any] = {"summary": description}
+        metadata.update(
+            {campo: record[campo] for campo in campos if record.get(campo) is not None}
+        )
+        try:
+            self.db.create_audit_event(
+                action=action,
+                tournament_id=int(tournament_id),
+                entity_type="point_adjustment",
+                entity_id=int(record.get("id") or 0) or None,
+                reason=str(record.get("reason") or "").strip(),
+                metadata=metadata,
+            )
+        except Exception:  # pragma: no cover - trilha nunca bloqueia a decisão
+            logger.exception("Falha ao registrar auditoria de %s", action)

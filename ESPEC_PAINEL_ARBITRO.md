@@ -808,9 +808,41 @@ produzir classificacao publicada incorreta.
 
 #### TBK-01 - Ajustes de pontos aplicados na classificacao
 
-Status: pendente.
+Status: CONCLUIDO (2026-07-30).
 
-Problema:
+Como ficou:
+
+- modulo puro `src/services/pairing/point_adjustments.py`: agrega as linhas de
+  `point_adjustments` por competidor (`AdjustmentTotal`), escreve o texto que
+  explica o total e define o marcador visual unico (`*`) mais a legenda;
+- `calculate_player_standings`/`calculate_team_standings` recebem `adjustments=`
+  e somam **depois** dos desempates: a penalidade e decisao sobre o punido, nao
+  sobre a forca de quem o enfrentou — Buchholz/SB/performance seguem medindo o
+  tabuleiro, que e tambem o que o Gacrux mede;
+- ordenacao com o Gacrux ativo: os pontos ja ajustados entram na frente e o rank
+  do motor vira o desempate de quem ficou com a mesma soma. Sem ajuste no
+  torneio a chave e a de antes, byte a byte. Em equipes o prefixo reordenado vai
+  ate o ultimo criterio que um ajuste pode mover (MP/GP);
+- **por que o ajuste nao vai ao motor:** no individual o Gacrux recebe TRF-16,
+  que nao tem registro 299; no de equipes o TRF-25 tem, mas o
+  `parse_trf_abnormal` do motor le o 299 como redefinicao do sistema de pontos,
+  nao como penalidade nominal. Vale a primeira saida prevista no escopo
+  ("pontos ajustados");
+- `PairingService.standings`/`team_standings` alimentam o parametro — e como
+  todo consumidor (tela, PDF, XLSX, site, portal, podio, ata, premiacao) passa
+  por eles, o numero corrigido chega a todos sem tocar em cada saida;
+- ata final ganha a secao "Ajustes de pontos do arbitro (TRF25 §7.3)" com
+  rodada, competidor, tipo, MP, GP, motivo e data — omitida quando nao ha
+  ajuste;
+- lancar, excluir e restaurar um ajuste geram evento em `audit_events` com o
+  motivo, que e de onde o `export_tournament_audit` monta o relatorio de
+  auditoria. Falha de auditoria nao desfaz a decisao ja gravada.
+
+Criterios de aceite: todos atendidos; 25 testes novos em
+`tests/test_core_point_adjustments.py` (individual e equipes, nos dois motores)
+e 3 em `tests/test_ui_arbitration.py` (trilha de auditoria).
+
+Problema original:
 
 - `point_adjustments` (penalidades e bonus do arbitro) so alimenta o registro
   299 do TRF25 (`federation_exporters/trf25.py:436`);
@@ -830,10 +862,10 @@ Escopo:
 
 Criterios de aceite:
 
-- [ ] penalidade de -0,5 reordena a classificacao na tela e em todas as
+- [x] penalidade de -0,5 reordena a classificacao na tela e em todas as
   exportacoes;
-- [ ] o ajuste aparece com motivo na ata final e no relatorio de auditoria;
-- [ ] testes cobrem ajuste individual e por equipes nos dois motores de
+- [x] o ajuste aparece com motivo na ata final e no relatorio de auditoria;
+- [x] testes cobrem ajuste individual e por equipes nos dois motores de
   desempate.
 
 #### TBK-02 - Fallback do motor de desempates visivel
@@ -1562,7 +1594,7 @@ a decisao arbitral ou mudar sem aviso.
 
 Entregas:
 
-1. [ ] `TBK-01` Ajustes de pontos aplicados na classificacao.
+1. [x] `TBK-01` Ajustes de pontos aplicados na classificacao.
 2. [ ] `TBK-02` Fallback do motor de desempates visivel.
 3. [ ] `ARB-01` Correcao com motivo, desbloqueio pontual e alerta de cascata.
 4. [ ] Correcoes pontuais de `PAR-04` com risco imediato: troca de cores via

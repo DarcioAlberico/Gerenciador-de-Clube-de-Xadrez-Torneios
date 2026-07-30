@@ -308,6 +308,52 @@ class ControladorTest(unittest.TestCase):
         self.assertEqual("b", (controlador.find_adjustment(1, 2) or {})["reason"])
         self.assertIsNone(controlador.find_adjustment(1, 99))
 
+    def test_ajuste_lancado_deixa_trilha_com_o_motivo(self) -> None:
+        """TBK-01: o ajuste move a classificação, então precisa de auditoria.
+
+        Vai para `audit_events` — a mesma trilha de `round_generated` — porque é
+        de lá que o `export_tournament_audit` tira o relatório de auditoria.
+        """
+        controlador, db = self.controlador()
+        controlador.add_adjustment(
+            7, state.AdjustmentForm(3, 2, "", "", "-0,5", "Celular tocou")
+        )
+        self.assertEqual(["add_point_adjustment", "create_audit_event"], db.nomes_chamados())
+        _nome, _args, kwargs = db.chamadas[-1]
+        self.assertEqual("point_adjustment_added", kwargs["action"])
+        self.assertEqual(7, kwargs["tournament_id"])
+        self.assertEqual("Celular tocou", kwargs["reason"])
+        self.assertIn("-0,5 (rodada 2)", kwargs["metadata"]["summary"])
+
+    def test_exclusao_de_ajuste_tambem_e_auditada(self) -> None:
+        """Apagar o ajuste devolve os pontos: é uma decisão como a de lançar."""
+        controlador, db = self.controlador(
+            list_point_adjustments=[
+                {"id": 4, "player_id": 3, "game_points": -0.5, "reason": "Celular tocou",
+                 "round_number": 2, "player_name": "Ana"}
+            ]
+        )
+        controlador.delete_adjustment(7, 4)
+        self.assertEqual(
+            ["list_point_adjustments", "delete_point_adjustment", "create_audit_event"],
+            db.nomes_chamados(),
+        )
+        _nome, _args, kwargs = db.chamadas[-1]
+        self.assertEqual("point_adjustment_removed", kwargs["action"])
+        self.assertIn("Ana", kwargs["metadata"]["summary"])
+
+    def test_trilha_indisponivel_nao_derruba_o_lancamento(self) -> None:
+        """Em pleno salão, problema de registro não pode virar problema de operação."""
+
+        class BancoQueFalhaNaAuditoria(BancoDeMentira):
+            def create_audit_event(self, **kwargs: Any) -> int:
+                raise RuntimeError("banco ocupado")
+
+        db = BancoQueFalhaNaAuditoria()
+        controlador = ArbitrationController(db, pairing_service=BancoDeMentira())
+        controlador.add_adjustment(7, state.AdjustmentForm(3, 2, "", "", "-0,5", "Celular"))
+        self.assertEqual(["add_point_adjustment"], db.nomes_chamados())
+
     def test_sem_rodada_gerada_o_pacote_recusa_com_recado(self) -> None:
         controlador, _db = self.controlador(list_rounds=[])
         with self.assertRaises(AppError):
