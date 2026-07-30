@@ -151,6 +151,7 @@
   "arbitration.issues.card.decision": "Decisão",
   "arbitration.issues.card.qr": "QR",
   "arbitration.issues.card.sync": "Sync",
+  "arbitration.issues.card.tiebreak": "Desempate",
   "arbitration.issues.card.total": "Total",
   "arbitration.issues.column.created": "Data",
   "arbitration.issues.column.detail": "Detalhe",
@@ -168,6 +169,7 @@
   "arbitration.issues.filter.decision": "Decisão",
   "arbitration.issues.filter.qr": "QR",
   "arbitration.issues.filter.sync": "Sync",
+  "arbitration.issues.filter.tiebreak": "Desempate",
   "arbitration.issues.search_placeholder": "Buscar mesa, título ou detalhe",
   "arbitration.issues.showing": "Exibindo {exibidos} de {total}",
   "arbitration.issues.title": "Central de pendências",
@@ -542,5 +544,6 @@
   "shell.palette.empty": "Nenhuma ação corresponde.",
   "shell.palette.placeholder": "Buscar ação… (digite e Enter)",
   "shell.palette.title": "Comando",
-  "shell.reload.empty": "Nada para recarregar."
+  "shell.reload.empty": "Nada para recarregar.",
+  "standings.engine.retry": "Recalcular com o motor configurado"
 }

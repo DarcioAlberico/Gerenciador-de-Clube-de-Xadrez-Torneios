@@ -21,11 +21,26 @@ def result_submission_issue(submission: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def audit_issue(event: dict[str, Any], source: str, kind: str, title: str) -> dict[str, Any]:
+def audit_issue(
+    event: dict[str, Any],
+    source: str,
+    kind: str,
+    title: str,
+    severity: str = "decision",
+) -> dict[str, Any]:
+    """Evento de auditoria → pendência do painel.
+
+    `severity` é parâmetro porque "decision" **bloqueia o fechamento da rodada**
+    (ver `_blocking_arbitration_issues_for_round`). Isso é certo para um evento
+    de sync rejeitado, que o árbitro precisa resolver antes de seguir, e errado
+    para um aviso de motor de desempate: pararia o torneio por causa de um
+    problema de relatório. O padrão continua "decision" para não mudar o
+    comportamento de quem já chamava sem o argumento.
+    """
     event_identifier = event.get("event_id") or event.get("id") or event.get("entity_id") or ""
     return {
         "issue_key": f"{source}:{kind}:{event_identifier}",
-        "severity": "decision",
+        "severity": severity,
         "source": source,
         "kind": kind,
         "title": title,
@@ -92,6 +107,7 @@ def issue_metrics(issues: list[dict[str, Any]]) -> dict[str, int]:
         "sync_conflicts": sum(1 for item in issues if item["source"] == "sync"),
         "clock_alerts": sum(1 for item in issues if item["source"] == "clock"),
         "pairing_alerts": sum(1 for item in issues if item["source"] == "pairing"),
+        "tiebreak_alerts": sum(1 for item in issues if item["source"] == "tiebreak"),
         "decision_required": sum(1 for item in issues if item["severity"] == "decision"),
     }
 

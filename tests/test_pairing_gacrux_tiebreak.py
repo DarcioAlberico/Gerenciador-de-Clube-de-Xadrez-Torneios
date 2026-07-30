@@ -252,6 +252,26 @@ class TestGacruxTiebreakStandings(unittest.TestCase):
         # Sem motor FIDE: nenhuma linha carrega o rank do Gacrux.
         self.assertFalse(any("_gacrux_rank" in item for item in standings))
 
+    def test_motor_real_bem_sucedido_nao_alerta_nada(self):
+        """TBK-02 pelo lado bom: com o motor de pe, nenhum aviso e nenhum evento.
+
+        Vale como guarda contra alarme falso — um alerta que aparece no caminho
+        normal treina o arbitro a ignorar o alerta.
+        """
+        self._set_engine("gacrux")
+        self.pairing_service.standings(self.tournament_id)
+
+        report = self.pairing_service.tiebreak_engine_report(self.tournament_id)
+        self.assertTrue(report.healthy)
+        self.assertEqual("gacrux", report.used)
+        self.assertEqual("ok", self.pairing_service.tiebreak_engine_badge(self.tournament_id)["tone"])
+        self.assertEqual(
+            [],
+            self.db.list_audit_events(
+                self.tournament_id, action="tiebreak_engine_fallback", limit=5
+            ),
+        )
+
     def test_prizes_follow_gacrux_standings(self):
         # Fase 4: a premiacao consome standings() -> respeita o ranking do Gacrux
         # sem qualquer mudanca no motor de premios (contrato preservado).

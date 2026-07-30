@@ -43,17 +43,16 @@ class PairingPagesMixin(ArbitrationPagesMixin, PairingResultsMixin):
         body = ctk.CTkFrame(self.content, fg_color="transparent")
         body.grid(row=1, column=0, padx=22, pady=(0, 22), sticky="nsew")
         body.grid_columnconfigure(0, weight=1)
-        body.grid_rowconfigure(1, weight=1)
+        # Linha 0 toolbar, 1 faixa do motor de desempate (TBK-02), 2 tabela.
+        body.grid_rowconfigure(2, weight=1)
 
         toolbar = self._make_panel(body)
         toolbar.grid(row=0, column=0, sticky="ew", pady=(0, 12))
 
         if tournament and tournament.get("competition_type") == "team":
-            ctk.CTkButton(toolbar, text="Recalcular", command=self.show_standings).pack(
-                side="left",
-                padx=12,
-                pady=12,
-            )
+            ctk.CTkButton(
+                toolbar, text="Recalcular", command=self._recalculate_standings
+            ).pack(side="left", padx=12, pady=12)
             botao_cruzada = ctk.CTkButton(toolbar, text="Exportar tabela cruzada")
             # O botao entra no proprio comando (F5.9): e ele que o
             # `_run_background` esmaece enquanto a exportacao roda. Sem isso a
@@ -65,7 +64,7 @@ class PairingPagesMixin(ArbitrationPagesMixin, PairingResultsMixin):
             botao_cruzada.pack(side="left", padx=(0, 12), pady=12)
 
             table_panel = self._make_panel(body)
-            table_panel.grid(row=1, column=0, sticky="nsew")
+            table_panel.grid(row=2, column=0, sticky="nsew")
             table_panel.grid_columnconfigure(0, weight=1)
             table_panel.grid_rowconfigure(0, weight=1)
 
@@ -117,7 +116,9 @@ class PairingPagesMixin(ArbitrationPagesMixin, PairingResultsMixin):
             self.standings_tree = tree
             row_team_ids: dict[str, int] = {}
 
-            team_standings = self.pairing_service.team_standings(self.current_tournament_id)
+            team_standings = self._standings_or_empty(
+                lambda: self.pairing_service.team_standings(self.current_tournament_id)
+            )
             for item in team_standings:
                 row_id = tree.insert(
                     "",
@@ -146,6 +147,7 @@ class PairingPagesMixin(ArbitrationPagesMixin, PairingResultsMixin):
                 row_team_ids[row_id] = int(item["team_id"])
 
             self._standings_adjustment_legend(table_panel, team_standings)
+            self._standings_engine_banner(body)
 
             def show_team_crosstable_detail() -> None:
                 selected = tree.selection()
@@ -192,11 +194,9 @@ class PairingPagesMixin(ArbitrationPagesMixin, PairingResultsMixin):
             except Exception as exc:
                 self._show_error(exc)
 
-        ctk.CTkButton(toolbar, text="Recalcular", command=self.show_standings).pack(
-            side="left",
-            padx=12,
-            pady=12,
-        )
+        ctk.CTkButton(
+            toolbar, text="Recalcular", command=self._recalculate_standings
+        ).pack(side="left", padx=12, pady=12)
         ctk.CTkButton(
             toolbar,
             text="Atualizar rating interno",
@@ -219,7 +219,7 @@ class PairingPagesMixin(ArbitrationPagesMixin, PairingResultsMixin):
         category_option.pack(side="left", padx=(0, 12), pady=12)
 
         table_panel = self._make_panel(body)
-        table_panel.grid(row=1, column=0, sticky="nsew")
+        table_panel.grid(row=2, column=0, sticky="nsew")
         table_panel.grid_columnconfigure(0, weight=1)
         table_panel.grid_rowconfigure(0, weight=1)
 
@@ -360,7 +360,10 @@ class PairingPagesMixin(ArbitrationPagesMixin, PairingResultsMixin):
             row_player_ids.clear()
             category = category_option.get()
             visible = []
-            for item in self.pairing_service.standings(self.current_tournament_id):
+            carregadas = self._standings_or_empty(
+                lambda: self.pairing_service.standings(self.current_tournament_id)
+            )
+            for item in carregadas:
                 if category != "Todas" and item["category"] != category:
                     continue
                 visible.append(item)
@@ -390,6 +393,82 @@ class PairingPagesMixin(ArbitrationPagesMixin, PairingResultsMixin):
 
         category_option.configure(command=lambda _value: load_standings())
         load_standings()
+        # Depois de carregar, e não antes: a faixa conta o que ACABOU de
+        # acontecer. Montada primeiro, mostraria o motor do cálculo anterior — e
+        # numa tela recém-aberta diria "tudo bem" ao lado de uma tabela vazia.
+        self._standings_engine_banner(body)
+
+    # ---- Motor de desempate: faixa, recálculo e tabela ausente (TBK-02) ---- #
+
+    def _standings_engine_banner(self, body: Any) -> None:
+        """Faixa permanente com o motor que assinou a classificação.
+
+        Permanente inclusive quando está tudo bem. Uma faixa que só aparece no
+        erro ensina o árbitro a não olhar para aquele canto; uma que sempre diz
+        qual motor assinou a tabela é um lugar onde se olha — e no dia em que o
+        Gacrux cair, o aviso chega onde os olhos já estão.
+        """
+        faixa = self.pairing_service.tiebreak_engine_badge(int(self.current_tournament_id))
+        cores = {
+            "ok": THEME_TEXT_SUB,
+            "warning": THEME_WARNING_TEXT,
+            "danger": THEME_DANGER,
+        }
+        painel = self._make_panel(body)
+        painel.grid(row=1, column=0, sticky="ew", pady=(0, 12))
+        painel.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(
+            painel,
+            text=faixa["label"],
+            text_color=cores.get(faixa["tone"], THEME_TEXT_SUB),
+            anchor="w",
+            justify="left",
+        ).grid(row=0, column=0, padx=12, pady=(10, 0), sticky="ew")
+        if not faixa["detail"]:
+            painel.grid_configure(pady=(0, 12))
+            return
+        # O detalhe embrulha porque diz o que muda na prática (adversário
+        # virtual, ordem dos empatados) — recado que não cabe em meia linha.
+        detalhe = ctk.CTkLabel(
+            painel,
+            text=faixa["detail"],
+            text_color=THEME_TEXT_SUB,
+            anchor="w",
+            justify="left",
+            wraplength=900,
+        )
+        detalhe.grid(row=1, column=0, padx=12, pady=(2, 4), sticky="ew")
+        ctk.CTkButton(
+            painel,
+            text=t("standings.engine.retry"),
+            command=self._recalculate_standings,
+        ).grid(row=2, column=0, padx=12, pady=(0, 10), sticky="w")
+
+    def _recalculate_standings(self) -> None:
+        """Esquece o cálculo cacheado e remonta a tela.
+
+        O "Recalcular" antes só repintava — e desde que a falha do motor passou a
+        ser cacheada (para não disparar um subprocesso por repintura), repintar
+        não bastaria para sair de uma falha passageira. Agora o botão faz o que
+        o nome diz.
+        """
+        if self.current_tournament_id:
+            self.pairing_service.reset_tiebreak_engine(int(self.current_tournament_id))
+        self.show_standings()
+
+    def _standings_or_empty(self, carregar: Any) -> list[dict[str, Any]]:
+        """Classificação, ou lista vazia quando o modo estrito barrou o cálculo.
+
+        Em modo estrito a falha do motor levanta `AppError` de propósito — é o
+        "bloquear a publicação" da TBK-02. Aqui ela não pode virar um traceback:
+        a faixa acima da tabela já explica o que aconteceu e oferece o
+        recálculo, então a tabela apenas fica vazia.
+        """
+        try:
+            return list(carregar())
+        except AppError as exc:
+            logger.warning("Classificacao indisponivel: %s", exc)
+            return []
 
     def _standings_adjustment_legend(self, painel: Any, standings: list[dict[str, Any]]) -> None:
         """Legenda do asterisco, só quando existe asterisco na tabela (TBK-01).

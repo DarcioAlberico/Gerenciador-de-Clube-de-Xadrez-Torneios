@@ -870,9 +870,66 @@ Criterios de aceite:
 
 #### TBK-02 - Fallback do motor de desempates visivel
 
-Status: pendente.
+Status: CONCLUIDO (2026-07-30).
 
-Problema:
+Como ficou:
+
+- modulo puro `src/services/pairing/tiebreak_engine.py`: `EngineReport` com tres
+  estados que nao se confundem — **normal** (`used == configured`),
+  **degradado** (`fallback`: o Gacrux falhou e o motor proprio assumiu, a tabela
+  esta publicada mas nao e a configurada) e **bloqueado** (`blocked`: modo
+  estrito barrou, nada foi publicado). Os textos das tres portas (faixa da tela,
+  evento de auditoria, pendencia do painel) saem do mesmo lugar;
+- `_run_tiebreak_engine` no `PairingService` unifica os caminhos individual e de
+  equipes: guarda o retrato, registra evento de auditoria e, em modo estrito,
+  levanta `AppError` em vez de degradar;
+- **a falha entra no cache junto com o sucesso**, e isso resolve dois problemas
+  de uma vez: antes um motor quebrado era re-executado a cada `standings()` —
+  dezenas de subprocessos por tela — e agora o motor roda uma vez por ESTADO do
+  torneio, o que tambem faz o arbitro receber um aviso por estado em vez de uma
+  enxurrada. Fechar rodada nova gera evento novo (ele precisa saber que
+  aconteceu de novo); repintar a tela nao gera nenhum;
+- `reset_tiebreak_engine` no botao "Recalcular": falha cacheada nao pode prender
+  o torneio numa falha passageira. Antes o botao so repintava;
+- faixa **permanente** acima da tabela de classificacao, inclusive no estado
+  normal — aviso que so aparece no erro ensina o arbitro a nao olhar para aquele
+  canto. Degradado/bloqueado acrescentam o detalhe (adversario virtual, ordem
+  dos empatados) e o botao de recalculo;
+- pendencia no painel do arbitro reusando a porta dos eventos de sync
+  (`_audit_issue`), com cartao "Desempate" e filtro proprio na Central;
+- **o modo estrito barra a PUBLICACAO, nao o torneio.** Escrever o bloqueio
+  dentro de `standings()` sem mais nada pararia o evento: pareamento, previa,
+  snapshot de fechamento e diagnostico do painel tambem leem a classificacao, e
+  todos so precisam da ORDEM POR PONTOS, que os dois motores calculam igual.
+  `standings`/`team_standings` (publicaveis) levantam; `_standings`/
+  `_team_standings` com `honor_strict=False` degradam para o motor proprio. O
+  retrato e o registro sao os mesmos nos dois caminhos — quem falha e o motor, e
+  o modo estrito do torneio e que diz se bloqueia; `honor_strict` so decide se
+  ESTE chamador recebe a excecao. Sem isso, um uso interno que chegasse primeiro
+  cacharia "degradado" e a publicacao seguinte leria o cache e degradaria em
+  silencio, que e exatamente o bug que a TBK-02 fecha;
+- pela mesma razao a pendencia entra como `attention`, e nao `decision`:
+  severidade `decision` **bloqueia o fechamento da rodada**
+  (`_blocking_arbitration_issues_for_round`), o que recriaria a mesma armadilha
+  por outro caminho. `audit_issue` ganhou o parametro, com o padrao antigo
+  preservado para os eventos de sync, onde bloquear e correto;
+- **reentrancia nao e fallback**: a chamada aninhada vinda do export do TRF
+  (`_GACRUX_TIEBREAK_INFLIGHT`) usa o motor proprio sem registrar, sem alertar e
+  sem valer o modo estrito — senao o export que o proprio motor pediu ficaria
+  impossivel;
+- configuracao `tiebreak_strict` ("Falhar em vez de degradar") em
+  `tournament_settings` (schema v45), nascendo DESLIGADA inclusive nas bases
+  existentes: barrar a classificacao e decisao do arbitro do torneio, nao padrao
+  que uma migracao imponha.
+
+Criterios de aceite: todos atendidos; 27 testes novos em
+`tests/test_core_tiebreak_engine.py` (retrato, faixa, fallback, modo estrito,
+equipes, persistencia da configuracao e — os que mais valeram — gerar e fechar
+rodada com o motor caido em modo estrito) e 1 em
+`tests/test_pairing_gacrux_tiebreak.py` (motor real de pe nao alerta nada —
+guarda contra alarme falso).
+
+Problema original:
 
 - se o subprocesso Gacrux falha, `pairing_service.py:1591-1597` apenas loga um
   warning e a classificacao passa a ser calculada pelo motor proprio, que nao
@@ -888,9 +945,9 @@ Escopo:
 
 Criterios de aceite:
 
-- [ ] fallback gera alerta visivel e evento de auditoria;
-- [ ] classificacao exibe o motor usado;
-- [ ] em modo estrito, falha do Gacrux bloqueia a publicacao em vez de trocar
+- [x] fallback gera alerta visivel e evento de auditoria;
+- [x] classificacao exibe o motor usado;
+- [x] em modo estrito, falha do Gacrux bloqueia a publicacao em vez de trocar
   de motor silenciosamente.
 
 #### TBK-03 - Jogos nao disputados conforme FIDE no motor proprio
@@ -1595,7 +1652,7 @@ a decisao arbitral ou mudar sem aviso.
 Entregas:
 
 1. [x] `TBK-01` Ajustes de pontos aplicados na classificacao.
-2. [ ] `TBK-02` Fallback do motor de desempates visivel.
+2. [x] `TBK-02` Fallback do motor de desempates visivel.
 3. [ ] `ARB-01` Correcao com motivo, desbloqueio pontual e alerta de cascata.
 4. [ ] Correcoes pontuais de `PAR-04` com risco imediato: troca de cores via
    servico com auditoria e `TEAM_PAIRING_METHODS` duplicado.
