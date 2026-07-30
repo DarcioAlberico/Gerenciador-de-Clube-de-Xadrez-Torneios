@@ -175,6 +175,43 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.assertGreater(len(self._linhas_da_faixa_de_filtros()), 1)
         self.assertEqual([], self._widgets_past_right_edge())
 
+    def test_linha_de_lancamento_quebra_em_janela_estreita(self) -> None:
+        """B-6/B-8: a linha de lançamento da rodada era o **gargalo do app**.
+
+        Dois seletores, "Salvar resultado" e os quatro botões rápidos exigiam
+        1.220px — medidos no "Limpar", que é o último da fila e, por isso, o
+        primeiro a sair da tela. O que ficava inacessível era justamente a ação
+        de desfazer um resultado lançado por engano.
+        """
+        for nome in ("Ana", "Bruno", "Carla", "Diego"):
+            self.db.create_player(self.tournament_id, name=nome, rating=1500)
+        self.app.pairing_service.generate_next_round(self.tournament_id)
+
+        self.app.geometry("1600x900+0+0")
+        self.app.update()
+        self.app.show_pairings()
+        self.app.update()
+        largo = self._linhas_do_lancamento()
+        self.assertEqual({0}, largo, "em janela larga a linha e uma so")
+
+        self.app.geometry("900x700+0+0")
+        self.app.update()
+        self.app.show_pairings()
+        self.app.update()
+        self.assertGreater(len(self._linhas_do_lancamento()), 1, "deveria quebrar")
+        self.assertEqual([], self._widgets_past_right_edge())
+
+    def _linhas_do_lancamento(self) -> set[int]:
+        """Linhas ocupadas pelos botões rápidos de resultado (1-0/1/2/0-1/Limpar)."""
+        rotulos = {"1-0", "1/2", "0-1", "Limpar", "Salvar resultado"}
+        linhas = set()
+        for widget in self._walk(self.app.content):
+            if isinstance(widget, ctk.CTkButton) and widget.cget("text") in rotulos:
+                info = widget.grid_info()
+                if info:
+                    linhas.add(int(info["row"]))
+        return linhas
+
     def test_faixa_so_sabe_onde_comeca_depois_de_aparecer(self) -> None:
         """B-8: o rodape dos cadastros TRF25 nasce a **direita** de um formulario
         de ~420px, e a faixa mede o espaco a partir de onde ela comeca.
