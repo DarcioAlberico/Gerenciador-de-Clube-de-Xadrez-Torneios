@@ -1021,22 +1021,37 @@ class trf2json(chessjson.chessjson):
         # print(ooo)
 
     def parse_trf_abnormal(self, tournament, line):
+        # patch local (bugs Gacrux v1.9.52) — tres defeitos nesta funcao faziam
+        # QUALQUER registro 299 derrubar o motor. Colunas conferidas contra o
+        # escritor do Albericus (federation_exporters/trf25_records.record_299),
+        # que segue o TRF25 §7.3: att col 5, MP 8-11, GP 14-17, rodada 20-22,
+        # entidades de 24 em diante, 4 de largura a cada 5 colunas.
+        #
+        # 1. "round" lia a MESMA fatia do gamePoints (13:17). Com pontos
+        #    fracionarios ("-0.5") o parse_int estourava ValueError antes de
+        #    qualquer outra coisa: um ajuste de -0,5 matava o subprocesso.
+        # 2. "teams.append[team]" — indexacao de metodo, TypeError garantido no
+        #    primeiro registro com entidade (e o nosso escritor sempre emite uma).
+        # 3. "self.attlist" nunca existe; o atributo criado no __init__ e
+        #    "aatlist". AttributeError.
         linelen = len(line)
         teams = []
         att = {
             "att": line[4],
             "matchPoints": parse_float(line[7:11]),
             "gamePoints": parse_float(line[13:17]),
-            "round": parse_int(line[13:17]),
+            "round": parse_int(line[19:22]),
             "teams": teams,
         }
         for i in range(27, linelen + 1, 5):
             team = parse_int(line[i - 4 : i])
-            teams.append[team]
+            teams.append(team)
         if att["round"] == 0 and (len(teams) == 0 or teams[0] == 0):
             self.scores.add_unplayed(att["att"], att["matchPoints"], att["gamePoints"])
         else:
-            self.attlist.append(att)
+            # Lista so acumulada: o motor nao usa AAT nominal no desempate. Quem
+            # aplica o ajuste na classificacao e o Albericus (TBK-01).
+            self.aatlist.append(att)
 
     def parse_trf_acceleratedv4(self, tournament, line):
         linelen = len(line)
