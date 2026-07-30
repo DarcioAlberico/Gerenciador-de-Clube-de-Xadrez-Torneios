@@ -7,6 +7,7 @@ os testes de pareamento Gacrux ja fazem).
 
 import json
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -459,6 +460,37 @@ class TestGacruxTeamTiebreaks(unittest.TestCase):
         self.assertTrue(albericus)
         self.assertFalse(any("_gacrux_rank" in item for item in albericus.values()))
 
+    def test_ajuste_de_pontos_nao_derruba_o_motor(self):
+        """Registro 299 no TRF-25 deixou de matar o subprocesso.
+
+        O `parse_trf_abnormal` do Gacrux v1.9.52 lia a rodada da fatia do
+        gamePoints: com "-0.5" o `parse_int` estourava e o motor morria. O
+        Albericus caia no motor proprio em silencio — exatamente o que a TBK-02
+        passou a denunciar. Depois do patch local, o 299 e lido e ignorado pelo
+        desempate (o ajuste quem aplica e o Albericus, TBK-01) e o rank do motor
+        continua chegando.
+        """
+        import src.services.pairing_service as ps
+        ps._GACRUX_TIEBREAK_CACHE.clear()
+
+        self.db.add_point_adjustment(
+            self.tournament_id,
+            round_number=1,
+            team_id=self.team_ids[0],
+            match_points=-2.0,
+            game_points=-0.5,
+            reason="Escalacao irregular",
+        )
+        gacrux = self._team_standings_by_id("gacrux")
+
+        self.assertTrue(
+            all("_gacrux_rank" in item for item in gacrux.values()),
+            "sem _gacrux_rank o motor caiu e a classificacao veio do motor proprio",
+        )
+        punida = gacrux[self.team_ids[0]]
+        self.assertEqual(-2.0, punida["adjustment_match_points"])
+        self.assertEqual(-0.5, punida["adjustment_game_points"])
+
 
 class TestGacruxRoundRobin(unittest.TestCase):
     """Round-robin: o motor deve usar regras pre-determinadas (-p), nao Suico (-s).
@@ -544,6 +576,60 @@ class TestGacruxRoundRobin(unittest.TestCase):
         positions = sorted(item["position"] for item in standings)
         self.assertEqual(positions, list(range(1, len(self.player_ids) + 1)))
         self.assertTrue(all("_gacrux_rank" in item for item in standings))
+
+
+class TestRegistro299RoundTrip(unittest.TestCase):
+    """O que o Albericus escreve no 299, o Gacrux tem de ler igual.
+
+    Teste rapido (sem subprocesso) do patch local em `parse_trf_abnormal`: e o
+    unico lugar onde o escritor e o leitor do registro 299 se encontram, e as
+    tres colunas em disputa (rodada, entidades) sao aritmetica de posicao, que
+    quebra em silencio. Importa o modulo do motor com o diretorio dele no
+    sys.path porque o Gacrux usa imports planos (`import qdefs`).
+    """
+
+    def _parser(self):
+        gacrux_dir = str(
+            Path(__file__).resolve().parent.parent
+            / "src" / "services" / "pairing" / "gacrux"
+        )
+        if gacrux_dir not in sys.path:
+            sys.path.insert(0, gacrux_dir)
+        from trf2json import trf2json
+
+        return trf2json()
+
+    def test_rodada_e_entidades_voltam_das_colunas_certas(self):
+        from src.services.federation_exporters.trf25_records import record_299
+
+        parser = self._parser()
+        parser.parse_trf_abnormal({}, record_299("", 0.0, -0.5, 3, [7]).rstrip())
+        parser.parse_trf_abnormal({}, record_299("W", -2.0, -1.0, 0, [2, 9]).rstrip())
+
+        primeiro, segundo = parser.aatlist
+        self.assertEqual(3, primeiro["round"], "rodada lida da fatia do gamePoints")
+        self.assertEqual([7], primeiro["teams"])
+        self.assertEqual(-0.5, float(primeiro["gamePoints"]))
+        self.assertEqual(0, segundo["round"])
+        self.assertEqual([2, 9], segundo["teams"])
+        self.assertEqual(-2.0, float(segundo["matchPoints"]))
+        self.assertEqual("W", segundo["att"])
+
+    def test_ajuste_nominal_nao_redefine_o_sistema_de_pontos(self):
+        """Com entidade nomeada o 299 vai para a lista, e nao ao score system.
+
+        `add_unplayed` reescreveria quanto vale um jogo nao disputado no torneio
+        inteiro — consequencia bem maior do que a penalidade de um competidor.
+        """
+        from src.services.federation_exporters.trf25_records import record_299
+
+        parser = self._parser()
+        # `scores` nasce so quando o motor le um torneio; aqui um espiao basta.
+        parser.scores = mock.Mock()
+        parser.parse_trf_abnormal({}, record_299("", 0.0, -0.5, 0, [4]).rstrip())
+
+        parser.scores.add_unplayed.assert_not_called()
+        self.assertEqual(1, len(parser.aatlist))
 
 
 if __name__ == "__main__":
