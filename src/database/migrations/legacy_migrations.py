@@ -58,6 +58,7 @@ class LegacyMigrations:
             44: self._migrate_to_v44,
             45: self._migrate_to_v45,
             46: self._migrate_to_v46,
+            47: self._migrate_to_v47,
         }
 
     def _run_schema_migrations(self, connection: sqlite3.Connection) -> None:
@@ -168,6 +169,8 @@ class LegacyMigrations:
             self._migrate_to_v45(connection)
         if self.db.SCHEMA_VERSION >= 46:
             self._migrate_to_v46(connection)
+        if self.db.SCHEMA_VERSION >= 47:
+            self._migrate_to_v47(connection)
 
     def _migrate_to_v1(self, connection: sqlite3.Connection) -> None:
         now = self.db.now()
@@ -1940,3 +1943,24 @@ class LegacyMigrations:
                 ON standings_snapshot_history(tournament_id, round_number, superseded_at)
             """
         )
+    def _migrate_to_v47(self, connection: sqlite3.Connection) -> None:
+        """Mesa adiada (ARB-02): a pendencia esperada deixa de parecer esquecimento.
+
+        Duas colunas em `pairings`, nenhuma tabela nova. `postponed` marca a mesa
+        que o arbitro adiou; `postponed_note` guarda o combinado ("sabado 14h",
+        "aguardando decisao de apelacao"). Antes disso, uma partida adiada e uma
+        partida que ninguem lancou eram a MESMA linha em branco no painel — e a
+        rodada travava nas duas do mesmo jeito, sem dizer qual era qual.
+
+        Bases antigas ganham as colunas com o padrao "nao adiada", que e o que
+        elas sempre foram.
+        """
+        columns = self.db._table_columns(connection, "pairings")
+        if "postponed" not in columns:
+            connection.execute(
+                "ALTER TABLE pairings ADD COLUMN postponed INTEGER NOT NULL DEFAULT 0"
+            )
+        if "postponed_note" not in columns:
+            connection.execute(
+                "ALTER TABLE pairings ADD COLUMN postponed_note TEXT NOT NULL DEFAULT ''"
+            )

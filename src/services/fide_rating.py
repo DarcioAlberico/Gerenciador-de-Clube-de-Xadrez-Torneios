@@ -12,12 +12,15 @@ from __future__ import annotations
 from typing import Any, Mapping, Sequence
 
 from src.services.constants import RESULT_POINTS, player_full_name
+from src.services.results_registry import RATED_RESULTS as _RATED_RESULTS
 
 MAX_RATING_DIFF = 400
 
-# Apenas partidas jogadas no tabuleiro contam para rating; WO/forfait (1F-0F,
-# 0F-1F, 0F-0F), byes e partidas sem resultado são excluídos.
-_RATED_RESULTS = {"1-0", "0-1", "1/2-1/2"}
+# `_RATED_RESULTS` vem do registro (ARB-02) e nao mais de uma lista escrita aqui.
+# Fora ficam: W.O./forfait (a partida nao foi jogada), byes, mesas sem resultado
+# e — desde a ARB-02 — os resultados por DECISAO DO ARBITRO (`W`/`D`/`L` do TRF),
+# que foram jogados mas nao sao rataveis. Uma lista local nao teria sido
+# atualizada, e o rating sairia contando partidas que a FIDE nao conta.
 
 # Tabela FIDE de expectativa (jogador de MAIOR rating), por faixa de diferença
 # de rating. Pares (limite_superior_inclusivo, p_do_maior). Diferenças são

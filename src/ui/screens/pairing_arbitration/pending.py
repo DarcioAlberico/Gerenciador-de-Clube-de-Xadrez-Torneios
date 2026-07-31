@@ -13,7 +13,7 @@ from typing import Any
 
 import customtkinter as ctk
 
-from ...components import WrapRow, secondary_button
+from ...components import WrapRow, reason_dialog, secondary_button
 from ...i18n import t
 from ...support import THEME_TEXT_SUB
 
@@ -31,10 +31,29 @@ RESULT_SHORTCUTS = {
     "<KP_Subtract>": "1/2-1/2",
     "<BackSpace>": "",
     "<Delete>": "",
+    # W.O. (ARB-02): letras, e não números, porque passam por confirmação — um
+    # dedo torto no teclado numérico não pode lançar ausência. `w` = brancas
+    # vencem, `p` = pretas vencem, `a` = dupla ausência.
+    "w": "1F-0F",
+    "p": "0F-1F",
+    "a": "0F-0F",
 }
 
 # Resultados oferecidos como botão, na ordem em que a súmula os traz.
 INLINE_RESULTS = (("1-0", "1-0"), ("1/2", "1/2-1/2"), ("0-1", "0-1"))
+
+# W.O. no painel (ARB-02): era lançável só na tela `Rodadas`, justamente o que o
+# árbitro NÃO tem à mão quando está em pé no salão decidindo uma ausência. Os
+# rótulos são os códigos da súmula, os mesmos que a tela `Rodadas` mostra.
+WALKOVER_INLINE_RESULTS = (
+    ("1F-0F", "1F-0F"),
+    ("0F-1F", "0F-1F"),
+    ("0F-0F", "0F-0F"),
+)
+
+# Resultados que exigem confirmação antes de gravar: são DECISÃO do árbitro
+# sobre alguém que não jogou, não a transcrição de um placar.
+CONFIRMED_RESULTS = frozenset(code for _rotulo, code in WALKOVER_INLINE_RESULTS)
 
 
 class PendingTablesSection:
@@ -180,9 +199,39 @@ class PendingTablesSection:
             )
         faixa.add(
             ctk.CTkLabel(
+                faixa.frame, text=t("arbitration.pending.walkover"), text_color=THEME_TEXT_SUB
+            ),
+            60,
+        )
+        for rotulo, resultado in WALKOVER_INLINE_RESULTS:
+            faixa.add(
+                secondary_button(
+                    faixa.frame,
+                    rotulo,
+                    lambda valor=resultado: host._save_arbitration_panel_result(valor),
+                    width=76,
+                ),
+                76,
+            )
+        # Adiar/retomar (ARB-02) fica na mesma faixa: é a terceira coisa que se
+        # faz com uma mesa em aberto, junto de lançar placar e lançar W.O.
+        faixa.add(
+            secondary_button(
+                faixa.frame, t("arbitration.pending.postpone"), self.postpone, width=90
+            ),
+            90,
+        )
+        faixa.add(
+            secondary_button(
+                faixa.frame, t("arbitration.pending.resume"), self.resume, width=90
+            ),
+            90,
+        )
+        faixa.add(
+            ctk.CTkLabel(
                 faixa.frame, text=t("arbitration.pending.shortcuts"), text_color=THEME_TEXT_SUB
             ),
-            170,
+            250,
         )
         faixa.bind_to(host.content)
 
@@ -210,11 +259,85 @@ class PendingTablesSection:
             pairing_id = host.arbitration_pending_row_map.get(selecionado[0])
             if not pairing_id:
                 raise self._app_error(t("arbitration.error.table_not_found"))
+            if not self._confirmed(tabela, selecionado[0], result):
+                return "break"
             self.controller.save_result(self.tournament_id, int(pairing_id), result)
             host.show_arbitration_panel()
         except Exception as exc:
             host._show_error(exc)
         return "break"
+
+    def postpone(self) -> None:
+        """Marca a mesa selecionada como adiada, perguntando o combinado."""
+        host = self.host
+        try:
+            pairing_id = self._selected_pairing_id()
+            # Nota OPCIONAL, e por isso o `validate` que aceita vazio: adiar sem
+            # saber quando ainda é melhor do que a mesa parecer esquecida. Quem
+            # exige texto é a correção de rodada fechada (ARB-01), que é prova
+            # documental — esta aqui é um lembrete.
+            nota = reason_dialog(
+                host,
+                t("arbitration.pending.postpone_title"),
+                t("arbitration.pending.postpone_prompt"),
+                validate=lambda _texto: "",
+            )
+            if nota is None:  # cancelou
+                return
+            self.controller.postpone_pairing(self.tournament_id, pairing_id, nota)
+            host.show_arbitration_panel()
+        except Exception as exc:
+            host._show_error(exc)
+
+    def resume(self) -> None:
+        """Desfaz o adiamento da mesa selecionada."""
+        host = self.host
+        try:
+            pairing_id = self._selected_pairing_id()
+            self.controller.resume_pairing(self.tournament_id, pairing_id)
+            host.show_arbitration_panel()
+        except Exception as exc:
+            host._show_error(exc)
+
+    def _selected_pairing_id(self) -> int:
+        tabela = getattr(self.host, "arbitration_pending_tree", None)
+        if tabela is None:
+            raise self._app_error(t("arbitration.error.no_pending"))
+        selecionado = tabela.selection()
+        if not selecionado:
+            raise self._app_error(t("arbitration.error.select_table"))
+        pairing_id = self.host.arbitration_pending_row_map.get(selecionado[0])
+        if not pairing_id:
+            raise self._app_error(t("arbitration.error.table_not_found"))
+        return int(pairing_id)
+
+    def _confirmed(self, tabela: Any, iid: str, result: str) -> bool:
+        """Pede confirmação para o que é decisão, não transcrição (ARB-02).
+
+        Um W.O. declara que alguém não compareceu — e a tecla que o lança fica a
+        um dedo de distância da que lança o placar. A confirmação nomeia a mesa e
+        os dois jogadores, porque o erro que ela precisa pegar é o de mesa
+        errada, não o de código errado.
+        """
+        if result not in CONFIRMED_RESULTS:
+            return True
+        valores = list(tabela.item(iid, "values") or [])
+        mesa, brancas, pretas = "?", "?", "?"
+        if len(valores) >= len(PENDING_COLUMNS):
+            mesa, brancas, pretas = valores[0], valores[2], valores[3]
+        return bool(
+            self.host._confirm_action(
+                t("arbitration.pending.walkover_confirm_title"),
+                t(
+                    "arbitration.pending.walkover_confirm",
+                    resultado=result,
+                    mesa=mesa,
+                    brancas=brancas,
+                    pretas=pretas,
+                ),
+                danger=True,
+            )
+        )
 
     @staticmethod
     def _app_error(message: str) -> Exception:

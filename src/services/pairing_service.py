@@ -74,6 +74,14 @@ from src.services.pairing.point_adjustments import (
 from src.services.pairing.gacrux_tiebreak_map import (
     sequence_signature as _sequence_signature,
 )
+from src.services.pairing.postponement import (
+    blocking_message as _postponed_blocking_message,
+    clean_note as _clean_postpone_note,
+    issue_from_pairing as _postponed_issue,
+    postpone_error as _postpone_error,
+    postponed_label as _postponed_label,
+    resume_error as _resume_error,
+)
 from src.services.pairing.corrections import (
     DEFAULT_UNLOCK_MINUTES,
     UnlockState,
@@ -425,24 +433,29 @@ class PairingService:
             return normalized_query in searchable
 
         if competition_type != "team":
-            return [
-                {
+            # `context` carrega o adiamento (ARB-02): a coluna existia vazia no
+            # individual, e e exatamente onde o arbitro precisa ler "Adiada —
+            # sabado 14h" em vez de confundir a mesa com uma esquecida.
+            def item_de(pairing: dict[str, Any]) -> dict[str, Any]:
+                return {
                     "pairing_id": int(pairing["id"]),
                     "board": int(pairing.get("board_number") or 0),
                     "white": pairing_player_name(pairing, "white"),
-                    "black": "BYE" if pairing.get("is_bye") else pairing_player_name(pairing, "black"),
-                    "context": "",
+                    "black": (
+                        "BYE" if pairing.get("is_bye") else pairing_player_name(pairing, "black")
+                    ),
+                    "context": _postponed_label(pairing) if pairing.get("postponed") else "",
+                    "postponed": bool(pairing.get("postponed")),
                 }
-                for pairing in self.db.get_pairings_for_round(int(latest_round["id"]))
-                if not pairing.get("result") or pairing.get("result") not in FINAL_RESULTS
-                if matches_query(
-                    {
-                        "board": int(pairing.get("board_number") or 0),
-                        "white": pairing_player_name(pairing, "white"),
-                        "black": "BYE" if pairing.get("is_bye") else pairing_player_name(pairing, "black"),
-                        "context": "",
-                    }
+
+            return [
+                item
+                for item in (
+                    item_de(pairing)
+                    for pairing in self.db.get_pairings_for_round(int(latest_round["id"]))
+                    if not pairing.get("result") or pairing.get("result") not in FINAL_RESULTS
                 )
+                if matches_query(item)
             ][:safe_limit]
 
         pending_items: list[dict[str, Any]] = []
@@ -528,10 +541,65 @@ class PairingService:
             )
 
         issues.extend(self._pairing_arbitration_issues(tournament_id, tournament))
+        issues.extend(self._postponed_arbitration_issues(tournament_id))
 
         issues = _finalize_issues(issues, acknowledged_keys, safe_limit)
         metrics = _issue_metrics(issues)
         return {"metrics": metrics, "issues": issues}
+
+    def _postponed_arbitration_issues(self, tournament_id: int) -> list[dict[str, Any]]:
+        """Uma pendencia por mesa adiada da rodada em andamento (ARB-02).
+
+        So a rodada corrente: mesa adiada de rodada fechada nao existe — lancar
+        o resultado desfaz o adiamento, e fechar a rodada exige o resultado.
+        """
+        latest_round = self.db.get_latest_round(tournament_id)
+        if not latest_round or latest_round.get("status") != "generated":
+            return []
+        round_id = int(latest_round["id"])
+        return [
+            _postponed_issue(pairing, round_id, int(latest_round.get("number") or 0))
+            for pairing in self.db.list_postponed_pairings(round_id)
+        ]
+
+    def postpone_pairing(self, tournament_id: int, pairing_id: int, note: str = "") -> None:
+        """Marca a mesa como adiada, com o combinado como nota (ARB-02)."""
+        pairing = self.db.get_pairing(int(pairing_id))
+        if not pairing or int(pairing.get("tournament_id") or 0) != int(tournament_id):
+            raise AppError("Mesa nao encontrada para o torneio selecionado.")
+        erro = _postpone_error(pairing)
+        if erro:
+            raise AppError(erro)
+        limpa = _clean_postpone_note(note)
+        self.db.set_pairing_postponed(int(pairing_id), True, limpa)
+        self.db.create_audit_event(
+            action="pairing_postponed",
+            tournament_id=int(tournament_id),
+            round_id=int(pairing["round_id"]),
+            entity_type="pairing",
+            entity_id=int(pairing_id),
+            before={"postponed": 0},
+            after={"postponed": 1, "postponed_note": limpa},
+        )
+
+    def resume_pairing(self, tournament_id: int, pairing_id: int) -> None:
+        """Desfaz o adiamento da mesa (ARB-02)."""
+        pairing = self.db.get_pairing(int(pairing_id))
+        if not pairing or int(pairing.get("tournament_id") or 0) != int(tournament_id):
+            raise AppError("Mesa nao encontrada para o torneio selecionado.")
+        erro = _resume_error(pairing)
+        if erro:
+            raise AppError(erro)
+        self.db.set_pairing_postponed(int(pairing_id), False)
+        self.db.create_audit_event(
+            action="pairing_resumed",
+            tournament_id=int(tournament_id),
+            round_id=int(pairing["round_id"]),
+            entity_type="pairing",
+            entity_id=int(pairing_id),
+            before={"postponed": 1, "postponed_note": str(pairing.get("postponed_note") or "")},
+            after={"postponed": 0},
+        )
 
     def _pairing_arbitration_issues(
         self,
@@ -1184,6 +1252,12 @@ class PairingService:
             if not pairing["result"] or pairing["result"] not in FINAL_RESULTS
         ]
         if pending:
+            # Mesa adiada primeiro, com recado proprio (ARB-02): mandar o arbitro
+            # "preencher todos os resultados" quando ele SABE que aquela mesa esta
+            # em aberto e o manda procurar o que ele mesmo combinou.
+            adiadas = self.db.list_postponed_pairings(round_id)
+            if adiadas:
+                raise AppError(_postponed_blocking_message(adiadas))
             raise AppError("Preencha todos os resultados antes de fechar a rodada.")
 
         blocking_issues = self._blocking_arbitration_issues_for_round(tournament_id, round_id)

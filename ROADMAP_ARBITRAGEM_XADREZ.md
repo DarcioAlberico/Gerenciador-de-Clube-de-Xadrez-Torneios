@@ -417,6 +417,16 @@ Sprint 8 em andamento:
 
 **SPRINT 8 CONCLUIDA (2026-07-31).**
 
+Sprint 9 em andamento:
+
+- `ARB-02` entregue (2026-07-31): W.O. lancavel no painel (com confirmacao e
+  atalho), estado de partida ADIADA (schema v47) com recado proprio no
+  fechamento, e os codigos `W`/`D`/`L` do TRF — partida DISPUTADA e nao ratavel,
+  que faltavam e obrigavam o arbitro a mentir no rating ou no Buchholz. Junto
+  nasceu o `results_registry.py`: o que um resultado e estava espalhado por seis
+  lugares, e a familia nova se distingue por uma propriedade que nenhum deles
+  expressava.
+
 Objetivo: fechar as lacunas encontradas na auditoria completa dos modulos de
 gestao de torneio feita sob otica de arbitro FIDE. Detalhamento executivo em
 `ESPEC_PAINEL_ARBITRO.md` (EPICs F a J, Sprints 7 a 12).
@@ -436,7 +446,8 @@ Entregas, em ordem de prioridade:
    sequencia configurada (`TBK-04` — ENTREGUE em 2026-07-30), desempates
    olimpicos de equipes (`TBK-05` — ENTREGUE em 2026-07-31). SPRINT CONCLUIDA.
 3. **Fluxo arbitral de salao (Sprint 9)**: W.O. e partida adiada no painel
-   inline (`ARB-02`), politica de byes solicitados com limites (`ARB-04`),
+   inline (`ARB-02` — ENTREGUE em 2026-07-31), politica de byes solicitados com
+   limites (`ARB-04`),
    retirada/reentrada com historico por rodada (`ARB-05`), registro
    disciplinar de incidentes (`ARB-03`).
 4. **Motores secundarios (Sprint 10)**: aceleracao e entrada tardia no caminho
@@ -481,7 +492,8 @@ colunas, TRF25) foram entregues nas fases 0 a 11 e nos EPICs A a E da
 - ~~Destravar round-robin por equipes (constante duplicada) (`PAR-04`, parte).~~
   FEITO 2026-07-30 — e o metodo passou a de fato parear, nao so a ser aceito.
 - Corrigir `birth_date` da importacao da lista FIDE (`FED-05`).
-- W.O. no lancamento inline do painel (`ARB-02`, parte).
+- ~~W.O. no lancamento inline do painel (`ARB-02`, parte).~~ FEITO 2026-07-31
+  — junto com partida adiada e os codigos `W`/`D`/`L`.
 
 ### Alto impacto / media complexidade
 

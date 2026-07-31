@@ -133,6 +133,13 @@ class ArbitrationController:
             int(tournament_id), int(pairing_id), result, reason
         )
 
+    def postpone_pairing(self, tournament_id: int, pairing_id: int, note: str = "") -> None:
+        """Marca a mesa como adiada (ARB-02). Quem valida é o serviço."""
+        self.pairing_service.postpone_pairing(int(tournament_id), int(pairing_id), note)
+
+    def resume_pairing(self, tournament_id: int, pairing_id: int) -> None:
+        self.pairing_service.resume_pairing(int(tournament_id), int(pairing_id))
+
     def acknowledge_issue(self, tournament_id: int, issue_key: str) -> None:
         self.pairing_service.acknowledge_arbitration_issue(int(tournament_id), str(issue_key))
 

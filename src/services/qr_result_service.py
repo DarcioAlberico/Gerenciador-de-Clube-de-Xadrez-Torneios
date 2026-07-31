@@ -8,7 +8,7 @@ from typing import Any
 from urllib.parse import urlencode
 
 from src.core.database import Database
-from src.services.constants import AppError, FINAL_RESULTS
+from src.services.constants import AppError, FINAL_RESULTS, UNRATED_RESULTS
 
 
 class QRResultService:
@@ -108,7 +108,11 @@ class QRResultService:
         }
 
     def submit_result(self, token: str, result: str, submitter: str = "") -> dict[str, Any]:
-        if result not in FINAL_RESULTS or result == "BYE":
+        # Resultado por DECISAO DO ARBITRO (`W`/`D`/`L`, ARB-02) nao entra por
+        # aqui: quem o lanca e quem decidiu. O QR e para o que os jogadores
+        # observaram na mesa — placar e ausencia —, e mesmo isso o arbitro
+        # aprova antes de valer.
+        if result not in FINAL_RESULTS or result == "BYE" or result in UNRATED_RESULTS:
             raise AppError("Resultado invalido para envio por QR.")
         token_row = self._validate_token(token)
         pairing = self._open_pairing(int(token_row["tournament_id"]), int(token_row["pairing_id"]))

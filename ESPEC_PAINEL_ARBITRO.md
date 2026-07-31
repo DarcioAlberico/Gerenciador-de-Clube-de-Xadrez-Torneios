@@ -1325,9 +1325,61 @@ Criterios de aceite:
 
 #### ARB-02 - Resultados arbitrais completos no painel
 
-Status: pendente.
+Status: CONCLUIDO (2026-07-31). Abre a Sprint 9.
 
-Problema:
+Como ficou:
+
+- **um REGISTRO de codigos de resultado** (`results_registry.py`), porque o que um
+  resultado E estava espalhado por seis lugares: `RESULT_POINTS`,
+  `WALKOVER_RESULTS`, `FINAL_RESULTS`, o `_trf_player_result` do exportador, o
+  `_count_result` dos resumos e os filtros de `fide_rating`. Enquanto os codigos
+  se dividiam em "jogada" e "W.O.", conjuntos soltos davam conta; a familia nova
+  se distingue por uma propriedade que nenhum deles expressa. Agora cada codigo
+  declara pontos, `played`, `rated` e as letras TRF, e os recortes derivam:
+
+  | familia | played | rated | letras TRF | codigos |
+  |---|---|---|---|---|
+  | normal | sim | sim | `1` `=` `0` | `1-0`, `0-1`, `1/2-1/2` |
+  | decisao do arbitro | sim | **nao** | `W` `D` `L` | `1U-0U`, `0U-1U`, `1/2U-1/2U` |
+  | W.O./forfait | **nao** | nao | `+` `-` | `1F-0F`, `0F-1F`, `0F-0F` |
+
+- **`W`/`D`/`L`: partida DISPUTADA e nao ratavel.** E o jogo decidido por
+  reclamacao, por posicao ilegal irrecuperavel ou por apelacao. Sem esses
+  codigos o arbitro escolhia entre mentir no rating (lancar `1-0`) ou mentir no
+  Buchholz e no pareamento (lancar W.O., que a FIDE trata como partida nao
+  disputada, e que desde a TBK-03 nao conta como vitoria). Como a partida
+  aconteceu, ela conta como confronto, entra no Buchholz e no SB e vale `WON` —
+  so nao entra no relatorio de rating. A importacao TRF passou a LER as letras
+  tambem: eram dois dicionarios escritos a mao, e `W`/`D`/`L` voltava como "sem
+  resultado";
+- **W.O. no painel**, com botao e atalho (`w`, `p`, `a` — letras, e nao numeros,
+  porque passam por confirmacao: um dedo torto no teclado numerico nao pode
+  lancar ausencia). A confirmacao nomeia a mesa e os dois jogadores, porque o
+  erro que ela precisa pegar e o de mesa errada, nao o de codigo errado;
+- **partida adiada** (schema **v47**: `pairings.postponed` + `postponed_note`).
+  Uma mesa adiada e uma pendencia ESPERADA; sem a marca, ela e a mesa esquecida
+  eram a mesma linha em branco, travando a rodada com o mesmo recado. Agora o
+  fechamento nomeia as mesas adiadas em vez de mandar "preencha todos os
+  resultados", o painel mostra "Adiada — sabado 14h" na coluna de contexto (que
+  no individual vivia vazia) e lancar o resultado desfaz o adiamento — adiada
+  com placar preenchido e um estado que nao existe no salao. A nota e OPCIONAL:
+  adiar sem saber quando ainda e melhor do que a mesa parecer esquecida.
+
+A pendencia do painel e `attention`, e nao `decision`: a decisao o arbitro ja
+tomou — foi ele quem adiou. Quem impede o fechamento e a mesa sem resultado, com
+o recado proprio; marcar como bloqueante faria a mesma coisa aparecer duas vezes,
+com dois textos diferentes.
+
+Criterios de aceite:
+
+- [x] W.O. lancavel pelo painel com confirmacao e auditoria;
+- [x] rodada com partida adiada exibe pendencia especifica (e o recado do
+  fechamento nomeia as mesas);
+- [x] `W`/`D`/`L` exportam corretamente no TRF16 — e sao lidos na importacao.
+
+Cobertura: 32 testes em `tests/test_core_arb02.py`.
+
+Problema original:
 
 - W.O. (`1F-0F`, `0F-1F`, `0F-0F`) so pode ser lancado na tela `Rodadas`; o
   lancamento inline do painel (`pairing_arbitration/pending.py:37`) oferece so
@@ -1344,9 +1396,9 @@ Escopo:
 
 Criterios de aceite:
 
-- [ ] W.O. lancavel pelo painel com confirmacao e auditoria;
-- [ ] rodada com partida adiada exibe pendencia especifica;
-- [ ] `W`/`D`/`L` exportam corretamente no TRF16.
+- [x] W.O. lancavel pelo painel com confirmacao e auditoria;
+- [x] rodada com partida adiada exibe pendencia especifica;
+- [x] `W`/`D`/`L` exportam corretamente no TRF16.
 
 #### ARB-03 - Registro disciplinar de incidentes
 
@@ -1982,7 +2034,7 @@ Objetivo: cobrir as situacoes reais de arbitragem que hoje exigem contorno.
 
 Entregas:
 
-1. [ ] `ARB-02` Resultados arbitrais completos no painel (W.O. inline,
+1. [x] `ARB-02` Resultados arbitrais completos no painel (W.O. inline,
    adiada, W/D/L).
 2. [ ] `ARB-04` Politica de byes solicitados.
 3. [ ] `ARB-05` Retirada e reentrada com historico por rodada.
