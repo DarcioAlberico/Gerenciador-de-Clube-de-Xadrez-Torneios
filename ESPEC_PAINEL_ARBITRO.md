@@ -1100,8 +1100,16 @@ jogadas, `SNO`, sorteio). O `BH/M2` ja e alcancavel por parametro
 (`buchholz_cut2` com corte simetrico); os demais sao criterios novos no registro,
 sem defeito associado — entram quando um regulamento pedir.
 
-Cobertura: 25 testes em `tests/test_core_tbk04.py` e 4 em `tests/test_ui_fields.py`
-(o editor). Um teste do 212 foi atualizado: `WIN` -> `WON`.
+**O 212 de EQUIPES mudou mais do que o individual**, e vale registrar o que era
+errado nele: a lista fixa `PTS,BH:MP,WIN` usava o `PTS` generico onde o primario
+de equipes e o match points, **omitia o game points** (que o motor sempre usou) e
+declarava `WIN`. Agora sai `MPTS,GPTS,BH,WON` — literalmente o plano que vai ao
+`tiebreakchecker`. O `BH` herda o primario no `parse_tiebreak` do Gacrux, entao
+equivale ao antigo `BH:MP` sem precisar declarar o tipo de ponto.
+
+Cobertura: 26 testes em `tests/test_core_tbk04.py` e 4 em `tests/test_ui_fields.py`
+(o editor). Dois testes existentes do 212 foram atualizados — o individual
+(`WIN` -> `WON`) e o de equipes.
 
 Problema original:
 
