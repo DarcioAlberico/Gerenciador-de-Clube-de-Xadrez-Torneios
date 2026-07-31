@@ -217,6 +217,20 @@ class PreviaDaRodadaTest(unittest.TestCase):
             "Nenhuma mesa prevista.", format_pairing_preview({"round_number": 1, "pairings": []})
         )
 
+    def test_aviso_da_rodada_aparece_antes_das_mesas(self) -> None:
+        """PAR-02: o corte por `limit` nao pode engolir o aviso do pareamento."""
+        preview = {
+            "round_number": 1,
+            "warnings": ["Aceleracao caiu no motor proprio."],
+            "pairings": [
+                {"board_number": n, "white_name": f"B{n}", "black_name": f"P{n}"}
+                for n in range(1, 16)
+            ],
+        }
+        texto = format_pairing_preview(preview, limit=2)
+        self.assertIn("Aviso: Aceleracao caiu no motor proprio.", texto)
+        self.assertLess(texto.index("Aviso:"), texto.index("Mesa 1"))
+
 
 class ProjetorTest(unittest.TestCase):
     """A paginação decidia se a última mesa aparecia na parede."""

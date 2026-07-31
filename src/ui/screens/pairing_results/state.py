@@ -175,6 +175,11 @@ def format_pairing_preview(preview: dict[str, Any], *, limit: int = 12) -> str:
         f"Alertas: {preview.get('alerts_count', 0)}",
         "",
     ]
+    # Avisos da rodada vêm ANTES das mesas de propósito: eles dizem por que o
+    # emparceiramento abaixo é o que é (PAR-02), e o corte por `limit` nunca os
+    # engole.
+    for aviso in preview.get("warnings") or []:
+        cabecalho.insert(len(cabecalho) - 1, f"Aviso: {aviso}")
     if preview.get("competition_type") == "team":
         itens = list(preview.get("matches", []))
         linhas = [

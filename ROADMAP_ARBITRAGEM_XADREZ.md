@@ -472,9 +472,9 @@ Entregas, em ordem de prioridade:
    retirada/reentrada com historico por rodada (`ARB-05` — ENTREGUE em 2026-07-31), registro
    disciplinar de incidentes (`ARB-03` — ENTREGUE em 2026-07-31). SPRINT CONCLUIDA.
 4. **Motores secundarios (Sprint 10)**: aceleracao e entrada tardia no caminho
-   Gacrux sem divergencia silenciosa (`PAR-02`), round-robin com tabela
-   persistida e returno (`PAR-01`), knockout com desempate registrado e
-   Scheveningen robusto (`PAR-03`).
+   Gacrux sem divergencia silenciosa (`PAR-02` — ENTREGUE em 2026-07-31),
+   round-robin com tabela persistida e returno (`PAR-01`), knockout com
+   desempate registrado e Scheveningen robusto (`PAR-03`).
 5. **Submissao federativa (Sprint 11)**: correcao do `birth_date` da lista
    FIDE (`FED-05`), TRF16 com `XXR`/`XXC`/`XXA`, Event-ID e modo submissao
    (`FED-03`), round-trip TRF fiel (`FED-04`), normas FIDE corretas com
@@ -525,7 +525,9 @@ colunas, TRF25) foram entregues nas fases 0 a 11 e nos EPICs A a E da
 - ~~Desempates olimpicos de equipes (`TBK-05`).~~ FEITO 2026-07-31 — SB
   olimpico, confronto direto, Buchholz de game points e board count.
 - ~~Politica de byes solicitados (`ARB-04`).~~ FEITO 2026-07-31.
-- Aceleracao e entrada tardia no caminho Gacrux (`PAR-02`).
+- ~~Aceleracao e entrada tardia no caminho Gacrux (`PAR-02`).~~ FEITO 2026-07-31
+  — aceleracao vira registro 250 no TRF e a entrada tardia vira celula de bye;
+  o que nao cabe no arquivo cai no motor proprio ou avisa, nunca some.
 - TRF16 com `XXR`/`XXC`/`XXA`, Event-ID e modo submissao (`FED-03`).
 - Round-trip TRF fiel (`FED-04`).
 - Normas FIDE corretas + certificado IT3 (`FED-06`).

@@ -14,23 +14,21 @@ from __future__ import annotations
 from typing import Any, Mapping, Sequence
 
 from src.services.results_registry import code_from_trf_letter
-
-# Offsets fixos da linha 001 (idênticos ao layout escrito pelo TRF16Exporter,
-# que segue o padrão FIDE Krause).
-_START_RANK = (4, 8)
-_SEX = (9, 10)
-_TITLE = (10, 13)
-_NAME = (14, 47)
-_RATING = (48, 52)
-_FEDERATION = (53, 56)
-_FIDE_ID = (57, 68)
-_BIRTH = (69, 79)
-_ROUND_CELLS_START = 91
-_ROUND_CELL_WIDTH = 10
-
-
-def _slice(line: str, bounds: tuple[int, int]) -> str:
-    return line[bounds[0]:bounds[1]].strip()
+from src.services.trf_layout import (
+    BIRTH as _BIRTH,
+    CELL_COLOR as _CELL_COLOR,
+    CELL_OPPONENT as _CELL_OPPONENT,
+    CELL_RESULT as _CELL_RESULT,
+    FEDERATION as _FEDERATION,
+    FIDE_ID as _FIDE_ID,
+    NAME as _NAME,
+    RATING as _RATING,
+    SEX as _SEX,
+    START_RANK as _START_RANK,
+    TITLE as _TITLE,
+    cell_blocks as _cell_blocks,
+    field as _slice,
+)
 
 
 def _trf_date_to_iso(value: str) -> str:
@@ -58,16 +56,13 @@ def _split_name(raw_name: str) -> tuple[str, str, str]:
 
 def _parse_round_cells(line: str) -> list[dict[str, str]]:
     cells: list[dict[str, str]] = []
-    index = _ROUND_CELLS_START
-    while index + _ROUND_CELL_WIDTH - 2 <= len(line):
-        block = line[index:index + _ROUND_CELL_WIDTH]
-        opponent = block[0:4].strip()
-        color = block[5:6].strip()
-        result = block[7:8].strip()
+    for block in _cell_blocks(line):
+        opponent = block[_CELL_OPPONENT[0]:_CELL_OPPONENT[1]].strip()
+        color = block[_CELL_COLOR:_CELL_COLOR + 1].strip()
+        result = block[_CELL_RESULT:_CELL_RESULT + 1].strip()
         if not opponent and not color and not result:
             break
         cells.append({"opponent_rank": opponent, "color": color, "result": result})
-        index += _ROUND_CELL_WIDTH
     return cells
 
 

@@ -81,6 +81,11 @@ def individual_preview_payload(
                 "explanation": " ".join(explanation),
             }
         )
+    # Avisos da rodada inteira (PAR-02) — não pertencem a nenhuma mesa, mas
+    # contam como alerta: é por eles que o árbitro fica sabendo que a aceleração
+    # trocou de motor, ou que alguém será pareado com pontuação diferente da
+    # classificação.
+    warnings = [str(item) for item in plan.get("warnings") or []]
     return {
         "competition_type": "individual",
         "tournament_id": tournament_id,
@@ -90,7 +95,8 @@ def individual_preview_payload(
         "pairing_engine_version": pairing_engine_version,
         "ruleset_version": ruleset_version,
         "pairings": preview_pairings,
-        "alerts_count": alert_count,
+        "warnings": warnings,
+        "alerts_count": alert_count + len(warnings),
     }
 
 

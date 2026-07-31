@@ -6,11 +6,12 @@ import json
 import logging
 import subprocess
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 from src.services.constants import AppError, player_pairing_name
 from src.services.export_service import ExportService
 from src.services.federation_exporters.trf16 import TRF16Exporter
+from src.services.pairing.gacrux_trf import acceleration_records, reconcile_scores
 
 logger = logging.getLogger(__name__)
 
@@ -22,18 +23,29 @@ GACRUX_TIMEOUT_SECONDS = 120
 class GacruxEngine:
     def __init__(self, db) -> None:
         self.db = db
+        # Avisos da última rodada pareada (PAR-02): o que o arquivo TRF não
+        # conseguiu contar ao motor. Quem chama repassa ao árbitro.
+        self.warnings: list[str] = []
 
     def pair_round(
         self,
         tournament_id: int,
         to_pair: list[dict[str, Any]],
         round_number: int,
+        *,
+        accelerated_player_ids: Sequence[int] = (),
+        acceleration_bonus: float = 0.0,
     ) -> list[dict[str, Any]]:
         """
         Executes Swiss pairing for the specified round using the FIDE-approved Gacrux engine.
         Re-uses the existing TRF16Exporter to serialize the tournament state, runs Gacrux,
         and parses back the results.
+
+        `accelerated_player_ids` recebe o bônus fictício de `acceleration_bonus`
+        nesta rodada (PAR-02): o motor não tem parâmetro de aceleração, ela viaja
+        como registro 250 no TRF. Ver `gacrux_trf.acceleration_records`.
         """
+        self.warnings = []
         # Instantiate a temporary ExportService and TRF16Exporter
         from src.services.pairing_service import PairingService
         pairing_service = PairingService(self.db)
@@ -67,7 +79,15 @@ class GacruxEngine:
 
             # Export the current tournament state to TRF
             exporter.export(tournament_id, input_path)
-            
+
+            accelerated = {int(player_id) for player_id in accelerated_player_ids}
+            self._adjust_trf_for_pairing(
+                input_path,
+                round_number,
+                [rank for rank, player_id in rank_to_player_id.items() if player_id in accelerated],
+                acceleration_bonus,
+            )
+
             if logger.isEnabledFor(logging.DEBUG):
                 with open(input_path, "r", encoding="utf-8") as f:
                     logger.debug("TRF gerado para o Gacrux:\n%s", "".join(f.readlines()[:25]))
@@ -185,3 +205,29 @@ class GacruxEngine:
             logger.debug("Rank -> player id: %s", rank_to_player_id)
             logger.debug("Pareamentos mapeados: %s", final_pairings)
             return final_pairings
+
+    def _adjust_trf_for_pairing(
+        self,
+        input_path: Path,
+        round_number: int,
+        accelerated_ranks: list[int],
+        bonus: float,
+    ) -> None:
+        """Reescreve o TRF exportado com o que só o PAREAMENTO precisa (PAR-02).
+
+        O arquivo oficial de envio continua sendo o do exportador, intocado: o que
+        entra aqui — registro 250 de aceleração e células coerentes com os pontos
+        da classificação — existe para o motor pontuar como a classificação
+        pontua, e não teria por que ir para a federação.
+        """
+        with open(input_path, "r", encoding="utf-8", newline="") as handle:
+            lines = handle.read().splitlines()
+
+        lines, warnings = reconcile_scores(lines)
+        lines.extend(acceleration_records(bonus, round_number, accelerated_ranks))
+        self.warnings = warnings
+        for aviso in warnings:
+            logger.warning("Rodada %s (Gacrux): %s", round_number, aviso)
+
+        with open(input_path, "w", encoding="utf-8", newline="") as handle:
+            handle.write("".join(f"{line}\r\n" for line in lines))
