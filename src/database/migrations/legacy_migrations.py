@@ -59,6 +59,7 @@ class LegacyMigrations:
             45: self._migrate_to_v45,
             46: self._migrate_to_v46,
             47: self._migrate_to_v47,
+            48: self._migrate_to_v48,
         }
 
     def _run_schema_migrations(self, connection: sqlite3.Connection) -> None:
@@ -171,6 +172,8 @@ class LegacyMigrations:
             self._migrate_to_v46(connection)
         if self.db.SCHEMA_VERSION >= 47:
             self._migrate_to_v47(connection)
+        if self.db.SCHEMA_VERSION >= 48:
+            self._migrate_to_v48(connection)
 
     def _migrate_to_v1(self, connection: sqlite3.Connection) -> None:
         now = self.db.now()
@@ -1963,4 +1966,27 @@ class LegacyMigrations:
         if "postponed_note" not in columns:
             connection.execute(
                 "ALTER TABLE pairings ADD COLUMN postponed_note TEXT NOT NULL DEFAULT ''"
+            )
+    def _migrate_to_v48(self, connection: sqlite3.Connection) -> None:
+        """Politica de bye solicitado (ARB-04): limite e ultima rodada.
+
+        Duas colunas em `tournament_settings`, ambas com padrao `0` = SEM LIMITE,
+        que e exatamente o que os torneios existentes sempre tiveram. Quem quiser
+        o regulamento ("no maximo 2 byes, e nenhum na ultima rodada") configura.
+
+        Nao mexe em `disable_bye`: aquela flag e do bye ALOCADO (o PAB de quem
+        sobra num numero impar), e um bye solicitado e o jogador avisando que
+        faltaria. Juntar as duas quebraria o torneio que exige numero par de
+        presentes mas aceita ausencia avisada.
+        """
+        columns = self.db._table_columns(connection, "tournament_settings")
+        if "max_requested_byes" not in columns:
+            connection.execute(
+                "ALTER TABLE tournament_settings "
+                "ADD COLUMN max_requested_byes INTEGER NOT NULL DEFAULT 0"
+            )
+        if "last_requested_bye_round" not in columns:
+            connection.execute(
+                "ALTER TABLE tournament_settings "
+                "ADD COLUMN last_requested_bye_round INTEGER NOT NULL DEFAULT 0"
             )

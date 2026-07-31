@@ -1430,9 +1430,54 @@ Criterios de aceite:
 
 #### ARB-04 - Politica de byes solicitados
 
-Status: pendente.
+Status: CONCLUIDO (2026-07-31).
 
-Problema:
+Como ficou:
+
+- **a causa dos quatro defeitos era a mesma**: o bye solicitado era gravado
+  DIRETO da tela no banco (`db.add_requested_bye`), sem passar por servico. O que
+  se validava era o FORMATO do formulario (tem alvo? tem rodada? o tipo e F/H/Z?)
+  — nao havia onde uma politica morar. Agora ha
+  `PairingService.request_bye()`, com auditoria, e a tela chama o servico;
+- **modulo puro `bye_policy.py`** com as regras e os textos. `ByePolicy` le as
+  duas configuracoes novas (schema **v48**): `max_requested_byes` e
+  `last_requested_bye_round`, ambas com padrao `0` = SEM LIMITE, que e o
+  comportamento que os torneios existentes sempre tiveram;
+- **rodada ja gerada e recusada**, e o recado diz por que: o pareamento daquela
+  rodada ja esta feito, entao o bye seria "aceito e nunca aplicado" — que era
+  exatamente o defeito. Rodada fechada idem, apontando para a correcao com
+  motivo (ARB-01);
+- **jogador inativo e recusado NA HORA DO PEDIDO**, com o motivo. Sobra um unico
+  caminho para o descarte — o jogador que sai DEPOIS de pedir —, e esse agora
+  AVISA: evento de auditoria, log e pendencia `attention` no painel. A geracao
+  segue: barrar a rodada por um pedido que ficou para tras seria trocar um
+  silencio ruim por uma parada pior;
+- **o bye de zero ponto (`Z`) nao conta para o limite.** Limita-lo puniria quem
+  AVISOU que faltaria, em vez de simplesmente nao aparecer — e ele nao da ponto
+  nenhum. Corrigir o tipo de um bye ja existente tambem nao esbarra no limite.
+
+Sobre o `disable_bye`, o escopo dava duas saidas ("cobrir tambem os byes
+solicitados ou renomear a flag"): foi **renomeada** (rotulo "Desativar bye
+alocado (PAB)"). Sao coisas diferentes — aquela flag desativa o bye que o sistema
+DA a quem sobra num numero impar, e um bye solicitado e o jogador AVISANDO que
+faltaria. Juntar as duas quebraria o regulamento mais comum, que exige numero par
+de presentes mas aceita ausencia avisada.
+
+Fica pendente do escopo original: **prazo de solicitacao** por data. Ele existe
+hoje na forma que resolve o defeito — o pedido vale enquanto a rodada nao foi
+gerada —, e um prazo em horas exigiria relogio de torneio, que o sistema nao tem.
+Fica tambem o bye ALOCADO que repete quando todos ja receberam (hoje so alerta):
+e regra de motor de pareamento, e nao de politica de bye.
+
+Criterios de aceite:
+
+- [x] pedido acima do limite ou fora do prazo e rejeitado com mensagem clara;
+- [x] bye para rodada fechada e impossivel (e para rodada ja gerada tambem);
+- [x] testes cobrem os limites e o descarte avisado.
+
+Cobertura: 24 testes em `tests/test_core_arb04.py`.
+
+Problema original:
 
 - nao ha limite de byes por jogador, nem proibicao de bye de meio ponto nas
   ultimas rodadas (regra comum de regulamento), nem validacao contra rodada ja
@@ -1451,9 +1496,9 @@ Escopo:
 
 Criterios de aceite:
 
-- [ ] pedido acima do limite ou fora do prazo e rejeitado com mensagem clara;
-- [ ] bye para rodada fechada e impossivel;
-- [ ] testes cobrem os limites e o descarte avisado.
+- [x] pedido acima do limite ou fora do prazo e rejeitado com mensagem clara;
+- [x] bye para rodada fechada e impossivel;
+- [x] testes cobrem os limites e o descarte avisado.
 
 #### ARB-05 - Retirada e reentrada com historico por rodada
 
@@ -2036,7 +2081,7 @@ Entregas:
 
 1. [x] `ARB-02` Resultados arbitrais completos no painel (W.O. inline,
    adiada, W/D/L).
-2. [ ] `ARB-04` Politica de byes solicitados.
+2. [x] `ARB-04` Politica de byes solicitados.
 3. [ ] `ARB-05` Retirada e reentrada com historico por rodada.
 4. [ ] `ARB-03` Registro disciplinar de incidentes.
 

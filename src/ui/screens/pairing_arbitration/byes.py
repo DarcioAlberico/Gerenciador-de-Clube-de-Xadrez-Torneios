@@ -37,7 +37,14 @@ class RequestedByesPage(TournamentRegistryPage):
         return t("arbitration.byes.table")
 
     def hint(self) -> str:
-        return t("arbitration.byes.hint.team") if self.is_team else t("arbitration.byes.hint.player")
+        if self.is_team:
+            return t("arbitration.byes.hint.team")
+        # Os limites do regulamento aparecem AQUI (ARB-04), e não só na tela de
+        # configuração: é neste formulário que o árbitro descobre que o pedido
+        # foi recusado, e ele precisa saber a regra antes de digitar.
+        base = t("arbitration.byes.hint.player")
+        limites = self.controller.bye_policy_summary(self.tournament_id)
+        return f"{base}\n{t('arbitration.byes.hint.policy', limites=limites)}" if limites else base
 
     def added_message(self) -> str:
         return t("arbitration.byes.added")

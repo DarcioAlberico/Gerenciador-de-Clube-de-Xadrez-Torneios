@@ -426,6 +426,12 @@ Sprint 9 em andamento:
   nasceu o `results_registry.py`: o que um resultado e estava espalhado por seis
   lugares, e a familia nova se distingue por uma propriedade que nenhum deles
   expressava.
+- `ARB-04` entregue (2026-07-31): o bye solicitado era gravado direto da tela no
+  banco, sem servico — por isso pedido para rodada ja gerada era aceito e nunca
+  aplicado, pedido de jogador inativo sumia na geracao e nao havia limite nenhum.
+  Nasceu `bye_policy.py` (puro) + `request_bye()` no servico, com limite por
+  jogador e ultima rodada permitida (schema v48, padrao SEM limite). O `Z` nao
+  conta para o limite: limita-lo puniria quem avisou que faltaria.
 
 Objetivo: fechar as lacunas encontradas na auditoria completa dos modulos de
 gestao de torneio feita sob otica de arbitro FIDE. Detalhamento executivo em
@@ -447,7 +453,7 @@ Entregas, em ordem de prioridade:
    olimpicos de equipes (`TBK-05` — ENTREGUE em 2026-07-31). SPRINT CONCLUIDA.
 3. **Fluxo arbitral de salao (Sprint 9)**: W.O. e partida adiada no painel
    inline (`ARB-02` — ENTREGUE em 2026-07-31), politica de byes solicitados com
-   limites (`ARB-04`),
+   limites (`ARB-04` — ENTREGUE em 2026-07-31),
    retirada/reentrada com historico por rodada (`ARB-05`), registro
    disciplinar de incidentes (`ARB-03`).
 4. **Motores secundarios (Sprint 10)**: aceleracao e entrada tardia no caminho
@@ -503,7 +509,7 @@ colunas, TRF25) foram entregues nas fases 0 a 11 e nos EPICs A a E da
   2026-07-30.
 - ~~Desempates olimpicos de equipes (`TBK-05`).~~ FEITO 2026-07-31 — SB
   olimpico, confronto direto, Buchholz de game points e board count.
-- Politica de byes solicitados (`ARB-04`).
+- ~~Politica de byes solicitados (`ARB-04`).~~ FEITO 2026-07-31.
 - Aceleracao e entrada tardia no caminho Gacrux (`PAR-02`).
 - TRF16 com `XXR`/`XXC`/`XXA`, Event-ID e modo submissao (`FED-03`).
 - Round-trip TRF fiel (`FED-04`).

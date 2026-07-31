@@ -267,6 +267,13 @@ class ControladorTest(unittest.TestCase):
         db = BancoDeMentira(**dados)
         return ArbitrationController(db, pairing_service=BancoDeMentira()), db
 
+    def controlador_com_servico(
+        self, **dados: Any
+    ) -> tuple[ArbitrationController, BancoDeMentira, BancoDeMentira]:
+        db = BancoDeMentira(**dados)
+        servico = BancoDeMentira()
+        return ArbitrationController(db, pairing_service=servico), db, servico
+
     def test_rodadas_previstas_nao_sao_as_geradas(self) -> None:
         """Bye é declarado antes de a rodada existir — por isso são duas listas."""
         controlador, _db = self.controlador(list_rounds=[{"id": 9, "number": 1}])
@@ -281,14 +288,23 @@ class ControladorTest(unittest.TestCase):
         self.assertEqual({"Time (#5)": 5}, controlador.targets(1, is_team=True))
 
     def test_bye_individual_e_de_equipe_chamam_funcoes_diferentes(self) -> None:
-        controlador, db = self.controlador()
+        """O individual passa pelo SERVICO desde a ARB-04.
+
+        E la que a politica mora (limite por jogador, ultima rodada, jogador
+        inativo), e a tela nao pode ser o unico lugar que valida — ela pode ser
+        burlada. Equipes seguem gravando direto: a politica e do individual, e
+        inventar uma regra para equipes que nenhum regulamento pediu seria pior
+        do que deixar explicito que ela nao existe la.
+        """
+        controlador, db, servico = self.controlador_com_servico()
         controlador.add_bye(1, state.RequestedByeForm(3, 2, "H", "", is_team=False))
         controlador.add_bye(1, state.RequestedByeForm(3, 2, "H", "", is_team=True))
         controlador.delete_bye(8, is_team=True)
         self.assertEqual(
-            ["add_requested_bye", "add_requested_team_bye", "delete_requested_team_bye"],
+            ["add_requested_team_bye", "delete_requested_team_bye"],
             db.nomes_chamados(),
         )
+        self.assertEqual(["request_bye"], servico.nomes_chamados())
 
     def test_proibicao_de_equipe_usa_a_tabela_de_equipes(self) -> None:
         controlador, db = self.controlador()
