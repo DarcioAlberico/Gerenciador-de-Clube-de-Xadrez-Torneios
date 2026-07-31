@@ -28,8 +28,10 @@ Para extrair uma nova função:
 """
 
 from src.services.pairing.acceleration import (
+    BAKU_NOT_IMPLEMENTED,
     acceleration_bonus,
     acceleration_spec,
+    accelerated_player_ids,
     accelerated_standings,
     classic_acceleration_bonus,
     classic_upper_half_size,
@@ -203,8 +205,10 @@ __all__ = [
     "parse_team_tiebreak_sequence",
     "player_tiebreak_value",
     "serialize_tiebreak_sequence",
+    "BAKU_NOT_IMPLEMENTED",
     "acceleration_bonus",
     "acceleration_spec",
+    "accelerated_player_ids",
     "accelerated_standings",
     "append_requested_bye_pairings",
     "acknowledged_issue_keys",

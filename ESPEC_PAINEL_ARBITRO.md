@@ -1649,31 +1649,62 @@ Criterios de aceite:
 
 #### PAR-02 - Aceleracao e entrada tardia no caminho Gacrux
 
-Status: pendente.
+Status: FEITO (2026-07-31).
 
 Problema:
 
-- aceleracao so e aplicada no motor proprio (`pairing_service.py:1918`);
-  com `pairing_system = gacrux_swiss` (padrao) ela e silenciosamente ignorada
-  (`:767-769`), sem aviso;
-- `starting_points` de entrada tardia nao chega ao Gacrux: o TRF-16 exporta as
-  rodadas ausentes como `0000 - Z` (0 ponto) (`export_federation.py:713`),
-  entao o Gacrux pareia o entrante tardio com pontuacao diferente da
-  classificacao publicada.
+- aceleracao so era aplicada no motor proprio; com `pairing_system =
+  gacrux_swiss` (padrao) ela era silenciosamente ignorada, sem aviso;
+- `starting_points` de entrada tardia nao chegava ao Gacrux: o TRF-16 exporta as
+  rodadas ausentes como `0000 - Z` (0 ponto), entao o Gacrux pareava o entrante
+  tardio com pontuacao diferente da classificacao publicada.
 
-Escopo:
+Como ficou:
 
-- com aceleracao configurada + Gacrux: aplicar via TRF (XXA/250 quando o
-  formato aceitar) ou cair no motor proprio com aviso explicito ao arbitro —
-  nunca ignorar em silencio;
-- transportar pontos de entrada tardia ao Gacrux (celulas de rodada coerentes
-  com `starting_points`) ou avisar da divergencia.
+- **o motor le celulas, nao o campo de pontos**. Esse e o eixo da correcao: a
+  linha 001 ja levava os pontos da CLASSIFICACAO (que incluem `starting_points`
+  e os ajustes da TBK-01), mas o Gacrux ignora esse campo e soma as celulas de
+  rodada. A diferenca entre os dois e exatamente o que nao chegava ao motor —
+  e agora e medida, no proprio arquivo, e materializada em celulas de bye nas
+  rodadas anteriores a inscricao (`H` de preferencia, `F` so quando o deficit
+  nao cabe em meios pontos). O que nao da para representar — diferenca negativa,
+  ou que nao cabe nas rodadas de ausencia — vira aviso, nunca silencio;
+- **so o PREFIXO de rodadas sem pareamento e reescrito**. Um `0000 - Z` no meio
+  do torneio e bye de zero ponto pedido ao arbitro (ARB-04) ou rodada de
+  retirada (ARB-05); reescreve-lo seria desfazer uma decisao dele;
+- **aceleracao viaja como registro 250**, um por faixa contigua de start-rank.
+  A faixa e calculada, e nao assumida: com ordem inicial que nao seja a do
+  start-rank do TRF (que sai por rating), a metade acelerada e picada. Nas
+  rodadas do esquema, o conjunto acelerado e o mesmo do motor proprio;
+- **bonus que o 250 nao transporta cai no motor proprio COM AVISO**. O Gacrux
+  converte os pontos do registro em um codigo de resultado e de volta em pontos:
+  so 1,0 e 0,5 sobrevivem a viagem, o resto viraria zero em silencio — que e o
+  defeito que esta tarefa existe para matar. `baku` continua sem bonus em
+  nenhum motor, e agora avisa no pareamento (nao so na exportacao TRF25);
+- **os avisos chegam ao arbitro em tres portas**: a previa da proxima rodada
+  (antes de gerar, contados em `alerts_count`), o log e o evento de auditoria
+  `pairing_warning` (depois, para quem for conferir a rodada meses depois);
+- **o arquivo oficial nao muda**. O ajuste vive no TRF temporario que alimenta o
+  motor; o TRF16 de envio a federacao continua saindo do exportador, intocado;
+- modularizacao: a geometria da linha 001 estava duplicada entre `trf_import.py`
+  e o novo ajuste. Virou `services/trf_layout.py`, com os dois lendo de la.
+
+Arquivos: `pairing/gacrux_trf.py` (novo, puro), `services/trf_layout.py` (novo),
+`pairing/gacrux_engine.py`, `pairing/acceleration.py`, `pairing_service.py`,
+`pairing/previews.py`, `ui/screens/pairing_results/state.py`.
 
 Criterios de aceite:
 
-- [ ] configurar aceleracao com Gacrux gera aviso ou aplica de fato;
-- [ ] entrante tardio e pareado com os pontos exibidos na classificacao;
-- [ ] teste compara pareamento Gacrux x classificacao com entrada tardia.
+- [x] configurar aceleracao com Gacrux gera aviso ou aplica de fato;
+- [x] entrante tardio e pareado com os pontos exibidos na classificacao;
+- [x] teste compara pareamento Gacrux x classificacao com entrada tardia.
+
+Fica pendente (backlog, fora do escopo desta tarefa): o motor de DESEMPATE
+(`GacruxTiebreakEngine`) exporta o seu proprio TRF e continua somando as celulas
+cruas, entao Buchholz & cia. ainda enxergam o entrante tardio com os pontos que
+ele fez no tabuleiro. E o mesmo defeito da TBK-01 com `point_adjustments`, ja
+anotado em `tiebreaks.py`; a correcao e a mesma funcao pura, mas mexe em valores
+de desempate homologados e pede a sua propria tarefa.
 
 #### PAR-03 - Knockout e Scheveningen maduros
 
@@ -2181,7 +2212,7 @@ Gacrux.
 
 Entregas:
 
-1. [ ] `PAR-02` Aceleracao e entrada tardia no caminho Gacrux.
+1. [x] `PAR-02` Aceleracao e entrada tardia no caminho Gacrux.
 2. [ ] `PAR-01` Round-robin com tabela persistida e returno.
 3. [ ] `PAR-03` Knockout e Scheveningen maduros.
 4. [ ] `PAR-04` Demais dividas tecnicas do nucleo.

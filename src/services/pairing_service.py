@@ -17,7 +17,10 @@ from src.services.constants import (
     player_full_name,
 )
 from src.services.pairing import (
+    BAKU_NOT_IMPLEMENTED as _BAKU_NOT_IMPLEMENTED,
     DEFAULT_PLAYER_TIEBREAKS as _DEFAULT_PLAYER_TIEBREAKS,
+    acceleration_spec as _acceleration_spec,
+    accelerated_player_ids as _accelerated_player_ids,
     accelerated_standings as _accelerated_standings,
     acknowledged_issue_keys as _acknowledged_issue_keys,
     append_requested_bye_pairings as _append_requested_bye_pairings,
@@ -54,6 +57,8 @@ from src.services.pairing import (
     result_states_summary as _result_states_summary,
     round_robin_pairings as _round_robin_pairings,
     round_robin_team_matches as _round_robin_team_matches,
+    scheme_applies_bonus as _scheme_applies_bonus,
+    scheme_is_baku as _scheme_is_baku,
     scheveningen_pairings as _scheveningen_pairings,
     team_preview_payload as _team_preview_payload,
     team_round_dashboard_metrics as _team_round_dashboard_metrics,
@@ -74,6 +79,10 @@ from src.services.pairing.point_adjustments import (
 )
 from src.services.pairing.gacrux_tiebreak_map import (
     sequence_signature as _sequence_signature,
+)
+from src.services.pairing.gacrux_trf import (
+    acceleration_ignored_warning as _acceleration_ignored_warning,
+    bonus_is_expressible as _bonus_is_expressible,
 )
 from src.services.pairing.incidents import (
     DECISION_NEEDS_PAIRING as _INCIDENT_DECISION_NEEDS_PAIRING,
@@ -925,6 +934,31 @@ class PairingService:
             },
         )
 
+    def _warn_pairing_notes(
+        self,
+        tournament_id: int,
+        round_number: int,
+        avisos: list[str],
+    ) -> None:
+        """Deixa na trilha o que o pareamento avisou ao arbitro (PAR-02).
+
+        A previa mostra os mesmos avisos ANTES de gerar; este registro e para
+        depois: quem conferir a rodada no futuro precisa achar por que ela foi
+        pareada assim (aceleracao que trocou de motor, pontuacao que o motor FIDE
+        nao recebeu) sem depender de quem estava na sala.
+        """
+        if not avisos:
+            return
+        for aviso in avisos:
+            logger.warning("Rodada %s do torneio %s: %s", round_number, tournament_id, aviso)
+        self.db.create_audit_event(
+            action="pairing_warning",
+            tournament_id=int(tournament_id),
+            entity_type="round",
+            entity_id=int(round_number),
+            after={"round_number": int(round_number), "messages": list(avisos)},
+        )
+
     def bye_policy_summary(self, tournament_id: int) -> str:
         """Uma linha com os limites configurados. ``""`` quando nao ha."""
         settings = self.db.get_tournament_settings(tournament_id) or {}
@@ -1126,6 +1160,7 @@ class PairingService:
         settings = plan["settings"]
         next_number = int(plan["round_number"])
         pairings = plan["pairings"]
+        self._warn_pairing_notes(tournament_id, next_number, plan.get("warnings") or [])
 
         pairing_system = str(settings.get("pairing_system") or "custom_authorized")
         input_snapshot = self._pairing_input_snapshot(
@@ -1221,6 +1256,10 @@ class PairingService:
         if next_number > int(tournament["rounds_count"]):
             raise AppError("O numero maximo de rodadas do torneio ja foi atingido.")
 
+        # Avisos do que o pareamento decidiu e o arbitro precisa saber — o que
+        # nao coube no arquivo do motor FIDE, a aceleracao que trocou de motor
+        # (PAR-02). Vao para a previa, para o log e para a auditoria.
+        avisos: list[str] = []
         pairing_method = settings.get("pairing_method", "swiss")
         if pairing_method in ("round_robin", "knockout", "scheveningen"):
             # Byes solicitados sao um conceito do Suico: nestes formatos o
@@ -1285,9 +1324,20 @@ class PairingService:
                     next_number,
                 )
                 use_gacrux = False
+            acelerados, bonus, use_gacrux = self._acceleration_plan(
+                to_pair, settings, next_number, use_gacrux, avisos
+            )
             if use_gacrux:
                 from src.services.pairing.gacrux_engine import GacruxEngine
-                pairings = GacruxEngine(self.db).pair_round(tournament_id, to_pair, next_number)
+                engine = GacruxEngine(self.db)
+                pairings = engine.pair_round(
+                    tournament_id,
+                    to_pair,
+                    next_number,
+                    accelerated_player_ids=acelerados,
+                    acceleration_bonus=bonus,
+                )
+                avisos.extend(engine.warnings)
             elif next_number == 1:
                 pairings = _first_round_pairings(to_pair, settings)
             else:
@@ -1298,7 +1348,70 @@ class PairingService:
             "settings": settings,
             "round_number": next_number,
             "pairings": pairings,
+            "warnings": avisos,
         }
+
+    def _acceleration_plan(
+        self,
+        to_pair: list[dict[str, Any]],
+        settings: dict[str, Any],
+        round_number: int,
+        use_gacrux: bool,
+        avisos: list[str],
+    ) -> tuple[list[int], float, bool]:
+        """Quem acelera nesta rodada, com quanto, e por qual motor (PAR-02).
+
+        A aceleracao so existia no motor proprio: com o Gacrux — que e o padrao —
+        ela era ignorada em silencio. Agora ela viaja no TRF (registro 250) e,
+        quando o bonus configurado nao cabe nesse registro, a rodada cai no motor
+        proprio COM AVISO. O que nao pode e o arbitro configurar aceleracao e nao
+        receber nem o efeito nem a noticia de que ele nao veio.
+        """
+        method = str(settings.get("acceleration_method") or "none")
+        if _scheme_is_baku(method):
+            avisos.append(_BAKU_NOT_IMPLEMENTED)
+            return [], 0.0, use_gacrux
+        if not _scheme_applies_bonus(method):
+            return [], 0.0, use_gacrux
+
+        acelerados = _accelerated_player_ids(
+            self._seeding(to_pair, settings), round_number, method
+        )
+        bonus = float(_acceleration_spec(method).get("bonus", 0.0) or 0.0)
+        if not acelerados:
+            # Fora das rodadas aceleradas: nada a fazer em nenhum dos motores.
+            return [], 0.0, use_gacrux
+        if use_gacrux and not _bonus_is_expressible(bonus):
+            avisos.append(_acceleration_ignored_warning(bonus))
+            return acelerados, bonus, False
+        if not use_gacrux and round_number == 1:
+            # `first_round_pairings` divide o campo pela ordem inicial e nao olha
+            # pontuacao — fictícia inclusive. Quem quer a rodada 1 acelerada de
+            # fato usa o motor FIDE; aqui o arbitro ao menos sabe.
+            avisos.append(
+                "Aceleracao configurada, mas o motor proprio pareia a rodada 1 pela "
+                "ordem inicial, sem os pontos ficticios. Use o motor Suico (Gacrux) "
+                "para acelerar a primeira rodada."
+            )
+        return acelerados, bonus, use_gacrux
+
+    def _seeding(
+        self,
+        players: list[dict[str, Any]],
+        settings: dict[str, Any],
+    ) -> list[int]:
+        """IDs na ordem de ranking inicial do torneio (1 = cabeca de chave)."""
+        initial_order = str(settings.get("initial_order") or "rating")
+        return [
+            int(player["id"])
+            for player in sorted(
+                players,
+                key=lambda p: (
+                    -_rating_for_initial_order(p, initial_order),
+                    str(p.get("name") or "").casefold(),
+                ),
+            )
+        ]
 
     def _pairing_input_snapshot(
         self,
@@ -2981,17 +3094,7 @@ class PairingService:
     ) -> list[dict[str, Any]]:
         standings = {item["player_id"]: item for item in self._standings(tournament_id)}
         settings = self.db.get_tournament_settings(tournament_id) or {}
-        initial_order = str(settings.get("initial_order") or "rating")
-        seeding = [
-            int(player["id"])
-            for player in sorted(
-                players,
-                key=lambda p: (
-                    -_rating_for_initial_order(p, initial_order),
-                    str(p.get("name") or "").casefold(),
-                ),
-            )
-        ]
+        seeding = self._seeding(players, settings)
         standings = _accelerated_standings(
             standings,
             seeding,

@@ -159,6 +159,25 @@ def classic_acceleration_bonus(start_rank: int, total_players: int, round_number
     )
 
 
+def accelerated_player_ids(
+    seeding: list[int],
+    round_number: int,
+    method: str,
+) -> list[int]:
+    """Quem recebe bônus fictício nesta rodada, na ordem do `seeding`.
+
+    Mesma conta de `accelerated_standings`, sem o standings: o caminho Gacrux
+    precisa só de QUEM acelera, para traduzir em start-ranks do TRF.
+    """
+    spec = acceleration_spec(method)
+    total = len(seeding)
+    return [
+        player_id
+        for index, player_id in enumerate(seeding, start=1)
+        if acceleration_bonus(index, total, round_number, spec)
+    ]
+
+
 def accelerated_standings(
     standings: dict[int, dict[str, Any]],
     seeding: list[int],
