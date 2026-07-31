@@ -349,3 +349,38 @@ class EditorDeDesempatesTest(unittest.TestCase):
         editor = self._editor(["sonneborn_berger"])
         self.assertEqual({}, editor.get_sequence()[0]["params"])
         self.assertEqual({}, editor._param_widgets)
+
+    def _editor_equipes(self, codes, params=None):
+        from src.services.pairing import DEFAULT_TEAM_TIEBREAKS, TEAM_TIEBREAKS
+        from src.ui.screens.tournament_widgets import TiebreakSequenceEditor
+
+        editor = TiebreakSequenceEditor(
+            self.root, TEAM_TIEBREAKS, DEFAULT_TEAM_TIEBREAKS, codes, params
+        )
+        self.addCleanup(editor.destroy)
+        self.root.update()
+        return editor
+
+    def test_o_editor_de_equipes_oferece_os_criterios_novos(self) -> None:
+        """TBK-05: o editor desenha o que o registro DE EQUIPES declara."""
+        editor = self._editor_equipes(
+            ["match_points", "direct_encounter", "buchholz_game_points", "board_count"]
+        )
+        self.assertEqual(
+            ["match_points", "direct_encounter", "buchholz_game_points", "board_count"],
+            [item["code"] for item in editor.get_sequence()],
+        )
+
+    def test_o_corte_do_sb_olimpico_e_editavel_so_em_equipes(self) -> None:
+        """O mesmo código tem parâmetros diferentes nos dois registros.
+
+        No individual o Sonneborn-Berger não tem corte; no de equipes tem. Se o
+        editor consultasse o registro errado, o campo apareceria na tela errada
+        (ou sumiria da certa).
+        """
+        equipes = self._editor_equipes(["sonneborn_berger"], {"sonneborn_berger": {"cut_low": 1}})
+        self.assertEqual({"cut_low": 1}, equipes.get_sequence()[0]["params"])
+        self.assertIn(("sonneborn_berger", "cut_low"), equipes._param_widgets)
+
+        individual = self._editor(["sonneborn_berger"])
+        self.assertEqual({}, individual.get_sequence()[0]["params"])

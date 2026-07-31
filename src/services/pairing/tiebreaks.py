@@ -1,13 +1,15 @@
-"""Helpers puros de desempate (spec §10).
+"""Helpers puros de desempate INDIVIDUAL (spec §10).
 
 Funções aqui não tocam o banco — recebem dicts já preparados pelo serviço
 e devolvem estruturas explicáveis. PairingService delega para elas.
+
+O que cada critério É (rótulo, fórmula, parâmetros) vive em
+`tiebreak_criteria.py`; a classificação por equipes vive em `team_tiebreaks.py`.
+Aqui só se calcula o individual.
 """
 
 from __future__ import annotations
 
-import json
-from dataclasses import dataclass
 from typing import Any, Mapping
 
 from src.services.constants import (
@@ -18,182 +20,11 @@ from src.services.constants import (
 )
 from src.services.fide_rating import fide_performance
 from src.services.pairing.point_adjustments import AdjustmentTotal, adjustment_note
-
-
-# ---------------------------------------------------------------------------
-# Registro de critérios de desempate configuráveis (spec E1/E2).
-#
-# Cada critério tem rótulo + fórmula curta. A ORDEM dos critérios é configurável
-# por torneio (tabela tournament_settings.tiebreak_sequence). Quando nenhuma
-# sequência é informada, usa-se DEFAULT_PLAYER_TIEBREAKS, que reproduz EXATAMENTE
-# a classificação histórica: pontos (sempre primeiro), Buchholz, Buchholz
-# mediano, Sonneborn-Berger, vitórias, e por fim rating/nome como criténos
-# técnicos finais.
-#
-# `points`, `rating` e `name` são aplicados FORA da sequência (pontos sempre em
-# primeiro; rating/nome sempre por último), por isso não aparecem no registro.
-# ---------------------------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class TiebreakParam:
-    """Um parâmetro configurável de um critério (TBK-04).
-
-    Declarado aqui, no registro, e não na tela: é a mesma razão do registro de
-    critérios existir. A tela desenha o que o registro declara, o motor próprio
-    lê em `player_tiebreak_value` e o mapa do Gacrux traduz para modificador —
-    três leitores, uma definição.
-
-    ``choices`` vazio significa número inteiro entre ``minimum`` e ``maximum``;
-    preenchido, é uma lista de ``(rótulo, valor)``.
-    """
-
-    key: str
-    label: str
-    default: Any
-    choices: tuple[tuple[str, Any], ...] = ()
-    minimum: int = 0
-    maximum: int = 9
-
-    def normalize(self, raw: Any) -> Any:
-        """Valor cru (texto da tela, JSON do banco) → valor válido do parâmetro.
-
-        Nunca levanta: parâmetro inválido volta ao padrão. Um desempate que
-        recusa a configuração no meio do torneio seria pior que um que ignora
-        um número datilografado errado — e a tela valida antes, de qualquer forma.
-        """
-        if self.choices:
-            validos = {valor for _rotulo, valor in self.choices}
-            return raw if raw in validos else self.default
-        try:
-            numero = int(raw)
-        except (TypeError, ValueError):
-            return self.default
-        return min(max(numero, self.minimum), self.maximum)
-
-
-_UNPLAYED_CHOICES = (
-    ("Jogos disputados (FIDE)", "real"),
-    ("Contar não disputados como próprios pontos", "self"),
+from src.services.pairing.tiebreak_criteria import (
+    DEFAULT_PLAYER_TIEBREAKS,
+    PLAYER_TIEBREAKS,
+    criterion_param,
 )
-
-
-@dataclass(frozen=True)
-class TiebreakCriterion:
-    code: str
-    label: str
-    formula: str
-    params: tuple[TiebreakParam, ...] = ()
-
-
-PLAYER_TIEBREAKS: dict[str, TiebreakCriterion] = {
-    "buchholz": TiebreakCriterion(
-        "buchholz", "Buchholz", "Soma dos pontos finais dos adversários enfrentados."
-    ),
-    "buchholz_cut1": TiebreakCriterion(
-        "buchholz_cut1",
-        "Buchholz Cut-1",
-        "Buchholz descartando o adversário de menor pontuação.",
-        params=(
-            TiebreakParam("cut_low", "Descartar piores", 1, maximum=5),
-            TiebreakParam("cut_high", "Descartar melhores", 0, maximum=5),
-            TiebreakParam("unplayed", "Jogos não disputados", "real", choices=_UNPLAYED_CHOICES),
-        ),
-    ),
-    "buchholz_cut2": TiebreakCriterion(
-        "buchholz_cut2",
-        "Buchholz Cut-2",
-        "Buchholz descartando os dois adversários de menor pontuação.",
-        params=(
-            TiebreakParam("cut_low", "Descartar piores", 2, maximum=5),
-            TiebreakParam("cut_high", "Descartar melhores", 0, maximum=5),
-            TiebreakParam("unplayed", "Jogos não disputados", "real", choices=_UNPLAYED_CHOICES),
-        ),
-    ),
-    "buchholz_median": TiebreakCriterion(
-        "buchholz_median",
-        "Buchholz mediano",
-        "Buchholz descartando o maior e o menor adversário (3+ jogos).",
-    ),
-    "sonneborn_berger": TiebreakCriterion(
-        "sonneborn_berger",
-        "Sonneborn-Berger",
-        "Pontos do adversário multiplicados pelo resultado obtido contra ele.",
-    ),
-    "direct_encounter": TiebreakCriterion(
-        "direct_encounter",
-        "Confronto direto",
-        "Pontos marcados contra adversários empatados em pontos.",
-    ),
-    "wins": TiebreakCriterion(
-        "wins", "Vitórias", "Número de partidas vencidas no tabuleiro."
-    ),
-    "cumulative": TiebreakCriterion(
-        "cumulative",
-        "Progressivo",
-        "Soma das pontuações acumuladas após cada rodada.",
-    ),
-    "cumulative_opp": TiebreakCriterion(
-        "cumulative_opp",
-        "Progressivo dos adversários",
-        "Soma do progressivo de todos os adversários enfrentados.",
-    ),
-    "koya": TiebreakCriterion(
-        "koya",
-        "Sistema Koya",
-        "Pontos obtidos contra adversários com ao menos 50% dos pontos.",
-        params=(
-            TiebreakParam("threshold", "Limiar (% dos pontos)", 50, minimum=1, maximum=99),
-        ),
-    ),
-    "aro": TiebreakCriterion(
-        "aro",
-        "Rating médio dos adversários",
-        "Média de rating dos adversários ranqueados.",
-    ),
-    "aroc": TiebreakCriterion(
-        "aroc",
-        "Rating médio (cortado)",
-        "Média de rating dos adversários descartando os extremos.",
-        params=(TiebreakParam("cut", "Descartar de cada ponta", 1, minimum=1, maximum=5),),
-    ),
-    "performance": TiebreakCriterion(
-        "performance", "Performance", "Rating performance estimado no torneio."
-    ),
-    "black_games": TiebreakCriterion(
-        "black_games", "Partidas com pretas", "Número de partidas jogadas com as pretas."
-    ),
-    "black_wins": TiebreakCriterion(
-        "black_wins", "Vitórias com pretas", "Número de vitórias jogando de pretas."
-    ),
-    "games_played": TiebreakCriterion(
-        "games_played", "Partidas jogadas", "Número de partidas disputadas no tabuleiro."
-    ),
-}
-
-DEFAULT_PLAYER_TIEBREAKS: list[str] = [
-    "buchholz",
-    "buchholz_median",
-    "sonneborn_berger",
-    "wins",
-]
-
-TEAM_TIEBREAKS: dict[str, TiebreakCriterion] = {
-    "match_points": TiebreakCriterion(
-        "match_points", "Match points", "Pontos de confronto da equipe (vitória/empate/derrota)."
-    ),
-    "game_points": TiebreakCriterion(
-        "game_points", "Game points", "Soma dos pontos de tabuleiro da equipe."
-    ),
-    "buchholz": TiebreakCriterion(
-        "buchholz", "Buchholz (equipes)", "Soma dos match points dos adversários da equipe."
-    ),
-    "wins": TiebreakCriterion(
-        "wins", "Vitórias (equipes)", "Número de confrontos vencidos pela equipe."
-    ),
-}
-
-DEFAULT_TEAM_TIEBREAKS: list[str] = ["match_points", "game_points", "buchholz", "wins"]
 
 
 def _as_float(value: Any) -> float:
@@ -203,90 +34,10 @@ def _as_float(value: Any) -> float:
         return 0.0
 
 
-def _dedup_codes(codes: list[str]) -> list[str]:
-    seen: set[str] = set()
-    ordered: list[str] = []
-    for code in codes:
-        if code and code not in seen:
-            seen.add(code)
-            ordered.append(code)
-    return ordered
-
-
-def _parse_tiebreak_sequence(
-    raw: Any,
-    registry: dict[str, TiebreakCriterion],
-    drop: set[str],
-) -> list[dict[str, Any]]:
-    """Normaliza uma sequência de desempates vinda do banco/UI.
-
-    Aceita string JSON ou lista; cada item pode ser um código (str) ou um dict
-    {"code", "params"}. Descarta códigos desconhecidos, duplicados e os de
-    `drop`. Sequência inválida/vazia retorna [] (= usar o padrão).
-    """
-    if not raw:
-        return []
-    items: Any = raw
-    if isinstance(raw, str):
-        try:
-            items = json.loads(raw)
-        except (ValueError, TypeError):
-            return []
-    if not isinstance(items, list):
-        return []
-    result: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    for entry in items:
-        if isinstance(entry, str):
-            code, params = entry.strip(), {}
-        elif isinstance(entry, dict):
-            code = str(entry.get("code") or "").strip()
-            raw_params = entry.get("params")
-            params = dict(raw_params) if isinstance(raw_params, dict) else {}
-        else:
-            continue
-        if code in drop or code not in registry or code in seen:
-            continue
-        seen.add(code)
-        # Normaliza na porta de entrada (TBK-04): o que estiver salvo no banco
-        # passa a chegar completo e validado a quem calcula, e um parametro que
-        # o critério perdeu numa versão nova some aqui, sem quebrar a sequência.
-        result.append({"code": code, "params": normalize_criterion_params(code, params)})
-    return result
-
-
-def parse_player_tiebreak_sequence(raw: Any) -> list[dict[str, Any]]:
-    return _parse_tiebreak_sequence(raw, PLAYER_TIEBREAKS, drop={"points"})
-
-
-def parse_team_tiebreak_sequence(raw: Any) -> list[dict[str, Any]]:
-    return _parse_tiebreak_sequence(raw, TEAM_TIEBREAKS, drop=set())
-
-
-def serialize_tiebreak_sequence(sequence: list[dict[str, Any]]) -> str:
-    return json.dumps(
-        [{"code": item["code"], "params": item.get("params", {})} for item in sequence],
-        ensure_ascii=False,
-    )
-
-
 def _resolve_player_codes(sequence: list[dict[str, Any]] | None) -> list[tuple[str, dict[str, Any]]]:
     if sequence:
         return [(item["code"], item.get("params", {})) for item in sequence]
     return [(code, {}) for code in DEFAULT_PLAYER_TIEBREAKS]
-
-
-def _resolve_team_codes(
-    settings: dict[str, Any],
-    sequence: list[dict[str, Any]] | None,
-) -> list[str]:
-    if sequence:
-        codes = [item["code"] for item in sequence if item.get("code") in TEAM_TIEBREAKS]
-        if codes:
-            return _dedup_codes(codes)
-    primary = str(settings.get("team_standing_primary", "match_points") or "match_points")
-    secondary = str(settings.get("team_standing_secondary", "game_points") or "game_points")
-    return _dedup_codes([primary, secondary, "buchholz", "wins"])
 
 
 def _opponent_points(player_stat: dict[str, Any], stats: dict[int, dict[str, Any]]) -> list[float]:
@@ -441,36 +192,6 @@ _CODE_TO_CANONICAL_FIELD: dict[str, str] = {
 }
 
 
-def criterion_params(code: str) -> tuple[TiebreakParam, ...]:
-    """Parâmetros declarados de um critério (individual ou equipes). Vazio se não há."""
-    criterio = PLAYER_TIEBREAKS.get(code) or TEAM_TIEBREAKS.get(code)
-    return criterio.params if criterio is not None else ()
-
-
-def normalize_criterion_params(code: str, raw: Any) -> dict[str, Any]:
-    """Parâmetros crus → só os declarados, já validados e completos (TBK-04).
-
-    Sempre devolve **todos** os parâmetros do critério, inclusive os que não
-    vieram: quem lê não precisa repetir o padrão em cada ponto de uso, e o JSON
-    salvo passa a descrever a configuração inteira. Chave desconhecida é
-    descartada — é como uma sequência antiga sobrevive a um critério que perdeu
-    um parâmetro.
-    """
-    entrada = dict(raw) if isinstance(raw, dict) else {}
-    return {
-        param.key: param.normalize(entrada.get(param.key, param.default))
-        for param in criterion_params(code)
-    }
-
-
-def _param(code: str, params: dict[str, Any], key: str) -> Any:
-    """Valor validado de um parâmetro, com o padrão do registro como piso."""
-    for param in criterion_params(code):
-        if param.key == key:
-            return param.normalize((params or {}).get(key, param.default))
-    return None
-
-
 def player_tiebreak_value(
     code: str,
     player_stat: dict[str, Any],
@@ -501,15 +222,15 @@ def player_tiebreak_value(
         return _buchholz_with_cut(
             player_stat,
             stats,
-            int(_param(code, params, "cut_low")),
-            int(_param(code, params, "cut_high")),
-            str(_param(code, params, "unplayed")),
+            int(criterion_param(code, params, "cut_low")),
+            int(criterion_param(code, params, "cut_high")),
+            str(criterion_param(code, params, "unplayed")),
         )
     if code == "aro":
         return _average_rating_opponents(player_stat, stats, cut=0)
     if code == "aroc":
         return _average_rating_opponents(
-            player_stat, stats, cut=int(_param(code, params, "cut"))
+            player_stat, stats, cut=int(criterion_param(code, params, "cut"))
         )
     if code == "direct_encounter":
         return _direct_encounter_score(player_stat, stats)
@@ -519,7 +240,7 @@ def player_tiebreak_value(
         return float(player_stat.get("cumulative_opp", 0.0) or 0.0)
     if code == "koya":
         return _koya_score(
-            player_stat, stats, rounds_total, _param(code, params, "threshold")
+            player_stat, stats, rounds_total, criterion_param(code, params, "threshold")
         )
     if code == "black_games":
         return float(player_stat.get("black_count", 0) or 0)
@@ -595,16 +316,6 @@ def performance_rating(
     # normas (fide_rating.py) e equivalente ao TPR do motor Gacrux. Antes daqui
     # usava-se uma aproximação logarítmica, que divergia da FIDE na faixa média.
     return fide_performance(average_rating, score, games)
-
-
-def team_standing_value(item: dict[str, Any], criterion: str) -> float:
-    if criterion == "wins":
-        return float(item.get("wins", 0) or 0)
-    if criterion == "game_points":
-        return float(item.get("game_points", 0.0) or 0.0)
-    if criterion == "buchholz":
-        return float(item.get("buchholz", 0.0) or 0.0)
-    return float(item.get("match_points", 0.0) or 0.0)
 
 
 def flatten_tiebreak_components(standings: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -983,168 +694,6 @@ def _apply_player_adjustments(
         values = player_stat.get("tiebreak_values")
         if isinstance(values, dict) and "points" in values:
             values["points"] = player_stat["points"]
-
-
-_ADJUSTABLE_TEAM_CODES = ("match_points", "game_points")
-
-
-def _apply_team_adjustments(
-    stats: dict[int, dict[str, Any]],
-    adjustments: Mapping[int, AdjustmentTotal] | None,
-) -> None:
-    """Soma os ajustes do árbitro aos pontos de cada equipe (TBK-01).
-
-    Espelha `_apply_player_adjustments`, com as duas grandezas de equipe: match
-    points e game points. O Buchholz de equipes soma os match points dos
-    adversários e é calculado antes — mesma razão do individual.
-    """
-    adjustments = adjustments or {}
-    for team_stat in stats.values():
-        total = adjustments.get(int(team_stat["team_id"]))
-        match_delta = float(total.match_points) if total else 0.0
-        game_delta = float(total.game_points) if total else 0.0
-        team_stat["adjustment_match_points"] = match_delta
-        team_stat["adjustment_game_points"] = game_delta
-        team_stat["adjustment_note"] = adjustment_note(total)
-        if match_delta:
-            team_stat["match_points"] = round(float(team_stat["match_points"]) + match_delta, 2)
-        if game_delta:
-            team_stat["game_points"] = round(float(team_stat["game_points"]) + game_delta, 2)
-
-
-def _adjusted_team_prefix(
-    codes: list[str],
-    stats: dict[int, dict[str, Any]],
-) -> list[str]:
-    """Critérios que precisam ser reordenados por cima do rank do Gacrux.
-
-    Sem ajuste no torneio, nenhum: o rank do motor continua sendo a ordem. Com
-    ajuste, o prefixo vai até o ÚLTIMO critério que um ajuste pode mover (match
-    points ou game points) — os critérios do meio entram com o valor do próprio
-    Gacrux, então quando nada muda a ordem resultante é a dele. Do prefixo em
-    diante o rank decide, que é onde ele continua valendo.
-    """
-    if not any(
-        float(item.get("adjustment_match_points") or 0.0)
-        or float(item.get("adjustment_game_points") or 0.0)
-        for item in stats.values()
-    ):
-        return []
-    last = max(
-        (index for index, code in enumerate(codes) if code in _ADJUSTABLE_TEAM_CODES),
-        default=-1,
-    )
-    return codes[: last + 1]
-
-
-def calculate_team_standings(
-    settings: dict[str, Any],
-    teams: list[dict[str, Any]],
-    closed_matches: list[dict[str, Any]],
-    sequence: list[dict[str, Any]] | None = None,
-    gacrux_tiebreaks: dict[int, dict[str, Any]] | None = None,
-    adjustments: Mapping[int, AdjustmentTotal] | None = None,
-) -> list[dict[str, Any]]:
-    stats: dict[int, dict[str, Any]] = {}
-    for team in teams:
-        team_id = int(team["id"])
-        stats[team_id] = {
-            "team_id": team_id,
-            "name": team["name"],
-            "club": team.get("club", ""),
-            "captain": team.get("captain", ""),
-            "active": int(team.get("active", 0) or 0),
-            "match_points": 0.0,
-            "game_points": 0.0,
-            "wins": 0,
-            "draws": 0,
-            "losses": 0,
-            "byes": 0,
-            "matches": 0,
-            "buchholz": 0.0,
-            "opponents": [],
-        }
-
-    for match in closed_matches:
-        white_team_id = int(match["white_team_id"])
-        black_team_id = int(match["black_team_id"]) if match.get("black_team_id") else None
-        if white_team_id not in stats:
-            continue
-        if match.get("is_bye"):
-            stats[white_team_id]["match_points"] += float(match.get("white_match_points", 0.0) or 0.0)
-            stats[white_team_id]["game_points"] += float(match.get("white_game_points", 0.0) or 0.0)
-            stats[white_team_id]["wins"] += 1
-            stats[white_team_id]["byes"] += 1
-            continue
-        if black_team_id is None or black_team_id not in stats:
-            continue
-
-        white_match_points = float(match.get("white_match_points", 0.0) or 0.0)
-        black_match_points = float(match.get("black_match_points", 0.0) or 0.0)
-        stats[white_team_id]["match_points"] += white_match_points
-        stats[black_team_id]["match_points"] += black_match_points
-        stats[white_team_id]["game_points"] += float(match.get("white_game_points", 0.0) or 0.0)
-        stats[black_team_id]["game_points"] += float(match.get("black_game_points", 0.0) or 0.0)
-        stats[white_team_id]["matches"] += 1
-        stats[black_team_id]["matches"] += 1
-        stats[white_team_id]["opponents"].append(black_team_id)
-        stats[black_team_id]["opponents"].append(white_team_id)
-
-        if white_match_points > black_match_points:
-            stats[white_team_id]["wins"] += 1
-            stats[black_team_id]["losses"] += 1
-        elif black_match_points > white_match_points:
-            stats[black_team_id]["wins"] += 1
-            stats[white_team_id]["losses"] += 1
-        else:
-            stats[white_team_id]["draws"] += 1
-            stats[black_team_id]["draws"] += 1
-
-    for team_stat in stats.values():
-        team_stat["match_points"] = round(float(team_stat["match_points"]), 2)
-        team_stat["game_points"] = round(float(team_stat["game_points"]), 2)
-        team_stat["buchholz"] = round(
-            sum(
-                float(stats[opponent_id]["match_points"])
-                for opponent_id in team_stat["opponents"]
-                if opponent_id in stats
-            ),
-            2,
-        )
-
-    # Modo Gacrux: sobrescreve os valores canônicos de equipe pelos do motor FIDE
-    # e segue o rank do Gacrux (mesma estratégia do individual; ver
-    # calculate_player_standings).
-    gacrux_tiebreaks = gacrux_tiebreaks or {}
-    for team_stat in stats.values():
-        gx = gacrux_tiebreaks.get(int(team_stat["team_id"]))
-        gx_scores = gx.get("scores") if gx else None
-        if gx:
-            for code in ("match_points", "game_points", "buchholz", "wins"):
-                if gx_scores and code in gx_scores:
-                    team_stat[code] = gx_scores[code]
-            team_stat["_gacrux_rank"] = int(gx.get("rank") or 0)
-
-    _apply_team_adjustments(stats, adjustments)
-
-    codes = _resolve_team_codes(settings, sequence)
-    if any("_gacrux_rank" in item for item in stats.values()):
-        prefix = _adjusted_team_prefix(codes, stats)
-        ordered_stats = sorted(
-            stats.values(),
-            key=lambda item: tuple(-team_standing_value(item, code) for code in prefix)
-            + (int(item.get("_gacrux_rank") or 0), str(item["name"]).casefold()),
-        )
-    else:
-        ordered_stats = sorted(
-            stats.values(),
-            key=lambda item: tuple(-team_standing_value(item, code) for code in codes)
-            + (str(item["name"]).casefold(),),
-        )
-    for index, item in enumerate(ordered_stats, start=1):
-        item["team_tiebreak_order"] = list(codes)
-        item["position"] = index
-    return ordered_stats
 
 
 def player_tiebreak_components(

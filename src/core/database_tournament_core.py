@@ -1749,6 +1749,45 @@ class TournamentCoreMixin(_DatabaseInfra):
             ).fetchall()
             return self.rows_to_dicts(rows)
 
+    def list_team_board_results(
+        self,
+        tournament_id: int,
+        closed_only: bool = True,
+    ) -> list[dict[str, Any]]:
+        """Resultados de tabuleiro do torneio, com a equipe de CADA cor (TBK-05).
+
+        O board count precisa saber quem pontuou em cada tabuleiro, e a equipe
+        vem do elenco do jogador, nao do lado do confronto: tabuleiros pares tem
+        as cores invertidas e um jogador pode ter sido substituido. E a mesma
+        regra que `team_match_result` usa para somar os game points — se aqui
+        fosse por paridade, a soma por tabuleiro poderia nao fechar com o total
+        do confronto.
+        """
+        status_filter = "AND r.status = 'closed'" if closed_only else ""
+        with self.connect() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT
+                    tb.team_match_id,
+                    tb.board_number,
+                    tb.result,
+                    r.number AS round_number,
+                    tm.is_bye,
+                    white_team.team_id AS white_team_id,
+                    black_team.team_id AS black_team_id
+                FROM team_boards tb
+                JOIN team_matches tm ON tm.id = tb.team_match_id
+                JOIN rounds r ON r.id = tm.round_id
+                LEFT JOIN team_players white_team ON white_team.player_id = tb.white_player_id
+                LEFT JOIN team_players black_team ON black_team.player_id = tb.black_player_id
+                WHERE r.tournament_id = ?
+                {status_filter}
+                ORDER BY r.number ASC, tm.match_number ASC, tb.board_number ASC
+                """,
+                (tournament_id,),
+            ).fetchall()
+            return self.rows_to_dicts(rows)
+
     def list_team_boards(self, team_match_id: int) -> list[dict[str, Any]]:
         with self.connect() as connection:
             rows = connection.execute(

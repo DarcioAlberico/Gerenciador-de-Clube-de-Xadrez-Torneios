@@ -43,12 +43,24 @@ UNSUPPORTED_BY_GACRUX: frozenset[str] = frozenset({"cumulative_opp"})
 
 # Critério de equipe do Albericus -> especificador do Gacrux (torneio por
 # equipes). ``match_points``/``game_points`` são os pontos primário/secundário;
-# ``buchholz`` de equipes é, por padrão, o Buchholz sobre match points.
+# ``buchholz`` de equipes é, por padrão, o Buchholz sobre match points — ele
+# herda o tipo de ponto do critério primário no `parse_tiebreak` do Gacrux, e é
+# por isso que não leva sufixo.
+#
+# Os quatro últimos são a TBK-05. O sufixo ``:PS`` escolhe o tipo de ponto
+# (``:GP`` = game points) e o prefixo ``E..SB`` escolhe os DOIS tipos do
+# Sonneborn-Berger: ``EMGSB`` multiplica os match points do adversário pelos
+# game points feitos contra ele, que é o SB dos regulamentos olímpicos. O
+# ``SB`` puro do Gacrux usaria match points dos dois lados — outro critério.
 ALBERICUS_TEAM_TO_GACRUX: dict[str, str] = {
     "match_points": "MPTS",
     "game_points": "GPTS",
     "buchholz": "BH",
     "wins": "WON",
+    "sonneborn_berger": "EMGSB",
+    "direct_encounter": "DE",
+    "buchholz_game_points": "BH:GP",
+    "board_count": "BC",
 }
 
 # Pontos são sempre a 1ª coluna do ``tiebreakScore`` (critério primário).
@@ -151,22 +163,43 @@ def build_tiebreak_plan(codes: list[Any]) -> TiebreakPlan:
     return TiebreakPlan(tuple(specifiers), tuple(code_order), tuple(skipped))
 
 
-def build_team_tiebreak_plan(codes: list[str]) -> TiebreakPlan:
+def team_specifier_with_params(code: str, params: dict[str, Any] | None) -> str | None:
+    """Especificador do Gacrux para um critério de EQUIPE, com modificadores.
+
+    Mesma regra do individual: parâmetro no valor padrão não vira modificador.
+    Hoje só o Sonneborn-Berger olímpico tem corte configurável (`EMGSB/C1`
+    descarta o pior confronto, como pedem alguns regulamentos).
+    """
+    base = ALBERICUS_TEAM_TO_GACRUX.get(code)
+    if base is None:
+        return None
+    valores = dict(params or {})
+    if code == "sonneborn_berger":
+        corte = int(valores.get("cut_low", 0) or 0)
+        return f"{base}/C{corte}" if corte else base
+    return base
+
+
+def build_team_tiebreak_plan(codes: list[Any]) -> TiebreakPlan:
     """Plano de desempate para torneios por EQUIPES.
 
     Ao contrário do individual, não há ``PTS`` primário fixo: o 1º critério da
     sequência (tipicamente ``match_points`` -> ``MPTS``) é o primário. Ignora
     duplicados e códigos sem equivalente Gacrux; cai em ``MPTS`` se nada sobrar.
+
+    Aceita as duas formas de entrada (código ou ``{"code", "params"}``) pela
+    mesma razão do individual: a sequência vem do banco já normalizada, mas o
+    plano também é montado a partir da lista de códigos padrão.
     """
     specifiers: list[str] = []
     code_order: list[str] = []
     skipped: list[str] = []
     seen: set[str] = set()
     for raw in codes:
-        code = str(raw or "").strip()
+        code, params = _code_and_params(raw)
         if not code or code in seen:
             continue
-        spec = ALBERICUS_TEAM_TO_GACRUX.get(code)
+        spec = team_specifier_with_params(code, params)
         if spec is None:
             skipped.append(code)
             continue
@@ -176,6 +209,22 @@ def build_team_tiebreak_plan(codes: list[str]) -> TiebreakPlan:
     if not specifiers:
         specifiers, code_order = ["MPTS"], ["match_points"]
     return TiebreakPlan(tuple(specifiers), tuple(code_order), tuple(skipped))
+
+
+def sequence_signature(codes: list[Any]) -> tuple[tuple[str, tuple[tuple[str, str], ...]], ...]:
+    """Assinatura HASHÁVEL de uma sequência (código + parâmetros).
+
+    Serve à chave de cache dos desempates: com os parâmetros no ar (TBK-04),
+    mudar só o corte do Buchholz muda o resultado do motor sem mudar a lista de
+    códigos — uma chave feita só de códigos devolveria o cálculo antigo.
+    """
+    assinatura: list[tuple[str, tuple[tuple[str, str], ...]]] = []
+    for raw in codes:
+        code, params = _code_and_params(raw)
+        assinatura.append(
+            (code, tuple(sorted((str(chave), str(valor)) for chave, valor in params.items())))
+        )
+    return tuple(assinatura)
 
 
 def parse_competitors(

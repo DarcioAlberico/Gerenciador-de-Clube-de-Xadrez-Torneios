@@ -23,6 +23,10 @@ from src.services.fide_norms import build_norm_report
 from src.services.fide_rating import build_fide_report_rows
 from src.services.list_layouts import STANDINGS_COLUMNS, resolve_column_specs, resolve_columns
 from src.services.pairing.point_adjustments import has_adjustment, mark_adjusted
+from src.services.pairing.team_tiebreaks import (
+    extra_team_columns as _extra_team_columns,
+    team_standing_value as _team_standing_value,
+)
 from src.services.prizes import PRIZE_KINDS, PRIZE_POLICIES, allocate_prizes
 from src.services.trf_import import build_trf_rounds, parse_trf
 
@@ -733,6 +737,11 @@ class ReportRenderersMixin:
 
     def _team_standings_section(self, tournament_id: int) -> tuple[str, list[str], list[list[Any]]]:
         standings = self.pairing_service.team_standings(tournament_id)
+        # Critérios da sequência configurada que não têm coluna fixa (TBK-05):
+        # entram antes do status, na ordem em que desempatam. Sem isso, um
+        # campeonato decidido pelo Sonneborn-Berger olímpico publicaria uma
+        # ordem que o próprio relatório não explica.
+        extras = _extra_team_columns(standings)
         rows = [
             [
                 item["position"],
@@ -753,6 +762,10 @@ class ReportRenderersMixin:
                 item["byes"],
                 item["matches"],
                 self._format_report_number(item["buchholz"]),
+                *[
+                    self._format_report_number(_team_standing_value(item, code))
+                    for code, _label in extras
+                ],
                 "Ativa" if item.get("active") else "Inativa",
             ]
             for item in standings
@@ -772,6 +785,7 @@ class ReportRenderersMixin:
                 "Byes",
                 "Confrontos",
                 "Buchholz",
+                *[label for _code, label in extras],
                 "Status",
             ],
             rows,

@@ -1137,9 +1137,81 @@ Criterios de aceite:
 
 #### TBK-05 - Desempates de equipes completos
 
-Status: pendente.
+Status: CONCLUIDO (2026-07-31). Fecha a Sprint 8.
 
-Problema:
+Como ficou:
+
+- **os quatro criterios que faltavam foram registrados** e valem nos dois
+  motores. Cada um tem uma definicao so, no registro, e tres leitores (tela,
+  motor proprio, mapa do Gacrux) — a mesma forma da TBK-04:
+
+  | criterio | o que e | Gacrux |
+  |---|---|---|
+  | `sonneborn_berger` | match points do adversario x game points feitos contra ele | `EMGSB` |
+  | `direct_encounter` | match points contra as equipes empatadas | `DE` |
+  | `buchholz_game_points` | soma dos game points dos adversarios | `BH:GP` |
+  | `board_count` | soma do numero do tabuleiro x pontos nele obtidos | `BC` |
+
+- **o SB olimpico nao e o SB de match points.** O `SB` puro do Gacrux usa match
+  points dos DOIS lados; o regulamento olimpico pesa a forca do adversario em
+  match points e o placar do confronto em pontos de tabuleiro, que e o `EMGSB`.
+  No fixture dos testes a diferenca e 14,0 contra 4,0 para a mesma equipe — nao
+  e detalhe de arredondamento, e outro criterio. O corte (`EMGSB/C1`, que alguns
+  regulamentos pedem) e parametro, e descarta pela mesma regra do motor FIDE:
+  menor pontuacao do adversario primeiro, produto como desempate;
+- **`higher_is_better` entrou no registro** por causa do board count, o unico
+  criterio em que o numero MENOR classifica melhor (o ponto vale mais no
+  tabuleiro de cima). Fica declarado ao lado do criterio, e nao numa lista de
+  excecoes na hora de ordenar: quem ordena pergunta, em vez de saber de cor;
+- **o board count precisa do resultado POR TABULEIRO**, que a classificacao nao
+  tinha: entrou `list_team_board_results` e o repasse ate o calculo. A equipe de
+  cada cor sai do ELENCO do jogador, e nao da paridade do tabuleiro — tabuleiros
+  pares invertem as cores e um jogador pode ter sido substituido; e a mesma regra
+  que `team_match_result` usa para somar os game points, entao a soma por
+  tabuleiro fecha com o placar do confronto. A consulta so roda quando o board
+  count esta na sequencia (nenhum torneio por padrao);
+- **divida da TBK-04 paga**: `_gacrux_player_tiebreaks`/`_gacrux_team_tiebreaks`
+  montavam a lista so com os CODIGOS, entao o corte configurado chegava ao
+  registro 212 do arquivo FIDE mas **nao ao calculo em execucao** — o arquivo
+  declarava um criterio e a tela mostrava outro numero. A sequencia agora vai
+  inteira, e a chave de cache virou assinatura (codigo + parametros), senao
+  mudar so o corte devolveria o calculo velho;
+- **os dois registros compartilham codigos com significados diferentes**
+  (`sonneborn_berger` de equipes aceita corte, o individual nao; `buchholz` de
+  equipes soma match points). `criterion_params` adivinhava o registro e
+  devolvia os parametros do criterio errado — passou a receber o registro;
+- **a classificacao publicada mostra o numero que decidiu.** A tabela de equipes
+  (tela e relatorio) tinha quatro colunas fixas porque eram os quatro criterios
+  que existiam; os configurados que nao tem coluna entram agora, na ordem em que
+  desempatam. Um desempate que decide o campeonato e nao aparece em lugar nenhum
+  nao e utilizavel numa apelacao;
+- **modularizacao**: o dominio de equipes saiu de `tiebreaks.py` (1284 linhas,
+  individual + equipes) para `team_tiebreaks.py`, e a DECLARACAO dos criterios
+  (dataclasses, os dois registros, parametros, parse/serialize da sequencia) para
+  `tiebreak_criteria.py`. Grafo de dependencia sem ciclo: declaracao <- calculo.
+
+Uma ressalva medida e assumida: o `DE` do Gacrux devolve uma POSICAO dentro do
+grupo empatado (0 quando nao separa) e o do Albericus devolve os pontos feitos
+contra os empatados, como no individual. Os numeros nao se comparam; a ORDEM
+sim, e e ela que o teste de paridade exige. No modo Gacrux o numero exibido
+continua sendo o do motor, como manda a TBK-02.
+
+Byes nao entram no Buchholz, no SB nem no board count do motor proprio: o
+adversario virtual da FIDE so existe no Gacrux, que e a razao de o motor proprio
+ser legado desde a TBK-03. Por isso os testes de paridade usam um fixture SEM
+bye — com bye estariam comparando duas definicoes diferentes, e nao a mesma
+conta.
+
+Criterios de aceite:
+
+- [x] campeonato por equipes com regulamento olimpico (MP, DE, SB olimpico)
+  ordena corretamente (e igual nos dois motores);
+- [x] paridade com o Gacrux testada para os novos criterios, rodando o motor de
+  verdade — valores para `EMGSB`, `EMGSB/C1`, `BH:GP` e `BC`; ordem para o `DE`.
+
+Cobertura: 43 testes em `tests/test_core_tbk05.py`.
+
+Problema original:
 
 - so existem 4 criterios de equipes (match points, game points, Buchholz sobre
   MP, vitorias). Faltam os desempates usuais de regulamento FIDE/CBX por
@@ -1154,9 +1226,9 @@ Escopo:
 
 Criterios de aceite:
 
-- [ ] campeonato por equipes com regulamento olimpico (MP, DE, SB olimpico)
+- [x] campeonato por equipes com regulamento olimpico (MP, DE, SB olimpico)
   ordena corretamente;
-- [ ] paridade com o Gacrux testada para os novos criterios.
+- [x] paridade com o Gacrux testada para os novos criterios.
 
 ### EPIC G - Fluxo arbitral em salao
 
@@ -1900,7 +1972,9 @@ Entregas:
 1. [x] `TBK-03` Jogos nao disputados conforme FIDE no motor proprio
    (pela segunda saida: motor proprio rebaixado a legado, nao homologavel).
 2. [x] `TBK-04` Parametros de criterios editaveis e registro 212 fiel.
-3. [ ] `TBK-05` Desempates de equipes completos.
+3. [x] `TBK-05` Desempates de equipes completos.
+
+**Sprint 8 CONCLUIDA (2026-07-31).**
 
 ### Sprint 9 - Fluxo arbitral em salao
 

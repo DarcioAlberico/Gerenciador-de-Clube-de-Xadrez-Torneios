@@ -43,7 +43,7 @@ class GacruxTiebreakEngine:
     def compute(
         self,
         tournament_id: int,
-        codes: list[str],
+        codes: list[Any],
         current_round: int | None = None,
     ) -> dict[int, dict[str, Any]]:
         """Devolve ``{player_id: {"rank": int, "scores": {codigo: float}}}``.
@@ -92,7 +92,7 @@ class GacruxTiebreakEngine:
     def compute_teams(
         self,
         tournament_id: int,
-        codes: list[str],
+        codes: list[Any],
         current_round: int | None = None,
     ) -> dict[int, dict[str, Any]]:
         """Devolve ``{team_id: {"rank": int, "scores": {codigo: float}}}``.
