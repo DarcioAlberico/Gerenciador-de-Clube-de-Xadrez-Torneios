@@ -52,6 +52,7 @@ from src.services.pairing import (
     result_submission_issue as _result_submission_issue,
     result_states_summary as _result_states_summary,
     round_robin_pairings as _round_robin_pairings,
+    round_robin_team_matches as _round_robin_team_matches,
     scheveningen_pairings as _scheveningen_pairings,
     team_preview_payload as _team_preview_payload,
     team_round_dashboard_metrics as _team_round_dashboard_metrics,
@@ -982,7 +983,24 @@ class PairingService:
 
         rosters, seed_ratings = self._team_starter_rosters(to_pair, boards_count)
 
-        if next_number == 1:
+        # O metodo de pareamento por equipes era lido pela exportacao e pelo
+        # motor de desempate, mas NAO pela geracao de rodada — que era sempre
+        # Suico (PAR-04). Com a constante duplicada consertada, `round_robin`
+        # voltou a ser selecionavel, e agora ele de fato pareia.
+        team_method = str(settings.get("team_pairing_method") or "swiss")
+        if team_method == "round_robin":
+            if bye_by_team:
+                # O calendario do todos-contra-todos e fixo: tirar uma equipe da
+                # rotacao desloca todo mundo e faz pares se repetirem. Num
+                # torneio assim, quem nao comparece perde por W.O. — nao "folga".
+                raise AppError(
+                    "Bye solicitado nao se aplica a todos contra todos por equipes: "
+                    "o calendario e fixo. Registre W.O. no confronto da rodada."
+                )
+            matches = _round_robin_team_matches(
+                to_pair, rosters, seed_ratings, boards_count, settings, next_number
+            )
+        elif next_number == 1:
             matches = _first_round_team_matches(to_pair, rosters, seed_ratings, boards_count, settings)
         else:
             matches = self._swiss_team_matches(
@@ -1485,10 +1503,16 @@ class PairingService:
                 continue
 
             boards = self.db.list_team_boards(int(match["id"]))
-            for board in boards:
-                if not board["result"] or board["result"] not in RESULT_POINTS:
-                    pending.append(board)
-            if pending:
+            # Pendencia DESTE confronto, e nao da lista acumulada (PAR-04): com o
+            # `pending` global, um tabuleiro em branco no primeiro confronto fazia
+            # todos os seguintes pularem o sumario, mesmo os completos.
+            faltando = [
+                board
+                for board in boards
+                if not board["result"] or board["result"] not in RESULT_POINTS
+            ]
+            pending.extend(faltando)
+            if faltando:
                 continue
 
             white_team_player_ids = {
@@ -1665,6 +1689,49 @@ class PairingService:
             replacement_player_id,
         )
 
+    def swap_pairing_colors(self, tournament_id: int, round_id: int, pairing_id: int) -> None:
+        """Inverte as cores de uma mesa, com auditoria (PAR-04).
+
+        A tela chamava `db.swap_pairing_colors` direto: era a UNICA mutacao de
+        rodada que nao passava pelo servico e, por isso, a unica sem evento de
+        auditoria. Cor decidida pelo arbitro entra no TRF e no historico de
+        cores — precisa de trilha como qualquer outra decisao.
+        """
+        round_data = self.db.get_round(round_id)
+        if not round_data or int(round_data["tournament_id"]) != int(tournament_id):
+            raise AppError("Rodada nao encontrada para o torneio selecionado.")
+        if round_data["status"] == "closed":
+            raise AppError("Rodada fechada nao pode ser ajustada.")
+        pairing = self.db.get_pairing(pairing_id)
+        if not pairing or int(pairing["tournament_id"]) != int(tournament_id):
+            raise AppError("Mesa nao encontrada para o torneio selecionado.")
+        if pairing.get("is_bye"):
+            raise AppError("Mesa de bye nao tem cores para inverter.")
+        if pairing["result"]:
+            raise AppError("Limpe o resultado da mesa antes de trocar cores.")
+
+        before = {
+            "pairing_id": int(pairing_id),
+            "white_player_id": pairing.get("white_player_id"),
+            "black_player_id": pairing.get("black_player_id"),
+        }
+        self.db.swap_pairing_colors(pairing_id)
+        self.db.create_audit_event(
+            action="pairing_colors_swapped",
+            tournament_id=tournament_id,
+            round_id=round_id,
+            entity_type="pairing",
+            entity_id=int(pairing_id),
+            reason="Cores invertidas pelo arbitro.",
+            before=before,
+            after={
+                "pairing_id": int(pairing_id),
+                "white_player_id": before["black_player_id"],
+                "black_player_id": before["white_player_id"],
+            },
+        )
+        logger.info("Cores trocadas na mesa %s", pairing_id)
+
     def swap_team_board_colors(self, tournament_id: int, round_id: int, team_board_id: int) -> None:
         round_data = self.db.get_round(round_id)
         if not round_data or int(round_data["tournament_id"]) != int(tournament_id):
@@ -1676,7 +1743,27 @@ class PairingService:
             raise AppError("Tabuleiro nao encontrado para o torneio selecionado.")
         if board["result"]:
             raise AppError("Limpe o resultado do tabuleiro antes de trocar cores.")
+        before = {
+            "team_board_id": int(team_board_id),
+            "white_player_id": board.get("white_player_id"),
+            "black_player_id": board.get("black_player_id"),
+        }
         self.db.swap_team_board_colors(team_board_id)
+        # Passava pelo servico, mas sem trilha — mesma lacuna do individual.
+        self.db.create_audit_event(
+            action="team_board_colors_swapped",
+            tournament_id=tournament_id,
+            round_id=round_id,
+            entity_type="team_board",
+            entity_id=int(team_board_id),
+            reason="Cores invertidas pelo arbitro.",
+            before=before,
+            after={
+                "team_board_id": int(team_board_id),
+                "white_player_id": before["black_player_id"],
+                "black_player_id": before["white_player_id"],
+            },
+        )
         logger.info("Cores trocadas no tabuleiro por equipes %s", team_board_id)
 
     def adjust_team_board_player(

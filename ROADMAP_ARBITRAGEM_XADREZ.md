@@ -375,8 +375,16 @@ Status: em execucao (auditoria arbitral de 2026-07-29). Sprint 7 iniciada em
   cascata, e os retratos de classificacao afetados sao arquivados e regravados
   com a classificacao **da epoca de cada rodada**.
 
-**Os tres bloqueantes da Sprint 7 estao fechados.** Resta da sprint apenas o
-item 4 (correcoes pontuais de `PAR-04`).
+- `PAR-04` (parte pontual) entregue — `TEAM_PAIRING_METHODS` estava definido duas
+  vezes e a segunda apagava o round-robin por equipes; ele voltou a ser
+  selecionavel E passou a de fato parear (a geracao de rodada nunca lia
+  `team_pairing_method`). A troca de cores no individual saiu do `db` cru para o
+  servico, com auditoria nos dois modos. Mais o `pending` acumulado no fechamento
+  por equipes e o `KeyError` cru do sumario. Achado no caminho: o dialogo "Trocar
+  jogador" nao abria (pai errado, `Dialog(self, ...)`).
+
+**SPRINT 7 CONCLUIDA (2026-07-30).** Proxima: Sprint 8 (`TBK-03`, `TBK-04`,
+`TBK-05`).
 
 Objetivo: fechar as lacunas encontradas na auditoria completa dos modulos de
 gestao de torneio feita sob otica de arbitro FIDE. Detalhamento executivo em
@@ -390,7 +398,7 @@ Entregas, em ordem de prioridade:
    ENTREGUE em 2026-07-30), correcao de resultado com motivo obrigatorio,
    desbloqueio pontual e alerta de cascata (`ARB-01` — ENTREGUE em 2026-07-30),
    troca de cores com auditoria e round-robin por equipes destravado
-   (`PAR-04` parcial, pendente).
+   (`PAR-04` parcial — ENTREGUE em 2026-07-30).
 2. **Desempates conformes (Sprint 8)**: adversario virtual FIDE no motor
    proprio ou rebaixamento formal a modo legado (`TBK-03`), parametros de
    criterios editaveis e registro 212 fiel a sequencia configurada
@@ -437,8 +445,9 @@ colunas, TRF25) foram entregues nas fases 0 a 11 e nos EPICs A a E da
   2026-07-30.
 - ~~Motivo obrigatorio na correcao de rodada fechada (`ARB-01`).~~ FEITO
   2026-07-30 (com desbloqueio pontual, cascata e retratos reconciliados).
-- Troca de cores via servico com auditoria (`PAR-04`, parte).
-- Destravar round-robin por equipes (constante duplicada) (`PAR-04`, parte).
+- ~~Troca de cores via servico com auditoria (`PAR-04`, parte).~~ FEITO 2026-07-30.
+- ~~Destravar round-robin por equipes (constante duplicada) (`PAR-04`, parte).~~
+  FEITO 2026-07-30 — e o metodo passou a de fato parear, nao so a ser aceito.
 - Corrigir `birth_date` da importacao da lista FIDE (`FED-05`).
 - W.O. no lancamento inline do painel (`ARB-02`, parte).
 

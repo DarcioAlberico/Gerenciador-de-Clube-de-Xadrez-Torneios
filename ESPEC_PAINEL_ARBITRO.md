@@ -1325,7 +1325,47 @@ Criterios de aceite:
 
 #### PAR-04 - Dividas tecnicas do nucleo de pareamento
 
-Status: pendente.
+Status: PARCIAL (2026-07-30) — os quatro itens pontuais entregues; resta o
+topscorers (C.3), que e feature de motor e nao conserto.
+
+Como ficou (parte pontual):
+
+- **`TEAM_PAIRING_METHODS` duplicado**: a segunda atribuicao (so `swiss`)
+  apagava a primeira em silencio, e por isso o round-robin por equipes era
+  recusado pela validacao e sumia do menu. A linha morreu, e ficou no lugar um
+  comentario dizendo por que nao se redefine ali. Um teste le o proprio
+  `constants.py` e falha se a constante voltar a ser atribuida duas vezes — o
+  defeito era invisivel para quem lia so o topo do arquivo;
+- **round-robin por equipes de fato pareando**: a geracao de rodada por equipes
+  nunca lia `team_pairing_method` (so a exportacao e o motor de desempate liam),
+  entao destravar a constante sozinha teria deixado o arbitro escolher um metodo
+  que o motor ignorava — uma mentira em vez de uma limitacao. Nasce
+  `round_robin_team_matches` (puro, em `team_swiss.py`): mesma rotacao Berger do
+  round-robin individual, equipe fantasma quando o numero e impar, cor de equipe
+  alternando com a paridade da rodada (sem isso a equipe que nao gira jogaria
+  sempre de brancas), e os tabuleiros saindo do `team_match_payload` que ja
+  existia. Bye SOLICITADO e recusado nesse modo: tirar uma equipe da rotacao
+  desloca todo mundo e faz pares se repetirem — num calendario fixo quem nao
+  comparece perde por W.O., nao "folga", e a recusa e explicita porque o
+  silencio aqui pareava a rodada errada sem ninguem ver;
+- **troca de cores com auditoria**: `swap_pairing_colors` era chamado direto do
+  `db` pela tela — a UNICA mutacao de rodada sem passar pelo servico e, portanto,
+  sem trilha. Agora ha `PairingService.swap_pairing_colors`, espelhando o de
+  equipes, com as guardas (rodada fechada, mesa de outro torneio, bye, resultado
+  ja lancado) e evento `pairing_colors_swapped`. O caminho de equipes ja passava
+  pelo servico mas tambem nao auditava: ganhou `team_board_colors_swapped`;
+- **`pending` acumulado no fechamento por equipes**: era uma lista unica para
+  todos os confrontos, entao um tabuleiro em branco no primeiro confronto fazia
+  todos os seguintes pularem o sumario. A pendencia passou a ser por confronto;
+- **`KeyError` cru em `team_match_summary`**: tabuleiro em branco ou com codigo
+  desconhecido subia como `KeyError`, que a tela mostrava como "erro inesperado"
+  com codigo de log — para uma situacao previsivel que o arbitro resolve sozinho.
+  Virou `AppError` dizendo qual tabuleiro e o que fazer.
+
+Achado no caminho, fora da lista da auditoria: **`Dialog(self, ...)` em
+`swaps.py`**, onde `self` e o objeto de acoes e nao a janela — o mesmo defeito que
+a extracao da B-6 encontrou no `qr.py` e que aqui tinha passado. "Trocar jogador"
+(individual e equipes) nao abria.
 
 Problema (itens pontuais confirmados na auditoria):
 
@@ -1346,14 +1386,25 @@ Problema (itens pontuais confirmados na auditoria):
 
 Escopo e criterios de aceite:
 
-- [ ] round-robin por equipes volta a ser selecionavel (ou e removido da
-  constante com changelog);
-- [ ] troca de cores passa pelo servico com evento de auditoria;
-- [ ] fechamento de equipes reporta todos os confrontos completos mesmo com
+- [x] round-robin por equipes volta a ser selecionavel (ou e removido da
+  constante com changelog) — **selecionavel E pareando**;
+- [x] troca de cores passa pelo servico com evento de auditoria;
+- [x] fechamento de equipes reporta todos os confrontos completos mesmo com
   pendencia anterior;
-- [ ] resultado invalido em equipes vira `AppError` legivel;
+- [x] resultado invalido em equipes vira `AppError` legivel;
 - [ ] topscorers (C.3) respeitado nas rodadas finais do motor proprio, com
-  teste.
+  teste — **fica para o PAR-04 completo**: e regra de motor, nao conserto
+  pontual, e o motor proprio deixou de ser o padrao de pareamento no PR #66
+  (hoje quem pareia e o Gacrux, que ja aplica C.3). Junto com ele ficam os
+  outros dois itens de motor: `float_histories` contando W.O. como float
+  enquanto cor e repeticao o excluem, e `team_pair_penalty` sem penalizar float
+  repetido no Suico por equipes.
+
+Cobertura da parte pontual: 18 testes em `tests/test_core_par04.py` — Berger de
+equipes (cada par uma vez, bye rotativo, cores alternando, calendario cheio),
+round-robin ponta a ponta pelo servico (inclusive a recusa do bye solicitado),
+troca de cores com trilha nos dois modos e com as quatro recusas, sumario com
+recado legivel e o fechamento que nao descarta mais confronto completo.
 
 ### EPIC I - Submissao federativa (FIDE e CBX)
 
@@ -1711,8 +1762,11 @@ Entregas:
 1. [x] `TBK-01` Ajustes de pontos aplicados na classificacao.
 2. [x] `TBK-02` Fallback do motor de desempates visivel.
 3. [x] `ARB-01` Correcao com motivo, desbloqueio pontual e alerta de cascata.
-4. [ ] Correcoes pontuais de `PAR-04` com risco imediato: troca de cores via
-   servico com auditoria e `TEAM_PAIRING_METHODS` duplicado.
+4. [x] Correcoes pontuais de `PAR-04` com risco imediato: troca de cores via
+   servico com auditoria e `TEAM_PAIRING_METHODS` duplicado (mais o `pending`
+   acumulado e o `KeyError` do sumario de equipes).
+
+**Sprint 7 CONCLUIDA (2026-07-30).**
 
 ### Sprint 8 - Conformidade de desempates
 
