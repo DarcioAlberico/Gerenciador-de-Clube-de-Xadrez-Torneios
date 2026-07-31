@@ -383,8 +383,21 @@ Status: em execucao (auditoria arbitral de 2026-07-29). Sprint 7 iniciada em
   por equipes e o `KeyError` cru do sumario. Achado no caminho: o dialogo "Trocar
   jogador" nao abria (pai errado, `Dialog(self, ...)`).
 
-**SPRINT 7 CONCLUIDA (2026-07-30).** Proxima: Sprint 8 (`TBK-03`, `TBK-04`,
-`TBK-05`).
+**SPRINT 7 CONCLUIDA (2026-07-30).**
+
+Sprint 8 em andamento:
+
+- `TBK-03` entregue (2026-07-30) pela SEGUNDA saida do escopo: o motor proprio foi
+  formalmente rebaixado a **legado, nao homologavel**, em vez de ganhar uma
+  segunda implementacao do adversario virtual da FIDE. As regras de desempate sao
+  versionadas por data e o Gacrux ja as acompanha; duas implementacoes da mesma
+  norma divergiriam com o tempo, que e o problema que a TBK-02 existe para
+  impedir. O aviso sai na faixa da classificacao, no relatorio de desempates e na
+  hora de escolher o motor. Junto, os dois defeitos que estavam errados em
+  qualquer caminho: `wins` contava W.O. (o `WON` da FIDE e vitoria no tabuleiro) e
+  o confronto direto era aplicado sem todos os empatados terem se enfrentado.
+  **Um item da auditoria nao se confirmou** — o limiar do Koya ja bate com o
+  Gacrux; a mudanca pedida afastaria os motores, e um teste guarda a equivalencia.
 
 Objetivo: fechar as lacunas encontradas na auditoria completa dos modulos de
 gestao de torneio feita sob otica de arbitro FIDE. Detalhamento executivo em

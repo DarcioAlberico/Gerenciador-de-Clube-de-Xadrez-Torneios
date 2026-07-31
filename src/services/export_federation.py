@@ -22,6 +22,7 @@ from src.services.constants import *
 from src.services.fide_norms import build_norm_report
 from src.services.fide_rating import build_fide_report_rows
 from src.services.list_layouts import STANDINGS_COLUMNS, resolve_column_specs, resolve_columns
+from src.services.pairing.tiebreak_engine import legacy_engine_note
 from src.services.prizes import PRIZE_KINDS, PRIZE_POLICIES, allocate_prizes
 from src.services.text_ascii import headers_to_ascii
 from src.services.trf_import import build_trf_rounds, parse_trf
@@ -289,6 +290,14 @@ class FederationReportsMixin:
         if tournament.get("competition_type") == "team":
             raise AppError("Relatório de desempates por jogador disponível apenas para torneios individuais.")
         rows = []
+        # Aviso de não conformidade no topo do relatório (TBK-03): é o documento
+        # que alguém usa para conferir a ordem final, então é onde a informação
+        # "este número não é o oficial" precisa estar — antes dos números.
+        aviso = legacy_engine_note(
+            self.pairing_service.tiebreak_engine_report(tournament_id).used
+        )
+        if aviso:
+            rows.append(["", "", "", "AVISO", "", "", aviso])
         for standing in self.pairing_service.tiebreak_report(tournament_id):
             components = dict(standing.get("tiebreak_components") or {})
             for criterion in (

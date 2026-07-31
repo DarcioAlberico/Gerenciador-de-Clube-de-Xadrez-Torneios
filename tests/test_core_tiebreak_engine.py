@@ -310,8 +310,19 @@ class MotorQueFalhaTest(CoreServiceTestCase):
     def test_faixa_pronta_para_a_tela_sai_do_servico(self) -> None:
         self.db.save_tournament_settings(self.tournament_id, {"tiebreak_engine": ENGINE_ALBERICUS})
         faixa = self.service.tiebreak_engine_badge(self.tournament_id)
-        self.assertEqual("ok", faixa["tone"])
         self.assertIn("Albericus", faixa["label"])
+        # Desde a TBK-03 o motor proprio e legado, entao a faixa avisa mesmo
+        # quando ele foi escolhido de proposito — nao e falha, mas a tabela nao
+        # e a oficial. O tom "ok" ficou so para o motor homologado.
+        self.assertEqual("warning", faixa["tone"])
+        self.assertIn("legado", faixa["label"])
+
+    def test_faixa_do_motor_homologado_segue_sem_aviso(self) -> None:
+        self.db.save_tournament_settings(self.tournament_id, {"tiebreak_engine": ENGINE_GACRUX})
+        ps._LAST_TIEBREAK_ENGINE.clear()
+        faixa = self.service.tiebreak_engine_badge(self.tournament_id)
+        self.assertEqual("ok", faixa["tone"])
+        self.assertEqual("", faixa["detail"])
 
     def test_sem_calculo_a_faixa_mostra_o_motor_configurado(self) -> None:
         """Tela aberta antes de qualquer cálculo já diz quem vai assinar."""

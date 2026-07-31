@@ -13,6 +13,7 @@ from typing import Any, Mapping
 from src.services.constants import (
     REQUESTED_BYE_POINTS,
     RESULT_POINTS,
+    WALKOVER_RESULTS,
     player_full_name,
 )
 from src.services.fide_rating import fide_performance
@@ -279,10 +280,49 @@ def _average_rating_opponents(
     return round(sum(ordered) / len(ordered), 2)
 
 
+def _tied_group_ids(player_stat: dict[str, Any], stats: dict[int, dict[str, Any]]) -> list[int]:
+    """Quem está empatado em pontos com este jogador, ele incluído."""
+    points = float(player_stat["points"])
+    return [
+        int(other["player_id"])
+        for other in stats.values()
+        if float(other["points"]) == points
+    ]
+
+
+def _direct_encounter_applies(
+    player_stat: dict[str, Any],
+    stats: dict[int, dict[str, Any]],
+) -> bool:
+    """O confronto direto só vale se TODOS os empatados se enfrentaram.
+
+    É condição da FIDE, e não detalhe: com três empatados em que A jogou contra
+    B e contra C mas B e C não se enfrentaram, "quem ganhou de quem" não é uma
+    ordem — é um pedaço de uma. Antes o critério era aplicado assim mesmo, e
+    somava só os jogos que existiam, o que produzia um número com aparência de
+    resultado.
+    """
+    grupo = _tied_group_ids(player_stat, stats)
+    if len(grupo) < 2:
+        return False
+    for player_id in grupo:
+        adversarios = set(stats[player_id]["opponents"])
+        if any(other != player_id and other not in adversarios for other in grupo):
+            return False
+    return True
+
+
 def _direct_encounter_score(
     player_stat: dict[str, Any],
     stats: dict[int, dict[str, Any]],
 ) -> float:
+    """Pontos feitos contra os empatados. ``0`` quando o critério não se aplica.
+
+    Zero para todo o grupo é neutro: o desempate seguinte decide, que é o que a
+    regra manda quando o confronto direto não pode ser usado.
+    """
+    if not _direct_encounter_applies(player_stat, stats):
+        return 0.0
     points = float(player_stat["points"])
     total = 0.0
     for game in player_stat["games"]:
@@ -730,10 +770,15 @@ def calculate_player_standings(
                 "earned": black_points,
             }
         )
-        if white_points == 1.0 and black_points == 0.0:
-            stats[white_id]["wins"] += 1
-        if black_points == 1.0 and white_points == 0.0:
-            stats[black_id]["wins"] += 1
+        # `wins` = WON da FIDE: vitórias **no tabuleiro**. W.O. é partida pareada
+        # e não jogada, então não conta — nem aqui nem no Gacrux, que exige
+        # `played and opponent > 0`. Antes contava, e por isso trocar de motor no
+        # meio do torneio reordenava os empatados (TBK-03).
+        if result not in WALKOVER_RESULTS:
+            if white_points == 1.0 and black_points == 0.0:
+                stats[white_id]["wins"] += 1
+            if black_points == 1.0 and white_points == 0.0:
+                stats[black_id]["wins"] += 1
 
     rounds_total = max(
         (int(game.get("round") or 0) for player_stat in stats.values() for game in player_stat["games"]),

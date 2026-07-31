@@ -12,6 +12,7 @@ from ..components import (
 )
 
 from src.services.pairing.acceleration import acceleration_spec
+from src.services.pairing.tiebreak_engine import LEGACY_ENGINE_CHOICE_HINT
 from src.services.constants import PAIRING_SYSTEMS, TIEBREAK_ENGINES
 from src.services.pairing import (
     DEFAULT_PLAYER_TIEBREAKS,
@@ -306,7 +307,9 @@ class TournamentSettingsMixin:
         )
 
         tiebreak_engine_option = form_rules.select(
-            "Motor de desempate (classificação)", list(tiebreak_engine_by_label.keys())
+            "Motor de desempate (classificação)",
+            list(tiebreak_engine_by_label.keys()),
+            help_text=LEGACY_ENGINE_CHOICE_HINT,
         )
         tiebreak_engine_option.set(
             TIEBREAK_ENGINES.get(
