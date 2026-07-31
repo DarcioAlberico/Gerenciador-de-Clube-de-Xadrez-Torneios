@@ -71,6 +71,9 @@ from src.services.pairing.point_adjustments import (
     aggregate_player_adjustments as _aggregate_player_adjustments,
     aggregate_team_adjustments as _aggregate_team_adjustments,
 )
+from src.services.pairing.gacrux_tiebreak_map import (
+    sequence_signature as _sequence_signature,
+)
 from src.services.pairing.corrections import (
     DEFAULT_UNLOCK_MINUTES,
     UnlockState,
@@ -1996,8 +1999,12 @@ class PairingService:
         if int(tournament_id) in _GACRUX_TIEBREAK_INFLIGHT:
             return None
 
-        codes = (
-            [str(item["code"]) for item in sequence]
+        # A sequencia vai INTEIRA (codigo + parametros) para o motor: era so a
+        # lista de codigos, entao o corte que o arbitro configurou na TBK-04
+        # chegava ao registro 212 do arquivo FIDE mas nao ao calculo em execucao
+        # — o motor rodava com os padroes e a tela mostrava outro numero.
+        codes: list[Any] = (
+            [dict(item) for item in sequence]
             if sequence
             else list(_DEFAULT_PLAYER_TIEBREAKS)
         )
@@ -2016,7 +2023,7 @@ class PairingService:
         # `current_round` entra na chave: a classificacao "ate a rodada N" e outro
         # calculo, e sem isso o retrato de uma rodada leria o cache de outra.
         cache_key = (
-            int(tournament_id), tuple(codes), results_sig, players_sig,
+            int(tournament_id), _sequence_signature(codes), results_sig, players_sig,
             int(current_round or 0),
         )
 
@@ -2407,7 +2414,27 @@ class PairingService:
             adjustments=_aggregate_team_adjustments(
                 self.db.list_point_adjustments(tournament_id)
             ),
+            board_results=self._team_board_results(tournament_id, sequence, up_to_round),
         )
+
+    def _team_board_results(
+        self,
+        tournament_id: int,
+        sequence: list[dict[str, Any]] | None,
+        up_to_round: int | None,
+    ) -> list[dict[str, Any]] | None:
+        """Resultados por tabuleiro — so quando algum criterio precisa (TBK-05).
+
+        A classificacao e recalculada a cada abertura de tela e a cada secao de
+        relatorio; a consulta so vale a pena quando o board count esta na
+        sequencia configurada, o que nao acontece em nenhum torneio por padrao.
+        """
+        if not any(str(item.get("code")) == "board_count" for item in sequence or []):
+            return None
+        rows = self.db.list_team_board_results(tournament_id, closed_only=True)
+        if up_to_round is None:
+            return rows
+        return [row for row in rows if int(row.get("round_number") or 0) <= int(up_to_round)]
 
     def _gacrux_team_tiebreaks(
         self,
@@ -2440,10 +2467,8 @@ class PairingService:
         if int(tournament_id) in _GACRUX_TIEBREAK_INFLIGHT:
             return None
 
-        if sequence:
-            codes = [str(item["code"]) for item in sequence if item.get("code")]
-        else:
-            codes = []
+        # Sequencia inteira, com parametros — ver `_gacrux_player_tiebreaks`.
+        codes: list[Any] = [dict(item) for item in (sequence or []) if item.get("code")]
         if not codes:
             primary = str(settings.get("team_standing_primary", "match_points") or "match_points")
             secondary = str(settings.get("team_standing_secondary", "game_points") or "game_points")
@@ -2462,7 +2487,7 @@ class PairingService:
         ))
         teams_sig = tuple(sorted(int(team["id"]) for team in teams))
         cache_key = (
-            "team", int(tournament_id), tuple(codes), results_sig, teams_sig,
+            "team", int(tournament_id), _sequence_signature(codes), results_sig, teams_sig,
             int(current_round or 0),
         )
 

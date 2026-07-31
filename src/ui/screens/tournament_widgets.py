@@ -43,7 +43,9 @@ class TiebreakSequenceEditor(ctk.CTkFrame):
         # destrói e recria os widgets a cada movimento de linha — sem isto,
         # subir um critério apagaria o corte que o árbitro acabou de escolher.
         self._params: dict[str, dict[str, Any]] = {
-            code: normalize_criterion_params(code, initial_params.get(code) if initial_params else {})
+            code: normalize_criterion_params(
+                code, initial_params.get(code) if initial_params else {}, registry
+            )
             for code in self._codes
         }
         self._param_widgets: dict[tuple[str, str], Any] = {}
@@ -72,11 +74,11 @@ class TiebreakSequenceEditor(ctk.CTkFrame):
             valores = self._params.setdefault(code, {})
             valores[key] = self._choice_value(code, key, bruto)
         for code in list(self._params):
-            self._params[code] = normalize_criterion_params(code, self._params[code])
+            self._params[code] = normalize_criterion_params(code, self._params[code], self._registry)
 
     def _choice_value(self, code: str, key: str, bruto: Any) -> Any:
         """Rótulo escolhido no menu → valor do parâmetro. Número passa direto."""
-        for param in criterion_params(code):
+        for param in criterion_params(code, self._registry):
             if param.key == key and param.choices:
                 return dict(param.choices).get(str(bruto), param.default)
         return bruto
@@ -93,10 +95,12 @@ class TiebreakSequenceEditor(ctk.CTkFrame):
         volta ao gargalo de largura que a B-8 desfez. Critério sem parâmetro não
         rende linha nenhuma.
         """
-        params = criterion_params(code)
+        params = criterion_params(code, self._registry)
         if not params:
             return
-        valores = self._params.setdefault(code, normalize_criterion_params(code, {}))
+        valores = self._params.setdefault(
+            code, normalize_criterion_params(code, {}, self._registry)
+        )
         faixa = ctk.CTkFrame(row, fg_color="transparent")
         faixa.grid(row=1, column=0, columnspan=4, sticky="ew", pady=(2, 0))
         for coluna, param in enumerate(params):

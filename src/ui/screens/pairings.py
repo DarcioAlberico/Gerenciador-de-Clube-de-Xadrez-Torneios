@@ -4,6 +4,7 @@ from ..support import *
 
 from tkinter import TclError
 
+from src.services.pairing.team_tiebreaks import extra_team_columns, team_standing_value
 from src.services.pairing.point_adjustments import (
     ADJUSTMENT_LEGEND,
     has_adjustment,
@@ -68,6 +69,15 @@ class PairingPagesMixin(ArbitrationPagesMixin, PairingResultsMixin):
             table_panel.grid_columnconfigure(0, weight=1)
             table_panel.grid_rowconfigure(0, weight=1)
 
+            team_standings = self._standings_or_empty(
+                lambda: self.pairing_service.team_standings(self.current_tournament_id)
+            )
+            # Colunas dos criterios configurados que nao tem lugar fixo
+            # (TBK-05): a tabela precisa mostrar o numero que decidiu a ordem,
+            # senao o arbitro publica uma classificacao que nao consegue
+            # explicar. Vem antes do status, na ordem em que desempatam.
+            extras = extra_team_columns(team_standings)
+
             tree = self._make_tree(
                 table_panel,
                 [
@@ -82,6 +92,7 @@ class PairingPagesMixin(ArbitrationPagesMixin, PairingResultsMixin):
                     "losses",
                     "byes",
                     "buchholz",
+                    *[code for code, _label in extras],
                     "status",
                 ],
                 {
@@ -96,6 +107,7 @@ class PairingPagesMixin(ArbitrationPagesMixin, PairingResultsMixin):
                     "losses": "D",
                     "byes": "Byes",
                     "buchholz": "Buchholz",
+                    **{code: label for code, label in extras},
                     "status": "Status",
                 },
                 {
@@ -110,15 +122,13 @@ class PairingPagesMixin(ArbitrationPagesMixin, PairingResultsMixin):
                     "losses": 55,
                     "byes": 65,
                     "buchholz": 90,
+                    **{code: 130 for code, _label in extras},
                     "status": 90,
                 },
             )
             self.standings_tree = tree
             row_team_ids: dict[str, int] = {}
 
-            team_standings = self._standings_or_empty(
-                lambda: self.pairing_service.team_standings(self.current_tournament_id)
-            )
             for item in team_standings:
                 row_id = tree.insert(
                     "",
@@ -141,6 +151,7 @@ class PairingPagesMixin(ArbitrationPagesMixin, PairingResultsMixin):
                         item["losses"],
                         item["byes"],
                         item["buchholz"],
+                        *[team_standing_value(item, code) for code, _label in extras],
                         "Ativa" if item.get("active") else "Inativa",
                     ),
                 )

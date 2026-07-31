@@ -405,6 +405,17 @@ Sprint 8 em andamento:
   declarava a federacao criterios diferentes dos usados; agora sai da
   `tiebreak_sequence` configurada, com os parametros junto, e o `WIN` virou `WON`
   (o motor sempre contou vitorias no tabuleiro).
+- `TBK-05` entregue (2026-07-31): os quatro desempates de equipes que faltavam —
+  Sonneborn-Berger olimpico (`EMGSB`: match points do adversario x game points
+  feitos contra ele, que NAO e o SB de match points), confronto direto, Buchholz
+  de game points e board count (Berlin, o unico criterio em que o menor
+  classifica melhor, agora declarado no registro). O board count trouxe o
+  resultado POR TABULEIRO ate a classificacao, com a equipe saindo do elenco do
+  jogador e nao da paridade do tabuleiro. Junto, uma divida da TBK-04: o corte
+  configurado chegava ao arquivo FIDE mas nao ao motor em execucao. E a tabela
+  publicada passou a mostrar o criterio que decidiu — ele existia so na ordem.
+
+**SPRINT 8 CONCLUIDA (2026-07-31).**
 
 Objetivo: fechar as lacunas encontradas na auditoria completa dos modulos de
 gestao de torneio feita sob otica de arbitro FIDE. Detalhamento executivo em
@@ -420,9 +431,10 @@ Entregas, em ordem de prioridade:
    troca de cores com auditoria e round-robin por equipes destravado
    (`PAR-04` parcial — ENTREGUE em 2026-07-30).
 2. **Desempates conformes (Sprint 8)**: adversario virtual FIDE no motor
-   proprio ou rebaixamento formal a modo legado (`TBK-03`), parametros de
-   criterios editaveis e registro 212 fiel a sequencia configurada
-   (`TBK-04`), desempates olimpicos de equipes (`TBK-05`).
+   proprio ou rebaixamento formal a modo legado (`TBK-03` — ENTREGUE em
+   2026-07-30), parametros de criterios editaveis e registro 212 fiel a
+   sequencia configurada (`TBK-04` — ENTREGUE em 2026-07-30), desempates
+   olimpicos de equipes (`TBK-05` — ENTREGUE em 2026-07-31). SPRINT CONCLUIDA.
 3. **Fluxo arbitral de salao (Sprint 9)**: W.O. e partida adiada no painel
    inline (`ARB-02`), politica de byes solicitados com limites (`ARB-04`),
    retirada/reentrada com historico por rodada (`ARB-05`), registro
@@ -473,9 +485,12 @@ colunas, TRF25) foram entregues nas fases 0 a 11 e nos EPICs A a E da
 
 ### Alto impacto / media complexidade
 
-- Adversario virtual FIDE no motor proprio de desempates (`TBK-03`).
-- Parametros de criterios editaveis + registro 212 fiel (`TBK-04`).
-- Desempates olimpicos de equipes (`TBK-05`).
+- ~~Adversario virtual FIDE no motor proprio de desempates (`TBK-03`).~~ FEITO
+  2026-07-30 — pela segunda saida: motor proprio rebaixado a legado.
+- ~~Parametros de criterios editaveis + registro 212 fiel (`TBK-04`).~~ FEITO
+  2026-07-30.
+- ~~Desempates olimpicos de equipes (`TBK-05`).~~ FEITO 2026-07-31 — SB
+  olimpico, confronto direto, Buchholz de game points e board count.
 - Politica de byes solicitados (`ARB-04`).
 - Aceleracao e entrada tardia no caminho Gacrux (`PAR-02`).
 - TRF16 com `XXR`/`XXC`/`XXA`, Event-ID e modo submissao (`FED-03`).

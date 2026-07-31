@@ -175,6 +175,7 @@ list_sponsors
 list_standings_snapshots
 list_superseded_standings_snapshots
 list_sync_outbox
+list_team_board_results
 list_team_boards
 list_team_lineup_boards
 list_team_lineups
