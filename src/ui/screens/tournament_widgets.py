@@ -8,6 +8,8 @@ from src.services.pairing import (
     DEFAULT_TEAM_TIEBREAKS,
     PLAYER_TIEBREAKS,
     TEAM_TIEBREAKS,
+    criterion_params,
+    normalize_criterion_params,
     parse_player_tiebreak_sequence,
     parse_team_tiebreak_sequence,
     serialize_tiebreak_sequence,
@@ -31,20 +33,93 @@ class TiebreakSequenceEditor(ctk.CTkFrame):
         registry: dict[str, Any],
         default_codes: list[str],
         initial_codes: list[str] | None = None,
+        initial_params: dict[str, dict[str, Any]] | None = None,
     ) -> None:
         super().__init__(master, fg_color="transparent")
         self._registry = registry
         self._default_codes = list(default_codes)
         self._codes = list(initial_codes) if initial_codes else list(default_codes)
+        # Parâmetros por critério (TBK-04). Guardados fora do `_render`, que
+        # destrói e recria os widgets a cada movimento de linha — sem isto,
+        # subir um critério apagaria o corte que o árbitro acabou de escolher.
+        self._params: dict[str, dict[str, Any]] = {
+            code: normalize_criterion_params(code, initial_params.get(code) if initial_params else {})
+            for code in self._codes
+        }
+        self._param_widgets: dict[tuple[str, str], Any] = {}
         self.grid_columnconfigure(0, weight=1)
         self._render()
 
     def get_sequence(self) -> list[dict[str, Any]]:
-        return [{"code": code, "params": {}} for code in self._codes]
+        """Sequência no formato persistido, com os parâmetros já validados.
+
+        Lê os widgets na hora de salvar em vez de a cada tecla: o editor não
+        precisa reagir à digitação, e ler no fim evita salvar um estado
+        intermediário (o "1" de quem ia digitar "12").
+        """
+        self._collect_params()
+        return [
+            {"code": code, "params": dict(self._params.get(code) or {})}
+            for code in self._codes
+        ]
+
+    def _collect_params(self) -> None:
+        for (code, key), widget in list(self._param_widgets.items()):
+            try:
+                bruto = widget.get()
+            except Exception:  # pragma: no cover - widget destruido
+                continue
+            valores = self._params.setdefault(code, {})
+            valores[key] = self._choice_value(code, key, bruto)
+        for code in list(self._params):
+            self._params[code] = normalize_criterion_params(code, self._params[code])
+
+    def _choice_value(self, code: str, key: str, bruto: Any) -> Any:
+        """Rótulo escolhido no menu → valor do parâmetro. Número passa direto."""
+        for param in criterion_params(code):
+            if param.key == key and param.choices:
+                return dict(param.choices).get(str(bruto), param.default)
+        return bruto
 
     def _criterion_label(self, code: str) -> str:
         criterion = self._registry.get(code)
         return criterion.label if criterion is not None else code
+
+    def _render_params(self, row: ctk.CTkFrame, code: str) -> None:
+        """Campos de parâmetro do critério, numa segunda linha (TBK-04).
+
+        Segunda linha, e não ao lado dos botões: a faixa de ordenação já tem
+        três botões e um rótulo, e enfiar corte e limiar ali levaria a tela de
+        volta ao gargalo de largura que a B-8 desfez. Critério sem parâmetro não
+        rende linha nenhuma.
+        """
+        params = criterion_params(code)
+        if not params:
+            return
+        valores = self._params.setdefault(code, normalize_criterion_params(code, {}))
+        faixa = ctk.CTkFrame(row, fg_color="transparent")
+        faixa.grid(row=1, column=0, columnspan=4, sticky="ew", pady=(2, 0))
+        for coluna, param in enumerate(params):
+            bloco = ctk.CTkFrame(faixa, fg_color="transparent")
+            bloco.grid(row=0, column=coluna, padx=(0, 10), sticky="w")
+            ctk.CTkLabel(
+                bloco, text=param.label, text_color=THEME_TEXT_SUB, anchor="w"
+            ).grid(row=0, column=0, sticky="w")
+            atual = valores.get(param.key, param.default)
+            if param.choices:
+                rotulos = [rotulo for rotulo, _valor in param.choices]
+                widget = ctk.CTkOptionMenu(bloco, values=rotulos, width=200)
+                widget.set(
+                    next(
+                        (rotulo for rotulo, valor in param.choices if valor == atual),
+                        rotulos[0],
+                    )
+                )
+            else:
+                widget = ctk.CTkEntry(bloco, width=64)
+                widget.insert(0, str(atual))
+            widget.grid(row=1, column=0, sticky="w", pady=(2, 0))
+            self._param_widgets[(code, param.key)] = widget
 
     def _move(self, index: int, delta: int) -> None:
         target = index + delta
@@ -67,8 +142,13 @@ class TiebreakSequenceEditor(ctk.CTkFrame):
         self._render()
 
     def _render(self) -> None:
+        # Guarda o que estiver digitado antes de destruir os widgets: `_render`
+        # roda a cada subir/descer/remover, e sem isto o parâmetro voltaria ao
+        # padrão a cada clique de ordenação.
+        self._collect_params()
         for child in self.winfo_children():
             child.destroy()
+        self._param_widgets.clear()
 
         for index, code in enumerate(self._codes):
             row = ctk.CTkFrame(self, fg_color="transparent")
@@ -77,6 +157,7 @@ class TiebreakSequenceEditor(ctk.CTkFrame):
             ctk.CTkLabel(row, text=f"{index + 1}. {self._criterion_label(code)}", anchor="w").grid(
                 row=0, column=0, sticky="ew"
             )
+            self._render_params(row, code)
             up = ctk.CTkButton(row, text="↑", width=34, command=lambda i=index: self._move(i, -1))
             up.grid(row=0, column=1, padx=2)
             down = ctk.CTkButton(row, text="↓", width=34, command=lambda i=index: self._move(i, 1))

@@ -1049,9 +1049,61 @@ Criterios de aceite:
 
 #### TBK-04 - Parametros de criterios editaveis e registro 212 fiel
 
-Status: pendente.
+Status: CONCLUIDO (2026-07-30).
 
-Problema:
+Como ficou:
+
+- **os parametros passam a viver no REGISTRO**, e nao na tela: `TiebreakParam`
+  declara chave, rotulo, padrao e faixa (ou lista de opcoes) ao lado do criterio
+  em `PLAYER_TIEBREAKS`. Tres leitores, uma definicao — a tela desenha o que o
+  registro declara, o motor proprio le em `player_tiebreak_value` e o mapa do
+  Gacrux traduz para modificador. O `needs_cut: bool` que existia era declarado e
+  nunca lido; morreu;
+- `normalize_criterion_params` valida **na porta de entrada** (o
+  `parse_*_tiebreak_sequence`): valor fora da faixa volta para dentro, texto sem
+  numero volta ao padrao, chave desconhecida e descartada — e o que chega a quem
+  calcula vem sempre completo. Nunca levanta: um desempate que recusa a
+  configuracao no meio do torneio seria pior que um que ignora um numero
+  datilografado errado, e a tela valida antes de qualquer forma;
+- **limiar do Koya** virou parametro (era 50% cravado); corte do Buchholz
+  (`cut_low`/`cut_high`), `unplayed` e corte do ARO ja eram lidos pelo motor
+  proprio e agora sao alcancaveis;
+- **os parametros chegam ao motor FIDE.** `specifier_with_params` traduz para os
+  modificadores do Gacrux, cuja sintaxe esta em `gacrux/tiebreak.py` (laco que le
+  `comp[1:]`): `/C<n>` = corta os n piores, `/M<n>` = corta n de cada ponta,
+  `/L<n>` = limiar do Koya em porcentagem. Parametro no valor padrao **nao** vira
+  modificador — `BH` e `BH/C1` sao a mesma coisa para o motor, e o mais curto e o
+  que o arbitro reconhece no arquivo;
+- **registro 212 fiel.** Era a lista fixa `PTS,BH,BH/M1,SB,WIN`, escrita quando o
+  projeto ainda nao tinha sequencia configuravel — e por isso o arquivo enviado a
+  federacao declarava criterios diferentes dos que o motor usava. Agora sai da
+  mesma `tiebreak_sequence` que calcula a classificacao, traduzida pelo mapa. Dois
+  ganhos de tabela: os parametros viram modificador no arquivo (`BH/C2`,
+  `KS/L60`) e o `WIN` virou **`WON`** — o motor sempre contou vitorias no
+  tabuleiro (ver TBK-03), entao declarar `WIN` era declarar outro criterio;
+- **o editor devolve os parametros**, com uma segunda linha por criterio (e nao
+  ao lado dos botoes de ordenacao, que levaria a tela de volta ao gargalo de
+  largura da B-8). Os valores sao guardados fora do `_render` — que destroi e
+  recria os widgets a cada subir/descer —, senao ordenar apagaria o corte que o
+  arbitro acabou de escolher. Ha teste para exatamente isso.
+
+Criterios de aceite:
+
+- [x] alterar a sequencia no editor muda o 212 exportado;
+- [x] parametros persistem no JSON e sao aplicados pelos dois motores;
+- [x] teste valida o 212 contra a sequencia configurada (inclusive ponta a ponta,
+  lendo a linha 212 do arquivo exportado).
+
+Fica pendente do escopo original: **expor criterios ja suportados pelo Gacrux e
+ainda nao registrados** (`BH/M2` como criterio proprio, `SB` cortado, brancas
+jogadas, `SNO`, sorteio). O `BH/M2` ja e alcancavel por parametro
+(`buchholz_cut2` com corte simetrico); os demais sao criterios novos no registro,
+sem defeito associado — entram quando um regulamento pedir.
+
+Cobertura: 25 testes em `tests/test_core_tbk04.py` e 4 em `tests/test_ui_fields.py`
+(o editor). Um teste do 212 foi atualizado: `WIN` -> `WON`.
+
+Problema original:
 
 - `TiebreakSequenceEditor.get_sequence` devolve sempre `params: {}`
   (`tournament_widgets.py:42-43`): cortes de Buchholz alem de C1/C2/M1, limiar
@@ -1071,9 +1123,9 @@ Escopo:
 
 Criterios de aceite:
 
-- [ ] alterar a sequencia no editor muda o 212 exportado;
-- [ ] parametros persistem no JSON e sao aplicados pelos dois motores;
-- [ ] teste valida o 212 contra a sequencia configurada.
+- [x] alterar a sequencia no editor muda o 212 exportado;
+- [x] parametros persistem no JSON e sao aplicados pelos dois motores;
+- [x] teste valida o 212 contra a sequencia configurada.
 
 #### TBK-05 - Desempates de equipes completos
 
@@ -1839,7 +1891,7 @@ Entregas:
 
 1. [x] `TBK-03` Jogos nao disputados conforme FIDE no motor proprio
    (pela segunda saida: motor proprio rebaixado a legado, nao homologavel).
-2. [ ] `TBK-04` Parametros de criterios editaveis e registro 212 fiel.
+2. [x] `TBK-04` Parametros de criterios editaveis e registro 212 fiel.
 3. [ ] `TBK-05` Desempates de equipes completos.
 
 ### Sprint 9 - Fluxo arbitral em salao

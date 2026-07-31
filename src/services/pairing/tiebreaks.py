@@ -36,11 +36,54 @@ from src.services.pairing.point_adjustments import AdjustmentTotal, adjustment_n
 
 
 @dataclass(frozen=True)
+class TiebreakParam:
+    """Um parâmetro configurável de um critério (TBK-04).
+
+    Declarado aqui, no registro, e não na tela: é a mesma razão do registro de
+    critérios existir. A tela desenha o que o registro declara, o motor próprio
+    lê em `player_tiebreak_value` e o mapa do Gacrux traduz para modificador —
+    três leitores, uma definição.
+
+    ``choices`` vazio significa número inteiro entre ``minimum`` e ``maximum``;
+    preenchido, é uma lista de ``(rótulo, valor)``.
+    """
+
+    key: str
+    label: str
+    default: Any
+    choices: tuple[tuple[str, Any], ...] = ()
+    minimum: int = 0
+    maximum: int = 9
+
+    def normalize(self, raw: Any) -> Any:
+        """Valor cru (texto da tela, JSON do banco) → valor válido do parâmetro.
+
+        Nunca levanta: parâmetro inválido volta ao padrão. Um desempate que
+        recusa a configuração no meio do torneio seria pior que um que ignora
+        um número datilografado errado — e a tela valida antes, de qualquer forma.
+        """
+        if self.choices:
+            validos = {valor for _rotulo, valor in self.choices}
+            return raw if raw in validos else self.default
+        try:
+            numero = int(raw)
+        except (TypeError, ValueError):
+            return self.default
+        return min(max(numero, self.minimum), self.maximum)
+
+
+_UNPLAYED_CHOICES = (
+    ("Jogos disputados (FIDE)", "real"),
+    ("Contar não disputados como próprios pontos", "self"),
+)
+
+
+@dataclass(frozen=True)
 class TiebreakCriterion:
     code: str
     label: str
     formula: str
-    needs_cut: bool = False
+    params: tuple[TiebreakParam, ...] = ()
 
 
 PLAYER_TIEBREAKS: dict[str, TiebreakCriterion] = {
@@ -51,13 +94,21 @@ PLAYER_TIEBREAKS: dict[str, TiebreakCriterion] = {
         "buchholz_cut1",
         "Buchholz Cut-1",
         "Buchholz descartando o adversário de menor pontuação.",
-        needs_cut=True,
+        params=(
+            TiebreakParam("cut_low", "Descartar piores", 1, maximum=5),
+            TiebreakParam("cut_high", "Descartar melhores", 0, maximum=5),
+            TiebreakParam("unplayed", "Jogos não disputados", "real", choices=_UNPLAYED_CHOICES),
+        ),
     ),
     "buchholz_cut2": TiebreakCriterion(
         "buchholz_cut2",
         "Buchholz Cut-2",
         "Buchholz descartando os dois adversários de menor pontuação.",
-        needs_cut=True,
+        params=(
+            TiebreakParam("cut_low", "Descartar piores", 2, maximum=5),
+            TiebreakParam("cut_high", "Descartar melhores", 0, maximum=5),
+            TiebreakParam("unplayed", "Jogos não disputados", "real", choices=_UNPLAYED_CHOICES),
+        ),
     ),
     "buchholz_median": TiebreakCriterion(
         "buchholz_median",
@@ -91,6 +142,9 @@ PLAYER_TIEBREAKS: dict[str, TiebreakCriterion] = {
         "koya",
         "Sistema Koya",
         "Pontos obtidos contra adversários com ao menos 50% dos pontos.",
+        params=(
+            TiebreakParam("threshold", "Limiar (% dos pontos)", 50, minimum=1, maximum=99),
+        ),
     ),
     "aro": TiebreakCriterion(
         "aro",
@@ -101,6 +155,7 @@ PLAYER_TIEBREAKS: dict[str, TiebreakCriterion] = {
         "aroc",
         "Rating médio (cortado)",
         "Média de rating dos adversários descartando os extremos.",
+        params=(TiebreakParam("cut", "Descartar de cada ponta", 1, minimum=1, maximum=5),),
     ),
     "performance": TiebreakCriterion(
         "performance", "Performance", "Rating performance estimado no torneio."
@@ -193,7 +248,10 @@ def _parse_tiebreak_sequence(
         if code in drop or code not in registry or code in seen:
             continue
         seen.add(code)
-        result.append({"code": code, "params": params})
+        # Normaliza na porta de entrada (TBK-04): o que estiver salvo no banco
+        # passa a chegar completo e validado a quem calcula, e um parametro que
+        # o critério perdeu numa versão nova some aqui, sem quebrar a sequência.
+        result.append({"code": code, "params": normalize_criterion_params(code, params)})
     return result
 
 
@@ -345,8 +403,16 @@ def _koya_score(
     player_stat: dict[str, Any],
     stats: dict[int, dict[str, Any]],
     rounds_total: int,
+    threshold_percent: float = 50.0,
 ) -> float:
-    threshold = 0.5 * float(rounds_total or 0)
+    """Pontos contra adversários acima do limiar (padrão FIDE: 50%).
+
+    O divisor é o total de rodadas **jogadas**, e é assim de propósito: é o que
+    o Gacrux usa (`compute_koya`: `maxgames = rounds`). A auditoria pedia trocar
+    pelas rodadas configuradas do torneio — medido, isso afastaria os dois
+    motores. Ver `tests/test_core_tbk03.py::KoyaParidadeTest`.
+    """
+    threshold = (float(threshold_percent) / 100.0) * float(rounds_total or 0)
     total = 0.0
     for opponent_id, earned in player_stat["earned_against"]:
         if opponent_id in stats and float(stats[opponent_id]["points"]) >= threshold:
@@ -373,6 +439,36 @@ _CODE_TO_CANONICAL_FIELD: dict[str, str] = {
     "performance": "performance",
     "cumulative": "cumulative",
 }
+
+
+def criterion_params(code: str) -> tuple[TiebreakParam, ...]:
+    """Parâmetros declarados de um critério (individual ou equipes). Vazio se não há."""
+    criterio = PLAYER_TIEBREAKS.get(code) or TEAM_TIEBREAKS.get(code)
+    return criterio.params if criterio is not None else ()
+
+
+def normalize_criterion_params(code: str, raw: Any) -> dict[str, Any]:
+    """Parâmetros crus → só os declarados, já validados e completos (TBK-04).
+
+    Sempre devolve **todos** os parâmetros do critério, inclusive os que não
+    vieram: quem lê não precisa repetir o padrão em cada ponto de uso, e o JSON
+    salvo passa a descrever a configuração inteira. Chave desconhecida é
+    descartada — é como uma sequência antiga sobrevive a um critério que perdeu
+    um parâmetro.
+    """
+    entrada = dict(raw) if isinstance(raw, dict) else {}
+    return {
+        param.key: param.normalize(entrada.get(param.key, param.default))
+        for param in criterion_params(code)
+    }
+
+
+def _param(code: str, params: dict[str, Any], key: str) -> Any:
+    """Valor validado de um parâmetro, com o padrão do registro como piso."""
+    for param in criterion_params(code):
+        if param.key == key:
+            return param.normalize((params or {}).get(key, param.default))
+    return None
 
 
 def player_tiebreak_value(
@@ -402,15 +498,19 @@ def player_tiebreak_value(
         perf = player_stat.get("performance")
         return float(perf) if isinstance(perf, (int, float)) else 0.0
     if code in ("buchholz_cut1", "buchholz_cut2"):
-        default_low = 1 if code == "buchholz_cut1" else 2
-        cut_low = int(params.get("cut_low", default_low))
-        cut_high = int(params.get("cut_high", 0))
-        unplayed = str(params.get("unplayed", "real"))
-        return _buchholz_with_cut(player_stat, stats, cut_low, cut_high, unplayed)
+        return _buchholz_with_cut(
+            player_stat,
+            stats,
+            int(_param(code, params, "cut_low")),
+            int(_param(code, params, "cut_high")),
+            str(_param(code, params, "unplayed")),
+        )
     if code == "aro":
         return _average_rating_opponents(player_stat, stats, cut=0)
     if code == "aroc":
-        return _average_rating_opponents(player_stat, stats, cut=int(params.get("cut", 1)))
+        return _average_rating_opponents(
+            player_stat, stats, cut=int(_param(code, params, "cut"))
+        )
     if code == "direct_encounter":
         return _direct_encounter_score(player_stat, stats)
     if code == "cumulative":
@@ -418,7 +518,9 @@ def player_tiebreak_value(
     if code == "cumulative_opp":
         return float(player_stat.get("cumulative_opp", 0.0) or 0.0)
     if code == "koya":
-        return _koya_score(player_stat, stats, rounds_total)
+        return _koya_score(
+            player_stat, stats, rounds_total, _param(code, params, "threshold")
+        )
     if code == "black_games":
         return float(player_stat.get("black_count", 0) or 0)
     if code == "black_wins":

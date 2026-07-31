@@ -113,6 +113,16 @@ from src.services.federation_exporters.trf25_records import (
     record_802,
     tournament_line,
 )
+from src.services.pairing import (
+    DEFAULT_PLAYER_TIEBREAKS,
+    DEFAULT_TEAM_TIEBREAKS,
+    parse_player_tiebreak_sequence,
+    parse_team_tiebreak_sequence,
+)
+from src.services.pairing.gacrux_tiebreak_map import (
+    build_team_tiebreak_plan,
+    build_tiebreak_plan,
+)
 from src.services.pairing.acceleration import (
     BAKU_NOT_IMPLEMENTED,
     acceleration_spec,
@@ -219,7 +229,7 @@ class TRF25Exporter(TRF16Exporter):
             if starting_rank_172:
                 handle.write(starting_rank_172)
             handle.write(tournament_line("192", self._type_code_192(tournament, settings)))
-            handle.write(record_212(self._tiebreak_codes_212(is_team)))
+            handle.write(record_212(self._tiebreak_codes_212(is_team, tournament_id)))
             if is_team:
                 handle.write(tournament_line("352", self._colour_sequence_352(settings)))
                 scoring_362 = self._scoring_system_362(settings)
@@ -588,18 +598,29 @@ class TRF25Exporter(TRF16Exporter):
             return "FIDE_DUTCH_2025"
         return "FIDE_DUTCH_2017"
 
-    @staticmethod
-    def _tiebreak_codes_212(is_team: bool) -> list[str]:
-        """Códigos FIDE da ordem de desempate efetivamente usada pelo projeto.
+    def _tiebreak_codes_212(self, is_team: bool, tournament_id: int = 0) -> list[str]:
+        """Códigos FIDE da ordem de desempate **configurada no torneio** (TBK-04).
 
-        Espelha a ordenação fixa de `pairing/tiebreaks.py` (não há configuração
-        de critérios no projeto): individual = pontos, Buchholz, Buchholz mediano,
-        Sonneborn-Berger, vitórias; equipes = pontos, Buchholz (base match points),
-        vitórias. Fallbacks por rating/nome não são tie-breaks FIDE e ficam de fora.
+        Era uma lista fixa (`PTS,BH,BH/M1,SB,WIN`) escrita quando o projeto ainda
+        não tinha sequência configurável — e por isso o arquivo enviado à
+        federação declarava critérios diferentes dos que o motor usava. Agora sai
+        da mesma `tiebreak_sequence` que calcula a classificação, traduzida pelo
+        `gacrux_tiebreak_map`, que é quem sabe o dialeto FIDE.
+
+        Dois ganhos de tabela: os **parâmetros** viram modificador (`BH/C2`,
+        `KS/L60`), e o `WIN` virou `WON` — o motor sempre contou vitórias no
+        tabuleiro, então declarar `WIN` era declarar outro critério.
+
+        Fallbacks por rating/nome não são tie-breaks FIDE e ficam de fora.
         """
+        settings = self.export_service.db.get_tournament_settings(tournament_id) or {}
         if is_team:
-            return ["PTS", "BH:MP", "WIN"]
-        return ["PTS", "BH", "BH/M1", "SB", "WIN"]
+            sequence = parse_team_tiebreak_sequence(settings.get("team_tiebreak_sequence"))
+            plan = build_team_tiebreak_plan(sequence or list(DEFAULT_TEAM_TIEBREAKS))
+            return list(plan.specifiers) or ["MPTS"]
+        sequence = parse_player_tiebreak_sequence(settings.get("tiebreak_sequence"))
+        plan = build_tiebreak_plan(sequence or list(DEFAULT_PLAYER_TIEBREAKS))
+        return list(plan.specifiers)
 
     @staticmethod
     def _scoring_system_362(settings: dict[str, Any]) -> str | None:
