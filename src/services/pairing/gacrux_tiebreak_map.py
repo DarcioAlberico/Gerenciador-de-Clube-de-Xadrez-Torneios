@@ -71,23 +71,77 @@ class TiebreakPlan:
     skipped: tuple[str, ...] = ()
 
 
-def build_tiebreak_plan(codes: list[str]) -> TiebreakPlan:
-    """Monta o :class:`TiebreakPlan` a partir da sequência de códigos do Albericus.
+# Parâmetro do Albericus -> modificador do Gacrux (TBK-04).
+#
+# A sintaxe está em `gacrux/tiebreak.py`, no laço que lê `comp[1:]`:
+#   ``/C<n>`` -> cutlow = n          (descarta os n piores)
+#   ``/M<n>`` -> cutlow = cuthigh = n (descarta n de cada ponta)
+#   ``/L<n>`` -> plim = n            (limiar do Koya, em porcentagem)
+# Só se emite modificador quando o valor difere do padrão do critério: um
+# especificador enxuto é o que o motor já espera, e o TRF fica legível.
+
+
+def specifier_with_params(code: str, params: dict[str, Any] | None) -> str | None:
+    """Especificador do Gacrux para um critério, já com os modificadores.
+
+    ``None`` quando o critério não tem equivalente no motor. Parâmetro no valor
+    padrão não vira modificador — ``BH/C1`` e ``BH`` com corte 1 são a mesma
+    coisa para o motor, e o mais curto é o que o árbitro reconhece no arquivo.
+    """
+    base = ALBERICUS_TO_GACRUX.get(code)
+    if base is None:
+        return None
+    valores = dict(params or {})
+    if code in ("buchholz_cut1", "buchholz_cut2"):
+        baixo = int(valores.get("cut_low", 1 if code == "buchholz_cut1" else 2))
+        alto = int(valores.get("cut_high", 0))
+        if baixo and baixo == alto:
+            return f"BH/M{baixo}"
+        return f"BH/C{baixo}" if baixo else "BH"
+    if code == "aroc":
+        return f"ARO/M{int(valores.get('cut', 1))}"
+    if code == "koya":
+        limiar = int(valores.get("threshold", 50))
+        return "KS" if limiar == 50 else f"KS/L{limiar}"
+    return base
+
+
+def _code_and_params(entry: Any) -> tuple[str, dict[str, Any]]:
+    """Aceita ``"buchholz"`` ou ``{"code": ..., "params": {...}}``.
+
+    As duas formas coexistem porque a sequência vem do banco já normalizada
+    (dicts) mas o plano também é montado a partir da lista de códigos padrão.
+    """
+    if isinstance(entry, dict):
+        params = entry.get("params")
+        return (
+            str(entry.get("code") or "").strip(),
+            dict(params) if isinstance(params, dict) else {},
+        )
+    return str(entry or "").strip(), {}
+
+
+def build_tiebreak_plan(codes: list[Any]) -> TiebreakPlan:
+    """Monta o :class:`TiebreakPlan` a partir da sequência do Albericus.
 
     Sempre começa por ``PTS``. Ignora ``points`` (primário, já incluído),
     duplicados e códigos sem equivalente Gacrux (vão para ``skipped``). A ordem
     define tanto a ordem de desempate quanto a correspondência das colunas do
     ``tiebreakScore``.
+
+    Cada entrada pode trazer ``params`` (TBK-04): eles viram modificadores do
+    especificador, então o corte configurado pelo árbitro chega ao motor FIDE em
+    vez de ficar só no cálculo próprio.
     """
     specifiers: list[str] = [POINTS_SPEC]
     code_order: list[str] = [POINTS_CODE]
     skipped: list[str] = []
     seen: set[str] = set()
     for raw in codes:
-        code = str(raw or "").strip()
+        code, params = _code_and_params(raw)
         if not code or code == POINTS_CODE or code in seen:
             continue
-        spec = ALBERICUS_TO_GACRUX.get(code)
+        spec = specifier_with_params(code, params)
         if spec is None:
             skipped.append(code)
             continue

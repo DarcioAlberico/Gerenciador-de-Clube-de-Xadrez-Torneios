@@ -428,11 +428,17 @@ class TournamentSettingsMixin:
         acceleration_option.configure(command=lambda _value: refresh_accel_state())
         refresh_accel_state()
 
-        initial_tiebreak_codes = [
-            item["code"] for item in parse_player_tiebreak_sequence(settings.get("tiebreak_sequence"))
-        ]
+        # Sequencia salva -> codigos + parametros por criterio (TBK-04). Antes so
+        # os codigos chegavam ao editor, e por isso o corte configurado sumia ao
+        # reabrir a tela.
+        sequencia_individual = parse_player_tiebreak_sequence(settings.get("tiebreak_sequence"))
+        initial_tiebreak_codes = [item["code"] for item in sequencia_individual]
         tiebreak_editor = TiebreakSequenceEditor(
-            tab_rules, PLAYER_TIEBREAKS, DEFAULT_PLAYER_TIEBREAKS, initial_tiebreak_codes
+            tab_rules,
+            PLAYER_TIEBREAKS,
+            DEFAULT_PLAYER_TIEBREAKS,
+            initial_tiebreak_codes,
+            {item["code"]: item.get("params", {}) for item in sequencia_individual},
         )
         stack(
             tab_rules,
@@ -445,11 +451,14 @@ class TournamentSettingsMixin:
             ),
         )
 
-        initial_team_tiebreak_codes = [
-            item["code"] for item in parse_team_tiebreak_sequence(settings.get("team_tiebreak_sequence"))
-        ]
+        sequencia_equipes = parse_team_tiebreak_sequence(settings.get("team_tiebreak_sequence"))
+        initial_team_tiebreak_codes = [item["code"] for item in sequencia_equipes]
         team_tiebreak_editor = TiebreakSequenceEditor(
-            tab_rules, TEAM_TIEBREAKS, DEFAULT_TEAM_TIEBREAKS, initial_team_tiebreak_codes
+            tab_rules,
+            TEAM_TIEBREAKS,
+            DEFAULT_TEAM_TIEBREAKS,
+            initial_team_tiebreak_codes,
+            {item["code"]: item.get("params", {}) for item in sequencia_equipes},
         )
         stack(
             tab_rules,

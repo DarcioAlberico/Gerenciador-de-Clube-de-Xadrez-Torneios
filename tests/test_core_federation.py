@@ -379,10 +379,14 @@ class FederationExportTest(CoreServiceTestCase):
         )
         self.assertEqual(line_362[:6], "362 TW")
         self.assertIn(" 3.0", line_362)
-        # Ordem de desempate individual espelha pairing/tiebreaks.py.
+        # Ordem de desempate individual sai da sequencia CONFIGURADA (TBK-04) —
+        # sem configuracao, e o padrao FIDE do projeto. `WON` e nao `WIN`: o
+        # motor sempre contou vitorias no tabuleiro, entao declarar `WIN` no
+        # arquivo enviado a federacao era declarar outro criterio.
+        exporter = TRF25Exporter(self.export_service)
         self.assertEqual(
-            TRF25Exporter._tiebreak_codes_212(is_team=False),
-            ["PTS", "BH", "BH/M1", "SB", "WIN"],
+            exporter._tiebreak_codes_212(is_team=False, tournament_id=self.tournament_id),
+            ["PTS", "BH", "BH/M1", "SB", "WON"],
         )
 
     def test_federation_exporter_registry_keeps_trf16_flow_extensible(self) -> None:

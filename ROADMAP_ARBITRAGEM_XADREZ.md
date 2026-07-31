@@ -398,6 +398,13 @@ Sprint 8 em andamento:
   o confronto direto era aplicado sem todos os empatados terem se enfrentado.
   **Um item da auditoria nao se confirmou** — o limiar do Koya ja bate com o
   Gacrux; a mudanca pedida afastaria os motores, e um teste guarda a equivalencia.
+- `TBK-04` entregue (2026-07-30): os parametros de criterio passaram a viver no
+  REGISTRO (`TiebreakParam`), validados na porta de entrada e lidos pelos dois
+  motores — no Gacrux viram modificador (`BH/C2`, `KS/L60`), cuja sintaxe saiu do
+  proprio `gacrux/tiebreak.py`. O registro 212 do TRF25 era uma lista fixa e
+  declarava a federacao criterios diferentes dos usados; agora sai da
+  `tiebreak_sequence` configurada, com os parametros junto, e o `WIN` virou `WON`
+  (o motor sempre contou vitorias no tabuleiro).
 
 Objetivo: fechar as lacunas encontradas na auditoria completa dos modulos de
 gestao de torneio feita sob otica de arbitro FIDE. Detalhamento executivo em

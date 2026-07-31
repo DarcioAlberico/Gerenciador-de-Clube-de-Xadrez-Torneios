@@ -277,3 +277,75 @@ class EstadosDoCampoTest(unittest.TestCase):
 
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()
+
+
+@pytest.mark.gui
+class EditorDeDesempatesTest(unittest.TestCase):
+    """TBK-04: o editor de sequência devolve os parâmetros configurados."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        from tests.support.ctk_cleanup import create_tk_window
+
+        try:
+            cls.root = create_tk_window(ctk.CTk)
+        except TclError as exc:  # pragma: no cover - ambiente sem display
+            raise unittest.SkipTest(f"Tk indisponivel: {exc}") from exc
+        cls.root.geometry("600x400+60+60")
+        cls.root.update()
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        from tests.support.ctk_cleanup import (
+            cancel_pending_callbacks,
+            release_dead_ctk_windows,
+        )
+
+        cancel_pending_callbacks(cls.root)
+        try:
+            cls.root.destroy()
+        except TclError:  # pragma: no cover
+            pass
+        release_dead_ctk_windows()
+
+    def _editor(self, codes, params=None):
+        from src.services.pairing import DEFAULT_PLAYER_TIEBREAKS, PLAYER_TIEBREAKS
+        from src.ui.screens.tournament_widgets import TiebreakSequenceEditor
+
+        editor = TiebreakSequenceEditor(
+            self.root, PLAYER_TIEBREAKS, DEFAULT_PLAYER_TIEBREAKS, codes, params
+        )
+        self.addCleanup(editor.destroy)
+        self.root.update()
+        return editor
+
+    def test_sequencia_sai_com_os_parametros_e_nao_mais_vazia(self) -> None:
+        editor = self._editor(["buchholz_cut1", "koya"])
+        sequencia = editor.get_sequence()
+        self.assertEqual(["buchholz_cut1", "koya"], [item["code"] for item in sequencia])
+        self.assertEqual(
+            {"cut_low": 1, "cut_high": 0, "unplayed": "real"}, sequencia[0]["params"]
+        )
+        self.assertEqual({"threshold": 50}, sequencia[1]["params"])
+
+    def test_parametro_salvo_reabre_no_editor(self) -> None:
+        editor = self._editor(["koya"], {"koya": {"threshold": 70}})
+        self.assertEqual(70, editor.get_sequence()[0]["params"]["threshold"])
+
+    def test_reordenar_nao_apaga_o_parametro_digitado(self) -> None:
+        """`_render` destrói e recria os widgets a cada movimento de linha."""
+        editor = self._editor(["buchholz_cut1", "koya"])
+        campo = editor._param_widgets[("koya", "threshold")]
+        campo.delete(0, "end")
+        campo.insert(0, "80")
+        editor._move(1, -1)  # sobe o Koya, o que dispara o _render
+        self.root.update()
+
+        sequencia = editor.get_sequence()
+        self.assertEqual("koya", sequencia[0]["code"], "a ordem mudou")
+        self.assertEqual(80, sequencia[0]["params"]["threshold"], "o parametro se perdeu")
+
+    def test_criterio_sem_parametro_nao_rende_campo(self) -> None:
+        editor = self._editor(["sonneborn_berger"])
+        self.assertEqual({}, editor.get_sequence()[0]["params"])
+        self.assertEqual({}, editor._param_widgets)
