@@ -14,6 +14,7 @@ from src.services.constants import (
     RESULT_POINTS,
     RESULT_STATES,
     pairing_player_name,
+    player_full_name,
 )
 from src.services.pairing import (
     DEFAULT_PLAYER_TIEBREAKS as _DEFAULT_PLAYER_TIEBREAKS,
@@ -73,6 +74,26 @@ from src.services.pairing.point_adjustments import (
 )
 from src.services.pairing.gacrux_tiebreak_map import (
     sequence_signature as _sequence_signature,
+)
+from src.services.pairing.incidents import (
+    DECISION_NEEDS_PAIRING as _INCIDENT_DECISION_NEEDS_PAIRING,
+    DECISION_NEEDS_POINTS as _INCIDENT_DECISION_NEEDS_POINTS,
+    clean_notes as _incident_clean_notes,
+    clock_event_needs_decision as _clock_event_needs_decision,
+    decided_clock_event_ids as _decided_clock_event_ids,
+    describe as _incident_describe,
+    forfeit_result as _incident_forfeit_result,
+    infraction_label as _incident_infraction_label,
+    register_error as _incident_register_error,
+    repeat_offenders as _incident_repeat_offenders,
+)
+from src.services.pairing.participation import (
+    absence_rounds as _participation_absence_rounds,
+    change_error as _participation_change_error,
+    clean_reason as _participation_clean_reason,
+    effective_round as _participation_effective_round,
+    status_at_round as _participation_status_at,
+    summarize as _participation_summarize,
 )
 from src.services.pairing.bye_policy import (
     ByePolicy as _ByePolicy,
@@ -502,10 +523,45 @@ class PairingService:
         for event in self.db.list_audit_events(tournament_id, action="sync_event_rejected", limit=safe_limit):
             issues.append(_audit_issue(event, "sync", "outbox_rejected", "Evento local rejeitado pelo servidor"))
 
+        # Queda de seta e ausencia BLOQUEIAM ate a decisao ser registrada
+        # (ARB-03): sao os dois eventos que a FIDE nao deixa passar sem o
+        # arbitro decidir — quem ganha a partida? houve reclamacao? perdeu por
+        # 6.7? Antes eram `attention`, e a rodada fechava com a pergunta em
+        # aberto. Registrado o incidente que aponta para o evento, o alerta volta
+        # a ser informativo: a decisao existe e esta na ata.
+        decididos = _decided_clock_event_ids(self.db.list_incidents(tournament_id))
         for event in self.db.list_clock_events(tournament_id=tournament_id, limit=safe_limit):
             issue = _clock_event_issue(event)
-            if issue is not None:
-                issues.append(issue)
+            if issue is None:
+                continue
+            if (
+                _clock_event_needs_decision(event.get("event_type"))
+                and int(event.get("id") or 0) not in decididos
+            ):
+                issue["severity"] = "decision"
+                issue["detail"] = (
+                    "Registre a decisao no painel disciplinar: a rodada nao fecha "
+                    "com queda de seta ou ausencia sem decisao do arbitro."
+                )
+            issues.append(issue)
+
+        # Incidentes registrados viram pendencia informativa: o painel e onde o
+        # arbitro reve o que decidiu, e a ata sai dali.
+        for incident in self.db.list_incidents(tournament_id)[-safe_limit:]:
+            issues.append(
+                {
+                    "issue_key": f"incident:registered:{int(incident['id'])}",
+                    "severity": "attention",
+                    "source": "incident",
+                    "kind": str(incident.get("infraction") or ""),
+                    "title": _incident_describe(incident),
+                    "detail": str(incident.get("notes") or ""),
+                    "round_id": None,
+                    "round_number": int(incident.get("round_number") or 0),
+                    "entity_id": int(incident.get("player_id") or 0),
+                    "created_at": str(incident.get("created_at") or ""),
+                }
+            )
 
         # Troca de motor de desempate (TBK-02). Reusa a mesma porta dos eventos de
         # sync: o fallback ja virou evento de auditoria, e o painel so o le.
@@ -579,6 +635,209 @@ class PairingService:
             _postponed_issue(pairing, round_id, int(latest_round.get("number") or 0))
             for pairing in self.db.list_postponed_pairings(round_id)
         ]
+
+    # ------------------------------------------------------------------ #
+    # Registro disciplinar (ARB-03)
+    # ------------------------------------------------------------------ #
+
+    def register_incident(
+        self,
+        tournament_id: int,
+        *,
+        player_id: int,
+        infraction: str,
+        decision: str,
+        round_number: int = 0,
+        pairing_id: int | None = None,
+        notes: str = "",
+        deduction_points: float = 0.0,
+        clock_event_id: int | None = None,
+        actor: str = "",
+    ) -> dict[str, Any]:
+        """Registra o incidente E aplica a decisao (ARB-03).
+
+        Uma decisao disciplinar que nao chega na classificacao e um bilhete: o
+        `point_adjustments` ja existia (TBK-01 o faz mover a ordem), mas sem
+        catalogo de infracoes e sem vinculo — a deducao era um numero com texto
+        livre ao lado. Aqui os dois viram um registro so.
+        """
+        tournament = self.db.get_tournament(tournament_id)
+        if not tournament:
+            raise AppError("Selecione um torneio valido.")
+        player = self.db.get_player(int(player_id)) if player_id else None
+        if not player or int(player.get("tournament_id") or 0) != int(tournament_id):
+            raise AppError("Jogador nao encontrado para o torneio selecionado.")
+
+        pairing = self.db.get_pairing(int(pairing_id)) if pairing_id else None
+        if pairing_id and (
+            not pairing or int(pairing.get("tournament_id") or 0) != int(tournament_id)
+        ):
+            raise AppError("Mesa nao encontrada para o torneio selecionado.")
+
+        erro = _incident_register_error(
+            infraction=infraction,
+            decision=decision,
+            player_id=int(player_id),
+            pairing_id=int(pairing_id) if pairing_id else None,
+            deduction_points=float(deduction_points or 0.0),
+            notes=notes,
+        )
+        if erro:
+            raise AppError(erro)
+
+        rodada = int(round_number or (pairing or {}).get("round_number") or 0)
+        mesa = int((pairing or {}).get("board_number") or 0)
+        limpo = _incident_clean_notes(notes)
+
+        adjustment_id: int | None = None
+        if str(decision).strip() in _INCIDENT_DECISION_NEEDS_POINTS:
+            adjustment_id = self.db.add_point_adjustment(
+                int(tournament_id),
+                round_number=rodada,
+                player_id=int(player_id),
+                game_points=-abs(float(deduction_points)),
+                reason=f"{_incident_infraction_label(infraction)}: {limpo}".strip(": "),
+            )
+
+        incident_id = self.db.add_incident(
+            int(tournament_id),
+            player_id=int(player_id),
+            infraction=str(infraction).strip(),
+            decision=str(decision).strip(),
+            round_number=rodada,
+            board_number=mesa,
+            pairing_id=int(pairing_id) if pairing_id else None,
+            notes=limpo,
+            adjustment_id=adjustment_id,
+            clock_event_id=int(clock_event_id) if clock_event_id else None,
+            actor=actor,
+        )
+
+        if str(decision).strip() in _INCIDENT_DECISION_NEEDS_PAIRING and pairing:
+            # W.O., e nao o resultado por decisao do arbitro (`1U-0U`, ARB-02):
+            # quem perde por regulamento NAO JOGOU a partida aos olhos da FIDE.
+            resultado = _incident_forfeit_result(
+                int(pairing["white_player_id"]) == int(player_id)
+            )
+            self.update_result(int(tournament_id), int(pairing_id or 0), resultado)
+
+        self.db.create_audit_event(
+            action="incident_registered",
+            tournament_id=int(tournament_id),
+            entity_type="player",
+            entity_id=int(player_id),
+            after={
+                "incident_id": incident_id,
+                "infraction": str(infraction).strip(),
+                "decision": str(decision).strip(),
+                "round_number": rodada,
+                "board_number": mesa,
+                "notes": limpo,
+                "adjustment_id": adjustment_id,
+            },
+        )
+        return {
+            "incident_id": incident_id,
+            "adjustment_id": adjustment_id,
+            "round_number": rodada,
+        }
+
+    def incidents(self, tournament_id: int, player_id: int | None = None) -> list[dict[str, Any]]:
+        return list(self.db.list_incidents(int(tournament_id), player_id))
+
+    def incident_repeat_offenders(self, tournament_id: int) -> dict[int, int]:
+        """``{player_id: total}`` de quem tem mais de um incidente (ARB-03)."""
+        return _incident_repeat_offenders(self.db.list_incidents(int(tournament_id)))
+
+    # ------------------------------------------------------------------ #
+    # Participacao: retirada e reentrada (ARB-05)
+    # ------------------------------------------------------------------ #
+
+    def set_player_participation(
+        self,
+        tournament_id: int,
+        player_id: int,
+        status: str,
+        reason: str = "",
+        actor: str = "",
+    ) -> int:
+        """Muda o estado de participacao E registra no historico (ARB-05).
+
+        `players.player_status` guarda so o estado de agora; sem o evento nao
+        sobra rastro de "saiu na rodada 3, voltou na 5" — nem para a ata, nem
+        para explicar por que um jogador some do pareamento.
+
+        Devolve a rodada A PARTIR da qual a mudanca vale.
+        """
+        player = self.db.get_player(int(player_id))
+        if not player or int(player.get("tournament_id") or 0) != int(tournament_id):
+            raise AppError("Jogador nao encontrado para o torneio selecionado.")
+        erro = _participation_change_error(
+            new_status=str(status or "").strip(),
+            current_status=str(player.get("player_status") or "active"),
+            reason=reason,
+        )
+        if erro:
+            raise AppError(erro)
+
+        rodada = _participation_effective_round(self.db.get_latest_round(tournament_id))
+        limpo = _participation_clean_reason(reason)
+        self.db.set_player_status(int(player_id), str(status).strip())
+        self.db.add_player_status_event(
+            int(tournament_id),
+            int(player_id),
+            rodada,
+            str(status).strip(),
+            reason=limpo,
+            actor=actor,
+        )
+        self.db.create_audit_event(
+            action="player_participation_changed",
+            tournament_id=int(tournament_id),
+            entity_type="player",
+            entity_id=int(player_id),
+            before={"player_status": str(player.get("player_status") or "active")},
+            after={
+                "player_status": str(status).strip(),
+                "round_number": rodada,
+                "reason": limpo,
+            },
+        )
+        return rodada
+
+    def participation_history(
+        self,
+        tournament_id: int,
+        player_id: int | None = None,
+    ) -> list[dict[str, Any]]:
+        return list(self.db.list_player_status_events(int(tournament_id), player_id))
+
+    def participation_summary(self, tournament_id: int) -> list[dict[str, Any]]:
+        """Um resumo por jogador que teve mudanca — a secao da ata (ARB-05)."""
+        tournament = self.db.get_tournament(tournament_id) or {}
+        rodadas = int(tournament.get("rounds_count") or 0)
+        eventos = self.db.list_player_status_events(int(tournament_id))
+        por_jogador: dict[int, list[dict[str, Any]]] = {}
+        for evento in eventos:
+            por_jogador.setdefault(int(evento["player_id"]), []).append(evento)
+        resumo = []
+        for player_id, historico in por_jogador.items():
+            resumo.append(
+                {
+                    "player_id": player_id,
+                    "player_name": player_full_name(
+                        {
+                            "name": historico[0].get("player_name"),
+                            "surname": historico[0].get("player_surname"),
+                            "given_name": historico[0].get("player_given_name"),
+                        }
+                    ),
+                    "summary": _participation_summarize(historico, rodadas),
+                    "absence_rounds": _participation_absence_rounds(historico, rodadas),
+                    "final_status": _participation_status_at(historico, rodadas or 10**6),
+                }
+            )
+        return sorted(resumo, key=lambda item: str(item["player_name"]).casefold())
 
     # ------------------------------------------------------------------ #
     # Byes solicitados (ARB-04)

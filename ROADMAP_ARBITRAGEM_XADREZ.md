@@ -432,6 +432,21 @@ Sprint 9 em andamento:
   Nasceu `bye_policy.py` (puro) + `request_bye()` no servico, com limite por
   jogador e ultima rodada permitida (schema v48, padrao SEM limite). O `Z` nao
   conta para o limite: limita-lo puniria quem avisou que faltaria.
+- `ARB-05` entregue (2026-07-31): `player_status` e um campo unico que apaga o
+  anterior, entao "saiu na rodada 3, voltou na 5" nao ficava em lugar nenhum.
+  Nasceu a tabela `player_status_events` (schema v49, append-only) + o modulo
+  puro `participation.py` + secao propria na ata. A mudanca vale da PROXIMA
+  rodada (a atual ja foi pareada), e a reentrada de quem DESISTIU exige motivo.
+  O TRF nao tem codigo para separar desistencia de ausencia — o que ele
+  distingue e `Z` (nao pareado) de `-` (forfeit), e isso ja funcionava.
+- `ARB-03` entregue (2026-07-31): registro disciplinar com catalogo de infracoes
+  FIDE (schema v50), que era papel — a tabela do manual operacional. A deducao
+  cria o `point_adjustment` vinculado e chega na classificacao; partida perdida
+  lanca W.O. na mesa (e nao o `1U-0U` da ARB-02: quem perde por regulamento nao
+  jogou); queda de seta e ausencia passaram a BLOQUEAR o fechamento ate a decisao
+  ser registrada; e a ata ganhou anexo disciplinar com reincidencia marcada.
+
+**SPRINT 9 CONCLUIDA (2026-07-31).**
 
 Objetivo: fechar as lacunas encontradas na auditoria completa dos modulos de
 gestao de torneio feita sob otica de arbitro FIDE. Detalhamento executivo em
@@ -454,8 +469,8 @@ Entregas, em ordem de prioridade:
 3. **Fluxo arbitral de salao (Sprint 9)**: W.O. e partida adiada no painel
    inline (`ARB-02` — ENTREGUE em 2026-07-31), politica de byes solicitados com
    limites (`ARB-04` — ENTREGUE em 2026-07-31),
-   retirada/reentrada com historico por rodada (`ARB-05`), registro
-   disciplinar de incidentes (`ARB-03`).
+   retirada/reentrada com historico por rodada (`ARB-05` — ENTREGUE em 2026-07-31), registro
+   disciplinar de incidentes (`ARB-03` — ENTREGUE em 2026-07-31). SPRINT CONCLUIDA.
 4. **Motores secundarios (Sprint 10)**: aceleracao e entrada tardia no caminho
    Gacrux sem divergencia silenciosa (`PAR-02`), round-robin com tabela
    persistida e returno (`PAR-01`), knockout com desempate registrado e
@@ -518,8 +533,8 @@ colunas, TRF25) foram entregues nas fases 0 a 11 e nos EPICs A a E da
 
 ### Alto impacto / alta complexidade
 
-- Retirada e reentrada com historico por rodada (`ARB-05`).
-- Registro disciplinar de incidentes (`ARB-03`).
+- ~~Retirada e reentrada com historico por rodada (`ARB-05`).~~ FEITO 2026-07-31.
+- ~~Registro disciplinar de incidentes (`ARB-03`).~~ FEITO 2026-07-31.
 - Round-robin com tabela persistida (Berger) e returno (`PAR-01`).
 - Knockout com desempate registrado e Scheveningen robusto (`PAR-03`).
 - Rating com K/piso/ritmo e regulamento CBX (`FED-07`).

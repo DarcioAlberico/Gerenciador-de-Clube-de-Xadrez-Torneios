@@ -1584,6 +1584,132 @@ class TournamentCoreMixin(_DatabaseInfra):
                 (1 if active else 0, "active" if active else "inactive", player_id),
             )
 
+    def add_incident(
+        self,
+        tournament_id: int,
+        *,
+        player_id: int | None,
+        infraction: str,
+        decision: str,
+        round_number: int = 0,
+        board_number: int = 0,
+        pairing_id: int | None = None,
+        notes: str = "",
+        adjustment_id: int | None = None,
+        clock_event_id: int | None = None,
+        actor: str = "",
+    ) -> int:
+        """Registra um incidente disciplinar (ARB-03)."""
+        with self.connect() as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO incidents (
+                    tournament_id, round_number, board_number, pairing_id, player_id,
+                    infraction, decision, notes, adjustment_id, clock_event_id,
+                    actor, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    int(tournament_id),
+                    int(round_number or 0),
+                    int(board_number or 0),
+                    int(pairing_id) if pairing_id else None,
+                    int(player_id) if player_id else None,
+                    str(infraction or "").strip(),
+                    str(decision or "").strip(),
+                    str(notes or "").strip(),
+                    int(adjustment_id) if adjustment_id else None,
+                    int(clock_event_id) if clock_event_id else None,
+                    str(actor or "").strip(),
+                    self.now(),
+                ),
+            )
+            return int(cursor.lastrowid)
+
+    def list_incidents(
+        self,
+        tournament_id: int,
+        player_id: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """Incidentes do torneio, ou a ficha de um jogador."""
+        filtro = "AND i.player_id = ?" if player_id is not None else ""
+        parametros: tuple[Any, ...] = (
+            (int(tournament_id), int(player_id)) if player_id is not None else (int(tournament_id),)
+        )
+        with self.connect() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT i.*, p.name AS player_name, p.surname AS player_surname,
+                       p.given_name AS player_given_name
+                FROM incidents i
+                LEFT JOIN players p ON p.id = i.player_id
+                WHERE i.tournament_id = ?
+                {filtro}
+                ORDER BY i.round_number ASC, i.id ASC
+                """,
+                parametros,
+            ).fetchall()
+            return self.rows_to_dicts(rows)
+
+    def delete_incident(self, incident_id: int) -> None:
+        with self.connect() as connection:
+            connection.execute("DELETE FROM incidents WHERE id = ?", (int(incident_id),))
+
+    def add_player_status_event(
+        self,
+        tournament_id: int,
+        player_id: int,
+        round_number: int,
+        status: str,
+        *,
+        reason: str = "",
+        actor: str = "",
+    ) -> int:
+        """Registra uma mudanca de participacao (ARB-05). Append-only."""
+        with self.connect() as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO player_status_events (
+                    tournament_id, player_id, round_number, status, reason, actor, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    int(tournament_id),
+                    int(player_id),
+                    int(round_number),
+                    str(status or "").strip(),
+                    str(reason or "").strip(),
+                    str(actor or "").strip(),
+                    self.now(),
+                ),
+            )
+            return int(cursor.lastrowid)
+
+    def list_player_status_events(
+        self,
+        tournament_id: int,
+        player_id: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """Historico de participacao do torneio, ou de um jogador."""
+        filtro = "AND e.player_id = ?" if player_id is not None else ""
+        parametros: tuple[Any, ...] = (
+            (int(tournament_id), int(player_id)) if player_id is not None else (int(tournament_id),)
+        )
+        with self.connect() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT e.*, p.name AS player_name, p.surname AS player_surname,
+                       p.given_name AS player_given_name
+                FROM player_status_events e
+                LEFT JOIN players p ON p.id = e.player_id
+                WHERE e.tournament_id = ?
+                {filtro}
+                ORDER BY e.round_number ASC, e.id ASC
+                """,
+                parametros,
+            ).fetchall()
+            return self.rows_to_dicts(rows)
+
     def set_player_status(self, player_id: int, status: str) -> None:
         status = status.strip() or "active"
         with self.connect() as connection:

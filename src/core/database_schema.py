@@ -1050,6 +1050,37 @@ CREATE TABLE IF NOT EXISTS prohibited_team_pairings (
     FOREIGN KEY (team_b_id) REFERENCES teams(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS incidents (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tournament_id INTEGER NOT NULL,
+    round_number INTEGER NOT NULL DEFAULT 0,
+    board_number INTEGER NOT NULL DEFAULT 0,
+    pairing_id INTEGER,
+    player_id INTEGER,
+    infraction TEXT NOT NULL,
+    decision TEXT NOT NULL,
+    notes TEXT NOT NULL DEFAULT '',
+    adjustment_id INTEGER,
+    clock_event_id INTEGER,
+    actor TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
+    FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS player_status_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tournament_id INTEGER NOT NULL,
+    player_id INTEGER NOT NULL,
+    round_number INTEGER NOT NULL,
+    status TEXT NOT NULL,
+    reason TEXT NOT NULL DEFAULT '',
+    actor TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
+    FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS requested_byes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     tournament_id INTEGER NOT NULL,
@@ -1203,6 +1234,12 @@ CREATE INDEX IF NOT EXISTS idx_team_matches_black_team
 
 CREATE INDEX IF NOT EXISTS idx_team_boards_match
     ON team_boards(team_match_id, board_number);
+
+CREATE INDEX IF NOT EXISTS idx_incidents_tournament
+    ON incidents(tournament_id, round_number, id);
+
+CREATE INDEX IF NOT EXISTS idx_player_status_events
+    ON player_status_events(tournament_id, player_id, round_number);
 
 CREATE INDEX IF NOT EXISTS idx_team_lineups_round
     ON team_lineups(tournament_id, round_id, team_id);

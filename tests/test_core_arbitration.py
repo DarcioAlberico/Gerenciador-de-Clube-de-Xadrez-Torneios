@@ -162,6 +162,42 @@ class ArbitrationPhasesTest(CoreServiceTestCase):
         self.assertEqual("closed", self.db.get_round(int(round_data["id"]))["status"])
 
     def test_phase2_round_close_allows_attention_only_clock_issue(self) -> None:
+        """Alerta que NAO exige decisao continua deixando a rodada fechar.
+
+        Este teste exigia o mesmo de uma QUEDA DE SETA, e a ARB-03 mudou isso de
+        proposito: seta caida e ausencia sao os dois eventos que a FIDE nao deixa
+        passar sem o arbitro decidir (quem ganha? houve reclamacao? perdeu por
+        6.7?), e a rodada fechava com a pergunta em aberto. O aviso de tempo
+        critico segue sendo aviso — e e ele que este teste guarda agora.
+        """
+        self._create_players(2)
+        round_data = self.service.generate_next_round(self.tournament_id)
+        pairing = self.db.get_pairings_for_round(int(round_data["id"]))[0]
+        self.service.update_result(self.tournament_id, int(pairing["id"]), "1-0")
+        self.clock_integration_service.record_manual_event(
+            self.tournament_id,
+            "time_warning",
+            pairing_id=int(pairing["id"]),
+            side="white",
+            seconds_remaining=30,
+            note="Apenas alerta conferido em mesa.",
+        )
+
+        dashboard = self.service.arbitration_dashboard(self.tournament_id)
+        self.assertTrue(dashboard["metrics"]["ready_to_close"])
+        self.assertEqual(0, dashboard["metrics"]["blocking_issues"])
+
+        self.service.close_round(self.tournament_id, int(round_data["id"]))
+        self.assertEqual("closed", self.db.get_round(int(round_data["id"]))["status"])
+
+    def test_phase2_flag_fall_blocks_until_decision_is_registered(self) -> None:
+        """ARB-03: a seta caiu, e alguem precisa dizer o que houve.
+
+        O par do teste acima: a mudanca de comportamento fica explicita nos dois
+        lados, e nao escondida na ausencia de um teste.
+        """
+        from src.services.pairing.incidents import DECISION_WARNING
+
         self._create_players(2)
         round_data = self.service.generate_next_round(self.tournament_id)
         pairing = self.db.get_pairings_for_round(int(round_data["id"]))[0]
@@ -172,12 +208,27 @@ class ArbitrationPhasesTest(CoreServiceTestCase):
             pairing_id=int(pairing["id"]),
             side="white",
             seconds_remaining=0,
-            note="Apenas alerta conferido em mesa.",
         )
 
         dashboard = self.service.arbitration_dashboard(self.tournament_id)
-        self.assertTrue(dashboard["metrics"]["ready_to_close"])
-        self.assertEqual(0, dashboard["metrics"]["blocking_issues"])
+        self.assertFalse(dashboard["metrics"]["ready_to_close"])
+        with self.assertRaisesRegex(AppError, "pendencias de arbitragem bloqueantes"):
+            self.service.close_round(self.tournament_id, int(round_data["id"]))
+
+        evento = next(
+            item
+            for item in self.db.list_clock_events(tournament_id=self.tournament_id, limit=10)
+            if item["event_type"] == "flag_fall"
+        )
+        self.service.register_incident(
+            self.tournament_id,
+            player_id=int(pairing["white_player_id"]),
+            infraction="flag_fall",
+            decision=DECISION_WARNING,
+            round_number=1,
+            clock_event_id=int(evento["id"]),
+            notes="reclamacao indeferida; seta conferida em mesa",
+        )
 
         self.service.close_round(self.tournament_id, int(round_data["id"]))
         self.assertEqual("closed", self.db.get_round(int(round_data["id"]))["status"])

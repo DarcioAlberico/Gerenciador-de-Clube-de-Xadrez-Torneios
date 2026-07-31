@@ -60,6 +60,8 @@ class LegacyMigrations:
             46: self._migrate_to_v46,
             47: self._migrate_to_v47,
             48: self._migrate_to_v48,
+            49: self._migrate_to_v49,
+            50: self._migrate_to_v50,
         }
 
     def _run_schema_migrations(self, connection: sqlite3.Connection) -> None:
@@ -174,6 +176,10 @@ class LegacyMigrations:
             self._migrate_to_v47(connection)
         if self.db.SCHEMA_VERSION >= 48:
             self._migrate_to_v48(connection)
+        if self.db.SCHEMA_VERSION >= 49:
+            self._migrate_to_v49(connection)
+        if self.db.SCHEMA_VERSION >= 50:
+            self._migrate_to_v50(connection)
 
     def _migrate_to_v1(self, connection: sqlite3.Connection) -> None:
         now = self.db.now()
@@ -1990,3 +1996,75 @@ class LegacyMigrations:
                 "ALTER TABLE tournament_settings "
                 "ADD COLUMN last_requested_bye_round INTEGER NOT NULL DEFAULT 0"
             )
+    def _migrate_to_v49(self, connection: sqlite3.Connection) -> None:
+        """Historico de participacao por rodada (ARB-05).
+
+        `players.player_status` guarda o estado de AGORA e apaga o anterior:
+        `withdrawn` e `absent` davam no mesmo (`active = 0`) e nao sobrava rastro
+        de "saiu na rodada 3, voltou na 5" — nem para a ata, nem para explicar
+        por que um jogador some do pareamento no meio do evento.
+
+        A tabela e append-only e o campo do jogador CONTINUA existindo: ele e o
+        estado corrente, que o pareamento ja le. Torneio antigo comeca sem
+        historico, e e o que ele de fato tem — inventar eventos retroativos seria
+        escrever uma ata que ninguem assinou.
+        """
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS player_status_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tournament_id INTEGER NOT NULL,
+                player_id INTEGER NOT NULL,
+                round_number INTEGER NOT NULL,
+                status TEXT NOT NULL,
+                reason TEXT NOT NULL DEFAULT '',
+                actor TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_player_status_events
+                ON player_status_events(tournament_id, player_id, round_number)
+            """
+        )
+    def _migrate_to_v50(self, connection: sqlite3.Connection) -> None:
+        """Registro disciplinar de incidentes (ARB-03).
+
+        Nao existia modulo nenhum: celular (11.3.2), lance ilegal (7.5), atraso
+        (6.7) e conduta (12.x) eram anotados no PAPEL, na tabela do manual
+        operacional. `point_adjustments` existia, mas sem catalogo de infracoes e
+        sem vinculo com o jogador reincidente — uma deducao era um numero com
+        texto livre ao lado.
+
+        Os vinculos (`adjustment_id`, `clock_event_id`, `pairing_id`) sao
+        OPCIONAIS de proposito: advertencia nao mexe em ponto nem em mesa, e
+        exigir os tres transformaria o registro de uma conversa em burocracia
+        que ninguem preenche no meio da rodada.
+        """
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS incidents (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tournament_id INTEGER NOT NULL,
+                round_number INTEGER NOT NULL DEFAULT 0,
+                board_number INTEGER NOT NULL DEFAULT 0,
+                pairing_id INTEGER,
+                player_id INTEGER,
+                infraction TEXT NOT NULL,
+                decision TEXT NOT NULL,
+                notes TEXT NOT NULL DEFAULT '',
+                adjustment_id INTEGER,
+                clock_event_id INTEGER,
+                actor TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_incidents_tournament
+                ON incidents(tournament_id, round_number, id)
+            """
+        )
