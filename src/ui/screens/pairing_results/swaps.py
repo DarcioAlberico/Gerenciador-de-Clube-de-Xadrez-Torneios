@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import Any
 
 from ...components import Dialog, FormStack, actions_bar
-from ...support import AppError, logger, player_pairing_name
+from ...support import AppError, player_pairing_name
 
 
 class BoardSwapActions:
@@ -41,12 +41,15 @@ class BoardSwapActions:
             pairing_id = host._selected_pairing_id()
             if not pairing_id:
                 raise AppError("Selecione uma mesa.")
-            if host.current_round_id:
-                round_data = host.db.get_round(host.current_round_id)
-                if round_data and round_data["status"] == "closed":
-                    raise AppError("Rodada fechada nao pode ser ajustada.")
-            host.db.swap_pairing_colors(pairing_id)
-            logger.info("Cores trocadas na mesa %s", pairing_id)
+            if not host.current_round_id:
+                raise AppError("Selecione uma rodada.")
+            # Passa pelo serviço (PAR-04): a checagem de rodada fechada e a
+            # trilha de auditoria moram lá, junto com o caminho de equipes.
+            host.pairing_service.swap_pairing_colors(
+                host.current_tournament_id,
+                host.current_round_id,
+                pairing_id,
+            )
             host._load_selected_round_pairings()
         except Exception as exc:
             host._show_error(exc)
@@ -77,7 +80,10 @@ class BoardSwapActions:
             if not pairing["is_bye"]:
                 slot_options.append("Pretas")
 
-            dialog = Dialog(self, "Trocar jogador", size=(460, 320), resizable=False)
+            # `host`, nao `self`: `self` aqui e o objeto de acoes, nao a janela.
+            # O `Dialog` e um CTkToplevel — com um pai que nao e widget ele nem
+            # abre. Mesmo defeito que a extracao da B-6 achou no `qr.py`.
+            dialog = Dialog(host, "Trocar jogador", size=(460, 320), resizable=False)
             pilha = FormStack(dialog)
             pilha.section(
                 f"Mesa {pairing['board_number']}: "
@@ -130,7 +136,7 @@ class BoardSwapActions:
                 player_options.append(option)
                 player_map[option] = int(player["id"])
 
-            dialog = Dialog(self, "Trocar jogador por equipes", size=(520, 340), resizable=False)
+            dialog = Dialog(host, "Trocar jogador por equipes", size=(520, 340), resizable=False)
             pilha = FormStack(dialog)
             pilha.section(
                 f"Match {board.get('team_match_id', '')} - Tab. {board['board_number']}: "

@@ -118,7 +118,18 @@ def team_match_summary(
     white_game_points = 0.0
     black_game_points = 0.0
     for board in boards:
-        white_points, black_points = result_points[str(board["result"])]
+        resultado = str(board.get("result") or "")
+        if resultado not in result_points:
+            # Era `result_points[...]` cru: um tabuleiro em branco ou com codigo
+            # desconhecido subia como KeyError, que a tela mostrava como "erro
+            # inesperado" com codigo de log — para uma situacao previsivel e que
+            # o arbitro resolve sozinho (PAR-04).
+            raise AppError(
+                f"Tabuleiro {board.get('board_number', '?')} do confronto tem "
+                f"resultado invalido ({resultado or 'em branco'}). "
+                "Preencha todos os tabuleiros antes de fechar a rodada."
+            )
+        white_points, black_points = result_points[resultado]
         if board.get("white_player_id") in white_team_player_ids:
             white_game_points += white_points
         elif board.get("white_player_id") in black_team_player_ids:
@@ -212,6 +223,74 @@ def team_bye_payload(
         "is_bye": 1,
         "boards": [],
     }
+
+
+def round_robin_team_matches(
+    teams: list[dict[str, Any]],
+    rosters: dict[int, dict[int, int]],
+    seed_ratings: dict[int, int],
+    boards_count: int,
+    settings: dict[str, Any],
+    round_number: int,
+) -> list[dict[str, Any]]:
+    """Todos contra todos por equipes (Berger), rodada a rodada.
+
+    Mesma rotação do round-robin individual (`round_robin_pairings`): a primeira
+    equipe fica parada e as demais giram, o que garante que cada par se encontre
+    exatamente uma vez. Número ímpar de equipes ganha uma equipe fantasma, e quem
+    cai com ela recebe o bye da rodada.
+
+    A cor da EQUIPE alterna com a paridade da rodada — sem isso, a primeira
+    equipe (a que não gira) jogaria de brancas em todas as rodadas. As cores dos
+    tabuleiros dentro do confronto continuam saindo do `team_match_payload`, que
+    inverte a cada tabuleiro par.
+    """
+    ordered = sorted(
+        teams,
+        key=lambda team: (-seed_ratings[int(team["id"])], str(team["name"]).casefold()),
+    )
+    if len(ordered) % 2 == 1:
+        ordered.append({"id": -1, "name": "BYE"})
+
+    total = len(ordered)
+    if round_number > total - 1:
+        raise AppError(
+            "Todos contra todos por equipes: o numero maximo de rodadas "
+            f"({total - 1}) ja foi atingido."
+        )
+
+    girado = [ordered[0]]
+    for index in range(1, total):
+        deslocamento = round_number - 1
+        girado.append(ordered[((index - 1 - deslocamento) % (total - 1)) + 1])
+
+    superior = girado[: total // 2]
+    inferior = girado[total // 2:]
+    inferior.reverse()
+
+    matches: list[dict[str, Any]] = []
+    for index in range(total // 2):
+        if (round_number % 2 == 1 and index == 0) or (round_number % 2 == 0 and index > 0):
+            branca, preta = superior[index], inferior[index]
+        else:
+            branca, preta = inferior[index], superior[index]
+
+        if int(branca["id"]) == -1 or int(preta["id"]) == -1:
+            folga = preta if int(branca["id"]) == -1 else branca
+            matches.append(
+                team_bye_payload(len(matches) + 1, int(folga["id"]), settings, boards_count)
+            )
+            continue
+        matches.append(
+            team_match_payload(
+                len(matches) + 1,
+                int(branca["id"]),
+                int(preta["id"]),
+                rosters,
+                boards_count,
+            )
+        )
+    return matches
 
 
 def first_round_team_matches(

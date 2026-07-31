@@ -120,7 +120,10 @@ CERTIFICATE_TYPES = {
 }
 CERTIFICATE_ORIENTATIONS = {"landscape": "Paisagem", "portrait": "Retrato"}
 TEAM_PLAYER_ROLES = {"starter": "Titular", "reserve": "Reserva"}
-TEAM_PAIRING_METHODS = {"swiss": "Suico por equipes"}
+# NAO redefina TEAM_PAIRING_METHODS aqui. Havia uma segunda definicao nesta
+# linha (so "swiss") que sobrescrevia em silencio a de cima e tornava o
+# round-robin por equipes inalcancavel: a validacao recusava e o menu so
+# oferecia Suico (PAR-04).
 TEAM_STANDING_CRITERIA = {
     "match_points": "Match points",
     "game_points": "Game points",
