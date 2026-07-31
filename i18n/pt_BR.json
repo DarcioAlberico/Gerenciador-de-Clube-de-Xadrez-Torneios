@@ -68,6 +68,7 @@
   "arbitration.byes.error.type": "Selecione um tipo de bye (F, H ou Z).",
   "arbitration.byes.form": "Novo bye solicitado",
   "arbitration.byes.hint.player": "O bye é aplicado quando a rodada for gerada:\no jogador fica de fora do pareamento e recebe\nF=1.0, H=0.5 ou Z=0.0 ponto.\nVálido apenas no sistema Suíço.",
+  "arbitration.byes.hint.policy": "Regulamento deste torneio: {limites}.",
   "arbitration.byes.hint.team": "O bye é aplicado quando a rodada for gerada:\na equipe fica de fora e pontua por tipo\n(F=vitória, H=empate, Z=derrota).",
   "arbitration.byes.reason_placeholder": "Ex.: ausência comunicada",
   "arbitration.byes.removed": "Bye removido.",

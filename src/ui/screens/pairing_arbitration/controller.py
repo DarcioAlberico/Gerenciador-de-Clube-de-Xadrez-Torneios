@@ -226,6 +226,10 @@ class ArbitrationController:
         )
         logger.info("Bye solicitado registrado no torneio %s", tournament_id)
 
+    def bye_policy_summary(self, tournament_id: int) -> str:
+        """Limites do regulamento para bye solicitado (ARB-04). "" se nao ha."""
+        return self.pairing_service.bye_policy_summary(int(tournament_id))
+
     def find_bye(
         self, tournament_id: int, bye_id: int, is_team: bool
     ) -> dict[str, Any] | None:
@@ -257,8 +261,20 @@ class ArbitrationController:
         bye_type: str,
         reason: str,
     ) -> None:
-        adicionar = self.db.add_requested_team_bye if is_team else self.db.add_requested_bye
-        adicionar(tournament_id, target_id, round_number, bye_type, reason=reason)
+        if is_team:
+            # Equipes ainda gravam direto: a politica da ARB-04 e do individual
+            # (limite por jogador, ultima rodada, jogador inativo), e inventar
+            # uma regra para equipes que nenhum regulamento pediu seria pior do
+            # que deixar explicito que ela nao existe aqui.
+            self.db.add_requested_team_bye(
+                tournament_id, target_id, round_number, bye_type, reason=reason
+            )
+            return
+        # Individual passa pelo SERVICO (ARB-04): e la que a politica mora, e a
+        # tela nao pode ser o unico lugar que valida — ela pode ser burlada.
+        self.pairing_service.request_bye(
+            tournament_id, target_id, round_number, bye_type, reason=reason
+        )
 
     # ---- Proibições de pareamento (TRF25 registro 260) -------------------- #
 

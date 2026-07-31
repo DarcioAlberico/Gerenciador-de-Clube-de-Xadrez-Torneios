@@ -74,6 +74,11 @@ from src.services.pairing.point_adjustments import (
 from src.services.pairing.gacrux_tiebreak_map import (
     sequence_signature as _sequence_signature,
 )
+from src.services.pairing.bye_policy import (
+    ByePolicy as _ByePolicy,
+    discarded_warning as _bye_discarded_warning,
+    request_error as _bye_request_error,
+)
 from src.services.pairing.postponement import (
     blocking_message as _postponed_blocking_message,
     clean_note as _clean_postpone_note,
@@ -540,6 +545,19 @@ class PairingService:
                 )
             )
 
+        # Bye solicitado descartado por jogador inativo (ARB-04). `attention`: o
+        # pedido ja ficou para tras, e travar o fechamento nao o traria de volta
+        # — o que faltava era o arbitro FICAR SABENDO.
+        for event in self.db.list_audit_events(
+            tournament_id, action="requested_bye_discarded", limit=safe_limit
+        ):
+            issues.append(
+                _audit_issue(
+                    event, "bye", "discarded",
+                    "Bye solicitado descartado (jogador inativo)", severity="attention",
+                )
+            )
+
         issues.extend(self._pairing_arbitration_issues(tournament_id, tournament))
         issues.extend(self._postponed_arbitration_issues(tournament_id))
 
@@ -561,6 +579,97 @@ class PairingService:
             _postponed_issue(pairing, round_id, int(latest_round.get("number") or 0))
             for pairing in self.db.list_postponed_pairings(round_id)
         ]
+
+    # ------------------------------------------------------------------ #
+    # Byes solicitados (ARB-04)
+    # ------------------------------------------------------------------ #
+
+    def request_bye(
+        self,
+        tournament_id: int,
+        player_id: int,
+        round_number: int,
+        bye_type: str = "H",
+        reason: str = "",
+    ) -> int:
+        """Registra um bye solicitado, aplicando a politica do torneio (ARB-04).
+
+        Era gravado direto da tela no banco, sem servico nenhum — e por isso um
+        pedido para rodada ja gerada era aceito e nunca aplicado, um pedido de
+        jogador inativo sumia na hora de parear, e nao havia limite nenhum.
+        """
+        tournament = self.db.get_tournament(tournament_id)
+        if not tournament:
+            raise AppError("Selecione um torneio valido.")
+        player = self.db.get_player(int(player_id))
+        if not player or int(player.get("tournament_id") or 0) != int(tournament_id):
+            raise AppError("Jogador nao encontrado para o torneio selecionado.")
+
+        settings = self.db.get_tournament_settings(tournament_id) or {}
+        existing = self.db.get_round_by_number(tournament_id, int(round_number))
+        ja_pedidos = [
+            item
+            for item in self.db.list_requested_byes(tournament_id)
+            if int(item.get("player_id") or 0) == int(player_id)
+        ]
+        erro = _bye_request_error(
+            _ByePolicy.from_settings(settings),
+            bye_type=bye_type,
+            round_number=int(round_number),
+            rounds_count=int(tournament.get("rounds_count") or 0),
+            round_status=str(existing["status"]) if existing else None,
+            player_active=bool(int(player.get("active") or 0)),
+            existing_byes=ja_pedidos,
+            editing_existing=any(
+                int(item.get("round_number") or 0) == int(round_number) for item in ja_pedidos
+            ),
+        )
+        if erro:
+            raise AppError(erro)
+
+        bye_id = self.db.add_requested_bye(
+            tournament_id, int(player_id), int(round_number), bye_type, reason=reason
+        )
+        self.db.create_audit_event(
+            action="requested_bye_registered",
+            tournament_id=int(tournament_id),
+            entity_type="player",
+            entity_id=int(player_id),
+            after={
+                "round_number": int(round_number),
+                "bye_type": str(bye_type or "H").strip().upper(),
+                "reason": str(reason or "").strip(),
+            },
+        )
+        return bye_id
+
+    def _warn_discarded_byes(
+        self,
+        tournament_id: int,
+        round_number: int,
+        discarded: list[dict[str, Any]],
+    ) -> None:
+        """Registra os byes que a geracao teve de descartar (ARB-04)."""
+        if not discarded:
+            return
+        aviso = _bye_discarded_warning(discarded)
+        logger.warning("Rodada %s do torneio %s: %s", round_number, tournament_id, aviso)
+        self.db.create_audit_event(
+            action="requested_bye_discarded",
+            tournament_id=int(tournament_id),
+            entity_type="round",
+            entity_id=int(round_number),
+            after={
+                "round_number": int(round_number),
+                "message": aviso,
+                "player_ids": [int(item.get("player_id") or 0) for item in discarded],
+            },
+        )
+
+    def bye_policy_summary(self, tournament_id: int) -> str:
+        """Uma linha com os limites configurados. ``""`` quando nao ha."""
+        settings = self.db.get_tournament_settings(tournament_id) or {}
+        return _ByePolicy.from_settings(settings).describe()
 
     def postpone_pairing(self, tournament_id: int, pairing_id: int, note: str = "") -> None:
         """Marca a mesa como adiada, com o combinado como nota (ARB-02)."""
@@ -880,11 +989,23 @@ class PairingService:
                 pairings = self._knockout_pairings(tournament_id, players, next_number, settings)
         else:
             active_ids = {int(player["id"]) for player in players}
+            pedidos = self.db.list_requested_byes_for_round(tournament_id, next_number)
             bye_by_player = {
                 int(item["player_id"]): str(item["bye_type"])
-                for item in self.db.list_requested_byes_for_round(tournament_id, next_number)
+                for item in pedidos
                 if int(item["player_id"]) in active_ids
             }
+            # Bye de jogador inativo era descartado EM SILENCIO (ARB-04): o
+            # jogador avisou que faltaria, o arbitro registrou, e na hora de
+            # parear o pedido sumia. Agora sai aviso e fica na auditoria — quem
+            # le decide se reativa o jogador ou aceita a ausencia. A geracao
+            # segue: barrar a rodada por um pedido que ficou para tras seria
+            # trocar um silencio ruim por uma parada pior.
+            self._warn_discarded_byes(
+                tournament_id,
+                next_number,
+                [item for item in pedidos if int(item["player_id"]) not in active_ids],
+            )
             to_pair = [
                 player for player in players if int(player["id"]) not in bye_by_player
             ]

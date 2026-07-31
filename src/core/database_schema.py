@@ -566,6 +566,12 @@ CREATE TABLE IF NOT EXISTS tournament_settings (
     pairing_system TEXT NOT NULL DEFAULT 'gacrux_swiss',
     tiebreak_engine TEXT NOT NULL DEFAULT 'gacrux',
     tiebreak_strict INTEGER NOT NULL DEFAULT 0,
+    -- Politica de bye SOLICITADO (ARB-04). `0` = sem limite, que e o
+    -- comportamento historico. Nao confundir com `disable_bye`, que desativa o
+    -- bye ALOCADO (o PAB de quem sobra num numero impar): sao coisas diferentes,
+    -- e o regulamento mais comum exige numero par mas aceita ausencia avisada.
+    max_requested_byes INTEGER NOT NULL DEFAULT 0,
+    last_requested_bye_round INTEGER NOT NULL DEFAULT 0,
     acceleration_method TEXT NOT NULL DEFAULT 'none',
     hide_color_names INTEGER NOT NULL DEFAULT 0,
     show_opponents_in_standings INTEGER NOT NULL DEFAULT 0,

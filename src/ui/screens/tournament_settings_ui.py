@@ -325,6 +325,29 @@ class TournamentSettingsMixin:
             "Por equipes",
             help_text="Vale apenas quando o Formato (aba “Dados gerais”) é “Equipes”.",
         )
+        # Politica de bye SOLICITADO (ARB-04). Vazio ou 0 = sem limite, que e o
+        # comportamento de sempre. Fica antes da secao de equipes porque vale
+        # para o individual, que e onde o bye solicitado existe.
+        # A linha de apoio quebra à mão: `note()` monta um CTkLabel sem
+        # `wraplength`, então um texto longo numa linha só alarga o painel e
+        # empurra os controles para fora da janela nos tamanhos suportados —
+        # o teste de layout pega exatamente isso.
+        form_rules.section(
+            "Byes solicitados",
+            help_text=(
+                "Limites do regulamento para o bye que o jogador PEDE (0 = sem limite).\n"
+                "Não confunda com “Desativar bye alocado (PAB)”, que é o bye\n"
+                "dado a quem sobra num número ímpar."
+            ),
+        )
+        for key, label, dica in (
+            ("max_requested_byes", "Máximo de byes por jogador", "0 = sem limite"),
+            ("last_requested_bye_round", "Última rodada com bye permitido", "0 = sem limite"),
+        ):
+            entry = form_rules.text(label, placeholder=dica)
+            entry.insert(0, str(settings.get(key, 0) or 0))
+            setting_entries[key] = entry
+
         team_setting_fields = [
             ("team_boards_count", "Tabuleiros por equipe", "Ex.: 4"),
             ("team_match_win_points", "Pontos por vitória da equipe", "Ex.: 2"),
@@ -371,7 +394,10 @@ class TournamentSettingsMixin:
             "allow_public_registration": "Permitir inscricao publica",
             "allow_player_result_edit": "Jogador pode alterar resultado",
             "allow_dangerous_changes": "Permitir mudancas perigosas",
-            "disable_bye": "Desativar bye/tchau",
+            # `disable_bye` desativa o bye ALOCADO (o PAB de quem sobra num numero
+            # impar). O bye SOLICITADO — o jogador avisando que faltaria — tem
+            # politica propria (ARB-04) e nao passa por aqui.
+            "disable_bye": "Desativar bye alocado (PAB)",
             "accelerated_system": "Sistema acelerado",
             "hide_standings": "Ocultar classificacao",
             "calculate_performance": "Calcular desempenho do jogador",
