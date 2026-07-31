@@ -952,9 +952,71 @@ Criterios de aceite:
 
 #### TBK-03 - Jogos nao disputados conforme FIDE no motor proprio
 
-Status: pendente.
+Status: CONCLUIDO (2026-07-30), pela SEGUNDA saida do escopo.
 
-Problema:
+**A escolha: rebaixar, nao reimplementar.** O escopo dava duas saidas —
+implementar o adversario virtual da FIDE no motor proprio ou rebaixa-lo
+formalmente a legado. Foi rebaixado, e a razao e de engenharia: as regras de
+desempate da FIDE sao versionadas por data de vigencia (o proprio Gacrux carrega
+`rulesversion`, com ramos `16.4.1`/`16.4.2` para 2026-02-01), e o Gacrux e o motor
+padrao desde o PR #66. Uma segunda implementacao da mesma norma versionada
+tenderia a divergir a cada revisao — e duas respostas "oficiais" diferentes e
+exatamente o problema que a TBK-02 existe para impedir. Melhor uma implementacao
+conforme e a outra honestamente rotulada.
+
+Como ficou:
+
+- `LEGACY_ENGINE_NOTE` e `LEGACY_ENGINE_CHOICE_HINT` em `tiebreak_engine.py`,
+  ao lado da razao da escolha. Sai por tres portas: a **faixa** da classificacao
+  (reusando o vocabulario da TBK-02 — motor proprio escolhido de proposito agora
+  rende tom `warning`, nao `ok`), o **relatorio de desempates** (o aviso vai no
+  topo, antes dos numeros, porque e o documento que alguem usa para conferir a
+  ordem final) e a **tela de configuracao**, no `help_text` do seletor de motor —
+  que e onde a decisao acontece;
+- **`wins` deixou de contar W.O.** O criterio e o `WON` da FIDE, "vitorias no
+  tabuleiro", e o Gacrux exige `played and opponent > 0`. Antes o Albericus
+  contava a vitoria por W.O., entao trocar de motor no meio do torneio reordenava
+  os empatados. Ha teste de paridade com o motor real, num torneio COM W.O. e COM
+  bye — a restricao "sem W.O." do teste antigo caiu;
+- **confronto direto so quando todos os empatados se enfrentaram**, como a FIDE
+  exige. Com tres empatados em que A jogou com B e com C mas B e C nao se
+  enfrentaram, "quem ganhou de quem" nao e uma ordem — e um pedaco de uma. Antes
+  o criterio somava os jogos que existiam e produzia um numero com aparencia de
+  resultado; agora e zero para o grupo inteiro, e o desempate seguinte decide.
+
+**Um item da auditoria NAO se confirmou, e vale registrar.** O relatorio pedia
+trocar o divisor do limiar de Koya pelas rodadas CONFIGURADAS do torneio, no lugar
+das jogadas. O Gacrux usa as jogadas (`compute_koya`: `maxgames = rounds`, onde
+`rounds` e o `-n` do subprocesso), entao a mudanca pedida afastaria os dois
+motores. Medido no cenario em que os dois divisores divergem — 3 rodadas fechadas
+de 7 configuradas — os valores ja batem. Nada foi alterado, e um teste guarda a
+equivalencia para que ninguem "conserte" isso depois.
+
+Criterios de aceite:
+
+- [x] fixture com W.O. e byes produz o mesmo Buchholz/SB nos dois motores **ou o
+  motor proprio exibe aviso de nao conformidade** — pela segunda alternativa, com
+  teste que registra a divergencia de Buchholz como fato (e nao impressao), para
+  o dia em que alguem pensar em promover o motor proprio de volta;
+- [x] confronto direto so e aplicado quando todos os empatados se enfrentaram;
+- [x] teste de paridade `wins` x `WON` sem restricao de "sem W.O.".
+
+**Um defeito de componente apareceu no caminho.** O `help_text` do seletor de
+motor foi a primeira ajuda longa escrita no app, e o `labeled_field` montava a
+linha de apoio **sem quebra de linha**. Como o painel do formulario e um
+`CTkScrollableFrame` (cresce para caber o conteudo), o texto alargou o formulario
+inteiro e empurrou os controles para fora da janela — o guarda de layout da B-8
+pegou em cinco larguras. O conserto foi no componente, nao no texto: a linha de
+apoio quebra na largura da coluna do formulario. Detalhe que custou duas
+tentativas: seguir a largura medida com `<Configure>` **realimenta o problema**
+(container mais largo -> quebra maior -> rotulo mais largo -> container mais
+largo). A largura e fixa de proposito.
+
+Cobertura: 16 testes em `tests/test_core_tbk03.py` e 1 em `tests/test_ui_fields.py`
+(a ajuda longa nao pode alargar a caixa do campo). Um teste da TBK-02 foi
+ajustado: a faixa do motor proprio deixou de ser tom `ok`.
+
+Problema original:
 
 - no motor proprio (`pairing/tiebreaks.py`), W.O. contam como partida real em
   Buchholz, Sonneborn-Berger, ARO e performance (`:697-700`), e byes nao
@@ -980,10 +1042,10 @@ Escopo:
 
 Criterios de aceite:
 
-- [ ] fixture com W.O. e byes produz o mesmo Buchholz/SB nos dois motores (ou
-  o motor proprio exibe aviso de nao conformidade);
-- [ ] confronto direto so e aplicado quando todos os empatados se enfrentaram;
-- [ ] teste de paridade `wins` x `WON` sem restricao de "sem W.O.".
+- [x] fixture com W.O. e byes produz o mesmo Buchholz/SB nos dois motores (ou
+  o motor proprio exibe aviso de nao conformidade) — pela segunda alternativa;
+- [x] confronto direto so e aplicado quando todos os empatados se enfrentaram;
+- [x] teste de paridade `wins` x `WON` sem restricao de "sem W.O.".
 
 #### TBK-04 - Parametros de criterios editaveis e registro 212 fiel
 
@@ -1775,7 +1837,8 @@ controle real sobre os criterios.
 
 Entregas:
 
-1. [ ] `TBK-03` Jogos nao disputados conforme FIDE no motor proprio.
+1. [x] `TBK-03` Jogos nao disputados conforme FIDE no motor proprio
+   (pela segunda saida: motor proprio rebaixado a legado, nao homologavel).
 2. [ ] `TBK-04` Parametros de criterios editaveis e registro 212 fiel.
 3. [ ] `TBK-05` Desempates de equipes completos.
 

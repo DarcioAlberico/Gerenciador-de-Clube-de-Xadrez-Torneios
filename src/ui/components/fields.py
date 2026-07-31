@@ -22,6 +22,7 @@ from typing import Any, Callable
 
 import customtkinter as ctk
 
+from ..form_layout import FORM_PADX, FORM_PANEL_WIDTH
 from ..theme import (
     SIZE_BODY,
     SPACE_XS,
@@ -43,6 +44,12 @@ from ..theme import (
 # campo-botao na mesma linha que define a escala, nao um numero solto.
 FIELD_HEIGHT = 36
 FIELD_RADIUS = 6
+
+# Largura de quebra da linha de apoio (`help_text`): a largura de texto do
+# formulário canônico — o painel de 300px menos as duas margens. Ver
+# `_wrap_hint` para o porquê de ser fixa.
+FORM_TEXT_WIDTH = FORM_PANEL_WIDTH - 2 * FORM_PADX
+HINT_WRAP_MIN = 160
 
 # Escala fechada de larguras (ESPEC §4.6). FULL nao e uma largura: e grid com
 # sticky="ew" — use FIELD_MD como minimo e deixe a coluna esticar.
@@ -383,6 +390,25 @@ def date_field(master: Any, **kwargs: Any) -> Any:
     return attach_field_states(MaskedDateEntry(master, **kwargs))
 
 
+def _wrap_hint(hint: ctk.CTkLabel) -> None:
+    """Quebra a linha de apoio na largura do formulário, em vez de alargá-lo.
+
+    Sem isto um `help_text` de duas frases vira uma linha só e **alarga o
+    formulário inteiro**: o painel é um `CTkScrollableFrame`, que cresce para
+    caber o conteúdo, e a tela passa a exigir mais largura do que a janela tem —
+    os controles saem pela borda direita. Foi o guarda de layout da B-8 que
+    pegou, na primeira ajuda longa escrita (TBK-03); o defeito era do
+    componente e valia para qualquer texto de apoio.
+
+    **A largura é fixa de propósito, e a tentativa de segui-la foi o erro.**
+    Um `<Configure>` que ajustasse a quebra à largura medida realimenta o
+    próprio problema: container mais largo → quebra maior → rótulo mais largo →
+    container mais largo. A coluna do formulário tem largura conhecida
+    (`FORM_PANEL_WIDTH`), então o texto quebra nela e pronto.
+    """
+    hint.configure(wraplength=max(HINT_WRAP_MIN, FORM_TEXT_WIDTH))
+
+
 def labeled_field(
     master: Any,
     label: str,
@@ -420,6 +446,7 @@ def labeled_field(
         justify="left",
     )
     hint.grid(row=2, column=0, sticky="ew")
+    _wrap_hint(hint)
     estado = _field_state(campo) or _field_state(attach_field_states(campo))
     estado["hint"] = hint
     estado["help"] = help_text

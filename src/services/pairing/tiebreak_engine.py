@@ -97,6 +97,44 @@ BADGE_TONE_OK = "ok"
 BADGE_TONE_WARNING = "warning"
 BADGE_TONE_DANGER = "danger"
 
+# --- Motor próprio: modo legado, não homologável (TBK-03) ------------------- #
+#
+# A auditoria arbitral deu duas saídas para a não conformidade do motor próprio
+# em jogos não disputados: implementar o adversário virtual da FIDE nele, ou
+# rebaixá-lo formalmente. A escolha foi rebaixar, e a razão é de engenharia: as
+# regras de desempate da FIDE são versionadas por data de vigência, e o Gacrux
+# — que é o motor padrão desde o PR #66 — já as acompanha. Uma segunda
+# implementação da mesma norma versionada tenderia a divergir com o tempo, e
+# duas respostas "oficiais" diferentes é exatamente o problema que a TBK-02
+# existe para impedir.
+
+LEGACY_ENGINE_NOTE = (
+    "Motor legado, não homologável: em jogos não disputados (W.O., bye, ausência) "
+    "ele não aplica o adversário virtual da FIDE, então Buchholz, Sonneborn-Berger, "
+    "ARO e performance podem divergir do resultado oficial. Serve para acompanhar "
+    "o torneio; para publicar ou enviar à federação, use o motor FIDE (Gacrux)."
+)
+
+# Dito na hora da ESCOLHA, e não só depois — é ali que a decisão acontece. Texto
+# separado porque compara os dois motores, enquanto o de cima descreve o que
+# está em uso.
+LEGACY_ENGINE_CHOICE_HINT = (
+    "FIDE (Gacrux) é o motor homologado e o padrão. O Albericus (próprio) é "
+    "legado: não aplica o adversário virtual da FIDE em jogos não disputados, "
+    "então não serve para publicar classificação oficial nem para enviar à "
+    "federação."
+)
+
+
+def is_legacy_engine(engine: str) -> bool:
+    """O motor não é homologável para desempate oficial?"""
+    return str(engine or "") == ENGINE_ALBERICUS
+
+
+def legacy_engine_note(engine: str) -> str:
+    """Aviso de não conformidade, ou ``""`` quando o motor é o homologado."""
+    return LEGACY_ENGINE_NOTE if is_legacy_engine(engine) else ""
+
 
 def engine_badge(report: EngineReport) -> dict[str, str]:
     """Faixa permanente da tela: ``{"label", "tone", "detail"}``.
@@ -119,6 +157,15 @@ def engine_badge(report: EngineReport) -> dict[str, str]:
             ),
             "tone": BADGE_TONE_WARNING,
             "detail": _detail_fallback(report),
+        }
+    # Motor próprio escolhido de propósito: a tabela sai, mas não é a oficial —
+    # e isso precisa estar na faixa, não só na tela de configuração, porque é
+    # aqui que alguém decide publicar (TBK-03).
+    if is_legacy_engine(report.used):
+        return {
+            "label": f"Motor de desempate: {engine_label(report.used)} — legado, não homologável",
+            "tone": BADGE_TONE_WARNING,
+            "detail": LEGACY_ENGINE_NOTE,
         }
     return {
         "label": f"Motor de desempate: {engine_label(report.used)}",

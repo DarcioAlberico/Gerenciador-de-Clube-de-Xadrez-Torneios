@@ -19,6 +19,7 @@ from src.ui.components.fields import (
     FIELD_MD,
     FIELD_RADIUS,
     FIELD_SM,
+    FORM_TEXT_WIDTH,
     clear_field_error,
     date_field,
     field_has_error,
@@ -129,6 +130,36 @@ class AnatomiaDosCamposTest(unittest.TestCase):
         self.assertIs(box, campo.master)
         self.assertEqual(1, int(campo.grid_info()["row"]))
         box.destroy()
+
+    def test_ajuda_longa_quebra_em_vez_de_alargar_o_formulario(self) -> None:
+        """TBK-03: o painel do formulário é rolável e cresce para caber o texto.
+
+        Uma linha de apoio sem quebra alargava o formulário inteiro e empurrava
+        os controles para fora da janela — foi o guarda de layout da B-8 que
+        pegou. O teste compara com um texto curto: a caixa não pode ficar mais
+        larga por causa da ajuda.
+        """
+        longa = (
+            "FIDE (Gacrux) é o motor homologado e o padrão. O Albericus (próprio) "
+            "é legado: não aplica o adversário virtual da FIDE em jogos não "
+            "disputados, então não serve para publicar classificação oficial."
+        )
+        curta, _ = labeled_field(
+            self.root, "Motor", lambda p: text_field(p, placeholder="x"), help_text="Curta."
+        )
+        comprida, _ = labeled_field(
+            self.root, "Motor", lambda p: text_field(p, placeholder="x"), help_text=longa
+        )
+        self.root.update()
+        self.assertLessEqual(
+            comprida.winfo_reqwidth(),
+            max(curta.winfo_reqwidth(), FORM_TEXT_WIDTH) + 4,
+            "a ajuda longa alargou a caixa do campo",
+        )
+        dica = [w for w in comprida.winfo_children() if isinstance(w, ctk.CTkLabel)][-1]
+        self.assertEqual(FORM_TEXT_WIDTH, int(dica.cget("wraplength")))
+        curta.destroy()
+        comprida.destroy()
 
 
 @pytest.mark.gui
