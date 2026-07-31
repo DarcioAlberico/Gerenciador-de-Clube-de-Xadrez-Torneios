@@ -667,8 +667,17 @@ class TeamTournamentsTest(CoreServiceTestCase):
         self.assertTrue(any(line.startswith("142 ") for line in lines))
         self.assertIn("192 FIDE_TEAM_TYPEA_MP_GP", content)
         self.assertIn("352 WB", content)
-        # Tie-breaks de classificação (212), sempre começando por PTS.
-        self.assertIn("212 PTS,BH:MP,WIN", content)
+        # Tie-breaks de classificação (212). Era a lista fixa `PTS,BH:MP,WIN`,
+        # escrita quando o projeto não tinha sequência configurável; desde a
+        # TBK-04 o registro sai da MESMA sequência que o motor executa, então
+        # ele é literalmente o plano enviado ao `tiebreakchecker`. Três
+        # diferenças, todas conserto:
+        #  - `MPTS` no lugar de `PTS`: em equipes o primário é match points;
+        #  - `GPTS` aparece — o motor sempre o usou, o 212 é que o omitia;
+        #  - `WON` no lugar de `WIN`: vitórias no tabuleiro (ver TBK-03).
+        # O `BH` herda os match points do primário (`parse_tiebreak` do Gacrux
+        # usa `primaryscore`), então equivale ao antigo `BH:MP`.
+        self.assertIn("212 MPTS,GPTS,BH,WON", content)
         # Pontuação padrão (TW=2/TD=1/TL=0) → 362 omitido.
         self.assertFalse(any(line.startswith("362 ") for line in lines))
         # Equipes saem como 310 (substitui o 013); o 013 não é mais emitido.

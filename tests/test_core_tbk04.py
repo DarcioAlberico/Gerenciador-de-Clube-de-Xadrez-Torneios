@@ -212,6 +212,15 @@ class Registro212Test(CoreServiceTestCase):
         )
         self.assertEqual(["PTS", "BH/C2", "KS/L60"], self._codigos())
 
+    def test_212_de_equipes_declara_os_quatro_criterios_usados(self) -> None:
+        """A lista fixa antiga (`PTS,BH:MP,WIN`) omitia o game points.
+
+        Em equipes o primário é match points (`MPTS`), não o `PTS` genérico, e o
+        `BH` herda esse primário no `parse_tiebreak` do Gacrux — equivale ao
+        antigo `BH:MP` sem precisar declarar o tipo de ponto.
+        """
+        self.assertEqual(["MPTS", "GPTS", "BH", "WON"], self._codigos(is_team=True))
+
     def test_criterio_sem_equivalente_fide_nao_entra_no_212(self) -> None:
         """O 212 é um registro FIDE: só cabe o que a FIDE nomeia."""
         self.db.save_tournament_settings(
