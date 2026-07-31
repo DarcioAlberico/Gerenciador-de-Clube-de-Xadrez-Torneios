@@ -13,6 +13,8 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Sequence
 
+from src.services.results_registry import code_from_trf_letter
+
 # Offsets fixos da linha 001 (idênticos ao layout escrito pelo TRF16Exporter,
 # que segue o padrão FIDE Krause).
 _START_RANK = (4, 8)
@@ -133,15 +135,23 @@ def parse_trf(content: str) -> dict[str, Any]:
     }
 
 
-# Códigos de resultado TRF -> resultado Albericus, da perspectiva das BRANCAS.
-_GAME_WHITE = {"1": "1-0", "0": "0-1", "=": "1/2-1/2", "½": "1/2-1/2", "+": "1F-0F", "-": "0F-1F"}
-_GAME_BLACK = {"1": "0-1", "0": "1-0", "=": "1/2-1/2", "½": "1/2-1/2", "+": "0F-1F", "-": "1F-0F"}
+# O `½` não é letra do TRF: entra porque arquivos gerados por outros programas
+# aparecem com ele no lugar do `=`, e recusar a linha inteira por causa de um
+# caractere seria pior do que aceitá-lo.
+_ALIASES = {"½": "="}
 
 
 def _decode_game(color: str, code: str) -> str:
-    """Resultado Albericus (perspectiva das brancas) a partir da célula do jogador."""
-    table = _GAME_BLACK if color.lower() == "b" else _GAME_WHITE
-    return table.get(code, "")
+    """Resultado Albericus (perspectiva das brancas) a partir da célula do jogador.
+
+    As letras vêm do registro de resultados (ARB-02), que é o mesmo que o
+    exportador usa: um código novo passa a ser lido e escrito de uma vez. Era um
+    par de dicionários escritos à mão, e o `W`/`D`/`L` — que o TRF já trazia —
+    voltava como "sem resultado".
+    """
+    letra = str(code or "").strip()
+    letra = _ALIASES.get(letra, letra)
+    return code_from_trf_letter(letra, is_white=color.lower() != "b")
 
 
 def _trf_bye_result(code: str) -> str:

@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from src.services.constants import AppError, FINAL_RESULTS, RESULT_POINTS, player_pairing_name
+from src.services.results_registry import is_played_result
 from src.services.federation_exporters.base import FederationExportFormat
 
 
@@ -294,7 +295,10 @@ class TRF16Exporter:
         if is_bye:
             summary["byes"] += 1
             return
-        if result in {"1-0", "0-1", "1/2-1/2"}:
+        # Resultado por decisao do arbitro conta como PARTIDA JOGADA (ARB-02):
+        # a mesa aconteceu, so nao e ratavel. Somar com o W.O. diria ao arbitro
+        # que houve uma ausencia que nao houve.
+        if is_played_result(result):
             summary["played"] += 1
         elif result in {"1F-0F", "0F-1F"}:
             summary["forfeits"] += 1

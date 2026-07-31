@@ -401,6 +401,12 @@ CREATE TABLE IF NOT EXISTS pairings (
     black_player_id INTEGER,
     result TEXT DEFAULT '',
     is_bye INTEGER NOT NULL DEFAULT 0,
+    -- Mesa adiada (ARB-02): partida que nao sera disputada agora e cuja
+    -- pendencia e ESPERADA. Sem a marca, uma mesa adiada e uma mesa esquecida
+    -- sao a mesma linha em branco no painel, e o arbitro nao tem como saber se
+    -- esta cobrando alguem ou aguardando o combinado.
+    postponed INTEGER NOT NULL DEFAULT 0,
+    postponed_note TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL,
     FOREIGN KEY (round_id) REFERENCES rounds(id) ON DELETE CASCADE,
     FOREIGN KEY (white_player_id) REFERENCES players(id) ON DELETE CASCADE,

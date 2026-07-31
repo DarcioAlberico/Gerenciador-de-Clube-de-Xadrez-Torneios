@@ -1246,6 +1246,55 @@ class UiLayoutSmokeTest(unittest.TestCase):
 
         self.assertEqual("", self.db.get_pairing(int(pairing["id"]))["result"])
 
+    def test_arbitration_panel_walkover_asks_before_saving(self) -> None:
+        """ARB-02: o W.O. e decisao, nao transcricao de placar.
+
+        O atalho fica a um dedo do que lanca o resultado normal, entao a
+        confirmacao e o que separa "declarei ausencia" de "errei a tecla".
+        """
+        for index in range(2):
+            self.db.create_player(
+                self.tournament_id,
+                name=f"Jogador {index + 1}",
+                rating=1800 - index * 10,
+                club="Clube",
+                category="ABS",
+            )
+        round_data = self.app.pairing_service.generate_next_round(self.tournament_id)
+        pairing = self.db.get_pairings_for_round(int(round_data["id"]))[0]
+
+        self.app.show_arbitration_panel()
+        self.app.update()
+
+        with mock.patch("src.ui.components.dialogs.confirm_dialog", return_value=False):
+            self.assertEqual("break", self.app._save_arbitration_panel_result("1F-0F"))
+        self.assertEqual("", self.db.get_pairing(int(pairing["id"]))["result"])
+
+        with mock.patch("src.ui.components.dialogs.confirm_dialog", return_value=True):
+            self.assertEqual("break", self.app._save_arbitration_panel_result("1F-0F"))
+        self.assertEqual("1F-0F", self.db.get_pairing(int(pairing["id"]))["result"])
+
+    def test_arbitration_panel_result_without_walkover_does_not_ask(self) -> None:
+        """O placar normal continua a um toque: confirmar cada mesa pararia a rodada."""
+        for index in range(2):
+            self.db.create_player(
+                self.tournament_id,
+                name=f"Jogador {index + 1}",
+                rating=1800 - index * 10,
+                club="Clube",
+                category="ABS",
+            )
+        round_data = self.app.pairing_service.generate_next_round(self.tournament_id)
+        pairing = self.db.get_pairings_for_round(int(round_data["id"]))[0]
+
+        self.app.show_arbitration_panel()
+        self.app.update()
+
+        with mock.patch("src.ui.components.dialogs.confirm_dialog") as pergunta:
+            self.app._save_arbitration_panel_result("1-0")
+        pergunta.assert_not_called()
+        self.assertEqual("1-0", self.db.get_pairing(int(pairing["id"]))["result"])
+
     def test_arbitration_issues_can_approve_qr_submission(self) -> None:
         self.db.create_player(self.tournament_id, name="Bruno", rating=1800, club="Clube", category="ABS")
         self.db.create_player(self.tournament_id, name="Carlos", rating=1700, club="Clube", category="ABS")

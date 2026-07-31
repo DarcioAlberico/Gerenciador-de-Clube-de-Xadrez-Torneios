@@ -437,14 +437,19 @@ class ReportSectionsMixin:
                 byes += 1
                 continue
             result = pairing.get("result")
-            if result == "1-0":
-                white_wins += 1
-            elif result == "0-1":
-                black_wins += 1
-            elif result == "1/2-1/2":
-                draws += 1
-            elif result in ("1F-0F", "0F-1F", "0F-0F"):
+            # Pelos PONTOS, e nao pelo codigo: desde a ARB-02 uma vitoria das
+            # brancas pode ser `1-0` ou `1U-0U` (decisao do arbitro), e as duas
+            # sao vitoria das brancas numa distribuicao de resultados.
+            if result in WALKOVER_RESULTS:
                 walkovers += 1
+            elif result in RESULT_POINTS:
+                brancas, pretas = RESULT_POINTS[result]
+                if brancas > pretas:
+                    white_wins += 1
+                elif pretas > brancas:
+                    black_wins += 1
+                else:
+                    draws += 1
 
         played = white_wins + draws + black_wins
 

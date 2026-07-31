@@ -2624,11 +2624,54 @@ class TournamentCoreMixin(_DatabaseInfra):
             return self.rows_to_dicts(rows)
 
     def update_pairing_result(self, pairing_id: int, result: str) -> None:
+        """Grava o resultado da mesa e encerra o adiamento (ARB-02).
+
+        Resultado lancado E a resolucao do adiamento: deixar a marca de pe
+        significaria a mesa aparecer como adiada com placar preenchido, que e
+        um estado que nao existe no salao.
+        """
         with self.connect() as connection:
             connection.execute(
-                "UPDATE pairings SET result = ? WHERE id = ?",
+                "UPDATE pairings SET result = ?, postponed = 0, postponed_note = '' "
+                "WHERE id = ?",
                 (result, pairing_id),
             )
+
+    def set_pairing_postponed(
+        self,
+        pairing_id: int,
+        postponed: bool,
+        note: str = "",
+    ) -> None:
+        """Marca/desmarca a mesa como adiada, com o combinado como nota."""
+        with self.connect() as connection:
+            connection.execute(
+                "UPDATE pairings SET postponed = ?, postponed_note = ? WHERE id = ?",
+                (1 if postponed else 0, str(note or "").strip() if postponed else "", pairing_id),
+            )
+
+    def list_postponed_pairings(self, round_id: int) -> list[dict[str, Any]]:
+        """Mesas adiadas da rodada, para o painel e para o fechamento."""
+        with self.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT
+                    p.*,
+                    white.name AS white_player_name,
+                    white.surname AS white_player_surname,
+                    white.given_name AS white_player_given_name,
+                    black.name AS black_player_name,
+                    black.surname AS black_player_surname,
+                    black.given_name AS black_player_given_name
+                FROM pairings p
+                LEFT JOIN players white ON white.id = p.white_player_id
+                LEFT JOIN players black ON black.id = p.black_player_id
+                WHERE p.round_id = ? AND p.postponed = 1
+                ORDER BY p.board_number ASC
+                """,
+                (round_id,),
+            ).fetchall()
+            return self.rows_to_dicts(rows)
 
     def swap_pairing_colors(self, pairing_id: int) -> None:
         with self.connect() as connection:

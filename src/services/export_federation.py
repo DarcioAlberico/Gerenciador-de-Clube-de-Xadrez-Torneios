@@ -541,21 +541,19 @@ class FederationReportsMixin:
 
     @staticmethod
     def _trf_player_result(result: str, *, is_white: bool, is_bye: bool) -> str:
+        """Letra TRF do lado pedido. `Z` para mesa sem resultado.
+
+        As letras saem do registro de resultados (ARB-02): era uma escada de
+        `if` que precisava crescer a cada codigo novo, e a `W`/`D`/`L` — partida
+        disputada e nao ratavel — teria passado despercebida em metade dos
+        lugares que perguntam a mesma coisa de outro jeito.
+        """
         if is_bye:
             return "U"
-        if result == "1-0":
-            return "1" if is_white else "0"
-        if result == "0-1":
-            return "0" if is_white else "1"
-        if result == "1/2-1/2":
-            return "="
-        if result == "1F-0F":
-            return "+" if is_white else "-"
-        if result == "0F-1F":
-            return "-" if is_white else "+"
-        if result == "0F-0F":
-            return "-"
-        return "Z"
+        letras = trf_letters(result)
+        if letras is None:
+            return "Z"
+        return letras[0] if is_white else letras[1]
 
     @staticmethod
     def _trf_tournament_line(code: str, value: Any) -> str:

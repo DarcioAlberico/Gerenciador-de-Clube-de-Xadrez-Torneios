@@ -159,6 +159,7 @@ list_pairing_snapshots
 list_payments
 list_players
 list_point_adjustments
+list_postponed_pairings
 list_prohibited_pairings
 list_prohibited_team_pairings
 list_referees
@@ -227,6 +228,7 @@ set_learning_level_active
 set_member_active_class
 set_member_status
 set_membership_plan_active
+set_pairing_postponed
 set_player_active
 set_player_scheveningen_group
 set_player_status
