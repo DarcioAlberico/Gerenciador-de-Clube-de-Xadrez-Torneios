@@ -143,8 +143,18 @@ class TournamentPlayersController:
         self.db.update_player(player_id, **form.update_payload(atual))
         logger.info("Jogador atualizado: %s", player_id)
 
-    def set_status(self, player_id: int, status: str) -> None:
-        self.db.set_player_status(player_id, status)
+    def set_status(self, player_id: int, status: str, reason: str = "") -> None:
+        """Muda a participacao pelo SERVICO (ARB-05).
+
+        Era `db.set_player_status` cru: o campo guarda o estado de agora e apaga
+        o anterior, entao "saiu na rodada 3, voltou na 5" nao ficava em lugar
+        nenhum. O servico grava o evento junto, com a rodada de vigencia.
+        """
+        jogador = self.db.get_player(int(player_id))
+        tournament_id = int((jogador or {}).get("tournament_id") or 0)
+        self.pairing_service.set_player_participation(
+            tournament_id, int(player_id), status, reason
+        )
         logger.info("Status do jogador %s alterado para %s", player_id, status)
 
     def set_scheveningen_group(self, player_id: int, group: str) -> None:

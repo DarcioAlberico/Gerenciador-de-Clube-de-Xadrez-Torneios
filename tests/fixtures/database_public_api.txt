@@ -3,6 +3,8 @@
 # este conjunto com a interface atual. Se a refatoracao perder um metodo,
 # o teste falha. Para atualizar intencionalmente, regenere via o snippet
 # em test_database.py (TestDatabasePublicInterface docstring).
+add_incident
+add_player_status_event
 add_player_to_team
 add_point_adjustment
 add_prohibited_pairing
@@ -61,6 +63,7 @@ create_training_list
 create_training_session
 delete_certificate_issuances
 delete_financial_transaction
+delete_incident
 delete_member_presence
 delete_member_title
 delete_player
@@ -140,6 +143,7 @@ list_exercises
 list_financial_transactions
 list_guardian_members
 list_guardians
+list_incidents
 list_inventory_items
 list_inventory_loans
 list_inventory_maintenance
@@ -157,6 +161,7 @@ list_members_without_guardians
 list_membership_plans
 list_pairing_snapshots
 list_payments
+list_player_status_events
 list_players
 list_point_adjustments
 list_postponed_pairings

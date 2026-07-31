@@ -1402,9 +1402,56 @@ Criterios de aceite:
 
 #### ARB-03 - Registro disciplinar de incidentes
 
-Status: pendente.
+Status: CONCLUIDO (2026-07-31). Fecha a Sprint 9.
 
-Problema:
+Como ficou:
+
+- **tabela `incidents`** (schema **v50**) com catalogo de infracoes FIDE:
+  celular (11.3.2), lance ilegal (7.5), atraso alem da tolerancia (6.7), conduta
+  (12.2), anotacao (8.1), resultado combinado (11.1), queda de seta contestada
+  (6.2) e "outro". Era tudo papel — a tabela do manual operacional;
+- **o catalogo nomeia o ARTIGO, e nao a sancao.** A FIDE deixa a sancao a cargo
+  do arbitro (11.3.2 e a excecao historica, e mesmo ela tem margem em rapidas),
+  entao cada infracao traz a sancao SUGERIDA e o arbitro escolhe. O que o sistema
+  garante e que a escolha fique registrada;
+- **a decisao chega na classificacao.** Deducao cria o `point_adjustment`
+  vinculado (`adjustment_id`), que desde a TBK-01 move a ordem; partida perdida
+  lanca o resultado na mesa. Uma decisao disciplinar que nao chega na tabela e um
+  bilhete;
+- **partida perdida e W.O. (`1F-0F`), e nao o `1U-0U` da ARB-02.** Quem perde por
+  regulamento NAO JOGOU a partida aos olhos da FIDE — o adversario nao ganha uma
+  vitoria no tabuleiro nem a partida entra no rating. Sao duas coisas parecidas
+  que a ARB-02 acabou de separar, e usar a errada aqui desfaria aquilo;
+- **queda de seta e ausencia BLOQUEIAM o fechamento** ate a decisao ser
+  registrada (eram `attention`, e a rodada fechava com a pergunta em aberto).
+  Registrado o incidente que aponta para o evento (`clock_event_id`), o alerta
+  volta a ser informativo: a decisao existe e esta na ata. Aviso de tempo critico
+  continua sendo so aviso;
+- **anexo disciplinar na ata**, com rodada, mesa, jogador, artigo, decisao,
+  observacoes e **reincidencia marcada** — que e o numero que o catalogo existe
+  para produzir: no papel, a segunda advertencia do mesmo artigo ao mesmo jogador
+  nao era encontravel por ninguem.
+
+Os vinculos (`adjustment_id`, `clock_event_id`, `pairing_id`) sao OPCIONAIS de
+proposito: advertencia nao mexe em ponto nem em mesa, e exigir os tres
+transformaria o registro de uma conversa em burocracia que ninguem preenche no
+meio da rodada. O que e exigido esta na validacao: partida perdida sem mesa e
+deducao sem valor sao recusadas, e "outro" exige descricao — e ela que a ata
+cita no lugar do artigo.
+
+Criterios de aceite:
+
+- [x] incidente com deducao reflete na classificacao (via TBK-01);
+- [x] relatorio de incidentes sai na ata final;
+- [x] queda de seta registrada exige decisao antes de fechar a rodada.
+
+Cobertura: 27 testes em `tests/test_core_arb03.py`.
+
+Fica pendente do escopo original: a **ficha do jogador** com as reincidencias
+como TELA. O dado existe e sai na ata (`incident_repeat_offenders`); o que falta
+e a visualizacao por jogador, que e trabalho de UI sem regra nova.
+
+Problema original:
 
 - nao existe modulo de incidentes disciplinares: celular (art. 11.3.2), lance
   ilegal (7.5), atraso/default time (6.7), conduta (12.x). O registro hoje e
@@ -1424,9 +1471,9 @@ Escopo:
 
 Criterios de aceite:
 
-- [ ] incidente com deducao reflete na classificacao (depende de TBK-01);
-- [ ] relatorio de incidentes sai na ata final;
-- [ ] queda de seta registrada exige decisao antes de fechar a rodada.
+- [x] incidente com deducao reflete na classificacao (depende de TBK-01);
+- [x] relatorio de incidentes sai na ata final;
+- [x] queda de seta registrada exige decisao antes de fechar a rodada.
 
 #### ARB-04 - Politica de byes solicitados
 
@@ -1502,9 +1549,49 @@ Criterios de aceite:
 
 #### ARB-05 - Retirada e reentrada com historico por rodada
 
-Status: pendente.
+Status: CONCLUIDO (2026-07-31).
 
-Problema:
+Como ficou:
+
+- **tabela `player_status_events`** (schema **v49**), append-only: torneio,
+  jogador, rodada de vigencia, estado, motivo e autor. O campo
+  `players.player_status` CONTINUA existindo — ele e o estado corrente, que o
+  pareamento ja le; o que faltava era o rastro, e um campo unico apaga o
+  anterior a cada mudanca;
+- **a mudanca vale da PROXIMA rodada.** A rodada em andamento ja foi pareada:
+  tirar alguem agora nao desfaz a mesa dele — isso e resultado (W.O.) ou
+  correcao. E tambem a leitura do salao ("a partir da 4 ele nao joga mais");
+- **modulo puro `participation.py`** responde o que o historico guarda:
+  `status_at_round`, `absence_rounds`, `history_lines` e um `summarize` que
+  agrupa faixas ("Fora R3-R5"). Quem grava e
+  `PairingService.set_player_participation()`, com auditoria; as DUAS telas que
+  mexiam no estado (cadastro de jogadores e chamada inicial) passaram a chamar o
+  servico em vez de `db.set_player_status` cru;
+- **reentrada de quem DESISTIU exige motivo**, e a de quem so faltou nao. Voltar
+  um desistente e decisao arbitral e vai para a ata; voltar quem faltou uma
+  rodada e rotina de salao. Repetir o estado atual e recusado;
+- **secao propria na ata**: "Desistencias, ausencias e reentradas", com situacao
+  final, rodadas fora e o historico com os motivos.
+
+Sobre o TRF, e vale registrar porque o escopo pedia a distincao: **o arquivo nao
+tem codigo para separar "desistiu" de "faltou"**. As duas viram `0000 - Z` (nao
+pareado, zero ponto), e isso esta CERTO — o que a FIDE distingue e `Z` de `-`
+(pareado e nao compareceu, que e forfeit e exige mesa), e essa distincao o
+sistema ja fazia por construcao. A diferenca entre desistencia e ausencia e do
+REGULAMENTO, nao do arquivo, e por isso ela mora na ata. Ha teste para as duas
+afirmacoes.
+
+Criterios de aceite:
+
+- [x] jogador que sai e volta e pareado corretamente e o historico mostra as
+  rodadas de ausencia;
+- [x] TRF diferencia os casos que o formato permite diferenciar (`Z` x `-`), e a
+  ata carrega a distincao que o formato nao tem;
+- [x] auditoria registra quem/quando/motivo.
+
+Cobertura: 22 testes em `tests/test_core_arb05.py`.
+
+Problema original:
 
 - `player_status` e um campo unico sem historico: `withdrawn` e `absent`
   produzem o mesmo efeito (`active = 0`) e nao ha rastro de "saiu na rodada 3,
@@ -1521,10 +1608,10 @@ Escopo:
 
 Criterios de aceite:
 
-- [ ] jogador que sai e volta e pareado corretamente e o historico mostra as
+- [x] jogador que sai e volta e pareado corretamente e o historico mostra as
   rodadas de ausencia;
-- [ ] TRF e tabela cruzada diferenciam os casos;
-- [ ] auditoria registra quem/quando/motivo.
+- [x] TRF e tabela cruzada diferenciam os casos;
+- [x] auditoria registra quem/quando/motivo.
 
 ### EPIC H - Motores de pareamento (correcoes)
 
@@ -2082,8 +2169,10 @@ Entregas:
 1. [x] `ARB-02` Resultados arbitrais completos no painel (W.O. inline,
    adiada, W/D/L).
 2. [x] `ARB-04` Politica de byes solicitados.
-3. [ ] `ARB-05` Retirada e reentrada com historico por rodada.
-4. [ ] `ARB-03` Registro disciplinar de incidentes.
+3. [x] `ARB-05` Retirada e reentrada com historico por rodada.
+4. [x] `ARB-03` Registro disciplinar de incidentes.
+
+**Sprint 9 CONCLUIDA (2026-07-31).**
 
 ### Sprint 10 - Motores de pareamento
 

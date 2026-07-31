@@ -204,8 +204,13 @@ class InitialCallSection:
                 return
             if not player_ids:
                 raise AppError(t("initial_call.select_first"))
+            # Pelo SERVICO (ARB-05): a chamada inicial e onde a ausencia da
+            # rodada 1 nasce, e ela precisa entrar no historico como qualquer
+            # outra — senao a ata nao sabe quem faltou desde o comeco.
             for player_id in player_ids:
-                self.host.db.set_player_status(player_id, status)
+                self.host.pairing_service.set_player_participation(
+                    int(self.host.current_tournament_id), int(player_id), status
+                )
             self.reload()
         except Exception as exc:
             self.host._show_error(exc)

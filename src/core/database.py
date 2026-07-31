@@ -388,7 +388,7 @@ class Database(
     RefereesMixin,
     UiPrefsMixin,
 ):
-    SCHEMA_VERSION = 48
+    SCHEMA_VERSION = 50
 
     def __init__(
         self,

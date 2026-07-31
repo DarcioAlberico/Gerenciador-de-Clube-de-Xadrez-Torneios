@@ -8,6 +8,10 @@ from typing import Any, Mapping
 from src.services.constants import *
 from src.services.fide_norms import build_norm_report
 from src.services.fide_rating import build_fide_report_rows
+from src.services.pairing.incidents import (
+    decision_label as incident_decision_label,
+    infraction_label as incident_infraction_label,
+)
 from src.services.pairing.point_adjustments import format_signed
 from src.services.prizes import PRIZE_KINDS, PRIZE_POLICIES, allocate_prizes
 from src.services.export_federation import FederationReportsMixin
@@ -900,6 +904,12 @@ class ReportSectionsMixin:
         corrections = self._closed_round_corrections_section(tournament_id)
         if corrections:
             sections.append(corrections)
+        participation = self._participation_section(tournament_id)
+        if participation:
+            sections.append(participation)
+        incidents = self._incidents_section(tournament_id)
+        if incidents:
+            sections.append(incidents)
         if tournament.get("competition_type") != "team":
             sections.append(self._category_winners_section(tournament_id))
         # Premiacao e taxas sao opcionais: AppError quando nao se aplicam.
@@ -915,6 +925,75 @@ class ReportSectionsMixin:
             ("Árbitros e assinaturas", ["Nome", "Função", "FIDE ID", "Categoria", "Assinatura"], arbiter_rows)
         )
         return sections
+
+    def _incidents_section(
+        self, tournament_id: int
+    ) -> tuple[str, list[str], list[list[Any]]] | None:
+        """Anexo disciplinar da ata (ARB-03). ``None`` quando nao houve incidente.
+
+        A reincidencia sai marcada porque e ela que o catalogo existe para
+        produzir: no papel, a segunda advertencia do mesmo artigo ao mesmo
+        jogador nao era encontravel por ninguem.
+        """
+        incidentes = self.pairing_service.incidents(tournament_id)
+        if not incidentes:
+            return None
+        reincidentes = self.pairing_service.incident_repeat_offenders(tournament_id)
+        linhas = []
+        for item in incidentes:
+            player_id = int(item.get("player_id") or 0)
+            total = reincidentes.get(player_id, 0)
+            linhas.append(
+                [
+                    int(item.get("round_number") or 0) or "-",
+                    int(item.get("board_number") or 0) or "-",
+                    player_full_name(
+                        {
+                            "name": item.get("player_name"),
+                            "surname": item.get("player_surname"),
+                            "given_name": item.get("player_given_name"),
+                        }
+                    ),
+                    incident_infraction_label(str(item.get("infraction") or "")),
+                    incident_decision_label(str(item.get("decision") or "")),
+                    f"{total}ª ocorrência" if total > 1 else "-",
+                    str(item.get("notes") or ""),
+                ]
+            )
+        return (
+            "Incidentes disciplinares",
+            ["Rodada", "Mesa", "Jogador", "Infração", "Decisão", "Reincidência", "Observações"],
+            linhas,
+        )
+
+    def _participation_section(
+        self, tournament_id: int
+    ) -> tuple[str, list[str], list[list[Any]]] | None:
+        """Desistencias, ausencias e reentradas, por rodada (ARB-05).
+
+        O TRF nao tem codigo para separar "desistiu" de "faltou" — as duas viram
+        `0000 - Z` (nao pareado, zero ponto), e isso esta certo: o que a FIDE
+        distingue e `Z` de `-` (pareado e nao compareceu, que exige mesa). A
+        diferenca entre desistencia e ausencia e do REGULAMENTO, e por isso ela
+        mora aqui, no documento que o arbitro assina.
+        """
+        resumo = self.pairing_service.participation_summary(tournament_id)
+        if not resumo:
+            return None
+        linhas = [
+            [
+                item["player_name"],
+                PLAYER_STATUSES.get(item["final_status"], item["final_status"]),
+                ", ".join(f"R{rodada}" for rodada in item["absence_rounds"]) or "-",
+                item["summary"],
+            ]
+            for item in resumo
+        ]
+        return (
+            "Desistências, ausências e reentradas",
+            ["Jogador", "Situação final", "Rodadas fora", "Histórico"],
+            linhas,
+        )
 
     def _closed_round_corrections_section(
         self, tournament_id: int
