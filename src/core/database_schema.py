@@ -374,6 +374,10 @@ CREATE TABLE IF NOT EXISTS players (
     starting_points REAL NOT NULL DEFAULT 0.0,
     k_factor INTEGER,
     scheveningen_group TEXT NOT NULL DEFAULT '',
+    -- Numero dentro do grupo (PAR-03). Com o grupo, e a ESCALA do Scheveningen:
+    -- fixa desde a primeira rodada, para que uma desistencia no meio nao
+    -- desloque os confrontos que ainda faltam.
+    scheveningen_number INTEGER NOT NULL DEFAULT 0,
     active INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL,
     FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
@@ -566,6 +570,9 @@ CREATE TABLE IF NOT EXISTS tournament_settings (
     -- Returno do rodizio (PAR-01): o calendario roda duas vezes, com as cores
     -- invertidas na volta. E o formato padrao de torneio fechado e de norma.
     round_robin_double INTEGER NOT NULL DEFAULT 0,
+    -- Disputa de 3o lugar no mata-mata (PAR-03): os dois perdedores da semifinal
+    -- jogam junto com a final, na mesma rodada.
+    knockout_third_place INTEGER NOT NULL DEFAULT 0,
     pairing_system TEXT NOT NULL DEFAULT 'gacrux_swiss',
     tiebreak_engine TEXT NOT NULL DEFAULT 'gacrux',
     tiebreak_strict INTEGER NOT NULL DEFAULT 0,
@@ -1116,6 +1123,24 @@ CREATE TABLE IF NOT EXISTS requested_team_byes (
 -- confrontos futuros de todos os outros. `number` e o numero da tabela de
 -- Berger (FIDE C.05, Anexo 1); campo impar ganha um numero fantasma, que e o
 -- bye e nao mora aqui.
+-- Avanco de fase no mata-mata quando a MESA nao decide (PAR-03): empate, dupla
+-- ausencia ou mesa sem resultado. Antes, qualquer um desses promovia o melhor
+-- numero inicial em silencio; agora o arbitro registra QUEM passa e por que
+-- criterio (mini-match, rapidas, blitz, armagedom, regulamento, decisao).
+CREATE TABLE IF NOT EXISTS knockout_advancements (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tournament_id INTEGER NOT NULL,
+    pairing_id INTEGER NOT NULL,
+    player_id INTEGER NOT NULL,
+    criterion TEXT NOT NULL,
+    notes TEXT NOT NULL DEFAULT '',
+    actor TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    UNIQUE (tournament_id, pairing_id),
+    FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
+    FOREIGN KEY (pairing_id) REFERENCES pairings(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS round_robin_numbers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     tournament_id INTEGER NOT NULL,

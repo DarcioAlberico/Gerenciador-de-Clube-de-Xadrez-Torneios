@@ -40,6 +40,7 @@ from src.services.pairing.corrections import (
 from .exports import RoundExportActions
 from .initial_call import InitialCallSection
 from .projector import ProjectorWindow
+from .knockout import KnockoutActions
 from .qr import QrResultActions
 from .swaps import BoardSwapActions
 from .state import (
@@ -77,6 +78,11 @@ class PairingResultsMixin:
             None,
             ("Trocar cores da mesa", self._swap_selected_colors),
             ("Trocar jogador da mesa", self._open_player_swap_dialog),
+            None,
+            # Mata-mata (PAR-03): a mesa empatada precisa de decisao registrada
+            # para a proxima fase existir, e a chave e onde ela aparece depois.
+            ("Registrar avanco (mata-mata)", self._open_knockout_advancement_dialog),
+            ("Chave do mata-mata", self._show_knockout_bracket),
             None,
             ("QR da mesa selecionada", self._show_selected_pairing_qr_link),
             ("Submissoes via QR", self._open_qr_submissions_queue),
@@ -937,6 +943,17 @@ class PairingResultsMixin:
 
     def _open_team_player_swap_dialog(self) -> None:
         self._board_swaps().open_team_player_swap()
+
+    # ---- Mata-mata: avanco registrado e chave (PAR-03) ---------------------- #
+
+    def _knockout_actions(self) -> KnockoutActions:
+        return KnockoutActions(self)
+
+    def _open_knockout_advancement_dialog(self) -> None:
+        self._knockout_actions().open_advancement()
+
+    def _show_knockout_bracket(self) -> None:
+        self._knockout_actions().show_bracket()
 
     def _close_current_round(self) -> None:
         try:

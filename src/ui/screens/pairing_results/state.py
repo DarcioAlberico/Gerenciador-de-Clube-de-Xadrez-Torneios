@@ -210,6 +210,39 @@ def _alertas(item: dict[str, Any]) -> str:
     return f" [{'; '.join(alertas)}]" if alertas else ""
 
 
+def format_knockout_bracket(bracket: dict[str, Any]) -> str:
+    """A chave do mata-mata em texto, com o MOTIVO de cada avanço (PAR-03).
+
+    O motivo é a razão de a chave existir: antes, quem passava depois de um
+    empate era o melhor número inicial, e isso não estava escrito em lugar
+    nenhum. Uma mesa sem decisão aparece como pendência, e não some.
+    """
+    linhas = [f"Chave: {bracket.get('tournament_name', '')}".rstrip(), ""]
+    fases = list(bracket.get("rounds", []))
+    if not fases:
+        return "\n".join(linhas + ["Nenhuma fase gerada."])
+    for fase in fases:
+        linhas.append(f"Fase {fase['round_number']}")
+        for mesa in fase.get("boards", []):
+            confronto = f"  Mesa {mesa['board_number']}: {mesa['white_name']}"
+            if mesa.get("black_name"):
+                confronto += f" x {mesa['black_name']}"
+            if mesa.get("result"):
+                confronto += f" ({mesa['result']})"
+            linhas.append(confronto)
+            if mesa.get("pending"):
+                linhas.append("    -> sem vencedor: registre quem avanca e por que")
+                continue
+            motivo = f"    -> avanca {mesa['advanced_name']} ({mesa['criterion_label']})"
+            if mesa.get("notes"):
+                motivo += f": {mesa['notes']}"
+            linhas.append(motivo)
+        linhas.append("")
+    if bracket.get("pending"):
+        linhas.append(f"Mesas sem decisao registrada: {bracket['pending']}.")
+    return "\n".join(linhas).rstrip()
+
+
 # ---------------------------------------------------------------------------
 # Modo Projetor: paginação
 #

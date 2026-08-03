@@ -25,6 +25,11 @@ from __future__ import annotations
 from typing import Any, Mapping, Sequence
 
 from src.services.constants import AppError
+from src.services.pairing.fixed_calendar import (
+    late_entry_warning as _late_entry_warning,
+    rounds_mismatch_warning as _rounds_mismatch_warning,
+    withdrawn_on_board_warning as _withdrawn_on_board_warning,
+)
 from src.services.pairing.gacrux.berger import bergertables
 
 # Fração de partidas que o desistente precisa ter jogado para os resultados dele
@@ -131,31 +136,16 @@ def missing_from_calendar(
 
 
 def late_entry_warning(names: Sequence[str]) -> str:
-    quem = ", ".join(names)
-    return (
-        f"Fora do calendario do rodizio: {quem}. Os numeros foram sorteados quando "
-        "a primeira rodada foi gerada e o calendario e fixo — incluir alguem agora "
-        "mudaria os confrontos de todo mundo. Quem entra depois joga o proximo "
-        "torneio, ou o calendario e refeito antes da rodada 1."
-    )
+    return _late_entry_warning(names, formato="rodizio")
 
 
 def withdrawn_on_board_warning(names: Sequence[str]) -> str:
-    quem = ", ".join(names)
-    return (
-        f"Mesa(s) com jogador fora do torneio: {quem}. No rodizio o calendario nao "
-        "se recalcula, entao a mesa e gerada e o resultado sai por W.O. (ausencia). "
-        "Lance o W.O. na mesa para fechar a rodada."
-    )
+    return _withdrawn_on_board_warning(names, formato="rodizio")
 
 
 def rounds_mismatch_warning(configured: int, calendar: int, *, double: bool) -> str:
     turno = "com returno" if double else "de turno unico"
-    return (
-        f"O rodizio {turno} deste campo tem {calendar} rodada(s), e o torneio esta "
-        f"configurado com {configured}. Ajuste as rodadas do torneio para o "
-        "calendario fechar."
-    )
+    return _rounds_mismatch_warning(configured, calendar, formato=f"rodizio {turno}")
 
 
 def annulment_candidates(

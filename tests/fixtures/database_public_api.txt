@@ -147,6 +147,7 @@ list_incidents
 list_inventory_items
 list_inventory_loans
 list_inventory_maintenance
+list_knockout_advancements
 list_learning_levels
 list_member_classes
 list_member_guardians
@@ -221,9 +222,11 @@ save_attendance
 save_club
 save_column_layout
 save_fide_rating_report
+save_knockout_advancement
 save_report_layout
 save_round_robin_numbers
 save_round_schedule
+save_scheveningen_scale
 save_tournament_settings
 search_official_players
 set_chess_results_url
