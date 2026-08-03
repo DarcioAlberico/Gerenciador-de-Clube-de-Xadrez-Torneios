@@ -50,6 +50,36 @@ def color_hard_violation(player_id: int, color: str, histories: dict[int, list[s
     return 0 if is_color_valid_fide(player_id, color, histories) else 1
 
 
+def topscorer_ids(
+    standings: dict[int, dict[str, Any]],
+    *,
+    round_number: int,
+    rounds_total: int,
+) -> set[int]:
+    """Quem e "topscorer" na rodada a ser pareada (FIDE C.04.3, A.7).
+
+    Topscorer e quem tem MAIS de 50% do maximo possivel — e o conceito so existe
+    na ULTIMA rodada do torneio. Ele importa por causa do C.3, o unico criterio
+    de cor ABSOLUTO: dois NAO-topscorers com a mesma preferencia absoluta de cor
+    nao podem se enfrentar. Dois topscorers podem — e e exatamente o que a ultima
+    rodada costuma exigir, quando os dois lideres precisam se enfrentar e ambos
+    devem a mesma cor.
+
+    Sem isso, o motor proprio tratava a cor como absoluta para todo mundo e podia
+    recusar (ou piorar) o pareamento que decide o torneio. O motor FIDE (Gacrux),
+    que hoje e o padrao, ja aplica o C.3 corretamente.
+    """
+    if rounds_total <= 0 or int(round_number) != int(rounds_total):
+        return set()
+    # Na rodada R cada jogador disputou R-1 partidas: o maximo possivel e R-1.
+    limite = (int(round_number) - 1) / 2.0
+    return {
+        int(player_id)
+        for player_id, item in standings.items()
+        if float(item.get("points", 0.0) or 0.0) > limite
+    }
+
+
 def color_preference(player_id: int, histories: dict[int, list[str]]) -> ColorPreference:
     """Perfil de preferencia de cor no estilo BBP/FIDE Dutch.
 
@@ -303,6 +333,7 @@ def pair_penalty(
     repeat_pairing_penalty: int,
     score_group_float_penalty: int,
     score_diff_penalty: int,
+    topscorers: frozenset[int] | set[int] = frozenset(),
 ) -> float:
     player_id = player["id"]
     opponent_id = opponent["id"]
@@ -341,6 +372,11 @@ def pair_penalty(
         color_penalty = assignment_color_penalty(player_id, "B", histories)
         color_penalty += assignment_color_penalty(opponent_id, "W", histories)
 
+    # C.3 (FIDE C.04.3) e criterio ABSOLUTO, e nao vale entre dois topscorers
+    # (A.7) — quem trata essa excecao e a busca estrita (`search_dutch_pairing`),
+    # que decide o que PODE ser pareado. Aqui e custo de QUALIDADE (C11): a
+    # violacao de cor continua cara para todos, topscorer ou nao, senao o motor
+    # deixaria de EVITA-LA quando havia alternativa.
     return penalty + hard_violations * COLOR_HARD_VIOLATION_PENALTY + color_penalty
 
 
@@ -354,7 +390,14 @@ def team_pair_penalty(
     repeat_pairing_penalty: int,
     score_group_float_penalty: int,
     score_diff_penalty: int,
+    float_histories: dict[int, list[str]] | None = None,
 ) -> float:
+    """Custo de um confronto por equipes.
+
+    `float_histories` traz a penalidade de FLOAT REPETIDO, que o individual ja
+    tinha e aqui faltava (PAR-04): sem ela, a mesma equipe podia descer de grupo
+    rodada apos rodada sem que o motor preferisse outra.
+    """
     team_id = int(team["id"])
     opponent_id = int(opponent["id"])
     team_score = float(standings.get(team_id, {}).get("match_points", 0.0) or 0.0)
@@ -363,6 +406,13 @@ def team_pair_penalty(
     penalty = score_diff * score_diff_penalty
     if score_diff:
         penalty += score_group_float_penalty
+        if float_histories is not None:
+            if team_score < opponent_score:
+                penalty += float_penalty(team_id, "up", float_histories)
+                penalty += float_penalty(opponent_id, "down", float_histories)
+            else:
+                penalty += float_penalty(team_id, "down", float_histories)
+                penalty += float_penalty(opponent_id, "up", float_histories)
 
     rank_distance = abs(rank_by_team_id.get(team_id, 0) - rank_by_team_id.get(opponent_id, 0))
     penalty += rank_distance * (4 if not score_diff else 1)
@@ -383,6 +433,7 @@ def greedy_player_pairs(
     repeat_pairing_penalty: int,
     score_group_float_penalty: int,
     score_diff_penalty: int,
+    topscorers: frozenset[int] | set[int] = frozenset(),
 ) -> list[tuple[dict[str, Any], dict[str, Any]]]:
     pending = players[:]
     pairs = []
@@ -401,6 +452,7 @@ def greedy_player_pairs(
                 repeat_pairing_penalty=repeat_pairing_penalty,
                 score_group_float_penalty=score_group_float_penalty,
                 score_diff_penalty=score_diff_penalty,
+                topscorers=topscorers,
             ),
         )
         pending.remove(opponent)
@@ -419,6 +471,7 @@ def optimal_player_pairs(
     repeat_pairing_penalty: int,
     score_group_float_penalty: int,
     score_diff_penalty: int,
+    topscorers: frozenset[int] | set[int] = frozenset(),
 ) -> list[tuple[dict[str, Any], dict[str, Any]]]:
     player_by_id = {int(player["id"]): player for player in players}
     penalty_cache: dict[tuple[int, int], float] = {}
@@ -437,6 +490,7 @@ def optimal_player_pairs(
                 repeat_pairing_penalty=repeat_pairing_penalty,
                 score_group_float_penalty=score_group_float_penalty,
                 score_diff_penalty=score_diff_penalty,
+                topscorers=topscorers,
             )
         return penalty_cache[key]
 
@@ -484,6 +538,7 @@ def optimal_player_pairs(
             repeat_pairing_penalty=repeat_pairing_penalty,
             score_group_float_penalty=score_group_float_penalty,
             score_diff_penalty=score_diff_penalty,
+            topscorers=topscorers,
         )
     return [(player_by_id[player_id], player_by_id[opponent_id]) for player_id, opponent_id in best_pairs]
 
@@ -497,6 +552,7 @@ def greedy_team_pairs(
     repeat_pairing_penalty: int,
     score_group_float_penalty: int,
     score_diff_penalty: int,
+    float_histories: dict[int, list[str]] | None = None,
 ) -> list[tuple[dict[str, Any], dict[str, Any]]]:
     pending = teams[:]
     pairs = []
@@ -513,6 +569,7 @@ def greedy_team_pairs(
                 repeat_pairing_penalty=repeat_pairing_penalty,
                 score_group_float_penalty=score_group_float_penalty,
                 score_diff_penalty=score_diff_penalty,
+                float_histories=float_histories,
             ),
         )
         pending.remove(opponent)
@@ -529,6 +586,7 @@ def optimal_team_pairs(
     repeat_pairing_penalty: int,
     score_group_float_penalty: int,
     score_diff_penalty: int,
+    float_histories: dict[int, list[str]] | None = None,
 ) -> list[tuple[dict[str, Any], dict[str, Any]]]:
     team_by_id = {int(team["id"]): team for team in teams}
     penalty_cache: dict[tuple[int, int], float] = {}
@@ -545,6 +603,7 @@ def optimal_team_pairs(
                 repeat_pairing_penalty=repeat_pairing_penalty,
                 score_group_float_penalty=score_group_float_penalty,
                 score_diff_penalty=score_diff_penalty,
+                float_histories=float_histories,
             )
         return penalty_cache[key]
 
@@ -588,5 +647,6 @@ def optimal_team_pairs(
             repeat_pairing_penalty=repeat_pairing_penalty,
             score_group_float_penalty=score_group_float_penalty,
             score_diff_penalty=score_diff_penalty,
+            float_histories=float_histories,
         )
     return [(team_by_id[team_id], team_by_id[opponent_id]) for team_id, opponent_id in best_pairs]

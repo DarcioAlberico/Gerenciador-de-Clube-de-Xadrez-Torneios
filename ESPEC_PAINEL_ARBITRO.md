@@ -1800,8 +1800,9 @@ que o regulamento talvez nao autorize.
 
 #### PAR-04 - Dividas tecnicas do nucleo de pareamento
 
-Status: PARCIAL (2026-07-30) — os quatro itens pontuais entregues; resta o
-topscorers (C.3), que e feature de motor e nao conserto.
+Status: FEITO (2026-08-03) — os quatro itens pontuais em 2026-07-30; os tres de
+motor (topscorers C.3, flutuacao em jogo nao disputado e float repetido por
+equipes) em 2026-08-03.
 
 Como ficou (parte pontual):
 
@@ -1867,13 +1868,37 @@ Escopo e criterios de aceite:
 - [x] fechamento de equipes reporta todos os confrontos completos mesmo com
   pendencia anterior;
 - [x] resultado invalido em equipes vira `AppError` legivel;
-- [ ] topscorers (C.3) respeitado nas rodadas finais do motor proprio, com
-  teste — **fica para o PAR-04 completo**: e regra de motor, nao conserto
-  pontual, e o motor proprio deixou de ser o padrao de pareamento no PR #66
-  (hoje quem pareia e o Gacrux, que ja aplica C.3). Junto com ele ficam os
-  outros dois itens de motor: `float_histories` contando W.O. como float
-  enquanto cor e repeticao o excluem, e `team_pair_penalty` sem penalizar float
-  repetido no Suico por equipes.
+- [x] topscorers (C.3) respeitado nas rodadas finais do motor proprio, com
+  teste.
+
+Como ficou (parte de motor, 2026-08-03):
+
+- **C.3 com topscorers**: `topscorer_ids` implementa a A.7 — o conceito so existe
+  na ULTIMA rodada, e topscorer e quem tem MAIS de 50% do que ja foi disputado
+  (na rodada R, mais de `(R-1)/2`). A excecao entra onde o C.3 de fato mora: na
+  BUSCA ESTRITA (`search_dutch_pairing`), que decide o que PODE ser pareado.
+  Dois topscorers com a mesma preferencia absoluta de cor deixam de ser um par
+  proibido — que e o que a rodada decisiva costuma exigir.
+  **O que NAO mudou, de proposito**: o custo de qualidade. A violacao de cor
+  continua cara no `pair_penalty` para todos, topscorer ou nao; o C11 manda
+  MINIMIZAR violacoes, e zerar o custo faria o motor parar de evita-las quando
+  havia alternativa. A primeira versao zerava, e a fixture grande do BBP
+  (`issue_7`) acusou na hora — pareamento legal, porem pior;
+- **flutuacao em jogo nao disputado**: `float_histories` dava flutuacao normal
+  aos DOIS lados de um W.O., enquanto cor e nao-repeticao ja o excluiam — o mesmo
+  jogo contava de tres jeitos. A regra passou a ser a do motor FIDE
+  (`compute_flt` do Gacrux, ramo `dutch`): compara pontuacao so quando a partida
+  foi JOGADA; quem pontuou sem jogar (W.O. a favor, bye que vale ponto) conta
+  como DOWNFLOAT; quem perdeu por W.O. (ou levou bye de zero ponto) nao flutua;
+- **float repetido por equipes**: `team_pair_penalty` ganhou o mesmo
+  `float_penalty` do individual, alimentado por `team_float_histories` (novo,
+  puro) — os match points de cada confronto ja estavam gravados. Sem isso a mesma
+  equipe podia descer de grupo rodada apos rodada sem o motor preferir outra.
+
+Nota de escopo: os tres valem para o MOTOR PROPRIO, que desde o PR #66 nao e mais
+o padrao de pareamento (quem pareia e o Gacrux, que ja aplica todas as tres). Sao
+consertos do caminho legado — e e por isso que a paridade com o motor homologado
+e o criterio usado em cada um deles.
 
 Cobertura da parte pontual: 18 testes em `tests/test_core_par04.py` — Berger de
 equipes (cada par uma vez, bye rotativo, cores alternando, calendario cheio),
@@ -2281,7 +2306,9 @@ Entregas:
 1. [x] `PAR-02` Aceleracao e entrada tardia no caminho Gacrux.
 2. [x] `PAR-01` Round-robin com tabela persistida e returno.
 3. [x] `PAR-03` Knockout e Scheveningen maduros.
-4. [ ] `PAR-04` Demais dividas tecnicas do nucleo.
+4. [x] `PAR-04` Demais dividas tecnicas do nucleo.
+
+**Sprint 10 CONCLUIDA (2026-08-03).**
 
 ### Sprint 11 - Submissao federativa
 

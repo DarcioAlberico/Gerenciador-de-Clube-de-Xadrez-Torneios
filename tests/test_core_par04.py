@@ -11,11 +11,22 @@ from __future__ import annotations
 
 import unittest
 
-from src.services.constants import TEAM_PAIRING_METHODS, AppError
-from src.services.pairing import round_robin_team_matches, team_match_summary
+from src.services.constants import RESULT_POINTS, TEAM_PAIRING_METHODS, AppError
+from src.services.pairing import (
+    float_histories,
+    round_robin_team_matches,
+    search_dutch_pairing,
+    team_float_histories,
+    team_match_summary,
+    team_pair_penalty,
+    topscorer_ids,
+)
 from tests.support.core_service_base import CoreServiceTestCase
 
 _RESULT_POINTS = {"1-0": (1.0, 0.0), "0-1": (0.0, 1.0), "1/2-1/2": (0.5, 0.5)}
+# Os pontos DE VERDADE (inclusive W.O. e decisao do arbitro), para o historico
+# de flutuacao saber quem pontuou sem jogar.
+_RESULT_POINTS_COMPLETO = RESULT_POINTS
 
 
 def _equipes(total: int) -> list[dict[str, object]]:
@@ -345,6 +356,150 @@ class FechamentoPorEquipesTest(CoreServiceTestCase):
             if match["is_bye"]:
                 continue
             self.assertTrue(str(match["result"]), f"confronto {match['id']} sem resultado")
+
+
+class TopscorersTest(unittest.TestCase):
+    """C.3/A.7: o único critério de cor ABSOLUTO não vale entre dois líderes."""
+
+    def _standings(self, pontos: dict[int, float]) -> dict[int, dict[str, float]]:
+        return {pid: {"points": valor} for pid, valor in pontos.items()}
+
+    def test_conceito_so_existe_na_ultima_rodada(self) -> None:
+        classificacao = self._standings({1: 3.0, 2: 1.0})
+        self.assertEqual(set(), topscorer_ids(classificacao, round_number=4, rounds_total=5))
+        self.assertEqual({1}, topscorer_ids(classificacao, round_number=5, rounds_total=5))
+
+    def test_limiar_e_MAIS_de_metade_do_disputado(self) -> None:
+        # Rodada 5: cada um disputou 4 partidas, entao o limite e 2.0.
+        classificacao = self._standings({1: 2.5, 2: 2.0, 3: 1.5})
+        self.assertEqual({1}, topscorer_ids(classificacao, round_number=5, rounds_total=5))
+
+    def test_sem_total_de_rodadas_ninguem_e_topscorer(self) -> None:
+        self.assertEqual(
+            set(), topscorer_ids(self._standings({1: 9.0}), round_number=5, rounds_total=0)
+        )
+
+    def _busca(self, topscorers: set[int]):
+        """Dois jogadores que devem a MESMA cor (ambos com duas brancas seguidas)."""
+        jogadores = [
+            {"id": 1, "name": "A", "rating": 2000},
+            {"id": 2, "name": "B", "rating": 1900},
+        ]
+        historicos = {1: ["W", "W"], 2: ["W", "W"]}
+        return search_dutch_pairing(
+            jogadores, historicos, set(), strict_colors=True, topscorers=topscorers
+        )
+
+    def test_dois_nao_topscorers_com_a_mesma_cor_absoluta_nao_se_enfrentam(self) -> None:
+        self.assertIsNone(self._busca(set()))
+
+    def test_dois_topscorers_podem_se_enfrentar(self) -> None:
+        """É o que a última rodada costuma exigir: os dois líderes se enfrentam."""
+        pares = self._busca({1, 2})
+        self.assertEqual(1, len(pares or []))
+
+    def test_um_topscorer_so_nao_libera_o_par(self) -> None:
+        self.assertIsNone(self._busca({1}))
+
+
+class HistoricoDeFlutuacaoTest(unittest.TestCase):
+    """A mesma partida contava de três jeitos: cor e repetição excluíam o W.O.,
+    a flutuação não. A regra passa a ser a do motor FIDE."""
+
+    def _mesas(self, *resultados: tuple[int, int | None, str, int]) -> list[dict[str, object]]:
+        return [
+            {
+                "white_player_id": branca,
+                "black_player_id": preta,
+                "result": resultado,
+                "is_bye": bye,
+            }
+            for branca, preta, resultado, bye in resultados
+        ]
+
+    def _historico(self, mesas, jogadores=(1, 2), bye_points: float = 1.0):
+        return float_histories(
+            mesas,
+            [{"id": pid, "starting_points": 0.0} for pid in jogadores],
+            bye_points,
+            _RESULT_POINTS_COMPLETO,
+        )
+
+    def test_partida_jogada_flutua_os_dois_lados(self) -> None:
+        historico = self._historico(
+            self._mesas((1, 2, "1-0", 0), (1, 2, "1-0", 0)),
+        )
+        self.assertEqual(["=", "down"], historico[1])
+        self.assertEqual(["=", "up"], historico[2])
+
+    def test_wo_nao_flutua_por_pontuacao(self) -> None:
+        """Quem venceu por W.O. pontuou sem jogar: conta como DOWNFLOAT; o outro
+        lado nao flutua (e o ramo `dutch` do `compute_flt` do Gacrux)."""
+        historico = self._historico(self._mesas((1, 2, "1F-0F", 0)))
+        self.assertEqual(["down"], historico[1])
+        self.assertEqual([], historico[2])
+
+    def test_dupla_ausencia_nao_flutua_ninguem(self) -> None:
+        historico = self._historico(self._mesas((1, 2, "0F-0F", 0)))
+        self.assertEqual([], historico[1])
+        self.assertEqual([], historico[2])
+
+    def test_bye_que_pontua_e_downfloat(self) -> None:
+        historico = self._historico(self._mesas((1, None, "BYE", 1)))
+        self.assertEqual(["bye", "down"], historico[1])
+
+    def test_bye_de_zero_ponto_nao_flutua(self) -> None:
+        historico = self._historico(self._mesas((1, None, "Z", 1)))
+        self.assertEqual(["bye"], historico[1])
+
+
+class FlutuacaoPorEquipesTest(unittest.TestCase):
+    """O Suíço por equipes não penalizava float repetido — o individual sim."""
+
+    def _confrontos(self) -> list[dict[str, object]]:
+        return [
+            {
+                "round_number": 1, "white_team_id": 1, "black_team_id": 2,
+                "white_match_points": 2.0, "black_match_points": 0.0, "is_bye": 0,
+            },
+            {
+                "round_number": 2, "white_team_id": 1, "black_team_id": 3,
+                "white_match_points": 2.0, "black_match_points": 0.0, "is_bye": 0,
+            },
+        ]
+
+    def test_historico_sai_dos_match_points(self) -> None:
+        historico = team_float_histories(self._confrontos())
+        self.assertEqual(["=", "down"], historico[1])
+        self.assertEqual(["="], historico[2])
+        self.assertEqual(["up"], historico[3])
+
+    def test_bye_de_equipe_que_pontua_e_downfloat(self) -> None:
+        historico = team_float_histories(
+            [{
+                "round_number": 1, "white_team_id": 1, "black_team_id": None,
+                "white_match_points": 2.0, "black_match_points": 0.0, "is_bye": 1,
+            }]
+        )
+        self.assertEqual(["bye", "down"], historico[1])
+
+    def test_float_repetido_encarece_o_confronto(self) -> None:
+        equipes = {1: {"match_points": 4.0}, 2: {"match_points": 2.0}}
+        argumentos = dict(
+            repeat_pairing_penalty=1000,
+            score_group_float_penalty=50,
+            score_diff_penalty=10,
+        )
+        base = team_pair_penalty(
+            {"id": 1, "name": "A"}, {"id": 2, "name": "B"}, equipes, set(), {1: 1, 2: 2},
+            **argumentos,
+        )
+        com_historico = team_pair_penalty(
+            {"id": 1, "name": "A"}, {"id": 2, "name": "B"}, equipes, set(), {1: 1, 2: 2},
+            float_histories={1: ["down", "down"], 2: ["up"]},
+            **argumentos,
+        )
+        self.assertGreater(com_historico, base)
 
 
 def _campo(payload_json: str, chave: str) -> str:
