@@ -13,6 +13,7 @@ from src.services.constants import (
     RESULTS,
     RESULT_POINTS,
     RESULT_STATES,
+    is_played_result as _is_played_result,
     pairing_player_name,
     player_full_name,
 )
@@ -55,7 +56,6 @@ from src.services.pairing import (
     rating_for_initial_order as _rating_for_initial_order,
     result_submission_issue as _result_submission_issue,
     result_states_summary as _result_states_summary,
-    round_robin_pairings as _round_robin_pairings,
     round_robin_team_matches as _round_robin_team_matches,
     scheme_applies_bonus as _scheme_applies_bonus,
     scheme_is_baku as _scheme_is_baku,
@@ -84,6 +84,18 @@ from src.services.pairing.gacrux_trf import (
     acceleration_ignored_warning as _acceleration_ignored_warning,
     bonus_is_expressible as _bonus_is_expressible,
 )
+from src.services.pairing.round_robin import (
+    annulment_candidates as _annulment_candidates,
+    annulment_warning as _annulment_warning,
+    assign_numbers as _assign_round_robin_numbers,
+    calendar_rounds as _calendar_rounds,
+    late_entry_warning as _late_entry_warning,
+    missing_from_calendar as _missing_from_calendar,
+    round_robin_pairings_from_numbers as _round_robin_pairings_from_numbers,
+    rounds_mismatch_warning as _rounds_mismatch_warning,
+    withdrawn_on_board_warning as _withdrawn_on_board_warning,
+)
+from src.services.pairing.participation import STATUS_WITHDRAWN as _STATUS_WITHDRAWN
 from src.services.pairing.incidents import (
     DECISION_NEEDS_PAIRING as _INCIDENT_DECISION_NEEDS_PAIRING,
     DECISION_NEEDS_POINTS as _INCIDENT_DECISION_NEEDS_POINTS,
@@ -1155,7 +1167,7 @@ class PairingService:
         if tournament.get("competition_type") == "team":
             return self._generate_next_team_round(tournament_id, tournament)
 
-        plan = self._individual_next_round_plan(tournament_id, tournament)
+        plan = self._individual_next_round_plan(tournament_id, tournament, persist=True)
         players = plan["players"]
         settings = plan["settings"]
         next_number = int(plan["round_number"])
@@ -1242,7 +1254,20 @@ class PairingService:
         generated["id"] = round_id
         return generated
 
-    def _individual_next_round_plan(self, tournament_id: int, tournament: dict[str, Any]) -> dict[str, Any]:
+    def _individual_next_round_plan(
+        self,
+        tournament_id: int,
+        tournament: dict[str, Any],
+        *,
+        persist: bool = False,
+    ) -> dict[str, Any]:
+        """Plano da proxima rodada. `persist` autoriza gravar o que o plano decide.
+
+        A previa chama com `persist=False` e a geracao com `True`: o unico plano
+        que decide algo PERSISTENTE e o do rodizio, que sorteia os numeros de
+        Berger na primeira rodada (PAR-01) — e uma previa que grava o sorteio
+        seria uma previa que muda o torneio.
+        """
         players = self.db.list_players(tournament_id, active_only=True)
         if len(players) < 2:
             raise AppError("Cadastre pelo menos 2 jogadores ativos.")
@@ -1276,11 +1301,19 @@ class PairingService:
                     "solicitado desta rodada ou troque o metodo de pareamento para gera-la."
                 )
             # Estes metodos nao descontam byes solicitados: a paridade vale sobre
-            # todos os jogadores ativos (comportamento historico).
-            if settings.get("disable_bye") and len(players) % 2 == 1:
+            # todos os jogadores ativos (comportamento historico). No rodizio a
+            # paridade e a do CALENDARIO, nao a da chamada de hoje: quem desistiu
+            # continua tendo mesa (ver _round_robin_round).
+            if (
+                settings.get("disable_bye")
+                and pairing_method != "round_robin"
+                and len(players) % 2 == 1
+            ):
                 raise AppError("O bye esta desativado. Use numero par de jogadores ativos.")
             if pairing_method == "round_robin":
-                pairings = _round_robin_pairings(players, next_number, settings)
+                pairings = self._round_robin_round(
+                    tournament_id, tournament, settings, next_number, avisos, persist=persist
+                )
             elif pairing_method == "scheveningen":
                 pairings = _scheveningen_pairings(players, next_number, settings)
             else:
@@ -1350,6 +1383,138 @@ class PairingService:
             "pairings": pairings,
             "warnings": avisos,
         }
+
+    def round_robin_numbers(self, tournament_id: int) -> dict[int, int]:
+        """Numeros de rodizio do torneio: `{player_id: numero}` (PAR-01).
+
+        Vazio enquanto o calendario nao foi sorteado — o que acontece na geracao
+        da primeira rodada.
+        """
+        return self.db.list_round_robin_numbers(int(tournament_id))
+
+    def _round_robin_round(
+        self,
+        tournament_id: int,
+        tournament: dict[str, Any],
+        settings: dict[str, Any],
+        round_number: int,
+        avisos: list[str],
+        *,
+        persist: bool,
+    ) -> list[dict[str, Any]]:
+        """Mesas da rodada lidas do CALENDARIO do rodizio (PAR-01).
+
+        O calendario e sorteado uma vez e guardado; daqui para a frente a rodada
+        so e lida da tabela de Berger. Por isso desativar um jogador nao mexe nos
+        confrontos futuros dos outros: a mesa dele continua existindo e sai por
+        W.O. — que e o que a FIDE manda no rodizio, onde nao existe "tirar alguem
+        da rotacao" sem desmanchar o torneio inteiro.
+        """
+        numeros = self._round_robin_calendar(tournament_id, settings, persist=persist)
+        jogadores = {
+            int(player["id"]): player
+            for player in self.db.list_players(tournament_id, active_only=False)
+        }
+        double = bool(settings.get("round_robin_double"))
+
+        configuradas = int(tournament.get("rounds_count") or 0)
+        do_calendario = _calendar_rounds(len(numeros), double=double)
+        if configuradas != do_calendario:
+            avisos.append(_rounds_mismatch_warning(configuradas, do_calendario, double=double))
+
+        ativos = [
+            int(player_id)
+            for player_id, player in jogadores.items()
+            if int(player.get("active") or 0)
+        ]
+        fora = _missing_from_calendar(numeros, ativos)
+        if fora:
+            avisos.append(_late_entry_warning(self._player_names(jogadores, fora)))
+
+        pairings = _round_robin_pairings_from_numbers(numeros, round_number, double=double)
+        ausentes = sorted(
+            {
+                int(player_id)
+                for pairing in pairings
+                for player_id in (pairing["white_player_id"], pairing["black_player_id"])
+                if player_id and not int(jogadores.get(int(player_id), {}).get("active") or 0)
+            }
+        )
+        if ausentes:
+            avisos.append(_withdrawn_on_board_warning(self._player_names(jogadores, ausentes)))
+            avisos.extend(self._round_robin_annulment_warnings(tournament_id, do_calendario, ausentes, jogadores))
+        return pairings
+
+    def _round_robin_calendar(
+        self,
+        tournament_id: int,
+        settings: dict[str, Any],
+        *,
+        persist: bool,
+    ) -> dict[int, int]:
+        """Numeros de rodizio, sorteando-os na primeira vez.
+
+        A ordem do sorteio e a ORDEM INICIAL do torneio — a mesma que o arbitro ja
+        configurou e ve na lista. Um sorteio aleatorio de verdade (a alternativa
+        do regulamento) precisaria de uma tela para o arbitro conduzi-lo em
+        publico; enquanto ela nao existe, um numero previsivel e conferivel e
+        melhor do que um numero que ninguem viu sair.
+        """
+        numeros = self.db.list_round_robin_numbers(tournament_id)
+        if numeros:
+            return numeros
+        jogadores = self.db.list_players(tournament_id, active_only=True)
+        numeros = _assign_round_robin_numbers(self._seeding(jogadores, settings))
+        if persist:
+            self.db.save_round_robin_numbers(tournament_id, numeros)
+            self.db.create_audit_event(
+                action="round_robin_table_assigned",
+                tournament_id=int(tournament_id),
+                entity_type="tournament",
+                entity_id=int(tournament_id),
+                after={
+                    "numbers": {str(player_id): int(numero) for player_id, numero in numeros.items()},
+                    "initial_order": str(settings.get("initial_order") or "rating"),
+                },
+            )
+        return numeros
+
+    def _round_robin_annulment_warnings(
+        self,
+        tournament_id: int,
+        calendar_rounds: int,
+        candidate_ids: list[int],
+        players_by_id: dict[int, dict[str, Any]],
+    ) -> list[str]:
+        """Aviso da regra dos 50% (FIDE C.05) para quem desistiu cedo."""
+        desistentes = [
+            player_id
+            for player_id in candidate_ids
+            if str(players_by_id.get(player_id, {}).get("player_status") or "") == _STATUS_WITHDRAWN
+        ]
+        if not desistentes:
+            return []
+        jogadas: dict[int, int] = {}
+        for pairing in self.db.get_pairings_for_tournament(tournament_id, closed_only=True):
+            if pairing.get("is_bye") or not _is_played_result(str(pairing.get("result") or "")):
+                continue
+            for player_id in (pairing.get("white_player_id"), pairing.get("black_player_id")):
+                if player_id:
+                    jogadas[int(player_id)] = jogadas.get(int(player_id), 0) + 1
+        anular = _annulment_candidates(jogadas, calendar_rounds, desistentes)
+        if not anular:
+            return []
+        return [_annulment_warning(self._player_names(players_by_id, anular), calendar_rounds)]
+
+    @staticmethod
+    def _player_names(
+        players_by_id: dict[int, dict[str, Any]],
+        player_ids: list[int],
+    ) -> list[str]:
+        return [
+            player_full_name(players_by_id.get(int(player_id), {})) or f"#{player_id}"
+            for player_id in player_ids
+        ]
 
     def _acceleration_plan(
         self,

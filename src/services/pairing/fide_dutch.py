@@ -86,65 +86,12 @@ def first_round_pairings(
     return pairings
 
 
-def round_robin_pairings(
-    players: list[dict[str, Any]],
-    next_number: int,
-    settings: dict[str, Any],
-) -> list[dict[str, Any]]:
-    ordered = sorted(
-        players,
-        key=lambda player: _initial_order_key(player, settings),
-    )
-    if len(ordered) % 2 == 1:
-        ordered.append({"id": -1, "name": "BYE", "is_dummy": True})
-
-    players_count = len(ordered)
-    if next_number > players_count - 1:
-        raise AppError("O numero maximo de rodadas do torneio ja foi atingido.")
-
-    round_number = next_number
-    rotated = [ordered[0]]
-    for index in range(1, players_count):
-        shift = round_number - 1
-        rotated_index = ((index - 1 - shift) % (players_count - 1)) + 1
-        rotated.append(ordered[rotated_index])
-
-    upper = rotated[: players_count // 2]
-    lower = rotated[players_count // 2:]
-    lower.reverse()
-
-    pairings: list[dict[str, Any]] = []
-    board = 1
-    for index in range(players_count // 2):
-        if (round_number % 2 == 1 and index == 0) or (round_number % 2 == 0 and index > 0):
-            white, black = upper[index], lower[index]
-        else:
-            white, black = lower[index], upper[index]
-
-        if white["id"] == -1 or black["id"] == -1:
-            real_player = black if white["id"] == -1 else white
-            pairings.append(
-                {
-                    "board_number": board,
-                    "white_player_id": real_player["id"],
-                    "black_player_id": None,
-                    "result": "1-0" if not settings.get("disable_bye") else "",
-                    "is_bye": 1,
-                }
-            )
-        else:
-            pairings.append(
-                {
-                    "board_number": board,
-                    "white_player_id": white["id"],
-                    "black_player_id": black["id"],
-                    "result": "",
-                    "is_bye": 0,
-                }
-            )
-        board += 1
-
-    return pairings
+# O round-robin individual morava aqui e recalculava o circulo a cada rodada a
+# partir da lista de ATIVOS ordenada por rating — o defeito que a PAR-01
+# consertou. O calendario agora sai da tabela de Berger (FIDE C.05, Anexo 1) em
+# `pairing/round_robin.py`, a partir de numeros sorteados UMA vez e guardados.
+# Nao ha versao "simples" aqui de proposito: duas implementacoes do mesmo
+# calendario divergiriam, e a que ficasse esquecida seria a que alguem usaria.
 
 
 def scheveningen_pairings(

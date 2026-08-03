@@ -274,6 +274,9 @@ TOURNAMENT_FLAG_FIELDS = {
     "allow_player_result_edit",
     "allow_dangerous_changes",
     "disable_bye",
+    # Returno do rodizio (PAR-01). Nao vale para o Suico: la o numero de rodadas
+    # e escolhido, e nao derivado do calendario.
+    "round_robin_double",
     "accelerated_system",
     "hide_standings",
     "calculate_performance",

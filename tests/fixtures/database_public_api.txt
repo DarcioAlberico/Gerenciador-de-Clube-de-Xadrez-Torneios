@@ -173,6 +173,7 @@ list_requested_byes_for_round
 list_requested_team_byes
 list_requested_team_byes_for_round
 list_result_submissions
+list_round_robin_numbers
 list_round_schedule
 list_rounds
 list_session_attendance
@@ -221,6 +222,7 @@ save_club
 save_column_layout
 save_fide_rating_report
 save_report_layout
+save_round_robin_numbers
 save_round_schedule
 save_tournament_settings
 search_official_players

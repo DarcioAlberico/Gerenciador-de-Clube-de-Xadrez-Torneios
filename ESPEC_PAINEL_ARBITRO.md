@@ -1619,33 +1619,69 @@ Prioridade: alta. Origem: auditoria arbitral de 2026-07-29.
 
 #### PAR-01 - Round-robin com tabela persistida e returno
 
-Status: pendente.
+Status: FEITO (2026-08-01) — com a anulacao dos 50% entregue como AVISO, nao
+como automatismo (ver "Fica pendente").
 
 Problema:
 
-- `round_robin_pairings` (`pairing/fide_dutch.py:89-147`) recalcula o circulo
-  a cada rodada a partir da lista ativa ordenada por rating: desativar um
-  jogador ou editar um rating no meio do evento muda todo o calendario
-  restante (revanches e confrontos perdidos);
-- o bye do rodizio grava `result = "1-0"` e so pontua certo porque
-  `bye_points` default e 1.0 (`fide_dutch.py:131` x `tiebreaks.py:671`);
-- nao ha duplo turno (returno), formato padrao de fechados e torneios de
+- `round_robin_pairings` recalculava o circulo a cada rodada a partir da lista
+  ATIVA ordenada por rating: desativar um jogador ou editar um rating no meio
+  do evento mudava todo o calendario restante (revanches e confrontos perdidos);
+- o bye do rodizio gravava `result = "1-0"` e so pontuava certo porque
+  `bye_points` tem padrao 1.0 — e aparecia como VITORIA em tudo que le o
+  resultado (TRF, tabela cruzada, contagem de vitorias);
+- nao havia duplo turno (returno), formato padrao de fechados e torneios de
   norma, nem tabelas de Berger (FIDE C.05).
 
-Escopo:
+Como ficou:
 
-- sortear/atribuir numeros de rodizio uma unica vez e persistir a tabela
-  (Berger) na criacao do torneio;
-- desistencia em RR segue a regra FIDE (anular ou manter resultados conforme
-  percentual jogado), sem recalcular o calendario;
-- opcao de duplo round-robin com cores invertidas no returno;
-- bye do rodizio gravado como bye real (nao `1-0`).
+- **o rodizio deixou de ser um pareamento e virou um CALENDARIO**. Os numeros
+  de rodizio sao atribuidos UMA vez (tabela `round_robin_numbers`, schema v51),
+  na geracao da primeira rodada, pela ordem inicial do torneio; daqui para a
+  frente cada rodada e so lida da tabela de Berger. Desativar um jogador ou
+  corrigir um rating no meio do evento nao mexe em confronto nenhum;
+- **a tabela de Berger vem da implementacao de referencia** (`gacrux/berger.py`,
+  Otto Milvang — o mesmo autor do motor FIDE que ja pareia e desempata aqui).
+  Manter uma segunda implementacao da mesma norma repetiria o erro que a TBK-03
+  documentou. O acoplamento e a um modulo SEM dependencias e esta preso por
+  teste: as tabelas de 6 e 8 jogadores conferidas contra o Handbook;
+- **quem desistiu continua com mesa**. No rodizio nao existe "tirar da rotacao"
+  sem desmanchar o torneio: a mesa e gerada e o resultado sai por W.O., com
+  aviso ao arbitro dizendo isso. Quem se inscreve DEPOIS do sorteio fica fora do
+  calendario — tambem com aviso, em vez de entrar e deslocar todo mundo;
+- **returno** (`round_robin_double`): o calendario roda duas vezes e a volta
+  repete a ida com as cores trocadas. O aviso de rodadas configuradas x rodadas
+  do calendario evita o torneio que para no meio;
+- **bye de verdade** (`is_bye`, resultado `BYE`), como no Suico;
+- **a previa nao sorteia**: `_individual_next_round_plan` so grava com
+  `persist=True`, que e a geracao. Uma previa que sorteasse o calendario mudaria
+  o torneio sem gerar rodada nenhuma;
+- a versao antiga em `fide_dutch.py` foi REMOVIDA, e nao deixada como fallback:
+  duas implementacoes do mesmo calendario divergem, e a esquecida e a que alguem
+  usaria.
+
+Arquivos: `pairing/round_robin.py` (novo, puro), `pairing/fide_dutch.py`,
+`pairing_service.py`, `core/database_schema.py`, `core/database_tournament_core.py`,
+`database/migrations/legacy_migrations.py` (v51), `services/constants.py`,
+`ui/screens/tournament_settings_ui.py`.
 
 Criterios de aceite:
 
-- [ ] desativar jogador nao altera os confrontos futuros dos demais;
-- [ ] fixture Berger de 6 e 8 jogadores confere com a tabela FIDE;
-- [ ] returno inverte cores corretamente.
+- [x] desativar jogador nao altera os confrontos futuros dos demais;
+- [x] fixture Berger de 6 e 8 jogadores confere com a tabela FIDE;
+- [x] returno inverte cores corretamente.
+
+Fica pendente:
+
+- **anulacao dos 50% (FIDE C.05)**: o sistema DETECTA quem desistiu antes da
+  metade e avisa, mas nao anula. Anular reescreve a classificacao publicada —
+  os pontos dos ADVERSARIOS mudam — e teria de valer tambem dentro do motor FIDE
+  de desempate, que recalcula tudo pelo arquivo TRF. E o mesmo argumento da
+  TBK-03: duas implementacoes da mesma norma divergem. Merece tarefa propria;
+- **rodizio por EQUIPES** (`round_robin_team_matches`) continua recalculando o
+  circulo a cada rodada, com o mesmo defeito que este item consertou no
+  individual. A tabela `round_robin_numbers` e de jogadores; o caminho de
+  equipes pede a sua.
 
 #### PAR-02 - Aceleracao e entrada tardia no caminho Gacrux
 
@@ -2213,7 +2249,7 @@ Gacrux.
 Entregas:
 
 1. [x] `PAR-02` Aceleracao e entrada tardia no caminho Gacrux.
-2. [ ] `PAR-01` Round-robin com tabela persistida e returno.
+2. [x] `PAR-01` Round-robin com tabela persistida e returno.
 3. [ ] `PAR-03` Knockout e Scheveningen maduros.
 4. [ ] `PAR-04` Demais dividas tecnicas do nucleo.
 

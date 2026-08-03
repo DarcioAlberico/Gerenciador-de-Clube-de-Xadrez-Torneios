@@ -62,6 +62,7 @@ class LegacyMigrations:
             48: self._migrate_to_v48,
             49: self._migrate_to_v49,
             50: self._migrate_to_v50,
+            51: self._migrate_to_v51,
         }
 
     def _run_schema_migrations(self, connection: sqlite3.Connection) -> None:
@@ -180,6 +181,8 @@ class LegacyMigrations:
             self._migrate_to_v49(connection)
         if self.db.SCHEMA_VERSION >= 50:
             self._migrate_to_v50(connection)
+        if self.db.SCHEMA_VERSION >= 51:
+            self._migrate_to_v51(connection)
 
     def _migrate_to_v1(self, connection: sqlite3.Connection) -> None:
         now = self.db.now()
@@ -2068,3 +2071,37 @@ class LegacyMigrations:
                 ON incidents(tournament_id, round_number, id)
             """
         )
+
+    def _migrate_to_v51(self, connection: sqlite3.Connection) -> None:
+        """Calendario de rodizio persistido e returno (PAR-01).
+
+        O todos-contra-todos recalculava o circulo a cada rodada a partir da
+        lista de ATIVOS ordenada por rating: desativar um jogador — ou corrigir
+        um rating — no meio do evento embaralhava os confrontos futuros de todos
+        os OUTROS, e ninguem via. Os numeros de rodizio passam a ser atribuidos
+        uma vez e guardados; a tabela de Berger sai deles.
+
+        Torneio antigo em andamento comeca sem numeros: eles sao atribuidos na
+        proxima geracao de rodada, pela ordem inicial. Isso mantem o calendario
+        DAQUI PARA A FRENTE estavel, que e o que da para prometer — o que ja foi
+        jogado ficou como ficou.
+        """
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS round_robin_numbers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tournament_id INTEGER NOT NULL,
+                player_id INTEGER NOT NULL,
+                number INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                UNIQUE (tournament_id, player_id),
+                UNIQUE (tournament_id, number)
+            )
+            """
+        )
+        columns = self.db._table_columns(connection, "tournament_settings")
+        if "round_robin_double" not in columns:
+            connection.execute(
+                "ALTER TABLE tournament_settings "
+                "ADD COLUMN round_robin_double INTEGER NOT NULL DEFAULT 0"
+            )

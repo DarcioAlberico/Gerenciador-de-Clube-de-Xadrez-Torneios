@@ -473,8 +473,9 @@ Entregas, em ordem de prioridade:
    disciplinar de incidentes (`ARB-03` — ENTREGUE em 2026-07-31). SPRINT CONCLUIDA.
 4. **Motores secundarios (Sprint 10)**: aceleracao e entrada tardia no caminho
    Gacrux sem divergencia silenciosa (`PAR-02` — ENTREGUE em 2026-07-31),
-   round-robin com tabela persistida e returno (`PAR-01`), knockout com
-   desempate registrado e Scheveningen robusto (`PAR-03`).
+   round-robin com tabela persistida e returno (`PAR-01` — ENTREGUE em
+   2026-08-01), knockout com desempate registrado e Scheveningen robusto
+   (`PAR-03`).
 5. **Submissao federativa (Sprint 11)**: correcao do `birth_date` da lista
    FIDE (`FED-05`), TRF16 com `XXR`/`XXC`/`XXA`, Event-ID e modo submissao
    (`FED-03`), round-trip TRF fiel (`FED-04`), normas FIDE corretas com
@@ -537,7 +538,10 @@ colunas, TRF25) foram entregues nas fases 0 a 11 e nos EPICs A a E da
 
 - ~~Retirada e reentrada com historico por rodada (`ARB-05`).~~ FEITO 2026-07-31.
 - ~~Registro disciplinar de incidentes (`ARB-03`).~~ FEITO 2026-07-31.
-- Round-robin com tabela persistida (Berger) e returno (`PAR-01`).
+- ~~Round-robin com tabela persistida (Berger) e returno (`PAR-01`).~~ FEITO
+  2026-08-01 — numeros sorteados uma vez e guardados, tabela de Berger da
+  referencia FIDE, returno com cores invertidas e bye de verdade. A anulacao dos
+  50% de quem desiste cedo fica DETECTADA e avisada, nao automatica.
 - Knockout com desempate registrado e Scheveningen robusto (`PAR-03`).
 - Rating com K/piso/ritmo e regulamento CBX (`FED-07`).
 - Categorias configuraveis por torneio (`ORG-01`).

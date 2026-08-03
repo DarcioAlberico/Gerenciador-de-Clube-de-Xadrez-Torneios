@@ -563,6 +563,9 @@ CREATE TABLE IF NOT EXISTS tournament_settings (
     prize_policy TEXT NOT NULL DEFAULT 'best_only',
     prize_tax_percent REAL NOT NULL DEFAULT 0.0,
     pairing_method TEXT NOT NULL DEFAULT 'swiss',
+    -- Returno do rodizio (PAR-01): o calendario roda duas vezes, com as cores
+    -- invertidas na volta. E o formato padrao de torneio fechado e de norma.
+    round_robin_double INTEGER NOT NULL DEFAULT 0,
     pairing_system TEXT NOT NULL DEFAULT 'gacrux_swiss',
     tiebreak_engine TEXT NOT NULL DEFAULT 'gacrux',
     tiebreak_strict INTEGER NOT NULL DEFAULT 0,
@@ -1105,6 +1108,24 @@ CREATE TABLE IF NOT EXISTS requested_team_byes (
     UNIQUE (tournament_id, team_id, round_number),
     FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
     FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE
+);
+
+-- Numeros de rodizio (PAR-01): o calendario de um todos-contra-todos e decidido
+-- UMA vez. Sem esta tabela ele era recalculado a cada rodada a partir da lista
+-- de ativos ordenada por rating, e desativar um jogador embaralhava os
+-- confrontos futuros de todos os outros. `number` e o numero da tabela de
+-- Berger (FIDE C.05, Anexo 1); campo impar ganha um numero fantasma, que e o
+-- bye e nao mora aqui.
+CREATE TABLE IF NOT EXISTS round_robin_numbers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tournament_id INTEGER NOT NULL,
+    player_id INTEGER NOT NULL,
+    number INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE (tournament_id, player_id),
+    UNIQUE (tournament_id, number),
+    FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
+    FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE
 );
 """
 
