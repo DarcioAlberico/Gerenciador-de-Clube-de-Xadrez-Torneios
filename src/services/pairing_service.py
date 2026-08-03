@@ -59,7 +59,6 @@ from src.services.pairing import (
     round_robin_team_matches as _round_robin_team_matches,
     scheme_applies_bonus as _scheme_applies_bonus,
     scheme_is_baku as _scheme_is_baku,
-    scheveningen_pairings as _scheveningen_pairings,
     team_preview_payload as _team_preview_payload,
     team_round_dashboard_metrics as _team_round_dashboard_metrics,
     tiebreak_narrative_from_standings as _tiebreak_narrative_from_standings,
@@ -83,6 +82,25 @@ from src.services.pairing.gacrux_tiebreak_map import (
 from src.services.pairing.gacrux_trf import (
     acceleration_ignored_warning as _acceleration_ignored_warning,
     bonus_is_expressible as _bonus_is_expressible,
+)
+from src.services.pairing.knockout import (
+    ADVANCEMENT_CRITERIA as _KNOCKOUT_CRITERIA,
+    advancing_player_ids as _knockout_advancing_ids,
+    bracket as _knockout_bracket,
+    clean_notes as _knockout_clean_notes,
+    decision_error as _knockout_decision_error,
+    pending_decision_message as _knockout_pending_message,
+    third_place_pairing as _knockout_third_place_pairing,
+    undecided_boards as _knockout_undecided_boards,
+)
+from src.services.pairing.scheveningen import (
+    assign_scale as _assign_scheveningen_scale,
+    calendar_rounds as _scheveningen_calendar_rounds,
+    late_entry_warning as _scheveningen_late_entry_warning,
+    missing_from_scale as _missing_from_scale,
+    rounds_mismatch_warning as _scheveningen_rounds_mismatch_warning,
+    scheveningen_pairings_from_scale as _scheveningen_pairings_from_scale,
+    withdrawn_on_board_warning as _scheveningen_withdrawn_warning,
 )
 from src.services.pairing.round_robin import (
     annulment_candidates as _annulment_candidates,
@@ -1315,7 +1333,9 @@ class PairingService:
                     tournament_id, tournament, settings, next_number, avisos, persist=persist
                 )
             elif pairing_method == "scheveningen":
-                pairings = _scheveningen_pairings(players, next_number, settings)
+                pairings = self._scheveningen_round(
+                    tournament_id, tournament, settings, next_number, avisos, persist=persist
+                )
             else:
                 pairings = self._knockout_pairings(tournament_id, players, next_number, settings)
         else:
@@ -1432,18 +1452,116 @@ class PairingService:
             avisos.append(_late_entry_warning(self._player_names(jogadores, fora)))
 
         pairings = _round_robin_pairings_from_numbers(numeros, round_number, double=double)
-        ausentes = sorted(
-            {
-                int(player_id)
-                for pairing in pairings
-                for player_id in (pairing["white_player_id"], pairing["black_player_id"])
-                if player_id and not int(jogadores.get(int(player_id), {}).get("active") or 0)
-            }
-        )
+        ausentes = self._inactive_on_boards(pairings, jogadores)
         if ausentes:
             avisos.append(_withdrawn_on_board_warning(self._player_names(jogadores, ausentes)))
             avisos.extend(self._round_robin_annulment_warnings(tournament_id, do_calendario, ausentes, jogadores))
         return pairings
+
+    def _scheveningen_round(
+        self,
+        tournament_id: int,
+        tournament: dict[str, Any],
+        settings: dict[str, Any],
+        round_number: int,
+        avisos: list[str],
+        *,
+        persist: bool,
+    ) -> list[dict[str, Any]]:
+        """Mesas da rodada a partir da ESCALA guardada (PAR-03).
+
+        A escala era refeita a cada rodada com a lista de ativos: uma desistencia
+        deslocava todos os indices seguintes — os confrontos que faltavam viravam
+        outros — e ainda desigualava os grupos, o que fazia a geracao ser
+        RECUSADA. Agora o grupo e o numero moram no jogador, e quem sai mantem a
+        cadeira: a mesa sai por W.O.
+        """
+        escala = self._scheveningen_scale(tournament_id, settings, persist=persist)
+        jogadores = {
+            int(player["id"]): player
+            for player in self.db.list_players(tournament_id, active_only=False)
+        }
+
+        configuradas = int(tournament.get("rounds_count") or 0)
+        do_calendario = _scheveningen_calendar_rounds(escala)
+        if configuradas != do_calendario:
+            avisos.append(_scheveningen_rounds_mismatch_warning(configuradas, do_calendario))
+
+        ativos = [
+            int(player_id)
+            for player_id, player in jogadores.items()
+            if int(player.get("active") or 0)
+        ]
+        fora = _missing_from_scale(escala, ativos)
+        if fora:
+            avisos.append(_scheveningen_late_entry_warning(self._player_names(jogadores, fora)))
+
+        pairings = _scheveningen_pairings_from_scale(escala, round_number)
+        ausentes = self._inactive_on_boards(pairings, jogadores)
+        if ausentes:
+            avisos.append(_scheveningen_withdrawn_warning(self._player_names(jogadores, ausentes)))
+        return pairings
+
+    def _scheveningen_scale(
+        self,
+        tournament_id: int,
+        settings: dict[str, Any],
+        *,
+        persist: bool,
+    ) -> dict[int, tuple[str, int]]:
+        """Escala do Scheveningen, montando-a na primeira vez.
+
+        Respeita o grupo que o arbitro tiver atribuido a mao; sem isso, parte o
+        campo pela ordem inicial. O numero dentro do grupo e o que faltava para a
+        escala parar de andar quando alguem sai.
+        """
+        jogadores = self.db.list_players(tournament_id, active_only=False)
+        guardada = {
+            int(player["id"]): (
+                str(player.get("scheveningen_group") or "").strip().upper(),
+                int(player.get("scheveningen_number") or 0),
+            )
+            for player in jogadores
+            if int(player.get("scheveningen_number") or 0) > 0
+        }
+        if guardada:
+            return guardada
+
+        ativos = [player for player in jogadores if int(player.get("active") or 0)]
+        escala = _assign_scheveningen_scale(
+            self._seeding(ativos, settings),
+            {int(player["id"]): player.get("scheveningen_group") for player in ativos},
+        )
+        if persist:
+            self.db.save_scheveningen_scale(tournament_id, escala)
+            self.db.create_audit_event(
+                action="scheveningen_scale_assigned",
+                tournament_id=int(tournament_id),
+                entity_type="tournament",
+                entity_id=int(tournament_id),
+                after={
+                    "scale": {
+                        str(player_id): f"{grupo}{numero}"
+                        for player_id, (grupo, numero) in escala.items()
+                    }
+                },
+            )
+        return escala
+
+    @staticmethod
+    def _inactive_on_boards(
+        pairings: list[dict[str, Any]],
+        players_by_id: dict[int, dict[str, Any]],
+    ) -> list[int]:
+        """Quem esta fora do torneio e mesmo assim tem mesa no calendario fixo."""
+        return sorted(
+            {
+                int(player_id)
+                for pairing in pairings
+                for player_id in (pairing["white_player_id"], pairing["black_player_id"])
+                if player_id and not int(players_by_id.get(int(player_id), {}).get("active") or 0)
+            }
+        )
 
     def _round_robin_calendar(
         self,
@@ -3235,14 +3353,141 @@ class PairingService:
             honor_strict=honor_strict,
         )
 
-    def _knockout_pairings(self, tournament_id: int, players: list[dict[str, Any]], next_number: int, settings: dict[str, Any]) -> list[dict[str, Any]]:
-        previous_pairings = None
-        if next_number > 1:
-            prev_round = self.db.get_round_by_number(tournament_id, next_number - 1)
-            if not prev_round:
-                raise AppError("Rodada anterior não encontrada.")
-            previous_pairings = self.db.get_pairings_for_round(int(prev_round["id"]))
-        return _knockout_pairings(players, next_number, settings, previous_pairings)
+    def _knockout_pairings(
+        self,
+        tournament_id: int,
+        players: list[dict[str, Any]],
+        next_number: int,
+        settings: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        """Proxima fase do mata-mata, com o avanco explicado (PAR-03).
+
+        A fase so e gerada quando toda mesa da anterior tem vencedor — do
+        tabuleiro ou por decisao registrada. Empate, dupla ausencia e mesa em
+        branco promoviam o melhor numero inicial em silencio; agora eles PARAM a
+        geracao e pedem a decisao do arbitro.
+        """
+        if next_number == 1:
+            return _knockout_pairings(players, next_number, settings)
+
+        anteriores = self._knockout_round_pairings(tournament_id, next_number - 1)
+        decisoes = self._knockout_decisions(tournament_id)
+        pendentes = _knockout_undecided_boards(anteriores, decisoes)
+        if pendentes:
+            raise AppError(
+                _knockout_pending_message(
+                    [int(mesa.get("board_number") or 0) for mesa in pendentes]
+                )
+            )
+
+        avancaram = _knockout_advancing_ids(anteriores, decisoes)
+        if next_number > 2:
+            # Quem jogou a mesa de 3o lugar perdeu a fase anterior: vencer ali
+            # nao devolve ninguem a chave principal.
+            na_chave = set(
+                _knockout_advancing_ids(
+                    self._knockout_round_pairings(tournament_id, next_number - 2), decisoes
+                )
+            )
+            avancaram = [player_id for player_id in avancaram if player_id in na_chave]
+
+        pairings = _knockout_pairings(players, next_number, settings, avancaram)
+        if settings.get("knockout_third_place") and len(avancaram) == 2:
+            terceiro = _knockout_third_place_pairing(
+                anteriores, decisoes, len(pairings) + 1
+            )
+            if terceiro:
+                pairings.append(terceiro)
+        return pairings
+
+    def _knockout_round_pairings(self, tournament_id: int, round_number: int) -> list[dict[str, Any]]:
+        round_data = self.db.get_round_by_number(tournament_id, int(round_number))
+        if not round_data:
+            raise AppError("Rodada anterior não encontrada.")
+        return self.db.get_pairings_for_round(int(round_data["id"]))
+
+    def _knockout_decisions(self, tournament_id: int) -> dict[int, dict[str, Any]]:
+        return {
+            int(item["pairing_id"]): item
+            for item in self.db.list_knockout_advancements(int(tournament_id))
+        }
+
+    def knockout_advancement_criteria(self) -> dict[str, str]:
+        """Criterios de desempate de mata-mata oferecidos ao arbitro (PAR-03)."""
+        return dict(_KNOCKOUT_CRITERIA)
+
+    def register_knockout_advancement(
+        self,
+        tournament_id: int,
+        pairing_id: int,
+        player_id: int,
+        criterion: str,
+        notes: str = "",
+        actor: str = "",
+    ) -> None:
+        """Registra quem avancou numa mesa que a partida nao decidiu (PAR-03)."""
+        pairing = self.db.get_pairing(int(pairing_id))
+        if not pairing or int(pairing.get("tournament_id") or 0) != int(tournament_id):
+            pairing = None
+        round_data = (
+            self.db.get_round(int(pairing["round_id"])) if pairing else None
+        )
+        erro = _knockout_decision_error(
+            criterion=criterion,
+            notes=notes,
+            player_id=int(player_id),
+            pairing=pairing,
+            round_closed=bool(round_data and str(round_data.get("status")) == "closed"),
+        )
+        if erro:
+            raise AppError(erro)
+        limpo = _knockout_clean_notes(notes)
+        self.db.save_knockout_advancement(
+            int(tournament_id),
+            int(pairing_id),
+            int(player_id),
+            str(criterion).strip(),
+            notes=limpo,
+            actor=actor,
+        )
+        self.db.create_audit_event(
+            action="knockout_advancement_registered",
+            tournament_id=int(tournament_id),
+            round_id=int(pairing["round_id"]) if pairing else None,
+            entity_type="pairing",
+            entity_id=int(pairing_id),
+            after={
+                "player_id": int(player_id),
+                "criterion": str(criterion).strip(),
+                "notes": limpo,
+            },
+        )
+
+    def knockout_bracket(self, tournament_id: int) -> dict[str, Any]:
+        """A chave do mata-mata, com o motivo de cada avanco (PAR-03)."""
+        tournament = self.db.get_tournament(tournament_id)
+        if not tournament:
+            raise AppError("Selecione um torneio valido.")
+        rounds = sorted(
+            self.db.list_rounds(tournament_id), key=lambda item: int(item["number"])
+        )
+        pairings_by_round = {
+            int(round_data["number"]): self.db.get_pairings_for_round(int(round_data["id"]))
+            for round_data in rounds
+        }
+        nomes = {
+            int(player["id"]): player_full_name(player)
+            for player in self.db.list_players(tournament_id, active_only=False)
+        }
+        fases = _knockout_bracket(
+            rounds, pairings_by_round, self._knockout_decisions(tournament_id), nomes
+        )
+        return {
+            "tournament_id": int(tournament_id),
+            "tournament_name": str(tournament.get("name") or ""),
+            "rounds": fases,
+            "pending": sum(int(fase["pending"]) for fase in fases),
+        }
 
     @staticmethod
     def _find_player_slot(

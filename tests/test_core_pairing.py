@@ -796,11 +796,12 @@ class PairingRulesTest(CoreServiceTestCase):
         self.assertEqual(rows, [])
 
     def test_scheveningen_requires_even_field(self) -> None:
-        from src.services.pairing import scheveningen_pairings
+        # A regra migrou para a montagem da ESCALA (PAR-03), que e onde os grupos
+        # passaram a ser decididos — uma vez, e nao a cada rodada.
+        from src.services.pairing.scheveningen import assign_scale
 
-        players = [{"id": index, "name": f"P{index}", "rating": 2000 - index} for index in range(5)]
         with self.assertRaisesRegex(AppError, "par"):
-            scheveningen_pairings(players, 1, {})
+            assign_scale([1, 2, 3, 4, 5])
 
     def test_scheveningen_pairs_every_cross_group_match(self) -> None:
         ids = self._create_players(6)  # A = 3 de maior rating, B = 3 de menor
@@ -853,15 +854,10 @@ class PairingRulesTest(CoreServiceTestCase):
         self.assertEqual(seen, {(a, b) for a in group_a for b in group_b})
 
     def test_scheveningen_manual_groups_must_match_size(self) -> None:
-        from src.services.pairing import scheveningen_pairings
+        from src.services.pairing.scheveningen import assign_scale
 
-        players = [
-            {"id": 1, "name": "A1", "rating": 2000, "scheveningen_group": "A"},
-            {"id": 2, "name": "A2", "rating": 1900, "scheveningen_group": "A"},
-            {"id": 3, "name": "B1", "rating": 1800, "scheveningen_group": "B"},
-        ]
         with self.assertRaisesRegex(AppError, "mesmo numero"):
-            scheveningen_pairings(players, 1, {})
+            assign_scale([1, 2, 3], {1: "A", 2: "A", 3: "B"})
 
     def test_classic_acceleration_bonus_boundaries(self) -> None:
         from src.services.pairing import classic_acceleration_bonus

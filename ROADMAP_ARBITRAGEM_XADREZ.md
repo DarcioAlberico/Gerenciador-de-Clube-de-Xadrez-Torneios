@@ -475,7 +475,7 @@ Entregas, em ordem de prioridade:
    Gacrux sem divergencia silenciosa (`PAR-02` — ENTREGUE em 2026-07-31),
    round-robin com tabela persistida e returno (`PAR-01` — ENTREGUE em
    2026-08-01), knockout com desempate registrado e Scheveningen robusto
-   (`PAR-03`).
+   (`PAR-03` — ENTREGUE em 2026-08-01).
 5. **Submissao federativa (Sprint 11)**: correcao do `birth_date` da lista
    FIDE (`FED-05`), TRF16 com `XXR`/`XXC`/`XXA`, Event-ID e modo submissao
    (`FED-03`), round-trip TRF fiel (`FED-04`), normas FIDE corretas com
@@ -542,7 +542,10 @@ colunas, TRF25) foram entregues nas fases 0 a 11 e nos EPICs A a E da
   2026-08-01 — numeros sorteados uma vez e guardados, tabela de Berger da
   referencia FIDE, returno com cores invertidas e bye de verdade. A anulacao dos
   50% de quem desiste cedo fica DETECTADA e avisada, nao automatica.
-- Knockout com desempate registrado e Scheveningen robusto (`PAR-03`).
+- ~~Knockout com desempate registrado e Scheveningen robusto (`PAR-03`).~~ FEITO
+  2026-08-01 — empate no mata-mata para a proxima fase ate o arbitro registrar
+  quem passa e por que; a chave mostra o motivo; a escala do Scheveningen e
+  guardada e sobrevive a desistencia.
 - Rating com K/piso/ritmo e regulamento CBX (`FED-07`).
 - Categorias configuraveis por torneio (`ORG-01`).
 - Agenda e controle de tempo estruturados (`ORG-03`).

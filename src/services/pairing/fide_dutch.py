@@ -94,68 +94,27 @@ def first_round_pairings(
 # calendario divergiriam, e a que ficasse esquecida seria a que alguem usaria.
 
 
-def scheveningen_pairings(
-    players: list[dict[str, Any]],
-    next_number: int,
-    settings: dict[str, Any],
-) -> list[dict[str, Any]]:
-    """Sistema Scheveningen: cada jogador do grupo A enfrenta todos do grupo B.
-
-    Os grupos vêm do campo `scheveningen_group` (A/B) quando atribuídos; se não
-    houver atribuição manual, caem nas metades por ranking inicial (top = A,
-    base = B). Em N rodadas (N = jogadores por grupo) cada par A×B se enfrenta
-    exatamente uma vez; as cores alternam para equilibrar.
-    """
-
-    def _by_rank(group: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        return sorted(group, key=lambda player: _initial_order_key(player, settings))
-
-    manual_a = [p for p in players if str(p.get("scheveningen_group") or "").strip().upper() == "A"]
-    manual_b = [p for p in players if str(p.get("scheveningen_group") or "").strip().upper() == "B"]
-
-    if manual_a and manual_b:
-        if len(manual_a) != len(manual_b):
-            raise AppError("Scheveningen: os grupos A e B devem ter o mesmo numero de jogadores.")
-        group_a = _by_rank(manual_a)
-        group_b = _by_rank(manual_b)
-    else:
-        ordered = _by_rank(list(players))
-        if len(ordered) % 2 == 1:
-            raise AppError("Scheveningen exige numero par de jogadores (dois grupos iguais).")
-        per_group = len(ordered) // 2
-        group_a = ordered[:per_group]
-        group_b = ordered[per_group:]
-
-    per_group = len(group_a)
-    if next_number > per_group:
-        raise AppError("O numero maximo de rodadas do Scheveningen ja foi atingido.")
-
-    pairings: list[dict[str, Any]] = []
-    for index in range(per_group):
-        opponent = group_b[(index + next_number - 1) % per_group]
-        player = group_a[index]
-        if (index + next_number) % 2 == 0:
-            white_id, black_id = player["id"], opponent["id"]
-        else:
-            white_id, black_id = opponent["id"], player["id"]
-        pairings.append(
-            {
-                "board_number": index + 1,
-                "white_player_id": white_id,
-                "black_player_id": black_id,
-                "result": "",
-                "is_bye": 0,
-            }
-        )
-    return pairings
+# O Scheveningen tambem morava aqui e recalculava a escala a cada rodada a
+# partir da lista de ATIVOS: uma desistencia deslocava todos os indices
+# seguintes (os confrontos que faltavam viravam outros) e desigualava os
+# grupos, o que passava a RECUSAR a geracao. A escala agora e guardada no
+# jogador (grupo + numero) e o calendario sai dela, em `pairing/scheveningen.py`.
 
 
 def knockout_pairings(
     players: list[dict[str, Any]],
     next_number: int,
     settings: dict[str, Any],
-    previous_pairings: list[dict[str, Any]] | None = None,
+    advancing_ids: list[int] | None = None,
 ) -> list[dict[str, Any]]:
+    """Chave da fase, a partir de QUEM avancou (PAR-03).
+
+    Quem avancou nao se decide mais aqui: vinha de dois `if` que promoviam o
+    melhor numero inicial em qualquer resultado que nao fosse `1-0`/`0-1` — o
+    empate, a dupla ausencia, a mesa em branco e ate o W.O. e a decisao do
+    arbitro. Agora e o servico quem responde, lendo o placar e as decisoes
+    registradas (`pairing/knockout.py`), e esta funcao so monta a chave.
+    """
     ordered = sorted(
         players,
         key=lambda player: _initial_order_key(player, settings),
@@ -164,30 +123,10 @@ def knockout_pairings(
     if next_number == 1:
         active_players = ordered[:]
     else:
-        if previous_pairings is None:
+        if advancing_ids is None:
             raise AppError("Rodada anterior não encontrada.")
-
-        active_players_set = set()
-        seed_map = {int(player["id"]): index for index, player in enumerate(ordered)}
-
-        for pairing in previous_pairings:
-            if pairing["is_bye"]:
-                active_players_set.add(int(pairing["white_player_id"]))
-                continue
-
-            white_id = int(pairing["white_player_id"])
-            black_id = int(pairing["black_player_id"])
-
-            if pairing["result"] == "1-0":
-                active_players_set.add(white_id)
-            elif pairing["result"] == "0-1":
-                active_players_set.add(black_id)
-            else:
-                white_index = seed_map.get(white_id, 9999)
-                black_index = seed_map.get(black_id, 9999)
-                active_players_set.add(white_id if white_index < black_index else black_id)
-
-        active_players = [player for player in ordered if int(player["id"]) in active_players_set]
+        avancaram = {int(player_id) for player_id in advancing_ids}
+        active_players = [player for player in ordered if int(player["id"]) in avancaram]
 
     if len(active_players) == 1:
         raise AppError("O torneio já tem um vencedor. Não é possível gerar mais rodadas.")
@@ -229,12 +168,15 @@ def knockout_pairings(
         board += 1
 
     for player in bye_players:
+        # Bye de verdade, como no Suico e no rodizio (PAR-01/03): gravado como
+        # `1-0` ele pontuava certo por acaso (o padrao de `bye_points` e 1,0) e
+        # aparecia como VITORIA em tudo que le o resultado.
         pairings.append(
             {
                 "board_number": board,
                 "white_player_id": player["id"],
                 "black_player_id": None,
-                "result": "1-0" if not settings.get("disable_bye") else "",
+                "result": "BYE",
                 "is_bye": 1,
             }
         )

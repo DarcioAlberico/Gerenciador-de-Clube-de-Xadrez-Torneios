@@ -1744,29 +1744,59 @@ de desempate homologados e pede a sua propria tarefa.
 
 #### PAR-03 - Knockout e Scheveningen maduros
 
-Status: pendente.
+Status: FEITO (2026-08-01).
 
 Problema:
 
-- no mata-mata, empate, duplo W.O. ou resultado vazio promovem o melhor seed
-  silenciosamente (`fide_dutch.py:234-241`), sem desempate nem registro do
-  criterio;
-- Scheveningen exige grupos exatamente iguais e recalcula a escala a cada
-  rodada (`:150-203`) — desistencia quebra o formato.
+- no mata-mata, empate, duplo W.O. ou resultado vazio promoviam o melhor seed
+  silenciosamente, sem desempate nem registro do criterio. E o W.O. e o
+  resultado por decisao do arbitro (`1F-0F`, `1U-0U`), que TEM vencedor, caiam
+  na mesma vala: o avanco saia do ranking, e nao do placar;
+- Scheveningen exigia grupos exatamente iguais e recalculava a escala a cada
+  rodada — desistencia deslocava os confrontos futuros e ainda desigualava os
+  grupos, o que passava a RECUSAR a geracao.
 
-Escopo:
+Como ficou:
 
-- desempate de KO configuravel: mini-match, partidas rapidas/blitz, armagedom
-  ou decisao manual do arbitro, com registro do criterio de avanco;
-- disputa de 3o lugar opcional e visualizacao de chave;
-- Scheveningen com escala persistida e tolerancia a desistencia (bye ou
-  substituto).
+- **quem avanca sai dos PONTOS do resultado**, e nao de uma lista de codigos:
+  `board_winner` usa `RESULT_POINTS`, entao W.O. e decisao arbitral decidem a
+  mesa como qualquer vitoria. Empate, dupla ausencia e mesa em branco nao
+  decidem — e agora PARAM a geracao da proxima fase com a lista das mesas;
+- **o desempate e registrado, nao simulado**. O sistema nao joga o blitz nem o
+  armagedom: ele guarda quem passou e por que criterio (mini-match, rapidas,
+  blitz, armagedom, criterio do regulamento, decisao do arbitro), com motivo
+  obrigatorio nos dois ultimos — sao os que nao se explicam sozinhos. Tabela
+  `knockout_advancements` (schema v52), evento de auditoria e dialogo na tela de
+  rodadas;
+- **a chave explica cada avanco** (`knockout_bracket` + "Chave do mata-mata" no
+  menu da rodada): fase a fase, com o motivo ao lado de quem passou e a mesa sem
+  decisao aparecendo como pendencia em vez de sumir;
+- **disputa de 3o lugar** opcional (`knockout_third_place`): os dois perdedores
+  da semifinal jogam na mesma rodada da final. Quem vence ali nao volta a chave
+  principal — o filtro e "avancou tambem na fase anterior", sem coluna nova;
+- **Scheveningen com escala guardada**: grupo e numero passam a morar no jogador
+  (`scheveningen_group` ja existia, `scheveningen_number` e novo). Quem desiste
+  mantem a cadeira e a mesa sai por W.O., com aviso — os mesmos avisos do rodizio,
+  agora num modulo compartilhado (`pairing/fixed_calendar.py`);
+- **bye do mata-mata virou bye de verdade**, como no rodizio (PAR-01);
+- as duas versoes antigas em `fide_dutch.py` foram REMOVIDAS.
+
+Arquivos: `pairing/knockout.py` e `pairing/scheveningen.py` (novos, puros),
+`pairing/fixed_calendar.py` (novo), `pairing/fide_dutch.py`, `pairing_service.py`,
+`core/database_schema.py`, `core/database_tournament_core.py`,
+`database/migrations/legacy_migrations.py` (v52), `services/constants.py`,
+`ui/screens/pairing_results/knockout.py` (novo), `.../state.py`, `.../view.py`,
+`ui/screens/tournament_settings_ui.py`.
 
 Criterios de aceite:
 
-- [ ] empate em KO exige decisao registrada antes de gerar a proxima fase;
-- [ ] a chave exibe por que cada jogador avancou;
-- [ ] Scheveningen sobrevive a desistencia sem corromper confrontos passados.
+- [x] empate em KO exige decisao registrada antes de gerar a proxima fase;
+- [x] a chave exibe por que cada jogador avancou;
+- [x] Scheveningen sobrevive a desistencia sem corromper confrontos passados.
+
+Fica pendente: substituto no lugar do desistente (o escopo dizia "bye ou
+substituto"); hoje a mesa sai por W.O., que e a saida que nao inventa um jogador
+que o regulamento talvez nao autorize.
 
 #### PAR-04 - Dividas tecnicas do nucleo de pareamento
 
@@ -2250,7 +2280,7 @@ Entregas:
 
 1. [x] `PAR-02` Aceleracao e entrada tardia no caminho Gacrux.
 2. [x] `PAR-01` Round-robin com tabela persistida e returno.
-3. [ ] `PAR-03` Knockout e Scheveningen maduros.
+3. [x] `PAR-03` Knockout e Scheveningen maduros.
 4. [ ] `PAR-04` Demais dividas tecnicas do nucleo.
 
 ### Sprint 11 - Submissao federativa

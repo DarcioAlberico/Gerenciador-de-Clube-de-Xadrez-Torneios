@@ -277,6 +277,8 @@ TOURNAMENT_FLAG_FIELDS = {
     # Returno do rodizio (PAR-01). Nao vale para o Suico: la o numero de rodadas
     # e escolhido, e nao derivado do calendario.
     "round_robin_double",
+    # Disputa de 3o lugar no mata-mata (PAR-03).
+    "knockout_third_place",
     "accelerated_system",
     "hide_standings",
     "calculate_performance",

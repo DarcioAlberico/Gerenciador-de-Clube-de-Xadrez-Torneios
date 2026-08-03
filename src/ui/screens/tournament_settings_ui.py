@@ -401,6 +401,9 @@ class TournamentSettingsMixin:
             # So tem efeito no formato "Schuring (Todos contra todos)": o
             # calendario roda duas vezes, com as cores invertidas na volta.
             "round_robin_double": "Returno no todos contra todos (turno e returno)",
+            # So tem efeito no formato "Mata-mata": os dois perdedores da
+            # semifinal jogam pelo 3o lugar, na mesma rodada da final.
+            "knockout_third_place": "Disputa de 3o lugar no mata-mata",
             "accelerated_system": "Sistema acelerado",
             "hide_standings": "Ocultar classificacao",
             "calculate_performance": "Calcular desempenho do jogador",

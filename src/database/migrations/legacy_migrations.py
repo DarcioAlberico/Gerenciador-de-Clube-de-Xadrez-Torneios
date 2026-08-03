@@ -63,6 +63,7 @@ class LegacyMigrations:
             49: self._migrate_to_v49,
             50: self._migrate_to_v50,
             51: self._migrate_to_v51,
+            52: self._migrate_to_v52,
         }
 
     def _run_schema_migrations(self, connection: sqlite3.Connection) -> None:
@@ -183,6 +184,8 @@ class LegacyMigrations:
             self._migrate_to_v50(connection)
         if self.db.SCHEMA_VERSION >= 51:
             self._migrate_to_v51(connection)
+        if self.db.SCHEMA_VERSION >= 52:
+            self._migrate_to_v52(connection)
 
     def _migrate_to_v1(self, connection: sqlite3.Connection) -> None:
         now = self.db.now()
@@ -2104,4 +2107,48 @@ class LegacyMigrations:
             connection.execute(
                 "ALTER TABLE tournament_settings "
                 "ADD COLUMN round_robin_double INTEGER NOT NULL DEFAULT 0"
+            )
+
+    def _migrate_to_v52(self, connection: sqlite3.Connection) -> None:
+        """Mata-mata com avanco registrado e escala do Scheveningen (PAR-03).
+
+        No mata-mata, empate/dupla ausencia/mesa em branco promoviam o melhor
+        numero inicial EM SILENCIO — nao havia onde registrar que houve um blitz
+        de desempate, um armagedom ou uma decisao arbitral. A tabela nova e o
+        lugar disso, e a chave passa a explicar cada avanco.
+
+        No Scheveningen, a escala era recalculada a cada rodada a partir da lista
+        de ativos: uma desistencia deslocava os confrontos que ainda faltavam. O
+        numero dentro do grupo passa a morar no jogador, ao lado do grupo que ja
+        morava la.
+
+        Torneio antigo comeca sem escala (numero 0) e sem avanco registrado, que
+        e o que ele de fato tem: a escala e montada na proxima geracao de rodada,
+        e nenhum avanco passado e inventado.
+        """
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS knockout_advancements (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tournament_id INTEGER NOT NULL,
+                pairing_id INTEGER NOT NULL,
+                player_id INTEGER NOT NULL,
+                criterion TEXT NOT NULL,
+                notes TEXT NOT NULL DEFAULT '',
+                actor TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                UNIQUE (tournament_id, pairing_id)
+            )
+            """
+        )
+        columns = self.db._table_columns(connection, "players")
+        if "scheveningen_number" not in columns:
+            connection.execute(
+                "ALTER TABLE players ADD COLUMN scheveningen_number INTEGER NOT NULL DEFAULT 0"
+            )
+        settings_columns = self.db._table_columns(connection, "tournament_settings")
+        if "knockout_third_place" not in settings_columns:
+            connection.execute(
+                "ALTER TABLE tournament_settings "
+                "ADD COLUMN knockout_third_place INTEGER NOT NULL DEFAULT 0"
             )

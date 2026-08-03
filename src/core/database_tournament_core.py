@@ -428,6 +428,7 @@ class TournamentCoreMixin(_DatabaseInfra):
                     pairing_system = ?, tiebreak_engine = ?, tiebreak_strict = ?,
                     max_requested_byes = ?, last_requested_bye_round = ?,
                     acceleration_method = ?, round_robin_double = ?,
+                    knockout_third_place = ?,
                     hide_color_names = ?, show_opponents_in_standings = ?,
                     tiebreak_sequence = ?, team_tiebreak_sequence = ?,
                     prize_policy = ?, prize_tax_percent = ?,
@@ -474,6 +475,7 @@ class TournamentCoreMixin(_DatabaseInfra):
                     int(data.get("last_requested_bye_round", 0) or 0),
                     str(data.get("acceleration_method", "none")).strip() or "none",
                     int(data.get("round_robin_double", 0) or 0),
+                    int(data.get("knockout_third_place", 0) or 0),
                     int(data.get("hide_color_names", 0) or 0),
                     int(data.get("show_opponents_in_standings", 0) or 0),
                     str(data.get("tiebreak_sequence", "")),
@@ -2376,6 +2378,75 @@ class TournamentCoreMixin(_DatabaseInfra):
                 (int(tournament_id),),
             ).fetchall()
             return self.rows_to_dicts(rows)
+
+    def list_knockout_advancements(self, tournament_id: int) -> list[dict[str, Any]]:
+        """Avancos de fase registrados pelo arbitro no mata-mata (PAR-03)."""
+        with self.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT ka.*, p.name AS player_name
+                FROM knockout_advancements ka
+                LEFT JOIN players p ON p.id = ka.player_id
+                WHERE ka.tournament_id = ?
+                ORDER BY ka.pairing_id ASC
+                """,
+                (int(tournament_id),),
+            ).fetchall()
+            return self.rows_to_dicts(rows)
+
+    def save_knockout_advancement(
+        self,
+        tournament_id: int,
+        pairing_id: int,
+        player_id: int,
+        criterion: str,
+        *,
+        notes: str = "",
+        actor: str = "",
+    ) -> None:
+        """Grava (ou corrige) quem avancou naquela mesa e por que criterio."""
+        with self.connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO knockout_advancements (
+                    tournament_id, pairing_id, player_id, criterion, notes, actor, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (tournament_id, pairing_id) DO UPDATE SET
+                    player_id = excluded.player_id,
+                    criterion = excluded.criterion,
+                    notes = excluded.notes,
+                    actor = excluded.actor,
+                    created_at = excluded.created_at
+                """,
+                (
+                    int(tournament_id),
+                    int(pairing_id),
+                    int(player_id),
+                    str(criterion).strip(),
+                    str(notes or "").strip(),
+                    str(actor or "").strip(),
+                    self.now(),
+                ),
+            )
+
+    def save_scheveningen_scale(
+        self,
+        tournament_id: int,
+        scale_by_player: dict[int, tuple[str, int]],
+    ) -> None:
+        """Grava a escala do Scheveningen (grupo + numero) nos jogadores."""
+        with self.connect() as connection:
+            connection.executemany(
+                """
+                UPDATE players
+                SET scheveningen_group = ?, scheveningen_number = ?
+                WHERE id = ? AND tournament_id = ?
+                """,
+                [
+                    (str(grupo), int(numero), int(player_id), int(tournament_id))
+                    for player_id, (grupo, numero) in scale_by_player.items()
+                ],
+            )
 
     def list_round_robin_numbers(self, tournament_id: int) -> dict[int, int]:
         """Numeros de rodizio ja atribuidos: `{player_id: numero}` (PAR-01).
