@@ -40,6 +40,47 @@ def team_color_histories(matches: list[dict[str, Any]]) -> dict[int, list[str]]:
     return histories
 
 
+def team_float_histories(matches: list[dict[str, Any]]) -> dict[int, list[str]]:
+    """Flutuacoes por equipe, na ordem das rodadas (PAR-04).
+
+    O Suico por equipes penalizava float repetido no individual e nao aqui: a
+    mesma equipe podia descer de grupo tres rodadas seguidas sem que o motor
+    notasse. Os match points de cada confronto ja estao gravados, entao o
+    historico sai deles — bye conta como downfloat quando pontua, igual ao
+    individual.
+    """
+    histories: dict[int, list[str]] = {}
+    scores: dict[int, float] = {}
+    for match in sorted(matches, key=lambda item: int(item.get("round_number") or 0)):
+        white_id = int(match["white_team_id"])
+        black_id = int(match["black_team_id"]) if match.get("black_team_id") else None
+        histories.setdefault(white_id, [])
+        scores.setdefault(white_id, 0.0)
+        white_points = float(match.get("white_match_points") or 0.0)
+
+        if match.get("is_bye") or black_id is None:
+            histories[white_id].append("bye")
+            if white_points > 0:
+                histories[white_id].append("down")
+            scores[white_id] += white_points
+            continue
+
+        histories.setdefault(black_id, [])
+        scores.setdefault(black_id, 0.0)
+        if scores[white_id] < scores[black_id]:
+            histories[white_id].append("up")
+            histories[black_id].append("down")
+        elif scores[white_id] > scores[black_id]:
+            histories[white_id].append("down")
+            histories[black_id].append("up")
+        else:
+            histories[white_id].append("=")
+            histories[black_id].append("=")
+        scores[white_id] += white_points
+        scores[black_id] += float(match.get("black_match_points") or 0.0)
+    return histories
+
+
 def played_pairs(pairings: list[dict[str, Any]]) -> set[frozenset[int]]:
     """Pares que efetivamente JOGARAM entre si (regra de nao-repeticao).
 
@@ -109,6 +150,17 @@ def float_histories(
     bye_points: float,
     result_points: dict[str, tuple[float, float]],
 ) -> dict[int, list[str]]:
+    """Sequencia de flutuacoes por jogador (up/down/=/bye).
+
+    Partida NAO JOGADA nao produz flutuacao por diferenca de pontos: quem pontuou
+    sem jogar (W.O. a favor, bye que vale ponto) conta como DOWNFLOAT, e quem
+    perdeu por W.O. nao conta nada. E a regra do motor FIDE — `compute_flt` do
+    Gacrux compara os pontos so quando `played`, e no ramo "dutch" da `d` a quem
+    ganhou ponto sem jogar (PAR-04).
+
+    Antes, o W.O. entrava como flutuacao normal dos DOIS lados enquanto a cor e a
+    nao-repeticao ja o excluiam: o mesmo jogo contava de tres jeitos diferentes.
+    """
     scores = {
         int(player["id"]): float(player.get("starting_points", 0.0) or 0.0)
         for player in players
@@ -122,16 +174,36 @@ def float_histories(
         scores.setdefault(white_id, 0.0)
 
         if pairing["is_bye"]:
-            histories[white_id].append("bye")
-            scores[white_id] += REQUESTED_BYE_POINTS.get(
+            ganhos = REQUESTED_BYE_POINTS.get(
                 str(pairing.get("result") or "").strip().upper(), bye_points
             )
+            # `bye` continua marcado a parte (a escolha do bye usa esta marca),
+            # e o downfloat so entra quando o bye PONTUOU — bye de zero ponto nao
+            # e flutuacao para ninguem.
+            histories[white_id].append("bye")
+            if ganhos > 0:
+                histories[white_id].append("down")
+            scores[white_id] += ganhos
             continue
 
         if black_id is None:
             continue
         histories.setdefault(black_id, [])
         scores.setdefault(black_id, 0.0)
+
+        if str(pairing.get("result") or "").strip().upper() in WALKOVER_RESULTS:
+            # Nao jogada: quem pontuou sem jogar conta como downfloat; o outro
+            # lado nao flutua. Ver o docstring — e o ramo "dutch" do Gacrux.
+            pontos = result_points.get(str(pairing.get("result") or "").strip())
+            if pontos:
+                brancas, pretas = pontos
+                if brancas > pretas:
+                    histories[white_id].append("down")
+                elif pretas > brancas:
+                    histories[black_id].append("down")
+                scores[white_id] += brancas
+                scores[black_id] += pretas
+            continue
 
         white_score = scores[white_id]
         black_score = scores[black_id]

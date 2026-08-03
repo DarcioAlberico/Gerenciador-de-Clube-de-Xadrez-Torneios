@@ -460,7 +460,9 @@ Entregas, em ordem de prioridade:
    ENTREGUE em 2026-07-30), correcao de resultado com motivo obrigatorio,
    desbloqueio pontual e alerta de cascata (`ARB-01` — ENTREGUE em 2026-07-30),
    troca de cores com auditoria e round-robin por equipes destravado
-   (`PAR-04` parcial — ENTREGUE em 2026-07-30).
+   (`PAR-04` parcial — ENTREGUE em 2026-07-30; a parte de motor — topscorers
+   C.3, flutuacao em jogo nao disputado e float repetido por equipes — ENTREGUE
+   em 2026-08-03, na Sprint 10).
 2. **Desempates conformes (Sprint 8)**: adversario virtual FIDE no motor
    proprio ou rebaixamento formal a modo legado (`TBK-03` — ENTREGUE em
    2026-07-30), parametros de criterios editaveis e registro 212 fiel a

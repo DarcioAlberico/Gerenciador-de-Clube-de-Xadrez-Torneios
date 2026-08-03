@@ -190,7 +190,15 @@ def search_dutch_pairing(
     histories: dict[int, list[str]],
     played_pairs: set[frozenset[int]],
     strict_colors: bool,
+    topscorers: frozenset[int] | set[int] = frozenset(),
 ) -> list[tuple[dict[str, Any], dict[str, Any]]] | None:
+    """Pareamento do bracket com cor absoluta (C.3) respeitada.
+
+    `topscorers` sao os jogadores que a A.7 tira do C.3 na ultima rodada: entre
+    dois deles a cor volta a ser criterio de QUALIDADE, e o par deixa de ser
+    recusado aqui. Sem isso, a rodada que decide o torneio podia nao juntar os
+    dois lideres so porque ambos deviam a mesma cor.
+    """
     if not pairable:
         return []
 
@@ -211,7 +219,7 @@ def search_dutch_pairing(
             if frozenset((p1["id"], p2["id"])) in played_pairs:
                 continue
 
-            if strict_colors:
+            if strict_colors and not (p1["id"] in topscorers and p2["id"] in topscorers):
                 white_id, _black_id = choose_colors(p1, p2, histories)
                 p1_color = "W" if white_id == p1["id"] else "B"
                 p2_color = "W" if white_id == p2["id"] else "B"
@@ -250,6 +258,7 @@ def dutch_bracket_pairing(
     repeat_pairing_penalty: int,
     score_group_float_penalty: int,
     score_diff_penalty: int,
+    topscorers: frozenset[int] | set[int] = frozenset(),
 ) -> tuple[list[tuple[dict[str, Any], dict[str, Any]]], list[dict[str, Any]]]:
     n = len(group)
 
@@ -258,7 +267,9 @@ def dutch_bracket_pairing(
             break
         pairable = group[:-num_floaters] if num_floaters else group
         floaters = group[-num_floaters:] if num_floaters else []
-        best_pairs = search_dutch_pairing(pairable, histories, played_pairs, strict_colors=True)
+        best_pairs = search_dutch_pairing(
+            pairable, histories, played_pairs, strict_colors=True, topscorers=topscorers
+        )
         if best_pairs is not None:
             return best_pairs, floaters
 
@@ -287,6 +298,7 @@ def dutch_bracket_pairing(
                 repeat_pairing_penalty=repeat_pairing_penalty,
                 score_group_float_penalty=score_group_float_penalty,
                 score_diff_penalty=score_diff_penalty,
+                topscorers=topscorers,
             )
         else:
             best_pairs = beam_player_pairs(
@@ -299,6 +311,7 @@ def dutch_bracket_pairing(
                 repeat_pairing_penalty=repeat_pairing_penalty,
                 score_group_float_penalty=score_group_float_penalty,
                 score_diff_penalty=score_diff_penalty,
+                topscorers=topscorers,
             )
 
         if all(frozenset((p1["id"], p2["id"])) not in played_pairs for p1, p2 in best_pairs):
@@ -346,6 +359,7 @@ def _single_pair_quality(
     repeat_pairing_penalty: int,
     score_group_float_penalty: int,
     score_diff_penalty: int,
+    topscorers: frozenset[int] | set[int] = frozenset(),
 ) -> tuple[int, int, float]:
     repeat = 1 if frozenset((player["id"], opponent["id"])) in played_pairs else 0
     hard_violations = pairing_color_hard_violations([(player, opponent)], histories)
@@ -360,6 +374,7 @@ def _single_pair_quality(
         repeat_pairing_penalty=repeat_pairing_penalty,
         score_group_float_penalty=score_group_float_penalty,
         score_diff_penalty=score_diff_penalty,
+        topscorers=topscorers,
     )
     return repeat, hard_violations, penalty
 
@@ -375,6 +390,7 @@ def pairing_quality(
     repeat_pairing_penalty: int,
     score_group_float_penalty: int,
     score_diff_penalty: int,
+    topscorers: frozenset[int] | set[int] = frozenset(),
 ) -> tuple[int, int, float]:
     quality = (0, 0, 0.0)
     for player, opponent in pairs:
@@ -389,6 +405,7 @@ def pairing_quality(
             repeat_pairing_penalty=repeat_pairing_penalty,
             score_group_float_penalty=score_group_float_penalty,
             score_diff_penalty=score_diff_penalty,
+            topscorers=topscorers,
         )
         quality = (
             quality[0] + pair_quality[0],
@@ -409,6 +426,7 @@ def beam_player_pairs(
     repeat_pairing_penalty: int,
     score_group_float_penalty: int,
     score_diff_penalty: int,
+    topscorers: frozenset[int] | set[int] = frozenset(),
     beam_width: int = 64,
     branch_width: int = 14,
 ) -> list[tuple[dict[str, Any], dict[str, Any]]]:
@@ -420,6 +438,7 @@ def beam_player_pairs(
         "repeat_pairing_penalty": repeat_pairing_penalty,
         "score_group_float_penalty": score_group_float_penalty,
         "score_diff_penalty": score_diff_penalty,
+        "topscorers": topscorers,
     }
     initial_remaining = tuple(int(player["id"]) for player in players)
     states: list[tuple[tuple[tuple[int, int], ...], tuple[int, ...], tuple[int, int, float]]] = [
@@ -506,6 +525,7 @@ def improve_pairing_by_swaps(
     repeat_pairing_penalty: int,
     score_group_float_penalty: int,
     score_diff_penalty: int,
+    topscorers: frozenset[int] | set[int] = frozenset(),
 ) -> list[tuple[dict[str, Any], dict[str, Any]]]:
     """Reduz repeticoes/cores por trocas locais sem explodir combinatoriamente."""
     current = list(pairs)
@@ -516,6 +536,7 @@ def improve_pairing_by_swaps(
         "repeat_pairing_penalty": repeat_pairing_penalty,
         "score_group_float_penalty": score_group_float_penalty,
         "score_diff_penalty": score_diff_penalty,
+        "topscorers": topscorers,
     }
 
     def pair_quality(pair: tuple[dict[str, Any], dict[str, Any]]) -> tuple[int, int, float]:
@@ -615,6 +636,7 @@ def improve_pairing_by_group_rematches(
     repeat_pairing_penalty: int,
     score_group_float_penalty: int,
     score_diff_penalty: int,
+    topscorers: frozenset[int] | set[int] = frozenset(),
 ) -> list[tuple[dict[str, Any], dict[str, Any]]]:
     current = list(pairs)
     if len(current) < group_size:
@@ -624,6 +646,7 @@ def improve_pairing_by_group_rematches(
         "repeat_pairing_penalty": repeat_pairing_penalty,
         "score_group_float_penalty": score_group_float_penalty,
         "score_diff_penalty": score_diff_penalty,
+        "topscorers": topscorers,
     }
     total_quality = pairing_quality(
         current,
@@ -742,6 +765,7 @@ def choose_bye_player_with_pairing_quality(
     repeat_pairing_penalty: int,
     score_group_float_penalty: int,
     score_diff_penalty: int,
+    topscorers: frozenset[int] | set[int] = frozenset(),
 ) -> dict[str, Any]:
     default_bye = choose_bye_player(players, standings, bye_player_ids)
     has_pairing_history = bool(played_pairs or bye_player_ids) or any(
@@ -786,6 +810,7 @@ def choose_bye_player_with_pairing_quality(
         "repeat_pairing_penalty": repeat_pairing_penalty,
         "score_group_float_penalty": score_group_float_penalty,
         "score_diff_penalty": score_diff_penalty,
+        "topscorers": topscorers,
     }
 
     def unplayed_count(player_id: int) -> int:
@@ -860,7 +885,9 @@ def swiss_pairings(
     repeat_pairing_penalty: int,
     score_group_float_penalty: int,
     score_diff_penalty: int,
+    topscorers: frozenset[int] | set[int] = frozenset(),
 ) -> list[dict[str, Any]]:
+    """Suico do motor proprio. `topscorers` implementa o C.3 (ver A.7)."""
     ranks = rank_by_player_id(standings)
     pending = sorted(
         players,
@@ -883,6 +910,7 @@ def swiss_pairings(
             repeat_pairing_penalty=repeat_pairing_penalty,
             score_group_float_penalty=score_group_float_penalty,
             score_diff_penalty=score_diff_penalty,
+            topscorers=topscorers,
         )
         pending.remove(bye_player)
         pairings.append(
@@ -919,6 +947,7 @@ def swiss_pairings(
             repeat_pairing_penalty=repeat_pairing_penalty,
             score_group_float_penalty=score_group_float_penalty,
             score_diff_penalty=score_diff_penalty,
+            topscorers=topscorers,
         )
         player_pairs.extend(group_pairs)
         floaters.extend(group_floaters)
@@ -928,6 +957,7 @@ def swiss_pairings(
             "repeat_pairing_penalty": repeat_pairing_penalty,
             "score_group_float_penalty": score_group_float_penalty,
             "score_diff_penalty": score_diff_penalty,
+            "topscorers": topscorers,
         }
         if len(floaters) <= max_exhaustive_pairing_players:
             leftover_pairs = optimal_player_pairs(
@@ -959,6 +989,7 @@ def swiss_pairings(
         "repeat_pairing_penalty": repeat_pairing_penalty,
         "score_group_float_penalty": score_group_float_penalty,
         "score_diff_penalty": score_diff_penalty,
+        "topscorers": topscorers,
     }
     current_quality = pairing_quality(
         player_pairs,

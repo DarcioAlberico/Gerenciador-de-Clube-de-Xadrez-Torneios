@@ -411,6 +411,7 @@ def dutch_team_bracket_pairing(
     repeat_pairing_penalty: int,
     score_group_float_penalty: int,
     score_diff_penalty: int,
+    float_histories: dict[int, list[str]] | None = None,
 ) -> tuple[list[tuple[dict[str, Any], dict[str, Any]]], list[dict[str, Any]]]:
     n = len(group)
 
@@ -458,6 +459,7 @@ def dutch_team_bracket_pairing(
                 repeat_pairing_penalty=repeat_pairing_penalty,
                 score_group_float_penalty=score_group_float_penalty,
                 score_diff_penalty=score_diff_penalty,
+                float_histories=float_histories,
             )
         else:
             best_pairs = greedy_team_pairs(
@@ -468,6 +470,7 @@ def dutch_team_bracket_pairing(
                 repeat_pairing_penalty=repeat_pairing_penalty,
                 score_group_float_penalty=score_group_float_penalty,
                 score_diff_penalty=score_diff_penalty,
+                float_histories=float_histories,
             )
 
         if all(frozenset((int(p1["id"]), int(p2["id"]))) not in played_pairs for p1, p2 in best_pairs):
@@ -491,6 +494,7 @@ def swiss_team_matches(
     repeat_pairing_penalty: int,
     score_group_float_penalty: int,
     score_diff_penalty: int,
+    float_histories: dict[int, list[str]] | None = None,
 ) -> list[dict[str, Any]]:
     rank_by_team_id = {
         int(team_id): int(item.get("position", 0) or 0)
@@ -532,6 +536,7 @@ def swiss_team_matches(
             repeat_pairing_penalty=repeat_pairing_penalty,
             score_group_float_penalty=score_group_float_penalty,
             score_diff_penalty=score_diff_penalty,
+            float_histories=float_histories,
         )
         team_pairs.extend(group_pairs)
         floaters.extend(group_floaters)
@@ -541,6 +546,7 @@ def swiss_team_matches(
             "repeat_pairing_penalty": repeat_pairing_penalty,
             "score_group_float_penalty": score_group_float_penalty,
             "score_diff_penalty": score_diff_penalty,
+            "float_histories": float_histories,
         }
         if len(floaters) <= max_exhaustive_pairing_teams:
             leftover_pairs = optimal_team_pairs(

@@ -54,6 +54,7 @@ from src.services.pairing import (
     played_pairs as _played_pairs,
     prohibited_pairs_for_round as _prohibited_pairs_for_round,
     rating_for_initial_order as _rating_for_initial_order,
+    topscorer_ids as _topscorer_ids,
     result_submission_issue as _result_submission_issue,
     result_states_summary as _result_states_summary,
     round_robin_team_matches as _round_robin_team_matches,
@@ -70,6 +71,7 @@ from src.services.pairing import (
     team_starter_roster as _team_starter_roster,
     team_bye_ids as _team_bye_ids,
     team_color_histories as _team_color_histories,
+    team_float_histories as _team_float_histories,
     team_played_pairs as _team_played_pairs,
 )
 from src.services.pairing.point_adjustments import (
@@ -1955,7 +1957,13 @@ class PairingService:
             repeat_pairing_penalty=self.REPEAT_PAIRING_PENALTY,
             score_group_float_penalty=self.SCORE_GROUP_FLOAT_PENALTY,
             score_diff_penalty=self.SCORE_DIFF_PENALTY,
+            float_histories=self._team_float_histories(tournament_id),
         )
+
+    def _team_float_histories(self, tournament_id: int) -> dict[int, list[str]]:
+        """Flutuacoes por equipe — o que faltava para penalizar float repetido."""
+        matches = self.db.list_team_matches_for_tournament(tournament_id, closed_only=True)
+        return _team_float_histories(matches)
 
     def update_result(
         self,
@@ -3505,6 +3513,14 @@ class PairingService:
         standings = {item["player_id"]: item for item in self._standings(tournament_id)}
         settings = self.db.get_tournament_settings(tournament_id) or {}
         seeding = self._seeding(players, settings)
+        # Topscorers (C.3/A.7) saem da classificacao REAL, antes da aceleracao:
+        # ponto ficticio de pareamento nao coloca ninguem na lideranca (PAR-04).
+        tournament = self.db.get_tournament(tournament_id) or {}
+        topscorers = _topscorer_ids(
+            standings,
+            round_number=round_number,
+            rounds_total=int(tournament.get("rounds_count") or 0),
+        )
         standings = _accelerated_standings(
             standings,
             seeding,
@@ -3531,6 +3547,7 @@ class PairingService:
             repeat_pairing_penalty=self.REPEAT_PAIRING_PENALTY,
             score_group_float_penalty=self.SCORE_GROUP_FLOAT_PENALTY,
             score_diff_penalty=self.SCORE_DIFF_PENALTY,
+            topscorers=topscorers,
         )
 
     def _team_played_pairs(self, tournament_id: int) -> set[frozenset[int]]:

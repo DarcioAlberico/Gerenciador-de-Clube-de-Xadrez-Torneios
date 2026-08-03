@@ -74,6 +74,7 @@ from src.services.pairing.constraints import (
     select_rating_for_order,
     team_pair_penalty,
     team_pairing_order_key,
+    topscorer_ids,
     would_make_three_colors,
 )
 from src.services.pairing.diagnostics import pairing_diagnostics
@@ -93,6 +94,7 @@ from src.services.pairing.histories import (
     played_pairs,
     team_bye_ids,
     team_color_histories,
+    team_float_histories,
     team_played_pairs,
 )
 from src.services.pairing.previews import individual_preview_payload, team_preview_payload
@@ -305,11 +307,13 @@ __all__ = [
     "team_bye_summary",
     "team_bye_ids",
     "team_color_histories",
+    "team_float_histories",
     "team_match_payload",
     "team_match_summary",
     "team_starter_roster",
     "team_pair_penalty",
     "team_pairing_order_key",
+    "topscorer_ids",
     "team_preview_payload",
     "team_played_pairs",
     "team_round_dashboard_metrics",
