@@ -398,6 +398,9 @@ class TournamentSettingsMixin:
             # impar). O bye SOLICITADO — o jogador avisando que faltaria — tem
             # politica propria (ARB-04) e nao passa por aqui.
             "disable_bye": "Desativar bye alocado (PAB)",
+            # So tem efeito no formato "Schuring (Todos contra todos)": o
+            # calendario roda duas vezes, com as cores invertidas na volta.
+            "round_robin_double": "Returno no todos contra todos (turno e returno)",
             "accelerated_system": "Sistema acelerado",
             "hide_standings": "Ocultar classificacao",
             "calculate_performance": "Calcular desempenho do jogador",

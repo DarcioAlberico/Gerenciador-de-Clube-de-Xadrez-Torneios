@@ -235,10 +235,15 @@ def round_robin_team_matches(
 ) -> list[dict[str, Any]]:
     """Todos contra todos por equipes (Berger), rodada a rodada.
 
-    Mesma rotação do round-robin individual (`round_robin_pairings`): a primeira
-    equipe fica parada e as demais giram, o que garante que cada par se encontre
-    exatamente uma vez. Número ímpar de equipes ganha uma equipe fantasma, e quem
-    cai com ela recebe o bye da rodada.
+    Rotação de círculo: a primeira equipe fica parada e as demais giram, o que
+    garante que cada par se encontre exatamente uma vez. Número ímpar de equipes
+    ganha uma equipe fantasma, e quem cai com ela recebe o bye da rodada.
+
+    Diferente do individual, que desde a PAR-01 lê a tabela de Berger de números
+    SORTEADOS E GUARDADOS (`pairing/round_robin.py`), aqui o círculo ainda é
+    recalculado a cada rodada a partir da lista de equipes ativas — desativar uma
+    equipe no meio do evento remexe os confrontos futuras das outras. É o mesmo
+    defeito, no caminho de equipes, e continua em aberto.
 
     A cor da EQUIPE alterna com a paridade da rodada — sem isso, a primeira
     equipe (a que não gira) jogaria de brancas em todas as rodadas. As cores dos

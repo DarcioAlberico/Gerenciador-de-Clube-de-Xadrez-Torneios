@@ -427,7 +427,7 @@ class TournamentCoreMixin(_DatabaseInfra):
                     hide_standings = ?, calculate_performance = ?,
                     pairing_system = ?, tiebreak_engine = ?, tiebreak_strict = ?,
                     max_requested_byes = ?, last_requested_bye_round = ?,
-                    acceleration_method = ?,
+                    acceleration_method = ?, round_robin_double = ?,
                     hide_color_names = ?, show_opponents_in_standings = ?,
                     tiebreak_sequence = ?, team_tiebreak_sequence = ?,
                     prize_policy = ?, prize_tax_percent = ?,
@@ -473,6 +473,7 @@ class TournamentCoreMixin(_DatabaseInfra):
                     int(data.get("max_requested_byes", 0) or 0),
                     int(data.get("last_requested_bye_round", 0) or 0),
                     str(data.get("acceleration_method", "none")).strip() or "none",
+                    int(data.get("round_robin_double", 0) or 0),
                     int(data.get("hide_color_names", 0) or 0),
                     int(data.get("show_opponents_in_standings", 0) or 0),
                     str(data.get("tiebreak_sequence", "")),
@@ -2375,6 +2376,57 @@ class TournamentCoreMixin(_DatabaseInfra):
                 (int(tournament_id),),
             ).fetchall()
             return self.rows_to_dicts(rows)
+
+    def list_round_robin_numbers(self, tournament_id: int) -> dict[int, int]:
+        """Numeros de rodizio ja atribuidos: `{player_id: numero}` (PAR-01).
+
+        Vazio quando o calendario ainda nao foi sorteado — e e assim que o
+        servico sabe que precisa sortear.
+        """
+        with self.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT player_id, number
+                FROM round_robin_numbers
+                WHERE tournament_id = ?
+                ORDER BY number ASC
+                """,
+                (int(tournament_id),),
+            ).fetchall()
+            return {int(row["player_id"]): int(row["number"]) for row in rows}
+
+    def save_round_robin_numbers(
+        self,
+        tournament_id: int,
+        numbers_by_player: dict[int, int],
+    ) -> None:
+        """Grava o calendario do rodizio, substituindo o que houver.
+
+        Substituir e intencional: refazer o sorteio antes da primeira rodada e
+        legitimo (chegou mais gente, o sorteio publico foi outro). Hoje so o
+        proprio pareamento chama, na primeira rodada; se um dia houver tela de
+        sorteio, quem tera de barrar o refazer com rodada ja jogada e o SERVICO —
+        a regra e dele, nao do banco.
+        """
+        now = self.now()
+        with self.connect() as connection:
+            connection.execute(
+                "DELETE FROM round_robin_numbers WHERE tournament_id = ?",
+                (int(tournament_id),),
+            )
+            connection.executemany(
+                """
+                INSERT INTO round_robin_numbers (
+                    tournament_id, player_id, number, created_at
+                ) VALUES (?, ?, ?, ?)
+                """,
+                [
+                    (int(tournament_id), int(player_id), int(number), now)
+                    for player_id, number in sorted(
+                        numbers_by_player.items(), key=lambda item: int(item[1])
+                    )
+                ],
+            )
 
     def delete_prohibited_pairing(self, prohibition_id: int) -> None:
         with self.connect() as connection:
