@@ -102,10 +102,28 @@ Aplicativo desktop em Python para Gerenciar Clube/Escolas_Turmas e Torneios de X
 - Relatorio de taxas de rating por torneio, separado por FIDE, CBX e LBX, com
   configuracao de valores unitarios e exportacao XLSX/PDF.
 - Relatorio de variacao de rating FIDE (estimativa de apoio): tabela oficial de
-  expectativa com regra dos 400, fator K (10/20/40 com override por jogador),
-  Ro, We, ΔElo, Rc e performance (Rp) por jogador. Disponivel na tela
-  `Relatorios` como `Rating FIDE`, exportavel em CSV/XLSX/PDF e com snapshot
-  persistido para reimpressao. Nao substitui a homologacao oficial da federacao.
+  expectativa com regra dos 400, fator K, Ro, We, ΔElo, Rc e performance (Rp)
+  por jogador. Disponivel na tela `Relatorios` como `Rating FIDE`, exportavel em
+  CSV/XLSX/PDF e com snapshot persistido para reimpressao. Nao substitui a
+  homologacao oficial da federacao.
+  - **Ritmo**: o torneio e classificado em standard, rapido ou blitz pela
+    formula da FIDE (tempo + 60 vezes o incremento), e cada ritmo usa a SUA
+    lista de rating. Da para declarar o ritmo em `Config. torneio -> Oficial`
+    quando o campo de ritmo de jogo nao descrever o evento. Faltando o rating do
+    ritmo, o relatorio usa o standard e AVISA — nao troca de lista calado.
+  - **Fator K conforme o B.02**: 40 para jogador novo (ate 30 partidas, pelo
+    campo `Partidas ja ratadas` do jogador), 40 para sub-18 ate o fim do ano do
+    aniversario com rating abaixo de 2300, 10 a partir de 2400 e 20 no resto,
+    com teto de K x n. O relatorio mostra o MOTIVO de cada K.
+  - **Piso e rating inicial**: Rc abaixo do piso do regulamento sai no piso, com
+    aviso; quem ainda nao tem rating recebe a estimativa de rating INICIAL do
+    B.02 8.2 (dois adversarios ficticios de 1800 empatados, teto de 2200, minimo
+    de 5 partidas), com o motivo quando nao da para estimar.
+  - **Regulamento editavel**: as faixas de K, o piso e as regras de estreia sao
+    DADO, nao codigo. O perfil FIDE vem conferido contra o B.02; o da CBX vem
+    com a forma certa e marcado como NAO conferido — edite os valores em
+    `Config. torneio -> Oficial -> Regulamento CBX` conforme o texto vigente, e
+    o relatorio dira que os numeros vieram dali.
 - Distribuicao de premios em dinheiro: cadastro de premios por colocacao (geral),
   por categoria, especiais e de tabuleiro na tela `Config. torneio`; politicas de
   combinacao geral×categoria (apenas o maior, acumular ou Sistema Hort), divisao

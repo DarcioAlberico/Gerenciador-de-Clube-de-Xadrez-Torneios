@@ -64,6 +64,7 @@ class LegacyMigrations:
             50: self._migrate_to_v50,
             51: self._migrate_to_v51,
             52: self._migrate_to_v52,
+            53: self._migrate_to_v53,
         }
 
     def _run_schema_migrations(self, connection: sqlite3.Connection) -> None:
@@ -186,6 +187,8 @@ class LegacyMigrations:
             self._migrate_to_v51(connection)
         if self.db.SCHEMA_VERSION >= 52:
             self._migrate_to_v52(connection)
+        if self.db.SCHEMA_VERSION >= 53:
+            self._migrate_to_v53(connection)
 
     def _migrate_to_v1(self, connection: sqlite3.Connection) -> None:
         now = self.db.now()
@@ -2152,3 +2155,35 @@ class LegacyMigrations:
                 "ALTER TABLE tournament_settings "
                 "ADD COLUMN knockout_third_place INTEGER NOT NULL DEFAULT 0"
             )
+
+    def _migrate_to_v53(self, connection: sqlite3.Connection) -> None:
+        """Rating por ritmo, partidas ja ratadas e regulamento editavel (FED-07).
+
+        O jogador do torneio tinha UM rating, enquanto o snapshot da lista
+        oficial ja guardava standard, rapido e blitz: um torneio de rapidas
+        calculava a variacao contra a lista de standard e ninguem via.
+
+        `games_played` e o numero que faltava para a regra do jogador novo
+        (K = 40 ate 30 partidas) disparar alguma vez. Comeca em `0`, que aqui
+        significa DESCONHECIDO — nao estreante: tratar o plantel inteiro como
+        estreante daria K = 40 a todo mundo, que e pior do que nao aplicar.
+
+        No torneio, `rating_speed` guarda o ritmo declarado (vazio = deduzir do
+        campo de ritmo de jogo) e `rating_regulation` guarda, em JSON por base,
+        os ajustes do regulamento — e assim o regulamento da CBX, que nao esta
+        publicado em lugar que o programa consiga ler, e preenchido pelo arbitro
+        em vez de inventado pelo codigo.
+        """
+        player_columns = self.db._table_columns(connection, "players")
+        for column in ("rapid_rating", "blitz_rating", "games_played"):
+            if column not in player_columns:
+                connection.execute(
+                    f"ALTER TABLE players ADD COLUMN {column} INTEGER NOT NULL DEFAULT 0"
+                )
+
+        settings_columns = self.db._table_columns(connection, "tournament_settings")
+        for column in ("rating_speed", "rating_regulation"):
+            if column not in settings_columns:
+                connection.execute(
+                    f"ALTER TABLE tournament_settings ADD COLUMN {column} TEXT NOT NULL DEFAULT ''"
+                )

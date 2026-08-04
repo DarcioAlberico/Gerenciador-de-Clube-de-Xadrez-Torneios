@@ -71,6 +71,9 @@ class _DatabaseInfra:
             lbx_id: str = "",
             national_rating: int = 0,
             international_rating: int = 0,
+            rapid_rating: int = 0,
+            blitz_rating: int = 0,
+            games_played: int = 0,
             player_status: str = "active",
             starting_points: float | None = None,
         ) -> int: ...

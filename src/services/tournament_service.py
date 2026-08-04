@@ -23,6 +23,7 @@ from src.services.pairing import (
 )
 from src.services.pairing.constraints import rating_for_initial_order
 from src.services.prizes import PRIZE_POLICIES
+from src.services.rating import SPEED_CHOICES, serialize_regulation_overrides
 
 if TYPE_CHECKING:
     from src.services.club_service import ClubService
@@ -523,6 +524,11 @@ class TournamentService:
             parse_team_tiebreak_sequence(data.get("team_tiebreak_sequence"))
         )
 
+        rating_speed = str(data.get("rating_speed", "")).strip().lower()
+        if rating_speed not in SPEED_CHOICES:
+            raise AppError("Ritmo para rating invalido.")
+        rating_regulation = serialize_regulation_overrides(data.get("rating_regulation"))
+
         prize_policy = str(data.get("prize_policy", "best_only")).strip() or "best_only"
         if prize_policy not in PRIZE_POLICIES:
             raise AppError("Politica de premiacao invalida.")
@@ -570,6 +576,8 @@ class TournamentService:
             "team_lineup_deadline": str(data.get("team_lineup_deadline", "")).strip(),
             "team_rating_tolerance": team_rating_tolerance,
             "team_max_substitutions": team_max_substitutions,
+            "rating_speed": rating_speed,
+            "rating_regulation": rating_regulation,
             **rating_fees,
         }
         if pairing_method is not None:

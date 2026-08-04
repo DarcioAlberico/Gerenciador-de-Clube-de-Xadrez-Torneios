@@ -7,7 +7,8 @@ from typing import Any, Mapping
 
 from src.services.constants import *
 from src.services.fide_norms import build_norm_report
-from src.services.fide_rating import build_fide_report_rows
+from src.services.rating import build_report_rows, regulation_from_settings, resolve_speed
+from src.services.time_control import SPEED_LABELS, below_blitz_minimum
 from src.services.pairing.incidents import (
     decision_label as incident_decision_label,
     infraction_label as incident_infraction_label,
@@ -248,11 +249,24 @@ class ReportSectionsMixin:
         if tournament.get("competition_type") == "team":
             raise AppError("Relatório de variacao de rating disponível apenas para torneios individuais.")
 
+        settings = self.db.get_tournament_settings(tournament_id) or {}
         players = self.db.list_players(tournament_id, active_only=False)
         closed = self.db.get_pairings_for_tournament(tournament_id, closed_only=True)
         start_date = str(tournament.get("start_date") or "").strip()
         year = int(start_date[:4]) if len(start_date) >= 4 and start_date[:4].isdigit() else None
-        rows = build_fide_report_rows(players, closed, rating_type, tournament_year=year)
+        # FED-07: o ritmo decide a lista de rating e o perfil do regulamento.
+        speed, speed_origin = resolve_speed(
+            tournament.get("time_control"), settings.get("rating_speed")
+        )
+        regulation = regulation_from_settings(settings, rating_type, speed)
+        rows = build_report_rows(
+            players,
+            closed,
+            rating_type,
+            tournament_year=year,
+            speed=speed,
+            regulation=regulation,
+        )
         # Snapshot persistido para auditoria/reimpressao (idempotente por base).
         self.db.save_fide_rating_report(tournament_id, rating_type, rows)
 
@@ -263,15 +277,41 @@ class ReportSectionsMixin:
         def cell(value: Any) -> Any:
             return "-" if value is None else value
 
+        fallback = [row for row in rows if "sem rating" in str(row.get("rating_source") or "")]
+        below_floor = [row for row in rows if row.get("below_floor")]
         notice_rows = [
             ["Estimativa de apoio ao árbitro (We, fator K, Rc, Rp)."],
             [f"Não substitui a homologação oficial da {base_label}."],
             [f"So conta partidas jogadas contra adversarios com rating na base {base_label}."],
             ["Diferencas de rating acima de 400 sao tratadas como 400 (regra dos 400)."],
+            [f"Regulamento aplicado: {regulation.label} ({regulation.source})."],
         ]
+        if not regulation.confirmed:
+            notice_rows.append(
+                ["ATENCAO: valores deste regulamento NAO foram conferidos no texto vigente."]
+            )
+        if fallback:
+            notice_rows.append(
+                [
+                    f"{len(fallback)} jogador(es) sem rating de {SPEED_LABELS.get(speed, speed)}: "
+                    "usado o rating standard, o que muda o ΔElo. Importe a lista do ritmo."
+                ]
+            )
+        if below_floor:
+            notice_rows.append(
+                [
+                    f"{len(below_floor)} jogador(es) com Rc abaixo do piso de "
+                    f"{regulation.rating_floor}; o relatório publica o piso."
+                ]
+            )
+        if below_blitz_minimum(tournament.get("time_control")):
+            notice_rows.append(["Ritmo abaixo do minimo que a FIDE rata (3 minutos)."])
         summary_rows = [
             ["Torneio", tournament["name"]],
             ["Base de rating", base_label],
+            ["Ritmo", f"{SPEED_LABELS.get(speed, speed)} ({speed_origin})"],
+            ["Regulamento", regulation.label],
+            ["Piso de rating", regulation.rating_floor],
             ["Jogadores no relatório", len(rows)],
             ["Com rating", len(rated)],
             ["Sem rating (somente performance)", len(rows) - len(rated)],
@@ -283,7 +323,9 @@ class ReportSectionsMixin:
             [
                 row["name"],
                 row["ro"] if row.get("ro") else "-",
+                row.get("rating_source") or "-",
                 row["k"] if row.get("ro") else "-",
+                row.get("k_reason") or "-",
                 row["games_rated"],
                 row["score"],
                 cell(row["we"]),
@@ -294,15 +336,53 @@ class ReportSectionsMixin:
             ]
             for row in rows
         ]
-        return [
+        # Estreantes: quem ainda nao tem rating na base ganha a estimativa de
+        # rating INICIAL (B.02 8.2), que o relatorio antigo simplesmente nao
+        # calculava — sobrava so a performance, que nao e a mesma conta.
+        initial_rows = [
+            [
+                row["name"],
+                row["games_rated"],
+                row["score"],
+                self._format_report_number(row["average_opponent"]),
+                row["rp"],
+                row.get("initial_rating") or "-",
+                row.get("initial_reason") or "-",
+            ]
+            for row in rows
+            if not row.get("ro")
+        ]
+        sections: list[tuple[str, list[str], list[list[Any]]]] = [
             ("Aviso", ["Observação"], notice_rows),
             ("Resumo do relatório de rating", ["Campo", "Valor"], summary_rows),
             (
                 f"Variacao de rating {base_label}",
-                ["Jogador", "Ro", "K", "n", "Pts", "We", "ΔElo", "Rc", "Rp", ">400"],
+                [
+                    "Jogador",
+                    "Ro",
+                    "Origem do Ro",
+                    "K",
+                    "Motivo do K",
+                    "n",
+                    "Pts",
+                    "We",
+                    "ΔElo",
+                    "Rc",
+                    "Rp",
+                    ">400",
+                ],
                 detail_rows,
             ),
         ]
+        if initial_rows:
+            sections.append(
+                (
+                    "Rating inicial estimado (sem rating na base)",
+                    ["Jogador", "n", "Pts", "Média adv.", "Rp", "Rating inicial", "Situação"],
+                    initial_rows,
+                )
+            )
+        return sections
 
     def _prize_sections(
         self, tournament_id: int

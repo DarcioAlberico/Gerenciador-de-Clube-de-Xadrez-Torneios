@@ -484,7 +484,8 @@ Entregas, em ordem de prioridade:
    (`FED-03` — ENTREGUE em 2026-08-03), round-trip TRF fiel (`FED-04` — ENTREGUE em 2026-08-03), normas
    FIDE corretas com
    certificado IT3 (`FED-06` — ENTREGUE em 2026-08-04), rating com K/piso/ritmo
-   corretos e relatorio CBX real (`FED-07`).
+   corretos e regulamento modelado (`FED-07` — ENTREGUE em 2026-08-04; o arquivo
+   de submissao CBX aguarda o formato publicado).
 6. **Organizacao (Sprint 12)**: categorias configuraveis por torneio
    (`ORG-01`), premiacao conforme edital, inclusive Feminino automatico
    (`ORG-02`), agenda e controle de tempo estruturados (`ORG-03`), remocao ou
@@ -559,7 +560,11 @@ colunas, TRF25) foram entregues nas fases 0 a 11 e nos EPICs A a E da
   2026-08-01 — empate no mata-mata para a proxima fase ate o arbitro registrar
   quem passa e por que; a chave mostra o motivo; a escala do Scheveningen e
   guardada e sobrevive a desistencia.
-- Rating com K/piso/ritmo e regulamento CBX (`FED-07`).
+- ~~Rating com K/piso/ritmo e regulamento CBX (`FED-07`).~~ FEITO 2026-08-04
+  — regulamento virou DADO (perfil por base e ritmo), um interpretador de
+  ritmo so para o TRF25 e para o rating, cada ritmo com a sua lista, K = 40
+  de novato disparando, sub-18 ate o fim do ano do aniversario, piso e
+  rating inicial do 8.2. O ARQUIVO de submissao da CBX aguarda o formato.
 - Categorias configuraveis por torneio (`ORG-01`).
 - Agenda e controle de tempo estruturados (`ORG-03`).
 

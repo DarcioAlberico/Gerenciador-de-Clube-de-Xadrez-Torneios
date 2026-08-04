@@ -80,7 +80,9 @@ class TestDatabasePublicInterface(DatabaseTestCase):
 
 class TestDatabaseSchema(DatabaseTestCase):
     def test_schema_version(self) -> None:
-        self.assertEqual(Database.SCHEMA_VERSION, 52)
+        # v53 (FED-07): ratings por ritmo e partidas ja ratadas no jogador,
+        # ritmo e regulamento de rating no torneio.
+        self.assertEqual(Database.SCHEMA_VERSION, 53)
 
     def test_core_tables_exist(self) -> None:
         with self.db.connect() as conn:

@@ -635,6 +635,12 @@ class OfficialRatingService:
             "birth_date": official.get("birth_date") or player.get("birth_date", ""),
             "national_rating": national_rating,
             "international_rating": international_rating,
+            # Ratings por ritmo (FED-07): o snapshot da lista oficial ja
+            # guardava os tres e so o standard chegava ao jogador do torneio.
+            "rapid_rating": int(official.get("rapid_rating") or 0)
+            or int(player.get("rapid_rating") or 0),
+            "blitz_rating": int(official.get("blitz_rating") or 0)
+            or int(player.get("blitz_rating") or 0),
             "rating": rating,
         }
 
