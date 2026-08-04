@@ -7,6 +7,7 @@ from typing import Any, Mapping
 
 from src.services.constants import *
 from src.services.fide_norms import build_norm_report
+from src.services.categories import group_by_category
 from src.services.rating import build_report_rows, regulation_from_settings, resolve_speed
 from src.services.time_control import SPEED_LABELS, below_blitz_minimum
 from src.services.pairing.incidents import (
@@ -768,14 +769,15 @@ class ReportSectionsMixin:
     def _category_winners_section(
         self, tournament_id: int, top_n: int = 3
     ) -> tuple[str, list[str], list[list[Any]]]:
-        """Vencedores por categoria (top N de cada categoria, na ordem da classificação)."""
-        groups: dict[str, list[dict[str, Any]]] = {}
-        for item in self.pairing_service.standings(tournament_id):
-            category = str(item.get("category") or "").strip()
-            if category:
-                groups.setdefault(category, []).append(item)
+        """Vencedores por categoria (top N de cada categoria, na ordem da classificação).
+
+        Agrupa por TODAS as categorias premiáveis do jogador (ORG-01), e não
+        mais só pela principal: era por isso que a jogadora Sub-10 não aparecia
+        em classificação feminina nenhuma.
+        """
+        groups = group_by_category(self.pairing_service.standings(tournament_id))
         rows: list[list[Any]] = []
-        for category in sorted(groups):
+        for category in sorted(groups, key=str.casefold):
             for rank, item in enumerate(groups[category][: max(1, top_n)], start=1):
                 rows.append(
                     [
@@ -883,12 +885,15 @@ class ReportSectionsMixin:
                         "detail": f"perf {item.get('performance', '')}",
                     }
                 )
-            champions: dict[str, str] = {}
-            for item in standings:
-                category = str(item.get("category") or "").strip()
-                if category and category not in champions:
-                    champions[category] = str(item.get("name") or "")
-            categories = [{"category": cat, "name": name} for cat, name in sorted(champions.items())]
+            # Campeão de cada categoria premiável (ORG-01): quem vem primeiro
+            # na classificação geral dentro daquele grupo.
+            categories = [
+                {"category": name, "name": str(rows[0].get("name") or "")}
+                for name, rows in sorted(
+                    group_by_category(standings).items(), key=lambda pair: pair[0].casefold()
+                )
+                if rows
+            ]
         return {"tournament": tournament, "top": top, "categories": categories, "is_team": is_team}
 
     def _write_podium_poster_pdf(self, path: Path, data: dict[str, Any]) -> None:

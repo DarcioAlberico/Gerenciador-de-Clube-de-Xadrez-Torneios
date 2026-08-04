@@ -35,6 +35,12 @@ from src.services.categories.definition import (
     from_row,
     normalize,
 )
+from src.services.categories.rankings import (
+    categories_of,
+    category_names,
+    category_standings,
+    group_by_category,
+)
 from src.services.categories.matching import (
     age_in_year,
     birth_year,
@@ -59,9 +65,13 @@ __all__ = [
     "age_in_year",
     "awardable_names",
     "birth_year",
+    "categories_of",
+    "category_names",
     "category_of_kind",
+    "category_standings",
     "default_categories",
     "from_row",
+    "group_by_category",
     "matches",
     "matching_categories",
     "narrowest_by_kind",

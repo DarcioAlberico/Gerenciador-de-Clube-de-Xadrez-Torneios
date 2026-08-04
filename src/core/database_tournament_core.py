@@ -12,6 +12,8 @@ import os
 import sqlite3
 from typing import Any
 
+from src.services.categories import from_row as category_from_row
+
 from ._database_base import _DatabaseInfra
 from .categories import competition_category_payload, reference_year
 
@@ -441,6 +443,7 @@ class TournamentCoreMixin(_DatabaseInfra):
                     team_max_substitutions = ?,
                     rating_fee_fide = ?, rating_fee_cbx = ?, rating_fee_lbx = ?,
                     rating_speed = ?, rating_regulation = ?,
+                    category_reference_date = ?,
                     archived = ?, updated_at = ?
                 WHERE tournament_id = ?
                 """,
@@ -501,6 +504,7 @@ class TournamentCoreMixin(_DatabaseInfra):
                     float(data.get("rating_fee_lbx", 0.0) or 0.0),
                     str(data.get("rating_speed", "")).strip(),
                     str(data.get("rating_regulation", "")).strip(),
+                    str(data.get("category_reference_date", "")).strip(),
                     int(data.get("archived", 0) or 0),
                     self.now(),
                     tournament_id,
@@ -519,6 +523,63 @@ class TournamentCoreMixin(_DatabaseInfra):
                         tournament_id,
                     ),
                 )
+
+    def list_tournament_categories(self, tournament_id: int) -> list[dict[str, Any]]:
+        """Categorias cadastradas do torneio, na ordem configurada.
+
+        Lista VAZIA e resposta legitima e significa "use o conjunto padrao" —
+        e assim que um torneio anterior ao ORG-01 continua se comportando como
+        antes sem ter treze linhas semeadas que ninguem pediu.
+        """
+        with self.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT *
+                FROM tournament_categories
+                WHERE tournament_id = ?
+                ORDER BY position ASC, name COLLATE NOCASE ASC
+                """,
+                (tournament_id,),
+            ).fetchall()
+            return self.rows_to_dicts(rows)
+
+    def replace_tournament_categories(
+        self,
+        tournament_id: int,
+        categories: list[dict[str, Any]],
+    ) -> None:
+        """Regrava as categorias do torneio (idempotente por torneio)."""
+        now = self.now()
+        with self.connect() as connection:
+            connection.execute(
+                "DELETE FROM tournament_categories WHERE tournament_id = ?",
+                (tournament_id,),
+            )
+            connection.executemany(
+                """
+                INSERT INTO tournament_categories (
+                    tournament_id, name, kind, min_value, max_value, sex, tag,
+                    reference_date, awards, position, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    (
+                        tournament_id,
+                        str(item.get("name") or "").strip(),
+                        str(item.get("kind") or "open").strip().lower(),
+                        int(item.get("min_value") or 0),
+                        int(item.get("max_value") or 0),
+                        str(item.get("sex") or "").strip().upper()[:1],
+                        str(item.get("tag") or "").strip(),
+                        str(item.get("reference_date") or "").strip(),
+                        1 if item.get("awards", True) else 0,
+                        int(item.get("position") or index),
+                        now,
+                    )
+                    for index, item in enumerate(categories)
+                    if str(item.get("name") or "").strip()
+                ],
+            )
 
     def save_fide_rating_report(
         self,
@@ -1014,7 +1075,7 @@ class TournamentCoreMixin(_DatabaseInfra):
                     club = ?, federation_id = ?, fide_id = ?, cbx_id = ?, lbx_id = ?,
                     rating = ?, national_rating = ?, international_rating = ?,
                     rapid_rating = ?, blitz_rating = ?, games_played = ?,
-                    category = ?, age_category = ?, rating_category = ?,
+                    category = ?, age_category = ?, rating_category = ?, categories = ?,
                     prize_tags = ?, birth_date = ?
                 WHERE id = ?
                 """,
@@ -1038,6 +1099,7 @@ class TournamentCoreMixin(_DatabaseInfra):
                     category_payload["category"],
                     category_payload["age_category"],
                     category_payload["rating_category"],
+                    category_payload["categories"],
                     category_payload["prize_tags"],
                     pick("birth_date"),
                     player_id,
@@ -1079,12 +1141,33 @@ class TournamentCoreMixin(_DatabaseInfra):
             ).fetchone()
             member = dict(member_row) if member_row else {}
 
+        # Categorias do torneio (ORG-01). Sem linha cadastrada, o motor usa o
+        # conjunto padrao — e o torneio anterior ao ORG-01 continua igual.
+        category_rows = connection.execute(
+            """
+            SELECT *
+            FROM tournament_categories
+            WHERE tournament_id = ?
+            ORDER BY position ASC, name COLLATE NOCASE ASC
+            """,
+            (tournament_id,),
+        ).fetchall()
+        definitions = [category_from_row(dict(row)) for row in category_rows]
+
+        settings_row = connection.execute(
+            "SELECT category_reference_date FROM tournament_settings WHERE tournament_id = ?",
+            (tournament_id,),
+        ).fetchone()
+        reference_date = str(dict(settings_row).get("category_reference_date") or "") if settings_row else ""
+
         effective_rating = int(rating or 0) or max(int(national_rating or 0), int(international_rating or 0))
         return competition_category_payload(
             birth_date=birth_date,
             rating=effective_rating,
             category=category,
             year=reference_year(tournament),
+            definitions=definitions,
+            reference_date=reference_date,
             sex=sex,
             member_type=member.get("member_type", ""),
             city=member.get("city", ""),
@@ -1141,10 +1224,10 @@ class TournamentCoreMixin(_DatabaseInfra):
                     tournament_id, member_id, name, surname, given_name, title, sex,
                     club, federation_id, fide_id, cbx_id, lbx_id, rating, national_rating,
                     international_rating, rapid_rating, blitz_rating, games_played,
-                    category, age_category, rating_category,
+                    category, age_category, rating_category, categories,
                     prize_tags, birth_date, player_status, starting_points, active,
                     created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     tournament_id,
@@ -1168,6 +1251,7 @@ class TournamentCoreMixin(_DatabaseInfra):
                     category_payload["category"],
                     category_payload["age_category"],
                     category_payload["rating_category"],
+                    category_payload["categories"],
                     category_payload["prize_tags"],
                     birth_date.strip(),
                     player_status.strip() or "active",
@@ -1234,7 +1318,7 @@ class TournamentCoreMixin(_DatabaseInfra):
                     club = ?, federation_id = ?, fide_id = ?, cbx_id = ?, lbx_id = ?,
                     rating = ?, national_rating = ?, international_rating = ?,
                     rapid_rating = ?, blitz_rating = ?, games_played = ?,
-                    category = ?, age_category = ?, rating_category = ?,
+                    category = ?, age_category = ?, rating_category = ?, categories = ?,
                     prize_tags = ?, birth_date = ?, player_status = ?,
                     starting_points = ?, active = ?
                 WHERE id = ?
@@ -1259,6 +1343,7 @@ class TournamentCoreMixin(_DatabaseInfra):
                     category_payload["category"],
                     category_payload["age_category"],
                     category_payload["rating_category"],
+                    category_payload["categories"],
                     category_payload["prize_tags"],
                     birth_date.strip(),
                     status,

@@ -27,7 +27,12 @@ from src.services.prizes import PRIZE_POLICIES
 from src.services.list_layouts import DEFAULT_STANDINGS_COLUMNS, STANDINGS_COLUMNS
 from src.services.chess_results import normalize_results_url
 from src.services.rating import parse_regulation_overrides
-from .tournament_widgets import ColumnLayoutEditor, PrizeEditor, TiebreakSequenceEditor
+from .tournament_widgets import (
+    CategoryEditor,
+    ColumnLayoutEditor,
+    PrizeEditor,
+    TiebreakSequenceEditor,
+)
 
 # Ritmo para efeito de rating. Vazio = deduzir do campo "Ritmo" do torneio.
 RATING_SPEED_LABELS = {
@@ -602,6 +607,37 @@ class TournamentSettingsMixin:
         prize_tax_entry.insert(0, str(settings.get("prize_tax_percent", 0.0) or 0.0))
         stack(tab_prizes, prize_controls, label="Distribuição de prêmios", section=True)
 
+        category_editor = CategoryEditor(
+            tab_prizes, self.db.list_tournament_categories(self.current_tournament_id)
+        )
+        stack(
+            tab_prizes,
+            category_editor,
+            label="Categorias do torneio",
+            section=True,
+            # Linhas curtas de proposito: rotulo longo puxa a largura minima da
+            # tela inteira (B-8), e foi assim que esta secao estourou a janela
+            # de 800px na primeira versao.
+            help_text=(
+                "Sem linhas, valem as faixas padrão.\n"
+                "Idade: 'Até' é inclusivo (Sub-12 aceita 12).\n"
+                "Rating: 'Até' é exclusivo (Sub-1400 recusa 1400)."
+            ),
+        )
+
+        category_reference_entry = ctk.CTkEntry(tab_prizes, width=160)
+        category_reference_entry.insert(0, str(settings.get("category_reference_date") or ""))
+        stack(
+            tab_prizes,
+            category_reference_entry,
+            label="Data de referência da idade",
+            help_text=(
+                "Vazio = ano do torneio.\n"
+                "A idade é a que o jogador COMPLETA no ano."
+            ),
+        )
+        setting_entries["category_reference_date"] = category_reference_entry
+
         prize_editor = PrizeEditor(tab_prizes, self.db.list_tournament_prizes(self.current_tournament_id))
         stack(
             tab_prizes,
@@ -863,6 +899,9 @@ class TournamentSettingsMixin:
                 )
                 # Salvamento unificado: premios e colunas vao junto com as configuracoes.
                 self.prize_service.replace_prizes(self.current_tournament_id, prize_editor.get_rows())
+                self.tournament_service.replace_categories(
+                    self.current_tournament_id, category_editor.get_rows()
+                )
                 self.list_layout_service.save_columns(
                     self.current_tournament_id, columns_editor.get_columns(), "standings"
                 )

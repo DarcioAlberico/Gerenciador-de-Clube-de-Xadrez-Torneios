@@ -39,13 +39,22 @@ class DatabaseTestCase(unittest.TestCase):
 class TestDatabasePublicInterface(DatabaseTestCase):
     """Snapshot da API publica — rede contra perda de metodo na extracao de mixins.
 
-    Para regenerar o snapshot apos uma mudanca INTENCIONAL de interface::
+    Para regenerar o snapshot apos uma mudanca INTENCIONAL de interface. O
+    cabecalho de comentario e PRESERVADO de proposito: a versao antiga deste
+    trecho reescrevia o arquivo inteiro e apagava a explicacao de para que ele
+    serve — o teste continuava passando (ele ignora linhas `#`) e ninguem via::
 
+        from pathlib import Path
         from src.core.database import Database
+
+        alvo = Path("tests/fixtures/database_public_api.txt")
+        cabecalho = [
+            linha for linha in alvo.read_text(encoding="utf-8").splitlines()
+            if linha.startswith("#")
+        ]
         pub = sorted(n for n in dir(Database)
                      if not n.startswith("_") and callable(getattr(Database, n)))
-        Path("tests/fixtures/database_public_api.txt").write_text(
-            "\\n".join(pub) + "\\n", encoding="utf-8")
+        alvo.write_text("\\n".join(cabecalho + pub) + "\\n", encoding="utf-8")
     """
 
     def _snapshot(self) -> set[str]:
@@ -80,9 +89,8 @@ class TestDatabasePublicInterface(DatabaseTestCase):
 
 class TestDatabaseSchema(DatabaseTestCase):
     def test_schema_version(self) -> None:
-        # v53 (FED-07): ratings por ritmo e partidas ja ratadas no jogador,
-        # ritmo e regulamento de rating no torneio.
-        self.assertEqual(Database.SCHEMA_VERSION, 53)
+        # v54 (ORG-01): categorias configuraveis por torneio.
+        self.assertEqual(Database.SCHEMA_VERSION, 54)
 
     def test_core_tables_exist(self) -> None:
         with self.db.connect() as conn:

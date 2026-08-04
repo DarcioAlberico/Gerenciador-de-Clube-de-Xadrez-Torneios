@@ -193,6 +193,7 @@ list_team_players
 list_team_substitution_events
 list_teams
 list_tiebreak_components
+list_tournament_categories
 list_tournament_prizes
 list_tournament_referees
 list_tournaments
@@ -211,6 +212,7 @@ remove_player_from_team
 remove_tournament_referee
 replace_team_lineup_board_player
 replace_tiebreak_components
+replace_tournament_categories
 replace_tournament_prizes
 replace_training_list_exercises
 restore_backup

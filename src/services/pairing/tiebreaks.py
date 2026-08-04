@@ -506,6 +506,10 @@ def calculate_player_standings(
             "category": player["category"],
             "age_category": player.get("age_category", ""),
             "rating_category": player.get("rating_category", ""),
+            # Todas as categorias premiáveis (ORG-01). A classificação por
+            # categoria agrupava só pela principal, e por isso a jogadora
+            # Sub-10 nunca aparecia numa classificação feminina.
+            "categories": player.get("categories", ""),
             "prize_tags": player.get("prize_tags", ""),
             "active": int(player["active"]),
             "player_status": player.get("player_status", "active"),

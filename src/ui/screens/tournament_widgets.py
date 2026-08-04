@@ -423,3 +423,174 @@ class ColumnLayoutEditor(ctk.CTkFrame):
         ctk.CTkButton(footer, text="Restaurar padrão", width=150, command=self._reset).grid(
             row=0, column=2, padx=(8, 0)
         )
+
+
+class CategoryEditor(ctk.CTkFrame):
+    """Editor de categorias do torneio em linhas dinamicas (ORG-01).
+
+    Cada linha e uma categoria do edital: nome, tipo, faixa e se ela premia.
+    `get_rows()` devolve o que o TournamentService persiste.
+
+    O campo de faixa muda de significado conforme o tipo, e o rotulo diz qual:
+    em idade o maximo e INCLUSIVO ("Sub-12" aceita quem completa 12) e em rating
+    e EXCLUSIVO ("Sub-1400" recusa 1400). E como o edital e escrito.
+    """
+
+    KIND_LABELS = {
+        "age": "Idade",
+        "rating": "Rating",
+        "sex": "Sexo",
+        "tag": "Marca",
+        "open": "Aberta",
+    }
+    SEX_LABELS = {"F": "Feminino", "M": "Masculino", "": "-"}
+
+    def __init__(self, master: Any, initial_rows: list[dict[str, Any]] | None = None) -> None:
+        super().__init__(master, fg_color="transparent")
+        self._kind_by_label = {label: code for code, label in self.KIND_LABELS.items()}
+        self._sex_by_label = {label: code for code, label in self.SEX_LABELS.items()}
+        self._data = [self._normalize(item) for item in (initial_rows or [])]
+        self._widgets: list[dict[str, Any]] = []
+        self.grid_columnconfigure(0, weight=1)
+        self._render()
+
+    @staticmethod
+    def _normalize(item: dict[str, Any]) -> dict[str, Any]:
+        def numero(valor: Any) -> str:
+            return "" if valor in (None, "", 0, "0") else str(valor)
+
+        return {
+            "name": str(item.get("name") or ""),
+            "kind": str(item.get("kind") or "age"),
+            "min_value": numero(item.get("min_value")),
+            "max_value": numero(item.get("max_value")),
+            "sex": str(item.get("sex") or "").upper()[:1],
+            "tag": str(item.get("tag") or ""),
+            "awards": bool(item.get("awards", True)),
+        }
+
+    def _sync(self) -> None:
+        for data, widgets in zip(self._data, self._widgets):
+            data["name"] = widgets["name"].get().strip()
+            data["kind"] = self._kind_by_label.get(widgets["kind"].get(), "age")
+            data["min_value"] = widgets["min_value"].get().strip()
+            data["max_value"] = widgets["max_value"].get().strip()
+            data["sex"] = self._sex_by_label.get(widgets["sex"].get(), "")
+            data["tag"] = widgets["tag"].get().strip()
+            data["awards"] = bool(widgets["awards"].get())
+
+    def get_rows(self) -> list[dict[str, Any]]:
+        self._sync()
+        return [
+            {**dict(data), "position": index}
+            for index, data in enumerate(self._data)
+            if data["name"]
+        ]
+
+    def set_rows(self, rows: list[dict[str, Any]]) -> None:
+        self._data = [self._normalize(item) for item in rows]
+        self._render()
+
+    def _add(self) -> None:
+        self._sync()
+        self._data.append(self._normalize({}))
+        self._render()
+
+    def _remove(self, index: int) -> None:
+        self._sync()
+        if 0 <= index < len(self._data):
+            del self._data[index]
+            self._render()
+
+    def _render(self) -> None:
+        for child in self.winfo_children():
+            child.destroy()
+        self._widgets = []
+
+        header = ctk.CTkFrame(self, fg_color="transparent")
+        header.grid(row=0, column=0, sticky="w", pady=(0, 2))
+        # Larguras apertadas de proposito: a tela de configuracao e testada em
+        # 800px (test_ui_layout) e a primeira versao desta linha estourava a
+        # janela em 99px — oito colunas folgadas nao cabem ali.
+        columns = [
+            ("Categoria", 130),
+            ("Tipo", 90),
+            ("De", 46),
+            ("Ate", 46),
+            ("Sexo", 96),
+            ("Marca", 86),
+            ("Premia", 50),
+            ("", 36),
+        ]
+        for index, (text, width) in enumerate(columns):
+            ctk.CTkLabel(header, text=text, width=width, anchor="w").grid(
+                row=0, column=index, padx=2, sticky="w"
+            )
+
+        for index, data in enumerate(self._data):
+            row = ctk.CTkFrame(self, fg_color="transparent")
+            row.grid(row=index + 1, column=0, sticky="w", pady=1)
+            name = ctk.CTkEntry(row, width=130)
+            name.insert(0, data["name"])
+            name.grid(row=0, column=0, padx=2)
+            kind = ctk.CTkOptionMenu(row, values=list(self.KIND_LABELS.values()), width=90)
+            kind.set(self.KIND_LABELS.get(data["kind"], "Idade"))
+            kind.grid(row=0, column=1, padx=2)
+            min_value = ctk.CTkEntry(row, width=46)
+            min_value.insert(0, data["min_value"])
+            min_value.grid(row=0, column=2, padx=2)
+            max_value = ctk.CTkEntry(row, width=46)
+            max_value.insert(0, data["max_value"])
+            max_value.grid(row=0, column=3, padx=2)
+            sex = ctk.CTkOptionMenu(row, values=list(self.SEX_LABELS.values()), width=96)
+            sex.set(self.SEX_LABELS.get(data["sex"], "-"))
+            sex.grid(row=0, column=4, padx=2)
+            tag = ctk.CTkEntry(row, width=86)
+            tag.insert(0, data["tag"])
+            tag.grid(row=0, column=5, padx=2)
+            awards = ctk.CTkCheckBox(row, text="", width=50)
+            if data["awards"]:
+                awards.select()
+            awards.grid(row=0, column=6, padx=2)
+            ctk.CTkButton(
+                row, text="✕", width=36, fg_color=THEME_DANGER, hover_color=THEME_DANGER_HOVER,
+                command=lambda i=index: self._remove(i),
+            ).grid(row=0, column=7, padx=2)
+            self._widgets.append(
+                {
+                    "name": name, "kind": kind, "min_value": min_value,
+                    "max_value": max_value, "sex": sex, "tag": tag, "awards": awards,
+                }
+            )
+
+        botoes = ctk.CTkFrame(self, fg_color="transparent")
+        botoes.grid(row=len(self._data) + 1, column=0, sticky="w", pady=(6, 0))
+        ctk.CTkButton(botoes, text="Adicionar categoria", width=170, command=self._add).grid(
+            row=0, column=0, padx=(0, 8)
+        )
+        ctk.CTkButton(
+            botoes, text="Usar faixas padrão", width=150, command=self._load_defaults
+        ).grid(row=0, column=1)
+
+    def _load_defaults(self) -> None:
+        """Preenche com o conjunto padrao — ponto de partida para editar.
+
+        Torneio sem linha nenhuma ja se comporta pelo padrao; este botao existe
+        para quem quer ver as faixas e mexer em duas, em vez de digitar treze.
+        """
+        from src.services.categories import default_categories
+
+        self.set_rows(
+            [
+                {
+                    "name": item.name,
+                    "kind": item.kind,
+                    "min_value": item.min_value,
+                    "max_value": item.max_value,
+                    "sex": item.sex,
+                    "tag": item.tag,
+                    "awards": item.awards,
+                }
+                for item in default_categories()
+            ]
+        )

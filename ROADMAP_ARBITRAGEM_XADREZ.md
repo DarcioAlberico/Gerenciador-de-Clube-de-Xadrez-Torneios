@@ -565,7 +565,10 @@ colunas, TRF25) foram entregues nas fases 0 a 11 e nos EPICs A a E da
   ritmo so para o TRF25 e para o rating, cada ritmo com a sua lista, K = 40
   de novato disparando, sub-18 ate o fim do ano do aniversario, piso e
   rating inicial do 8.2. O ARQUIVO de submissao da CBX aguarda o formato.
-- Categorias configuraveis por torneio (`ORG-01`).
+- ~~Categorias configuraveis por torneio (`ORG-01`).~~ FEITO 2026-08-04 — a
+  categoria virou dado (tabela por torneio), Feminino virou categoria de
+  verdade e a classificacao passou a agrupar por TODAS as categorias
+  premiaveis do jogador. Torneio sem cadastro continua no padrao antigo.
 - Agenda e controle de tempo estruturados (`ORG-03`).
 
 ### Baixa prioridade inicial

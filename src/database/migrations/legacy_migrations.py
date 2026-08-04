@@ -65,6 +65,7 @@ class LegacyMigrations:
             51: self._migrate_to_v51,
             52: self._migrate_to_v52,
             53: self._migrate_to_v53,
+            54: self._migrate_to_v54,
         }
 
     def _run_schema_migrations(self, connection: sqlite3.Connection) -> None:
@@ -189,6 +190,8 @@ class LegacyMigrations:
             self._migrate_to_v52(connection)
         if self.db.SCHEMA_VERSION >= 53:
             self._migrate_to_v53(connection)
+        if self.db.SCHEMA_VERSION >= 54:
+            self._migrate_to_v54(connection)
 
     def _migrate_to_v1(self, connection: sqlite3.Connection) -> None:
         now = self.db.now()
@@ -2187,3 +2190,48 @@ class LegacyMigrations:
                 connection.execute(
                     f"ALTER TABLE tournament_settings ADD COLUMN {column} TEXT NOT NULL DEFAULT ''"
                 )
+
+    def _migrate_to_v54(self, connection: sqlite3.Connection) -> None:
+        """Categorias configuraveis por torneio (ORG-01).
+
+        As faixas eram constantes no codigo — Sub-08 a Sub-20, S50+/S65+ e
+        cortes de 1400/1800/2200. Um edital com Sub-07/09/11/13, Veterano 60+ ou
+        cortes de 1600/2000 nao tinha onde caber, e "Feminino" era tag de premio
+        e nao categoria, entao nao existia classificacao feminina.
+
+        Torneio antigo comeca SEM linha nenhuma, e isso e proposital: o motor
+        trata "nenhuma categoria cadastrada" como "use o conjunto padrao", que
+        reproduz exatamente as faixas de antes. Semear as treze linhas em cada
+        torneio existente encheria o banco de dado que ninguem pediu e faria a
+        tela de configuracao parecer que o arbitro escolheu aquilo.
+        """
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS tournament_categories (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tournament_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                kind TEXT NOT NULL DEFAULT 'open',
+                min_value INTEGER NOT NULL DEFAULT 0,
+                max_value INTEGER NOT NULL DEFAULT 0,
+                sex TEXT NOT NULL DEFAULT '',
+                tag TEXT NOT NULL DEFAULT '',
+                reference_date TEXT NOT NULL DEFAULT '',
+                awards INTEGER NOT NULL DEFAULT 1,
+                position INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                UNIQUE (tournament_id, name),
+                FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE
+            )
+            """
+        )
+        player_columns = self.db._table_columns(connection, "players")
+        if "categories" not in player_columns:
+            connection.execute("ALTER TABLE players ADD COLUMN categories TEXT DEFAULT ''")
+
+        settings_columns = self.db._table_columns(connection, "tournament_settings")
+        if "category_reference_date" not in settings_columns:
+            connection.execute(
+                "ALTER TABLE tournament_settings "
+                "ADD COLUMN category_reference_date TEXT NOT NULL DEFAULT ''"
+            )

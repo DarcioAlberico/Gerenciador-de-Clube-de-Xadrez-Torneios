@@ -113,9 +113,11 @@ def primary_category(
 ) -> str:
     """Categoria principal do jogador — idade na frente do rating.
 
-    Mantém a regra que já valia: uma categoria escrita à mão só é substituída
-    quando ela mesma é automática (era Sub-12 e o jogador mudou de faixa). Nome
-    que o árbitro inventou não é apagado pelo cálculo.
+    Mantém a regra que já valia, inclusive no detalhe que é fácil perder: a
+    categoria escrita à mão só cede para o cálculo **da sua própria dimensão**.
+    Um "Sub-18" gravado num cadastro SEM data de nascimento continua "Sub-18" —
+    deixá-lo virar a faixa de rating trocaria um dado que alguém informou por
+    outro que o programa deduziu de outra coisa.
     """
     kwargs = {"player": player, "reference_year": reference_year, "rating": rating}
     computed_age = category_of_kind(definitions, AGE, **kwargs)
@@ -125,7 +127,8 @@ def primary_category(
     if not manual:
         return computed_age or computed_rating
 
-    automatic = {item.name for item in definitions if item.kind in (AGE, RATING)}
-    if manual in automatic:
-        return computed_age or computed_rating or manual
+    if manual in {item.name for item in definitions if item.kind == AGE} and computed_age:
+        return computed_age
+    if manual in {item.name for item in definitions if item.kind == RATING} and computed_rating:
+        return computed_rating
     return manual

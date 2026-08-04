@@ -23,6 +23,7 @@ from src.services.pairing import (
 )
 from src.services.pairing.constraints import rating_for_initial_order
 from src.services.prizes import PRIZE_POLICIES
+from src.services.categories import from_row as category_from_row, normalize as normalize_category
 from src.services.rating import SPEED_CHOICES, serialize_regulation_overrides
 
 if TYPE_CHECKING:
@@ -110,6 +111,51 @@ class TournamentService:
         tournament_id = self.db.duplicate_tournament(source_tournament_id, clean_name)
         logger.info("Torneio %s duplicado como %s", source_tournament_id, tournament_id)
         return tournament_id
+
+    def list_categories(self, tournament_id: int) -> list[dict[str, Any]]:
+        """Categorias cadastradas do torneio (vazio = faixas padrão)."""
+        return self.db.list_tournament_categories(tournament_id)
+
+    def replace_categories(
+        self, tournament_id: int, categories: list[dict[str, Any]]
+    ) -> None:
+        """Regrava as categorias do torneio, normalizadas (ORG-01).
+
+        Reprova nome repetido antes de gravar: a tabela tem `UNIQUE` e o erro
+        do SQLite chegaria à tela como texto de banco. Duas linhas com o mesmo
+        nome também não teriam significado — a segunda nunca seria alcançada.
+        """
+        tournament = self.db.get_tournament(tournament_id)
+        if not tournament:
+            raise AppError("Selecione um torneio valido.")
+
+        limpos: list[dict[str, Any]] = []
+        vistos: set[str] = set()
+        for posicao, item in enumerate(categories or []):
+            definicao = normalize_category(category_from_row(item))
+            if not definicao.is_valid:
+                if str(item.get("name") or "").strip():
+                    raise AppError(f"Tipo de categoria invalido em '{definicao.name}'.")
+                continue
+            chave = definicao.name.casefold()
+            if chave in vistos:
+                raise AppError(f"Categoria repetida: '{definicao.name}'.")
+            vistos.add(chave)
+            limpos.append(
+                {
+                    "name": definicao.name,
+                    "kind": definicao.kind,
+                    "min_value": definicao.min_value,
+                    "max_value": definicao.max_value,
+                    "sex": definicao.sex,
+                    "tag": definicao.tag,
+                    "reference_date": definicao.reference_date,
+                    "awards": definicao.awards,
+                    "position": posicao,
+                }
+            )
+        self.db.replace_tournament_categories(tournament_id, limpos)
+        logger.info("Categorias do torneio %s regravadas (%d)", tournament_id, len(limpos))
 
     def delete_tournament(self, tournament_id: int) -> None:
         tournament = self.db.get_tournament(tournament_id)

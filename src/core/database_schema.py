@@ -377,6 +377,10 @@ CREATE TABLE IF NOT EXISTS players (
     category TEXT DEFAULT '',
     age_category TEXT DEFAULT '',
     rating_category TEXT DEFAULT '',
+    -- Todas as categorias premiaveis do jogador, separadas por `; ` (ORG-01).
+    -- `category` continua sendo a PRINCIPAL: um Sub-12 que tambem e Sub-1400 e
+    -- Feminino concorre aos tres, e antes so a principal existia.
+    categories TEXT DEFAULT '',
     prize_tags TEXT DEFAULT '',
     birth_date TEXT DEFAULT '',
     player_status TEXT NOT NULL DEFAULT 'active',
@@ -614,6 +618,10 @@ CREATE TABLE IF NOT EXISTS tournament_settings (
     -- Ritmo do torneio para efeito de rating (FED-07). Vazio = deduzir do
     -- campo de ritmo de jogo; `standard`/`rapid`/`blitz` = declarado.
     rating_speed TEXT NOT NULL DEFAULT '',
+    -- Data de referencia da idade para categorias (ORG-01). Vazio = 1o de
+    -- janeiro do ano do torneio, que e como o edital de base e escrito.
+    -- Categoria pode ter a sua propria e sobrescrever esta.
+    category_reference_date TEXT NOT NULL DEFAULT '',
     -- Ajustes do regulamento de rating, em JSON por base:
     -- `{"cbx": {"k_top": 10, "rating_floor": 1400}}`. Coluna unica em vez de
     -- uma por parametro: o regulamento e DADO, e dado com forma propria cabe
@@ -622,6 +630,31 @@ CREATE TABLE IF NOT EXISTS tournament_settings (
     archived INTEGER NOT NULL DEFAULT 0,
     chess_results_url TEXT NOT NULL DEFAULT '',
     updated_at TEXT NOT NULL,
+    FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE
+);
+
+-- Categorias configuraveis por torneio (ORG-01). Antes as faixas eram
+-- constantes em `core/categories.py`, e um edital com Sub-07/09/11/13 ou corte
+-- 1600/2000 nao tinha onde caber. Torneio sem linha nenhuma usa o conjunto
+-- padrao, que reproduz o comportamento anterior.
+CREATE TABLE IF NOT EXISTS tournament_categories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tournament_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    -- age | rating | sex | tag | open
+    kind TEXT NOT NULL DEFAULT 'open',
+    -- Idade: maximo INCLUSIVO ("Sub-12" aceita quem completa 12).
+    -- Rating: maximo EXCLUSIVO ("Sub-1400" recusa 1400). A assimetria e a do
+    -- edital, e e a que o programa ja praticava.
+    min_value INTEGER NOT NULL DEFAULT 0,
+    max_value INTEGER NOT NULL DEFAULT 0,
+    sex TEXT NOT NULL DEFAULT '',
+    tag TEXT NOT NULL DEFAULT '',
+    reference_date TEXT NOT NULL DEFAULT '',
+    awards INTEGER NOT NULL DEFAULT 1,
+    position INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    UNIQUE (tournament_id, name),
     FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE
 );
 
