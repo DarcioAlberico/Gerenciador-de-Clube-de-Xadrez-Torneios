@@ -2399,7 +2399,33 @@ Criterios de aceite:
 
 #### ORG-03 - Agenda e controle de tempo estruturados
 
-Status: pendente.
+Status: FEITO (2026-08-04). Schema v55.
+
+Como ficou:
+
+- **o ritmo passou a entender a grafia do edital**: `90'+30"`, `90+30` e a forma
+  compacta `40/90+30` viram a mesma gramatica interna, no MESMO interpretador que
+  o registro 222 do TRF25 e a classificacao standard/rapid/blitz ja usavam
+  (`services/time_control.py`, da FED-07). Detalhe que muda numero: depois de
+  `40/90`, um `+30` SEM marca e o 2o periodo em MINUTOS; so `+30"` e incremento.
+  Lido como incremento, o mesmo texto daria 210 minutos em vez de 120.
+- **a agenda ganhou local, ritmo e dia de descanso por rodada.** Dia de descanso
+  e LINHA da agenda: sem ele, a data seguinte parece rodada atrasada.
+- **reduzir rodadas com agenda preenchida pede confirmacao** e registra evento de
+  auditoria (`schedule_rounds_reduced`) com as datas perdidas. Antes o
+  `_validated_schedule` fazia `continue` e apagava data ja publicada em silencio.
+- **tolerancia de atraso configuravel**, visivel no painel do arbitro e impressa
+  na sumula de mesa. Quem declara ausencia e o arbitro de sala, e o numero vivia
+  so no edital. O padrao e `0` — perde a hora marcada, como a FIDE desde 2018.
+
+Armadilha anotada:
+
+- **local e ritmo por rodada foram para uma SEGUNDA LINHA da agenda**, e nao para
+  mais duas colunas. Seis colunas nao cabem na janela de 800px que o
+  `test_ui_layout` cobre — e o que estourava nem era a agenda: era o editor de
+  colunas ao lado, empurrado pela largura que a agenda impunha a aba. Raspar
+  pixel das colunas nao resolveu (12px viraram 43px quando os campos ficaram
+  menores que o conteudo); o conserto foi mudar a forma.
 
 Problema:
 
@@ -2421,9 +2447,9 @@ Escopo:
 
 Criterios de aceite:
 
-- [ ] `90'+30"` classifica como standard e gera `222` valido;
-- [ ] reduzir rodadas exige confirmacao quando ha agenda;
-- [ ] tolerancia aparece no painel e na sumula.
+- [x] `90'+30"` classifica como standard e gera `222` valido;
+- [x] reduzir rodadas exige confirmacao quando ha agenda;
+- [x] tolerancia aparece no painel e na sumula.
 
 #### ORG-04 - Configuracao honesta (flags mortas e bloqueios pos-R1)
 
@@ -2610,8 +2636,8 @@ Objetivo: edital real configuravel sem texto livre nem contorno manual.
 Entregas:
 
 1. [x] `ORG-01` Categorias configuraveis por torneio.
-2. [ ] `ORG-02` Premiacao conforme edital.
-3. [ ] `ORG-03` Agenda e controle de tempo estruturados.
+2. [x] `ORG-02` Premiacao conforme edital.
+3. [x] `ORG-03` Agenda e controle de tempo estruturados.
 4. [ ] `ORG-04` Configuracao honesta (flags mortas e bloqueios pos-R1).
 
 ## 8. Definicao de Pronto

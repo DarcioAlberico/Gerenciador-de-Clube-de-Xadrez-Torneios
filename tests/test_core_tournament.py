@@ -271,7 +271,15 @@ class TournamentSetupTest(CoreServiceTestCase):
         )
         self.assertEqual([item["time"] for item in generated], ["08:30", "09:10", "08:30", "09:10", "08:30"])
 
-    def test_save_profile_can_reduce_rounds_with_existing_schedule_rows(self) -> None:
+    AGENDA_DE_CINCO = [
+        {"round_number": 1, "date": "2026-06-01", "time": "09:00"},
+        {"round_number": 2, "date": "2026-06-01", "time": "14:00"},
+        {"round_number": 3, "date": "2026-06-02", "time": "09:00"},
+        {"round_number": 4, "date": "2026-06-02", "time": "14:00"},
+        {"round_number": 5, "date": "2026-06-03", "time": "09:00"},
+    ]
+
+    def _reduzir_para_tres(self, **kwargs) -> None:
         self.tournament_service.save_profile(
             self.tournament_id,
             {
@@ -282,19 +290,34 @@ class TournamentSetupTest(CoreServiceTestCase):
                 "bye_points": "1",
             },
             {},
-            [
-                {"round_number": 1, "date": "2026-06-01", "time": "09:00"},
-                {"round_number": 2, "date": "2026-06-01", "time": "14:00"},
-                {"round_number": 3, "date": "2026-06-02", "time": "09:00"},
-                {"round_number": 4, "date": "2026-06-02", "time": "14:00"},
-                {"round_number": 5, "date": "2026-06-03", "time": "09:00"},
-            ],
+            list(self.AGENDA_DE_CINCO),
+            **kwargs,
         )
+
+    def test_save_profile_can_reduce_rounds_with_existing_schedule_rows(self) -> None:
+        """ORG-03: com confirmacao, reduzir apaga as datas excedentes."""
+        self._reduzir_para_tres(confirm_schedule_loss=True)
 
         tournament = self.db.get_tournament(self.tournament_id)
         schedule = self.db.list_round_schedule(self.tournament_id)
         self.assertEqual(tournament["rounds_count"], 3)
         self.assertEqual([item["round_number"] for item in schedule], [1, 2, 3])
+
+    def test_reduzir_rodadas_com_agenda_exige_confirmacao(self) -> None:
+        """ORG-03: sem confirmacao, o programa apagava data publicada calado."""
+        with self.assertRaises(AppError) as erro:
+            self._reduzir_para_tres()
+        self.assertIn("4, 5", str(erro.exception))
+        # Nada foi gravado: o total de rodadas continua o de antes.
+        self.assertNotEqual(3, self.db.get_tournament(self.tournament_id)["rounds_count"])
+
+    def test_reducao_confirmada_gera_auditoria(self) -> None:
+        self._reduzir_para_tres(confirm_schedule_loss=True)
+        acoes = [
+            evento["action"]
+            for evento in self.db.list_audit_events(tournament_id=self.tournament_id)
+        ]
+        self.assertIn("schedule_rounds_reduced", acoes)
 
     def test_save_profile_cannot_reduce_rounds_below_generated_rounds(self) -> None:
         self._create_players(4)

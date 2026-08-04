@@ -311,6 +311,13 @@ class PlayerRoundReportsMixin:
         scoresheets = self._scoresheet_rows(round_data, tournament)
         if not scoresheets:
             raise AppError("Não ha mesas validas para gerar súmulas.")
+        # ORG-03: a tolerancia de atraso vai impressa na mesa. Quem declara
+        # ausencia e o arbitro de sala, e ele nao tem o edital na mao.
+        settings = self.db.get_tournament_settings(int(round_data["tournament_id"])) or {}
+        tournament = {
+            **tournament,
+            "late_tolerance_minutes": int(settings.get("late_tolerance_minutes") or 0),
+        }
         self._write_scoresheets_pdf(path, tournament, round_data, scoresheets)
         logger.info("%s sumulas exportadas em PDF: %s", len(scoresheets), path)
 

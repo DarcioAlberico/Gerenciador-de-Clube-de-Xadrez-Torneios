@@ -240,7 +240,7 @@ class TournamentCoreMixin(_DatabaseInfra):
             )
             schedules = connection.execute(
                 """
-                SELECT round_number, date, time
+                SELECT round_number, date, time, venue, time_control, rest_day
                 FROM round_schedule
                 WHERE tournament_id = ?
                 ORDER BY round_number
@@ -250,8 +250,9 @@ class TournamentCoreMixin(_DatabaseInfra):
             connection.executemany(
                 """
                 INSERT INTO round_schedule (
-                    tournament_id, round_number, date, time, updated_at
-                ) VALUES (?, ?, ?, ?, ?)
+                    tournament_id, round_number, date, time, venue, time_control,
+                    rest_day, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 [
                     (
@@ -259,6 +260,9 @@ class TournamentCoreMixin(_DatabaseInfra):
                         int(row["round_number"]),
                         str(row["date"] or ""),
                         str(row["time"] or ""),
+                        str(row["venue"] or ""),
+                        str(row["time_control"] or ""),
+                        int(row["rest_day"] or 0),
                         self.now(),
                     )
                     for row in schedules
@@ -266,7 +270,8 @@ class TournamentCoreMixin(_DatabaseInfra):
             )
             prizes = connection.execute(
                 """
-                SELECT kind, label, category, rank_from, rank_to, amount, position
+                SELECT kind, label, category, rank_from, rank_to, amount,
+                       cumulative, currency, position
                 FROM tournament_prizes
                 WHERE tournament_id = ?
                 ORDER BY position, id
@@ -446,6 +451,8 @@ class TournamentCoreMixin(_DatabaseInfra):
                     rating_fee_fide = ?, rating_fee_cbx = ?, rating_fee_lbx = ?,
                     rating_speed = ?, rating_regulation = ?,
                     category_reference_date = ?,
+                    prize_tie_split = ?, prize_exclude_withdrawn = ?,
+                    late_tolerance_minutes = ?,
                     archived = ?, updated_at = ?
                 WHERE tournament_id = ?
                 """,
@@ -507,6 +514,9 @@ class TournamentCoreMixin(_DatabaseInfra):
                     str(data.get("rating_speed", "")).strip(),
                     str(data.get("rating_regulation", "")).strip(),
                     str(data.get("category_reference_date", "")).strip(),
+                    str(data.get("prize_tie_split", "equal")).strip() or "equal",
+                    int(data.get("prize_exclude_withdrawn", 0) or 0),
+                    int(data.get("late_tolerance_minutes", 0) or 0),
                     int(data.get("archived", 0) or 0),
                     self.now(),
                     tournament_id,
@@ -773,11 +783,15 @@ class TournamentCoreMixin(_DatabaseInfra):
             connection.executemany(
                 """
                 INSERT INTO round_schedule (
-                    tournament_id, round_number, date, time, updated_at
-                ) VALUES (?, ?, ?, ?, ?)
+                    tournament_id, round_number, date, time, venue, time_control,
+                    rest_day, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(tournament_id, round_number) DO UPDATE SET
                     date = excluded.date,
                     time = excluded.time,
+                    venue = excluded.venue,
+                    time_control = excluded.time_control,
+                    rest_day = excluded.rest_day,
                     updated_at = excluded.updated_at
                 """,
                 [
@@ -786,6 +800,9 @@ class TournamentCoreMixin(_DatabaseInfra):
                         int(item["round_number"]),
                         str(item.get("date", "")).strip(),
                         str(item.get("time", "")).strip(),
+                        str(item.get("venue", "")).strip(),
+                        str(item.get("time_control", "")).strip(),
+                        1 if item.get("rest_day") else 0,
                         self.now(),
                     )
                     for item in schedule

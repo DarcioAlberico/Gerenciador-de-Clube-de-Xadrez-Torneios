@@ -170,6 +170,7 @@ class TournamentService:
         tournament_data: dict[str, Any],
         settings_data: dict[str, Any],
         schedule: list[dict[str, Any]],
+        confirm_schedule_loss: bool = False,
     ) -> None:
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
@@ -192,7 +193,12 @@ class TournamentService:
         current_settings = self.db.get_tournament_settings(tournament_id) or {}
         settings_for_validation = {**current_settings, **settings_data}
         settings_payload = self._validated_settings(settings_for_validation)
-        schedule_payload = self._validated_schedule(schedule, tournament_payload["rounds_count"])
+        schedule_payload = self._validated_schedule(
+            schedule,
+            tournament_payload["rounds_count"],
+            confirm_schedule_loss=confirm_schedule_loss,
+        )
+        self._audit_schedule_loss(tournament_id, schedule, tournament_payload["rounds_count"])
         self._validate_team_settings_compatibility(tournament_id, tournament_payload, settings_payload)
 
         requested_method = str(settings_payload.get("pairing_method") or "").strip()
@@ -675,13 +681,40 @@ class TournamentService:
         except ValueError as exc:
             raise AppError(message) from exc
 
+    def _audit_schedule_loss(
+        self, tournament_id: int, schedule: list[dict[str, Any]], rounds_count: int
+    ) -> None:
+        """Registra as datas perdidas ao reduzir rodadas (ORG-03).
+
+        Chegar aqui significa que o arbitro confirmou; o evento existe para que
+        "a data da rodada 5 sumiu" tenha resposta depois.
+        """
+        perdidas = [
+            item
+            for item in schedule
+            if int(item.get("round_number") or 0) > int(rounds_count)
+            and (str(item.get("date", "")).strip() or str(item.get("time", "")).strip())
+        ]
+        if not perdidas:
+            return
+        self.db.create_audit_event(
+            action="schedule_rounds_reduced",
+            tournament_id=tournament_id,
+            entity_type="round_schedule",
+            reason=f"Total de rodadas reduzido para {rounds_count}",
+            before=perdidas,
+        )
+
     @staticmethod
     def _validated_schedule(
         schedule: list[dict[str, Any]],
         rounds_count: int,
+        *,
+        confirm_schedule_loss: bool = False,
     ) -> list[dict[str, Any]]:
         rows = []
         seen: set[int] = set()
+        dropped: list[int] = []
         for item in schedule:
             try:
                 round_number = int(item.get("round_number") or 0)
@@ -690,6 +723,10 @@ class TournamentService:
             if round_number < 1:
                 raise AppError("Agenda contem rodada fora do total configurado.")
             if round_number > rounds_count:
+                # ORG-03: descartar em silencio apagava data ja publicada. Quem
+                # reduz rodadas com agenda preenchida tem de saber o que perde.
+                if str(item.get("date", "")).strip() or str(item.get("time", "")).strip():
+                    dropped.append(round_number)
                 continue
             if round_number in seen:
                 raise AppError("Agenda contem rodada repetida.")
@@ -705,12 +742,35 @@ class TournamentService:
                     "round_number": round_number,
                     "date": round_date,
                     "time": str(item.get("time", "")).strip(),
+                    "venue": str(item.get("venue", "")).strip(),
+                    "time_control": str(item.get("time_control", "")).strip(),
+                    "rest_day": 1 if item.get("rest_day") else 0,
                 }
             )
 
         for round_number in range(1, rounds_count + 1):
             if round_number not in seen:
-                rows.append({"round_number": round_number, "date": "", "time": ""})
+                rows.append(
+                    {
+                        "round_number": round_number,
+                        "date": "",
+                        "time": "",
+                        "venue": "",
+                        "time_control": "",
+                        "rest_day": 0,
+                    }
+                )
+
+        if dropped and not confirm_schedule_loss:
+            # ORG-03: confirmacao, nao descarte calado. Quem reduziu o total de
+            # rodadas esta prestes a perder datas que ja podem ter sido
+            # publicadas — e o programa apagava sem dizer nada.
+            perdidas = ", ".join(str(numero) for numero in sorted(dropped))
+            raise AppError(
+                f"A agenda tem data marcada para a(s) rodada(s) {perdidas}, acima do total "
+                f"configurado ({rounds_count}). Confirme para apagar essas datas, aumente o "
+                "total de rodadas ou limpe a agenda dessas rodadas."
+            )
 
         return sorted(rows, key=lambda item: item["round_number"])
 

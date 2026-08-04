@@ -61,7 +61,14 @@ Aplicativo desktop em Python para Gerenciar Clube/Escolas_Turmas e Torneios de X
   jogador por tabuleiro dentro da equipe.
 - Busca de jogadores e filtro de classificacao por categoria.
 - Configuracao avancada de torneios com dados oficiais, regras basicas,
-  flags de interface/publicacao e agenda de datas/horarios por rodada.
+  flags de interface/publicacao e agenda por rodada com data, hora, **local,
+  ritmo e dia de folga**. Reduzir o total de rodadas com agenda preenchida pede
+  confirmacao e registra auditoria — antes as datas eram apagadas em silencio.
+- Ritmo de jogo entendido tambem na grafia do edital (`90'+30"`, `90+30`,
+  `40/90+30`), pelo mesmo interpretador que alimenta o registro 222 do TRF25 e a
+  classificacao standard/rapido/blitz do relatorio de rating.
+- Tolerancia de atraso configuravel por torneio, exibida no painel do arbitro e
+  impressa na sumula de mesa (`0` = perde a hora marcada, o padrao da FIDE).
 - Classificacao com pontos, Buchholz, Buchholz mediano, Sonneborn-Berger,
   vitorias e performance estimada do jogador.
 - Desempates configuraveis por torneio: escolha e ordene os criterios na tela

@@ -399,6 +399,7 @@ class TournamentSettingsMixin:
         for key, label, dica in (
             ("max_requested_byes", "Máximo de byes por jogador", "0 = sem limite"),
             ("last_requested_bye_round", "Última rodada com bye permitido", "0 = sem limite"),
+            ("late_tolerance_minutes", "Tolerância de atraso (min)", "0 = perde a hora marcada"),
         ):
             entry = form_rules.text(label, placeholder=dica)
             entry.insert(0, str(settings.get(key, 0) or 0))
@@ -723,22 +724,50 @@ class TournamentSettingsMixin:
         refresh_auto_rounds_state()
 
         ctk.CTkLabel(schedule_panel, text="Rodada").grid(row=1, column=0, padx=0, sticky="w")
-        ctk.CTkLabel(schedule_panel, text="Data").grid(row=1, column=1, padx=8, sticky="w")
-        ctk.CTkLabel(schedule_panel, text="Hora").grid(row=1, column=2, padx=8, sticky="w")
+        ctk.CTkLabel(schedule_panel, text="Data").grid(row=1, column=1, padx=6, sticky="w")
+        ctk.CTkLabel(schedule_panel, text="Hora").grid(row=1, column=2, padx=6, sticky="w")
+        ctk.CTkLabel(schedule_panel, text="Folga").grid(row=1, column=3, padx=6, sticky="w")
 
-        schedule_entries: dict[int, tuple[ctk.CTkEntry, ctk.CTkEntry]] = {}
-        for row_index, item in enumerate(existing_schedule, start=2):
+        # ORG-03: local e ritmo por rodada vao numa SEGUNDA linha, e nao em mais
+        # duas colunas. Seis colunas nao cabem na janela de 800px que o
+        # `test_ui_layout` cobre — e o que estoura nao e a agenda, e o editor de
+        # colunas ao lado, empurrado pela largura que a agenda impoe a aba (B-8).
+        schedule_entries: dict[int, dict[str, Any]] = {}
+        for indice, item in enumerate(existing_schedule):
             round_number = int(item["round_number"])
+            linha = 2 + indice * 2
             ctk.CTkLabel(schedule_panel, text=str(round_number)).grid(
-                row=row_index, column=0, padx=0, pady=(4, 0), sticky="w"
+                row=linha, column=0, padx=0, pady=(6, 0), sticky="w"
             )
-            date_entry = self._make_date_entry(schedule_panel, width=20)
-            date_entry.grid(row=row_index, column=1, padx=8, pady=(4, 0), sticky="ew")
+            date_entry = self._make_date_entry(schedule_panel, width=12)
+            date_entry.grid(row=linha, column=1, padx=6, pady=(6, 0), sticky="w")
             date_entry.insert(0, str(item.get("date") or ""))
-            time_entry = ctk.CTkEntry(schedule_panel, width=140)
-            time_entry.grid(row=row_index, column=2, padx=(8, 0), pady=(4, 0), sticky="ew")
+            time_entry = ctk.CTkEntry(schedule_panel, width=80)
+            time_entry.grid(row=linha, column=2, padx=6, pady=(6, 0), sticky="w")
             time_entry.insert(0, str(item.get("time") or ""))
-            schedule_entries[round_number] = (date_entry, time_entry)
+            rest_check = ctk.CTkCheckBox(schedule_panel, text="", width=40)
+            rest_check.grid(row=linha, column=3, padx=6, pady=(6, 0), sticky="w")
+            if item.get("rest_day"):
+                rest_check.select()
+
+            detalhe = ctk.CTkFrame(schedule_panel, fg_color="transparent")
+            detalhe.grid(row=linha + 1, column=1, columnspan=3, padx=6, pady=(2, 0), sticky="w")
+            ctk.CTkLabel(detalhe, text="Local").grid(row=0, column=0, padx=(0, 4), sticky="w")
+            venue_entry = ctk.CTkEntry(detalhe, width=150)
+            venue_entry.grid(row=0, column=1, padx=(0, 10), sticky="w")
+            venue_entry.insert(0, str(item.get("venue") or ""))
+            ctk.CTkLabel(detalhe, text="Ritmo").grid(row=0, column=2, padx=(0, 4), sticky="w")
+            rhythm_entry = ctk.CTkEntry(detalhe, width=110)
+            rhythm_entry.grid(row=0, column=3, sticky="w")
+            rhythm_entry.insert(0, str(item.get("time_control") or ""))
+
+            schedule_entries[round_number] = {
+                "date": date_entry,
+                "time": time_entry,
+                "venue": venue_entry,
+                "time_control": rhythm_entry,
+                "rest_day": rest_check,
+            }
 
         def apply_auto_schedule() -> None:
             try:
@@ -756,10 +785,10 @@ class TournamentSettingsMixin:
                     entries = schedule_entries.get(int(item["round_number"]))
                     if not entries:
                         continue
-                    entries[0].delete(0, "end")
-                    entries[0].insert(0, str(item["date"]))
-                    entries[1].delete(0, "end")
-                    entries[1].insert(0, str(item["time"]))
+                    entries["date"].delete(0, "end")
+                    entries["date"].insert(0, str(item["date"]))
+                    entries["time"].delete(0, "end")
+                    entries["time"].insert(0, str(item["time"]))
             except Exception as exc:
                 self._show_error(exc)
 
@@ -901,20 +930,46 @@ class TournamentSettingsMixin:
             for key, checkbox in flag_checks.items():
                 settings_payload[key] = checkbox.get()
             schedule_payload = [
-                {"round_number": round_number, "date": entries[0].get(), "time": entries[1].get()}
-                for round_number, entries in schedule_entries.items()
+                {
+                    "round_number": round_number,
+                    "date": campos["date"].get(),
+                    "time": campos["time"].get(),
+                    "venue": campos["venue"].get(),
+                    "time_control": campos["time_control"].get(),
+                    "rest_day": campos["rest_day"].get(),
+                }
+                for round_number, campos in schedule_entries.items()
             ]
             return tournament_payload, settings_payload, schedule_payload
 
         def save_settings(show_message: bool = True) -> None:
             try:
                 tournament_payload, settings_payload, schedule_payload = profile_payloads()
-                self.tournament_service.save_profile(
-                    self.current_tournament_id,
-                    tournament_payload,
-                    settings_payload,
-                    schedule_payload,
-                )
+                try:
+                    self.tournament_service.save_profile(
+                        self.current_tournament_id,
+                        tournament_payload,
+                        settings_payload,
+                        schedule_payload,
+                    )
+                except AppError as exc:
+                    # ORG-03: reduzir rodadas apaga data ja publicada. O servico
+                    # recusa e explica; aqui a decisao volta para o arbitro.
+                    if "Confirme para apagar essas datas" not in str(exc):
+                        raise
+                    if not self._confirm_action(
+                        "Reduzir rodadas",
+                        f"{exc}\n\nApagar as datas excedentes?",
+                        danger=True,
+                    ):
+                        return
+                    self.tournament_service.save_profile(
+                        self.current_tournament_id,
+                        tournament_payload,
+                        settings_payload,
+                        schedule_payload,
+                        confirm_schedule_loss=True,
+                    )
                 # Salvamento unificado: premios e colunas vao junto com as configuracoes.
                 self.prize_service.replace_prizes(self.current_tournament_id, prize_editor.get_rows())
                 self.tournament_service.replace_categories(
