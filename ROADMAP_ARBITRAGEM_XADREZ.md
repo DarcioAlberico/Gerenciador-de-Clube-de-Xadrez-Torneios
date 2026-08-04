@@ -486,10 +486,10 @@ Entregas, em ordem de prioridade:
    certificado IT3 (`FED-06` — ENTREGUE em 2026-08-04), rating com K/piso/ritmo
    corretos e regulamento modelado (`FED-07` — ENTREGUE em 2026-08-04; o arquivo
    de submissao CBX aguarda o formato publicado).
-6. **Organizacao (Sprint 12)**: categorias configuraveis por torneio
-   (`ORG-01`), premiacao conforme edital, inclusive Feminino automatico
-   (`ORG-02`), agenda e controle de tempo estruturados (`ORG-03`), remocao ou
-   implementacao das flags mortas de configuracao (`ORG-04`).
+6. **Organizacao (Sprint 12 — CONCLUIDA em 2026-08-04)**: categorias
+   configuraveis por torneio (`ORG-01`), premiacao conforme edital, inclusive
+   Feminino automatico (`ORG-02`), agenda e controle de tempo estruturados
+   (`ORG-03`), remocao das flags mortas de configuracao (`ORG-04`).
 
 Criterios de aceite:
 
@@ -546,7 +546,10 @@ colunas, TRF25) foram entregues nas fases 0 a 11 e nos EPICs A a E da
   titulado por nivel (CM/WCM fora), piso de rating ajustado que sobe UM
   adversario, tetos de federacao e de nao ratados, e a tabela do Anexo derivada
   das fracoes em vez de copiada. IT3 preenchido em PDF por norma detectada.
-- Premiacao conforme edital (Feminino automatico, multi-categoria) (`ORG-02`).
+- ~~Premiacao conforme edital (Feminino automatico, multi-categoria) (`ORG-02`).~~
+  FEITO 2026-08-04 — premio de categoria casa com TODAS as categorias do
+  jogador, politica por premio, e o "Sistema Hort" foi para onde ele de
+  fato mora: o rateio entre empatados.
 
 ### Alto impacto / alta complexidade
 
@@ -569,7 +572,10 @@ colunas, TRF25) foram entregues nas fases 0 a 11 e nos EPICs A a E da
   categoria virou dado (tabela por torneio), Feminino virou categoria de
   verdade e a classificacao passou a agrupar por TODAS as categorias
   premiaveis do jogador. Torneio sem cadastro continua no padrao antigo.
-- Agenda e controle de tempo estruturados (`ORG-03`).
+- ~~Agenda e controle de tempo estruturados (`ORG-03`).~~ FEITO 2026-08-04 —
+  `90'+30"` e a forma compacta da FIDE entendidas pelo mesmo interpretador do
+  TRF25, agenda com local/ritmo/folga por rodada, confirmacao ao reduzir
+  rodadas e tolerancia de atraso no painel e na sumula.
 
 ### Baixa prioridade inicial
 

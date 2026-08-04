@@ -55,6 +55,60 @@ _INCREMENT = re.compile(r"\+\s*(\d+)\s*(?:s|seg|segundos?)\b")
 _MULTI = re.compile(r"(\d+)\s*min\s*/\s*(\d+)\s*lances\s*\+\s*(\d+)\s*min")
 _SINGLE = re.compile(r"(\d+)\s*min")
 
+# Grafia internacional (ORG-03): `90'+30"` é como o edital e o cartaz escrevem,
+# e o programa não a reconhecia — o TRF25 omitia o registro 222 e o relatório de
+# rating não sabia classificar o evento. A conversão para a gramática interna é
+# textual de propósito: um interpretador só continua sendo um só.
+_MINUTES_MARK = re.compile(r"(\d+)\s*(?:'|’|min\b)")
+_SECONDS_MARK = re.compile(r"(\d+)\s*(?:\"|”|''|s\b)")
+# `40/90` = 40 lances em 90 minutos (forma compacta da FIDE).
+_COMPACT_MOVES = re.compile(r"^(\d+)\s*/\s*(\d+)(?![\d/])")
+# `90+30` sem marca nenhuma: convenção universal de minutos + incremento.
+_BARE_PAIR = re.compile(r"^(\d+)\s*\+\s*(\d+)$")
+
+
+def normalized_text(value: object) -> str:
+    """Traduz as grafias comuns para a gramática interna (`min`/`s`/`lances`).
+
+    Aceita `90'+30"`, `90+30`, `40/90+30` e o que o construtor de ritmo gera.
+    """
+    text = str(value or "").strip().lower().replace("segundos", "s").replace("minutos", "min")
+    if not text:
+        return ""
+
+    compacto = _COMPACT_MOVES.match(text)
+    if compacto:
+        lances, minutos = compacto.group(1), compacto.group(2)
+        resto = text[compacto.end() :].strip()
+        # `40/90+30` -> 40 lances em 90 min, e o que sobra e o 2o periodo/incremento.
+        # Depois de `40/90`, um `+30` SEM marca e o 2o periodo em MINUTOS
+        # ("40 lances em 90 min, depois 30 min"), que e a leitura corrente da
+        # notacao da FIDE. So `+30"` e incremento. A distincao importa: como
+        # incremento o mesmo texto daria 210 minutos em vez de 120.
+        segundo = ""
+        incremento = ""
+        sobra = resto.lstrip("+ ").strip()
+        if sobra:
+            marca_seg = _SECONDS_MARK.fullmatch(sobra)
+            if marca_seg:
+                incremento = f" + {marca_seg.group(1)} s"
+            else:
+                numeros = re.findall(r"\d+", sobra)
+                if numeros:
+                    segundo = f" + {numeros[0]} min"
+        if not segundo:
+            # Sem 2o periodo declarado, o resto do jogo corre no mesmo tempo.
+            segundo = f" + {minutos} min"
+        return f"{minutos} min / {lances} lances{segundo}{incremento}"
+
+    simples = _BARE_PAIR.match(text)
+    if simples:
+        return f"{simples.group(1)} min + {simples.group(2)} s"
+
+    text = _SECONDS_MARK.sub(r"\1 s", text)
+    text = _MINUTES_MARK.sub(r"\1 min", text)
+    return text
+
 
 def parse_time_control(value: object) -> list[TimePeriod]:
     """Períodos do ritmo, ou lista vazia quando o texto não é reconhecido.
@@ -63,7 +117,7 @@ def parse_time_control(value: object) -> list[TimePeriod]:
     qualquer coisa. Quem chama decide o que fazer com a dúvida — o TRF omite o
     registro e o relatório pede que o ritmo seja declarado.
     """
-    text = str(value or "").strip().lower()
+    text = normalized_text(value)
     if not text:
         return []
 

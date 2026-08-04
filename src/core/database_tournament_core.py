@@ -240,7 +240,7 @@ class TournamentCoreMixin(_DatabaseInfra):
             )
             schedules = connection.execute(
                 """
-                SELECT round_number, date, time
+                SELECT round_number, date, time, venue, time_control, rest_day
                 FROM round_schedule
                 WHERE tournament_id = ?
                 ORDER BY round_number
@@ -250,8 +250,9 @@ class TournamentCoreMixin(_DatabaseInfra):
             connection.executemany(
                 """
                 INSERT INTO round_schedule (
-                    tournament_id, round_number, date, time, updated_at
-                ) VALUES (?, ?, ?, ?, ?)
+                    tournament_id, round_number, date, time, venue, time_control,
+                    rest_day, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 [
                     (
@@ -259,6 +260,9 @@ class TournamentCoreMixin(_DatabaseInfra):
                         int(row["round_number"]),
                         str(row["date"] or ""),
                         str(row["time"] or ""),
+                        str(row["venue"] or ""),
+                        str(row["time_control"] or ""),
+                        int(row["rest_day"] or 0),
                         self.now(),
                     )
                     for row in schedules
@@ -266,7 +270,8 @@ class TournamentCoreMixin(_DatabaseInfra):
             )
             prizes = connection.execute(
                 """
-                SELECT kind, label, category, rank_from, rank_to, amount, position
+                SELECT kind, label, category, rank_from, rank_to, amount,
+                       cumulative, currency, position
                 FROM tournament_prizes
                 WHERE tournament_id = ?
                 ORDER BY position, id
@@ -277,8 +282,8 @@ class TournamentCoreMixin(_DatabaseInfra):
                 """
                 INSERT INTO tournament_prizes (
                     tournament_id, kind, label, category, rank_from, rank_to,
-                    amount, position, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    amount, cumulative, currency, position, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 [
                     (
@@ -289,6 +294,8 @@ class TournamentCoreMixin(_DatabaseInfra):
                         int(row["rank_from"] or 1),
                         int(row["rank_to"] or row["rank_from"] or 1),
                         float(row["amount"] or 0.0),
+                        int(row["cumulative"] or 0),
+                        str(row["currency"] or ""),
                         int(row["position"] or 0),
                         self.now(),
                     )
@@ -325,18 +332,28 @@ class TournamentCoreMixin(_DatabaseInfra):
         with self.connect() as connection:
             connection.execute("DELETE FROM tournaments WHERE id = ?", (tournament_id,))
 
-    def list_tournaments(self) -> list[dict[str, Any]]:
+    def list_tournaments(self, include_archived: bool = False) -> list[dict[str, Any]]:
+        """Torneios do sistema. Arquivado FICA DE FORA por padrao (ORG-04).
+
+        A opcao "Arquivado" existia na tela e nao arquivava nada — o torneio
+        continuava na lista igual aos outros. Quem precisa dos arquivados pede
+        explicitamente, que e o que o filtro da tela de torneios faz.
+        """
+        filtro = "" if include_archived else "WHERE COALESCE(s.archived, 0) = 0"
         with self.connect() as connection:
             rows = connection.execute(
-                """
+                f"""
                 SELECT
                     t.*,
                     c.name AS club_name,
                     c.kind AS club_kind,
-                    cl.name AS class_name
+                    cl.name AS class_name,
+                    COALESCE(s.archived, 0) AS archived
                 FROM tournaments t
                 LEFT JOIN clubs c ON c.id = t.club_id
                 LEFT JOIN classes cl ON cl.id = t.class_id
+                LEFT JOIN tournament_settings s ON s.tournament_id = t.id
+                {filtro}
                 ORDER BY t.created_at DESC, t.id DESC
                 """
             ).fetchall()
@@ -444,6 +461,8 @@ class TournamentCoreMixin(_DatabaseInfra):
                     rating_fee_fide = ?, rating_fee_cbx = ?, rating_fee_lbx = ?,
                     rating_speed = ?, rating_regulation = ?,
                     category_reference_date = ?,
+                    prize_tie_split = ?, prize_exclude_withdrawn = ?,
+                    late_tolerance_minutes = ?,
                     archived = ?, updated_at = ?
                 WHERE tournament_id = ?
                 """,
@@ -505,6 +524,9 @@ class TournamentCoreMixin(_DatabaseInfra):
                     str(data.get("rating_speed", "")).strip(),
                     str(data.get("rating_regulation", "")).strip(),
                     str(data.get("category_reference_date", "")).strip(),
+                    str(data.get("prize_tie_split", "equal")).strip() or "equal",
+                    int(data.get("prize_exclude_withdrawn", 0) or 0),
+                    int(data.get("late_tolerance_minutes", 0) or 0),
                     int(data.get("archived", 0) or 0),
                     self.now(),
                     tournament_id,
@@ -668,8 +690,8 @@ class TournamentCoreMixin(_DatabaseInfra):
                 """
                 INSERT INTO tournament_prizes (
                     tournament_id, kind, label, category, rank_from, rank_to,
-                    amount, position, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    amount, cumulative, currency, position, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 [
                     (
@@ -680,6 +702,8 @@ class TournamentCoreMixin(_DatabaseInfra):
                         int(prize.get("rank_from") or 1),
                         int(prize.get("rank_to") or prize.get("rank_from") or 1),
                         float(prize.get("amount") or 0.0),
+                        1 if prize.get("cumulative") else 0,
+                        str(prize.get("currency") or ""),
                         index,
                         now,
                     )
@@ -769,11 +793,15 @@ class TournamentCoreMixin(_DatabaseInfra):
             connection.executemany(
                 """
                 INSERT INTO round_schedule (
-                    tournament_id, round_number, date, time, updated_at
-                ) VALUES (?, ?, ?, ?, ?)
+                    tournament_id, round_number, date, time, venue, time_control,
+                    rest_day, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(tournament_id, round_number) DO UPDATE SET
                     date = excluded.date,
                     time = excluded.time,
+                    venue = excluded.venue,
+                    time_control = excluded.time_control,
+                    rest_day = excluded.rest_day,
                     updated_at = excluded.updated_at
                 """,
                 [
@@ -782,6 +810,9 @@ class TournamentCoreMixin(_DatabaseInfra):
                         int(item["round_number"]),
                         str(item.get("date", "")).strip(),
                         str(item.get("time", "")).strip(),
+                        str(item.get("venue", "")).strip(),
+                        str(item.get("time_control", "")).strip(),
+                        1 if item.get("rest_day") else 0,
                         self.now(),
                     )
                     for item in schedule

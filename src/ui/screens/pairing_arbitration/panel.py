@@ -134,6 +134,19 @@ class ArbitrationPanelView:
             text_color=THEME_TEXT_SUB,
         ).grid(row=1, column=5, padx=(8, 0), pady=(12, 0), sticky="e")
 
+        # Tolerancia de atraso (ORG-03): quem declara ausencia e o arbitro de
+        # sala, e o numero vivia so no edital.
+        tolerancia = int(metrics.get("late_tolerance_minutes") or 0)
+        ctk.CTkLabel(
+            cards,
+            text=(
+                f"Tolerância de atraso: {tolerancia} min"
+                if tolerancia
+                else "Tolerância de atraso: zero (perde a hora marcada)"
+            ),
+            text_color=THEME_TEXT_SUB,
+        ).grid(row=2, column=0, columnspan=6, padx=(0, 8), pady=(6, 0), sticky="w")
+
     def _build_alerts(
         self, main: ctk.CTkFrame, metrics: dict[str, Any], alerts: list[dict[str, Any]]
     ) -> None:

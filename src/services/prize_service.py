@@ -64,6 +64,11 @@ class PrizeService:
             "rank_from": rank_from,
             "rank_to": rank_to,
             "amount": round(amount, 2),
+            # Politica POR PREMIO (ORG-02): o edital tipico soma o premio
+            # Feminino ao geral mesmo quando a politica do torneio e "apenas o
+            # maior", e antes isso nao tinha como ser dito.
+            "cumulative": 1 if prize.get("cumulative") else 0,
+            "currency": str(prize.get("currency") or "").strip()[:8],
         }
 
     def allocate(self, tournament_id: int) -> dict[str, Any]:
@@ -83,6 +88,8 @@ class PrizeService:
             prizes,
             policy=str(settings.get("prize_policy") or "best_only"),
             tax_percent=float(settings.get("prize_tax_percent") or 0.0),
+            tie_split=str(settings.get("prize_tie_split") or "equal"),
+            exclude_withdrawn=bool(settings.get("prize_exclude_withdrawn")),
         )
         allocation["tournament"] = tournament
         return allocation

@@ -182,6 +182,12 @@ class ReportRenderersMixin:
             document.setFont("Helvetica", 9)
             document.drawString(margin, page_height - 23 * mm, f"Rodada: {round_data.get('number', '')}")
             document.drawRightString(page_width - margin, page_height - 23 * mm, f"Mesa: {scoresheet['board_label']}")
+            tolerancia = int(tournament.get("late_tolerance_minutes") or 0)
+            document.drawRightString(
+                page_width - margin,
+                page_height - 28 * mm,
+                f"Tolerancia de atraso: {tolerancia} min" if tolerancia else "Tolerancia: zero (perde a hora marcada)",
+            )
             if scoresheet.get("context"):
                 document.drawString(margin, page_height - 28 * mm, fitted_text(scoresheet["context"], content_width, font_size=9))
 

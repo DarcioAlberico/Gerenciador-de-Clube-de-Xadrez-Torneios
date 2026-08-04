@@ -287,6 +287,15 @@ class PairingService:
             "resolved_results": 0,
             "round_progress_percent": 0,
             "result_states": self.result_states_summary(tournament_id),
+            # Tolerancia de atraso (ORG-03). O arbitro precisa dela na mao no
+            # momento de declarar ausencia, e ela vivia so na cabeca de quem leu
+            # o edital. `0` = perde a hora marcada, que e o default da FIDE.
+            "late_tolerance_minutes": int(
+                (self.db.get_tournament_settings(tournament_id) or {}).get(
+                    "late_tolerance_minutes"
+                )
+                or 0
+            ),
             **self._round_clock_metrics(latest_round),
         }
         alerts: list[str] = []

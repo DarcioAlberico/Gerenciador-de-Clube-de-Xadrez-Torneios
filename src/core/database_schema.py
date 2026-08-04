@@ -622,6 +622,15 @@ CREATE TABLE IF NOT EXISTS tournament_settings (
     -- janeiro do ano do torneio, que e como o edital de base e escrito.
     -- Categoria pode ter a sua propria e sobrescrever esta.
     category_reference_date TEXT NOT NULL DEFAULT '',
+    -- Rateio entre EMPATADOS (ORG-02): `equal` divide o bolo por igual;
+    -- `hort` da a cada um 50% do premio da propria posicao no desempate mais
+    -- 50% do bolo dividido por igual. O `hort` que existia antes combinava
+    -- geral com categoria e nao era o Sistema Hort.
+    prize_tie_split TEXT NOT NULL DEFAULT 'equal',
+    prize_exclude_withdrawn INTEGER NOT NULL DEFAULT 0,
+    -- Tolerancia de atraso em minutos (ORG-03). `0` = perde por ausencia a
+    -- hora marcada, que e o default da FIDE desde 2018.
+    late_tolerance_minutes INTEGER NOT NULL DEFAULT 0,
     -- Ajustes do regulamento de rating, em JSON por base:
     -- `{"cbx": {"k_top": 10, "rating_floor": 1400}}`. Coluna unica em vez de
     -- uma por parametro: o regulamento e DADO, e dado com forma propria cabe
@@ -692,6 +701,12 @@ CREATE TABLE IF NOT EXISTS round_schedule (
     round_number INTEGER NOT NULL,
     date TEXT DEFAULT '',
     time TEXT DEFAULT '',
+    -- Agenda de verdade (ORG-03): a rodada pode mudar de local e de ritmo, e o
+    -- dia de descanso e uma LINHA da agenda — sem ele, a data seguinte parece
+    -- rodada atrasada.
+    venue TEXT NOT NULL DEFAULT '',
+    time_control TEXT NOT NULL DEFAULT '',
+    rest_day INTEGER NOT NULL DEFAULT 0,
     updated_at TEXT NOT NULL,
     UNIQUE (tournament_id, round_number),
     FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE
@@ -898,6 +913,11 @@ CREATE TABLE IF NOT EXISTS tournament_prizes (
     rank_from INTEGER NOT NULL DEFAULT 1,
     rank_to INTEGER NOT NULL DEFAULT 1,
     amount REAL NOT NULL DEFAULT 0,
+    -- Politica POR PREMIO (ORG-02): `1` acumula com os demais mesmo quando a
+    -- politica do torneio e "apenas o maior". E o caso do premio Feminino, que
+    -- quase todo edital soma ao premio geral.
+    cumulative INTEGER NOT NULL DEFAULT 0,
+    currency TEXT NOT NULL DEFAULT '',
     position INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
     FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE

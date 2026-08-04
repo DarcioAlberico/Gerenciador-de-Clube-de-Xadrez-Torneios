@@ -15,7 +15,7 @@ from src.services.pairing.incidents import (
     infraction_label as incident_infraction_label,
 )
 from src.services.pairing.point_adjustments import format_signed
-from src.services.prizes import PRIZE_KINDS, PRIZE_POLICIES, allocate_prizes
+from src.services.prizes import PRIZE_KINDS, PRIZE_POLICIES, PRIZE_TIE_SPLITS, allocate_prizes
 from src.services.export_federation import FederationReportsMixin
 
 logger = logging.getLogger(__name__)
@@ -67,7 +67,6 @@ class ReportSectionsMixin:
                 ["Data de corte", settings.get("cutoff_date", "")],
                 ["Ordem inicial", settings.get("initial_order", "")],
                 ["Tipo de torneio", settings.get("tournament_type", "")],
-                ["Calcular desempenho", "Sim" if settings.get("calculate_performance") else "Não"],
             ]
         )
         if tournament.get("competition_type") == "team":
@@ -402,12 +401,16 @@ class ReportSectionsMixin:
             prizes,
             policy=str(settings.get("prize_policy") or "best_only"),
             tax_percent=float(settings.get("prize_tax_percent") or 0.0),
+            tie_split=str(settings.get("prize_tie_split") or "equal"),
+            exclude_withdrawn=bool(settings.get("prize_exclude_withdrawn")),
         )
 
         policy_label = PRIZE_POLICIES.get(result["policy"], result["policy"])
         summary_rows = [
             ["Torneio", tournament["name"]],
             ["Política de premiação", policy_label],
+            ["Entre empatados", PRIZE_TIE_SPLITS.get(result["tie_split"], result["tie_split"])],
+            ["Desistentes excluídos", result["excluded_withdrawn"]],
             ["Imposto do organizador (%)", result["tax_percent"]],
             ["Premiados", result["winners"]],
             ["Total bruto", self._format_currency(result["total_gross"])],

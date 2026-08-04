@@ -89,8 +89,9 @@ class TestDatabasePublicInterface(DatabaseTestCase):
 
 class TestDatabaseSchema(DatabaseTestCase):
     def test_schema_version(self) -> None:
-        # v54 (ORG-01): categorias configuraveis por torneio.
-        self.assertEqual(Database.SCHEMA_VERSION, 54)
+        # v55 (ORG-02/ORG-03): politica e moeda por premio, rateio entre
+        # empatados, agenda com local/ritmo/descanso e tolerancia de atraso.
+        self.assertEqual(Database.SCHEMA_VERSION, 55)
 
     def test_core_tables_exist(self) -> None:
         with self.db.connect() as conn:

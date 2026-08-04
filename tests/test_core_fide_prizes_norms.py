@@ -176,7 +176,12 @@ class FidePrizesNormsTest(CoreServiceTestCase):
         self.assertEqual(by_id[3]["gross"], 200.0)
         self.assertEqual(result["total_gross"], 2400.0)
 
-    def test_prize_hort_policy_combines_overall_and_category(self) -> None:
+    def test_prize_policy_combines_overall_and_category(self) -> None:
+        """Combinação geral × categoria. O `hort` saiu daqui na ORG-02.
+
+        Ele nunca foi política de combinação: o Sistema Hort reparte prêmio
+        entre EMPATADOS, e agora mora em `tie_split` (ver `test_core_org02`).
+        """
         from src.services.prizes import allocate_prizes
 
         standings = [
@@ -195,7 +200,6 @@ class FidePrizesNormsTest(CoreServiceTestCase):
 
         self.assertEqual(gross("best_only"), 500.0)        # max(100, 500)
         self.assertEqual(gross("cumulative"), 600.0)       # 100 + 500
-        self.assertEqual(gross("hort"), 300.0)             # max(100, (100+500)/2)
 
     def test_prize_tax_deduction(self) -> None:
         from src.services.prizes import allocate_prizes

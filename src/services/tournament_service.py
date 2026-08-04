@@ -22,7 +22,7 @@ from src.services.pairing import (
     serialize_tiebreak_sequence,
 )
 from src.services.pairing.constraints import rating_for_initial_order
-from src.services.prizes import PRIZE_POLICIES
+from src.services.prizes import PRIZE_POLICIES, PRIZE_TIE_SPLITS
 from src.services.categories import from_row as category_from_row, normalize as normalize_category
 from src.services.rating import SPEED_CHOICES, serialize_regulation_overrides
 
@@ -170,6 +170,8 @@ class TournamentService:
         tournament_data: dict[str, Any],
         settings_data: dict[str, Any],
         schedule: list[dict[str, Any]],
+        confirm_schedule_loss: bool = False,
+        structural_change_reason: str = "",
     ) -> None:
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
@@ -192,7 +194,20 @@ class TournamentService:
         current_settings = self.db.get_tournament_settings(tournament_id) or {}
         settings_for_validation = {**current_settings, **settings_data}
         settings_payload = self._validated_settings(settings_for_validation)
-        schedule_payload = self._validated_schedule(schedule, tournament_payload["rounds_count"])
+        schedule_payload = self._validated_schedule(
+            schedule,
+            tournament_payload["rounds_count"],
+            confirm_schedule_loss=confirm_schedule_loss,
+        )
+        self._audit_schedule_loss(tournament_id, schedule, tournament_payload["rounds_count"])
+        self._guard_structural_change(
+            tournament_id,
+            current_settings,
+            settings_data,
+            settings_payload,
+            generated_rounds,
+            structural_change_reason,
+        )
         self._validate_team_settings_compatibility(tournament_id, tournament_payload, settings_payload)
 
         requested_method = str(settings_payload.get("pairing_method") or "").strip()
@@ -575,6 +590,16 @@ class TournamentService:
             raise AppError("Ritmo para rating invalido.")
         rating_regulation = serialize_regulation_overrides(data.get("rating_regulation"))
 
+        prize_tie_split = str(data.get("prize_tie_split", "equal")).strip() or "equal"
+        if prize_tie_split not in PRIZE_TIE_SPLITS:
+            raise AppError("Forma de rateio entre empatados invalida.")
+        try:
+            late_tolerance_minutes = int(data.get("late_tolerance_minutes") or 0)
+        except (TypeError, ValueError) as exc:
+            raise AppError("Tolerancia de atraso invalida.") from exc
+        if late_tolerance_minutes < 0:
+            raise AppError("Tolerancia de atraso nao pode ser negativa.")
+
         prize_policy = str(data.get("prize_policy", "best_only")).strip() or "best_only"
         if prize_policy not in PRIZE_POLICIES:
             raise AppError("Politica de premiacao invalida.")
@@ -624,6 +649,8 @@ class TournamentService:
             "team_max_substitutions": team_max_substitutions,
             "rating_speed": rating_speed,
             "rating_regulation": rating_regulation,
+            "prize_tie_split": prize_tie_split,
+            "late_tolerance_minutes": late_tolerance_minutes,
             **rating_fees,
         }
         if pairing_method is not None:
@@ -663,13 +690,91 @@ class TournamentService:
         except ValueError as exc:
             raise AppError(message) from exc
 
+    # Configuracoes que mudam o SIGNIFICADO do torneio (ORG-04): trocar
+    # qualquer uma no meio do caminho reescreve como as rodadas ja jogadas
+    # deveriam ter sido ordenadas ou pareadas.
+    STRUCTURAL_SETTINGS = (
+        "initial_order",
+        "acceleration_method",
+        "tiebreak_sequence",
+        "team_tiebreak_sequence",
+    )
+
+    def _guard_structural_change(
+        self,
+        tournament_id: int,
+        current_settings: dict[str, Any],
+        requested: dict[str, Any],
+        payload: dict[str, Any],
+        generated_rounds: list[dict[str, Any]],
+        reason: str,
+    ) -> None:
+        """Mudanca estrutural depois da rodada 1 exige motivo e vira auditoria.
+
+        Antes dava para trocar ordem inicial, aceleracao ou sequencia de
+        desempates com o torneio em andamento sem aviso e sem deixar rastro — e
+        a classificacao publicada mudava sozinha entre uma rodada e outra.
+        """
+        if not generated_rounds:
+            return
+        mudancas = {
+            campo: (current_settings.get(campo), payload.get(campo))
+            for campo in self.STRUCTURAL_SETTINGS
+            if campo in requested
+            and str(current_settings.get(campo) or "") != str(payload.get(campo) or "")
+        }
+        if not mudancas:
+            return
+        motivo = str(reason or "").strip()
+        if not motivo:
+            campos = ", ".join(sorted(mudancas))
+            raise AppError(
+                f"O torneio ja tem rodada gerada e voce esta mudando: {campos}. "
+                "Informe o motivo da mudanca para registrar na auditoria."
+            )
+        self.db.create_audit_event(
+            action="tournament_structural_change",
+            tournament_id=tournament_id,
+            entity_type="tournament_settings",
+            reason=motivo,
+            before={campo: antes for campo, (antes, _depois) in mudancas.items()},
+            after={campo: depois for campo, (_antes, depois) in mudancas.items()},
+        )
+
+    def _audit_schedule_loss(
+        self, tournament_id: int, schedule: list[dict[str, Any]], rounds_count: int
+    ) -> None:
+        """Registra as datas perdidas ao reduzir rodadas (ORG-03).
+
+        Chegar aqui significa que o arbitro confirmou; o evento existe para que
+        "a data da rodada 5 sumiu" tenha resposta depois.
+        """
+        perdidas = [
+            item
+            for item in schedule
+            if int(item.get("round_number") or 0) > int(rounds_count)
+            and (str(item.get("date", "")).strip() or str(item.get("time", "")).strip())
+        ]
+        if not perdidas:
+            return
+        self.db.create_audit_event(
+            action="schedule_rounds_reduced",
+            tournament_id=tournament_id,
+            entity_type="round_schedule",
+            reason=f"Total de rodadas reduzido para {rounds_count}",
+            before=perdidas,
+        )
+
     @staticmethod
     def _validated_schedule(
         schedule: list[dict[str, Any]],
         rounds_count: int,
+        *,
+        confirm_schedule_loss: bool = False,
     ) -> list[dict[str, Any]]:
         rows = []
         seen: set[int] = set()
+        dropped: list[int] = []
         for item in schedule:
             try:
                 round_number = int(item.get("round_number") or 0)
@@ -678,6 +783,10 @@ class TournamentService:
             if round_number < 1:
                 raise AppError("Agenda contem rodada fora do total configurado.")
             if round_number > rounds_count:
+                # ORG-03: descartar em silencio apagava data ja publicada. Quem
+                # reduz rodadas com agenda preenchida tem de saber o que perde.
+                if str(item.get("date", "")).strip() or str(item.get("time", "")).strip():
+                    dropped.append(round_number)
                 continue
             if round_number in seen:
                 raise AppError("Agenda contem rodada repetida.")
@@ -693,12 +802,35 @@ class TournamentService:
                     "round_number": round_number,
                     "date": round_date,
                     "time": str(item.get("time", "")).strip(),
+                    "venue": str(item.get("venue", "")).strip(),
+                    "time_control": str(item.get("time_control", "")).strip(),
+                    "rest_day": 1 if item.get("rest_day") else 0,
                 }
             )
 
         for round_number in range(1, rounds_count + 1):
             if round_number not in seen:
-                rows.append({"round_number": round_number, "date": "", "time": ""})
+                rows.append(
+                    {
+                        "round_number": round_number,
+                        "date": "",
+                        "time": "",
+                        "venue": "",
+                        "time_control": "",
+                        "rest_day": 0,
+                    }
+                )
+
+        if dropped and not confirm_schedule_loss:
+            # ORG-03: confirmacao, nao descarte calado. Quem reduziu o total de
+            # rodadas esta prestes a perder datas que ja podem ter sido
+            # publicadas — e o programa apagava sem dizer nada.
+            perdidas = ", ".join(str(numero) for numero in sorted(dropped))
+            raise AppError(
+                f"A agenda tem data marcada para a(s) rodada(s) {perdidas}, acima do total "
+                f"configurado ({rounds_count}). Confirme para apagar essas datas, aumente o "
+                "total de rodadas ou limpe a agenda dessas rodadas."
+            )
 
         return sorted(rows, key=lambda item: item["round_number"])
 

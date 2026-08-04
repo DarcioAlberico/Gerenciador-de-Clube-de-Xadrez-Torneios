@@ -188,8 +188,7 @@ class TournamentSetupTest(CoreServiceTestCase):
                 "initial_order": "international_then_national",
                 "tournament_type": "real",
                 "tournament_profile": "club",
-                "allow_public_registration": 1,
-                "calculate_performance": 1,
+                "hide_standings": 1,
                 "late_entry_points": "0.5",
                 "rating_fee_fide": "2.50",
                 "rating_fee_cbx": "3.75",
@@ -211,8 +210,9 @@ class TournamentSetupTest(CoreServiceTestCase):
         self.assertEqual(settings["fide_event_id"], "123456")
         self.assertEqual(settings["initial_order"], "international_then_national")
         self.assertEqual(settings["tournament_profile"], "club")
-        self.assertEqual(settings["allow_public_registration"], 1)
-        self.assertEqual(settings["calculate_performance"], 1)
+        # ORG-04: `allow_public_registration` e `calculate_performance` sairam —
+        # eram opcoes visiveis que nao faziam nada.
+        self.assertEqual(settings["hide_standings"], 1)
         self.assertEqual(settings["late_entry_points"], 0.5)
         self.assertEqual(settings["rating_fee_fide"], 2.5)
         self.assertEqual(settings["rating_fee_cbx"], 3.75)
@@ -271,7 +271,15 @@ class TournamentSetupTest(CoreServiceTestCase):
         )
         self.assertEqual([item["time"] for item in generated], ["08:30", "09:10", "08:30", "09:10", "08:30"])
 
-    def test_save_profile_can_reduce_rounds_with_existing_schedule_rows(self) -> None:
+    AGENDA_DE_CINCO = [
+        {"round_number": 1, "date": "2026-06-01", "time": "09:00"},
+        {"round_number": 2, "date": "2026-06-01", "time": "14:00"},
+        {"round_number": 3, "date": "2026-06-02", "time": "09:00"},
+        {"round_number": 4, "date": "2026-06-02", "time": "14:00"},
+        {"round_number": 5, "date": "2026-06-03", "time": "09:00"},
+    ]
+
+    def _reduzir_para_tres(self, **kwargs) -> None:
         self.tournament_service.save_profile(
             self.tournament_id,
             {
@@ -282,19 +290,34 @@ class TournamentSetupTest(CoreServiceTestCase):
                 "bye_points": "1",
             },
             {},
-            [
-                {"round_number": 1, "date": "2026-06-01", "time": "09:00"},
-                {"round_number": 2, "date": "2026-06-01", "time": "14:00"},
-                {"round_number": 3, "date": "2026-06-02", "time": "09:00"},
-                {"round_number": 4, "date": "2026-06-02", "time": "14:00"},
-                {"round_number": 5, "date": "2026-06-03", "time": "09:00"},
-            ],
+            list(self.AGENDA_DE_CINCO),
+            **kwargs,
         )
+
+    def test_save_profile_can_reduce_rounds_with_existing_schedule_rows(self) -> None:
+        """ORG-03: com confirmacao, reduzir apaga as datas excedentes."""
+        self._reduzir_para_tres(confirm_schedule_loss=True)
 
         tournament = self.db.get_tournament(self.tournament_id)
         schedule = self.db.list_round_schedule(self.tournament_id)
         self.assertEqual(tournament["rounds_count"], 3)
         self.assertEqual([item["round_number"] for item in schedule], [1, 2, 3])
+
+    def test_reduzir_rodadas_com_agenda_exige_confirmacao(self) -> None:
+        """ORG-03: sem confirmacao, o programa apagava data publicada calado."""
+        with self.assertRaises(AppError) as erro:
+            self._reduzir_para_tres()
+        self.assertIn("4, 5", str(erro.exception))
+        # Nada foi gravado: o total de rodadas continua o de antes.
+        self.assertNotEqual(3, self.db.get_tournament(self.tournament_id)["rounds_count"])
+
+    def test_reducao_confirmada_gera_auditoria(self) -> None:
+        self._reduzir_para_tres(confirm_schedule_loss=True)
+        acoes = [
+            evento["action"]
+            for evento in self.db.list_audit_events(tournament_id=self.tournament_id)
+        ]
+        self.assertIn("schedule_rounds_reduced", acoes)
 
     def test_save_profile_cannot_reduce_rounds_below_generated_rounds(self) -> None:
         self._create_players(4)
@@ -495,7 +518,7 @@ class TournamentSetupTest(CoreServiceTestCase):
                 "team_tiebreak_sequence": '[{"code":"game_points","params":{}}]',
                 "prize_policy": "cumulative",
                 "prize_tax_percent": 12.5,
-                "allow_public_registration": 1,
+                "hide_standings": 1,
                 "rating_fee_fide": 2.5,
             },
         )
@@ -508,7 +531,7 @@ class TournamentSetupTest(CoreServiceTestCase):
         self.assertEqual(settings["team_tiebreak_sequence"], '[{"code":"game_points","params":{}}]')
         self.assertEqual(settings["prize_policy"], "cumulative")
         self.assertEqual(settings["prize_tax_percent"], 12.5)
-        self.assertEqual(settings["allow_public_registration"], 1)
+        self.assertEqual(settings["hide_standings"], 1)
         self.assertEqual(settings["rating_fee_fide"], 2.5)
 
     def test_save_profile_partial_settings_preserves_existing_values(self) -> None:
@@ -519,7 +542,7 @@ class TournamentSetupTest(CoreServiceTestCase):
                 "team_tiebreak_sequence": '[{"code":"game_points","params":{}}]',
                 "prize_policy": "cumulative",
                 "prize_tax_percent": 12.5,
-                "allow_public_registration": 1,
+                "hide_standings": 1,
                 "rating_fee_fide": 2.5,
             },
         )
@@ -542,7 +565,7 @@ class TournamentSetupTest(CoreServiceTestCase):
         self.assertEqual(settings["team_tiebreak_sequence"], '[{"code": "game_points", "params": {}}]')
         self.assertEqual(settings["prize_policy"], "cumulative")
         self.assertEqual(settings["prize_tax_percent"], 12.5)
-        self.assertEqual(settings["allow_public_registration"], 1)
+        self.assertEqual(settings["hide_standings"], 1)
         self.assertEqual(settings["rating_fee_fide"], 2.5)
 
     def test_split_tournament_partitions_by_ranking(self) -> None:
