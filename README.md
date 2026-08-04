@@ -120,8 +120,18 @@ Aplicativo desktop em Python para Gerenciar Clube/Escolas_Turmas e Torneios de X
 - Assistente de normas/titulos FIDE (estimativa de apoio), na tela `Relatorios`
   como `Normas FIDE`: por jogador, performance, media dos adversarios, numero de
   federacoes e de titulados enfrentados, e o veredito por titulo (GM/IM e, para
-  jogadoras, WGM/WIM) com o que falta para atingir. Nao concede norma nem titulo
-  (isso e exclusivo da FIDE).
+  jogadoras, WGM/WIM) com o que falta para atingir. Os indicadores seguem o FIDE
+  Handbook B.01, secao 1.4: titulados por nivel (a norma de GM exige GMs, nao
+  titulados quaisquer; CM e WCM nao contam), piso de rating ajustado por norma,
+  minimo de duas federacoes ALEM da do candidato, teto de 3/5 da federacao do
+  candidato, 2/3 de uma mesma federacao e 20% sem rating. Nao concede norma nem
+  titulo (isso e exclusivo da FIDE).
+- Certificado `IT3` preenchido, na tela `Relatorios` como `Certificado IT3
+  (norma)`: gera em PDF o formulario da FIDE para cada norma detectada, com os
+  dados do torneio, do candidato e a tabela de adversarios rodada a rodada
+  (titulo, federacao, rating usado e resultado), fechando com Ra, Rp e as
+  contagens do B.01. Sem norma atingida o programa avisa, em vez de gerar papel
+  em branco.
 - Formulario de norma de arbitro (IA/FA), na tela `Relatorios`: reune os dados do
   torneio e os arbitros designados (nome, funcao, FIDE ID, categoria) como base
   para preencher o formulario oficial FIDE. Documento de apoio, nao oficial.

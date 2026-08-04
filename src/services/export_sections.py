@@ -545,14 +545,19 @@ class ReportSectionsMixin:
         self, tournament_id: int
     ) -> list[tuple[str, list[str], list[list[Any]]]]:
         self._individual_tournament(tournament_id, "Normas FIDE")
+        settings = self.db.get_tournament_settings(tournament_id) or {}
         players = self.db.list_players(tournament_id, active_only=False)
         closed = self.db.get_pairings_for_tournament(tournament_id, closed_only=True)
-        report = build_norm_report(players, closed, "fide")
+        report = build_norm_report(
+            players, closed, "fide", pairing_system=settings.get("pairing_method")
+        )
 
         notice_rows = [
             ["Estimativa de apoio ao árbitro: indica se o jogador atingiu indicadores"],
             ["compativeis com uma norma. NAO concede norma nem título (exclusivo da FIDE)."],
-            ["So conta partidas jogadas contra adversarios com rating."],
+            ["Indicadores conforme o FIDE Handbook B.01, secao 1.4 (edicao de 2024)."],
+            ["So conta partida jogada no tabuleiro; sem rating conta como 1400."],
+            ["A federacao do candidato NAO entra na contagem de federacoes (1.4.3)."],
         ]
         summary_rows = [
             [
@@ -563,6 +568,7 @@ class ReportSectionsMixin:
                 self._format_report_number(item["average_opponent"]),
                 item["federations"],
                 item["titled_opponents"],
+                item["unrated_opponents"],
                 ", ".join(item["achieved"]) or "-",
             ]
             for item in report
@@ -575,6 +581,8 @@ class ReportSectionsMixin:
                         item["name"],
                         title["label"],
                         "Sim" if title["meets"] else "Não",
+                        title["performance"],
+                        self._format_report_number(title["average_opponent"]),
                         "OK" if title["meets"] else "; ".join(title["missing"]),
                     ]
                 )
@@ -582,10 +590,24 @@ class ReportSectionsMixin:
             ("Aviso", ["Observação"], notice_rows),
             (
                 "Indicadores de norma por jogador",
-                ["Jogador", "Sexo", "Rp", "Partidas", "Média adv.", "Federações", "Titulados", "Norma atingida"],
+                [
+                    "Jogador",
+                    "Sexo",
+                    "Rp",
+                    "Partidas",
+                    "Média adv.",
+                    "Outras federações",
+                    "Titulados",
+                    "Sem rating",
+                    "Norma atingida",
+                ],
                 summary_rows,
             ),
-            ("Detalhe por título", ["Jogador", "Título", "Atende?", "Pendências"], detail_rows),
+            (
+                "Detalhe por título",
+                ["Jogador", "Título", "Atende?", "Rp da norma", "Ra da norma", "Pendências"],
+                detail_rows,
+            ),
         ]
 
     _ARBITER_ROLE_LABELS = {

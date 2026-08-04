@@ -288,6 +288,7 @@ class SettingsReportsMixin:
             "Estatistica de partidas",
             "Fichas individuais",
             "Normas FIDE",
+            "Certificado IT3 (norma)",
             "Formulario de arbitro (IA/FA)",
             "Ata final",
             "Podio (poster)",
@@ -355,7 +356,7 @@ class SettingsReportsMixin:
             format_option.configure(values=formats)
             if format_option.get() not in formats:
                 format_option.set(formats[0])
-            if report_option.get() in ("Site HTML", "JSON publico", "Access (banco)", "Podio (poster)", "Chess-Results (TRF16)", "Chess-Results (TRF16 submissao)", "TRF FIDE", "PGN (Partidas)"):
+            if report_option.get() in ("Site HTML", "JSON publico", "Access (banco)", "Podio (poster)", "Certificado IT3 (norma)", "Chess-Results (TRF16)", "Chess-Results (TRF16 submissao)", "TRF FIDE", "PGN (Partidas)"):
                 format_option.configure(state="disabled")
             else:
                 format_option.configure(state="normal")
@@ -377,6 +378,7 @@ class SettingsReportsMixin:
                 "Estatistica de partidas": f"{safe_name}_estatistica_partidas",
                 "Fichas individuais": f"{safe_name}_fichas",
                 "Normas FIDE": f"{safe_name}_normas_fide",
+                "Certificado IT3 (norma)": f"{safe_name}_it3",
                 "Formulario de arbitro (IA/FA)": f"{safe_name}_arbitro_ia_fa",
                 "Ata final": f"{safe_name}_ata_final",
                 "Podio (poster)": f"{safe_name}_podio",
@@ -438,7 +440,8 @@ class SettingsReportsMixin:
                     extension = "json"
                 elif report == "PGN (Partidas)":
                     extension = "pgn"
-                elif report == "Podio (poster)":
+                elif report in ("Podio (poster)", "Certificado IT3 (norma)"):
+                    # O IT3 e formulario da FIDE: so faz sentido em PDF.
                     extension = "pdf"
                 tournament_id = int(self.current_tournament_id)
                 if report == "Site HTML":
@@ -524,6 +527,8 @@ class SettingsReportsMixin:
                         self.export_service.export_player_cards(tournament_id, path)
                     elif report == "Normas FIDE":
                         self.export_service.export_norm_report(tournament_id, path)
+                    elif report == "Certificado IT3 (norma)":
+                        self.export_service.export_it3_certificate(tournament_id, path)
                     elif report == "Formulario de arbitro (IA/FA)":
                         self.export_service.export_arbiter_norm_report(tournament_id, path)
                     elif report == "Ata final":
