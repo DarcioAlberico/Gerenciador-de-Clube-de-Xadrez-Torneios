@@ -580,7 +580,7 @@ class TrainingFinanceMixin:
         payment_entries: dict[str, ctk.CTkEntry] = {}
         payment_fields = [
             ("description", "Descrição"),
-            ("reference_period", "Referencia"),
+            ("reference_period", "Referência"),
             ("due_date", "Vencimento"),
             ("payment_date", "Pagamento"),
             ("amount", "Valor"),

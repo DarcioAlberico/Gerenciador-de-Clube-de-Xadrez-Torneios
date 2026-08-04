@@ -2257,7 +2257,63 @@ virar implementacao.
 
 #### ORG-01 - Categorias configuraveis por torneio
 
-Status: pendente.
+Status: FEITO (2026-08-04). Schema v54.
+
+Como ficou:
+
+- **a categoria virou DADO** (`src/services/categories/`): nome, tipo (idade,
+  rating, sexo, marca, aberta), faixa e data de referencia numa tabela por
+  torneio. `definition` descreve, `matching` decide quem pertence, `defaults`
+  guarda o conjunto anterior e `assignment` combina os dois. `core/categories.py`
+  virou fachada — ninguem precisou trocar import.
+- **torneio SEM categoria cadastrada continua igual.** A lista vazia significa
+  "use o padrao", e o padrao e a traducao literal das constantes antigas —
+  inclusive `Adulto` (21-49) e `Aberto` (2200+), que eram fallbacks implicitos e
+  quase se perderam. Um teste compara as doze faixas de idade e os nove cortes
+  de rating contra o calculo antigo, fronteira por fronteira.
+- **maximo INCLUSIVO em idade, EXCLUSIVO em rating.** "Sub-12" aceita quem
+  completa 12; "Sub-1400" recusa 1400. E como o edital escreve e como o programa
+  ja se comportava (`age <= limite`, `rating < limite`); igualar os dois
+  obrigaria o arbitro a digitar 1399, que e onde o erro de digitacao mora.
+- **"Feminino" virou categoria** e a classificacao por categoria passou a
+  agrupar por TODAS as categorias premiaveis do jogador. Era so isso que faltava
+  para a classificacao feminina existir: a jogadora Sub-10 aparecia no Sub-10 e
+  em lugar nenhum mais, porque o agrupamento usava a categoria PRINCIPAL e
+  principal so tem uma.
+- **duas perguntas separadas**: de quais categorias o jogador PARTICIPA (todas,
+  para a classificacao filtravel) e quais sao AS DELE (a mais estreita de cada
+  dimensao — Sub-10, Sub-1400, Feminino — em `players.categories`). Guardar as
+  seis faixas etarias que um menino de 10 anos satisfaz encheria a tela sem
+  dizer nada.
+- **idade e a COMPLETADA no ano de referencia**, nao a do dia: a FIDE so publica
+  o ano de nascimento e metade dos cadastros tambem, e a idade exata daria duas
+  contas diferentes no mesmo torneio conforme o jogador tivesse data completa ou
+  nao. A data de referencia (do torneio ou da categoria) escolhe o ano.
+- UI: editor de categorias na aba `Premiacao`, com botao "Usar faixas padrao"
+  para partir das treze e mexer em duas.
+
+Armadilhas anotadas:
+
+- **a categoria escrita a mao so cede para o calculo da SUA dimensao.** Um
+  "Sub-18" gravado em cadastro sem data de nascimento continua "Sub-18"; a
+  primeira versao deixava virar faixa de rating e quebrou quatro testes.
+- **o agrupamento tem de incluir a categoria principal**, e nao so a lista
+  calculada: nome que o arbitro inventou ("Absoluto", "Convidados") nao sai de
+  faixa nenhuma e sumiria da classificacao por categoria.
+- o snapshot de API publica (`tests/fixtures/database_public_api.txt`) precisa
+  ser regenerado a cada metodo novo do `Database` — e o trecho de regeneracao
+  que estava documentado APAGAVA o cabecalho do arquivo (o teste ignora linhas
+  `#` e ninguem via). Corrigido junto.
+
+Fora do entregue (de proposito):
+
+- **a alocacao de premio multi-categoria e o `ORG-02`.** E literalmente o
+  problema descrito la ("premio Feminino nunca e alocado automaticamente"): este
+  item entrega a CLASSIFICACAO por categoria, e o alocador continua casando pela
+  categoria primaria ate o proximo item.
+- **o campo de texto livre `Categorias` continua existindo**, e nao foi migrado
+  para linhas: adivinhar categoria a partir de texto solto inventa categoria que
+  ninguem cadastrou.
 
 Problema:
 
@@ -2278,9 +2334,9 @@ Escopo:
 
 Criterios de aceite:
 
-- [ ] edital com faixas fora do padrao e configuravel sem texto livre;
-- [ ] classificacao feminina sai automaticamente quando configurada;
-- [ ] data de referencia altera o calculo de idade nos testes.
+- [x] edital com faixas fora do padrao e configuravel sem texto livre;
+- [x] classificacao feminina sai automaticamente quando configurada;
+- [x] data de referencia altera o calculo de idade nos testes.
 
 #### ORG-02 - Premiacao conforme edital
 
@@ -2523,7 +2579,7 @@ Objetivo: edital real configuravel sem texto livre nem contorno manual.
 
 Entregas:
 
-1. [ ] `ORG-01` Categorias configuraveis por torneio.
+1. [x] `ORG-01` Categorias configuraveis por torneio.
 2. [ ] `ORG-02` Premiacao conforme edital.
 3. [ ] `ORG-03` Agenda e controle de tempo estruturados.
 4. [ ] `ORG-04` Configuracao honesta (flags mortas e bloqueios pos-R1).

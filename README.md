@@ -124,6 +124,17 @@ Aplicativo desktop em Python para Gerenciar Clube/Escolas_Turmas e Torneios de X
     com a forma certa e marcado como NAO conferido — edite os valores em
     `Config. torneio -> Oficial -> Regulamento CBX` conforme o texto vigente, e
     o relatorio dira que os numeros vieram dali.
+- Categorias configuraveis por torneio, na aba `Premiacao` de `Config. torneio`:
+  cada linha e uma categoria do edital (nome, tipo idade/rating/sexo/marca,
+  faixa e se ela premia). Sem nenhuma linha valem as faixas padrao (Sub-08 a
+  Sub-20, S50+/S65+, cortes 1400/1800/2200 e Feminino), e o botao `Usar faixas
+  padrao` preenche a lista para voce mexer no que precisar. Em idade o `Ate` e
+  INCLUSIVO (Sub-12 aceita quem completa 12) e em rating e EXCLUSIVO (Sub-1400
+  recusa 1400), que e como o edital escreve. A idade e a que o jogador COMPLETA
+  no ano de referencia — configuravel em `Data de referencia da idade`. O
+  jogador pertence a varias categorias ao mesmo tempo (Sub-10, Sub-1400,
+  Feminino), e a classificacao por categoria da ata e do podio sai para todas —
+  e assim que a classificacao feminina aparece sozinha.
 - Distribuicao de premios em dinheiro: cadastro de premios por colocacao (geral),
   por categoria, especiais e de tabuleiro na tela `Config. torneio`; politicas de
   combinacao geral×categoria (apenas o maior, acumular ou Sistema Hort), divisao
