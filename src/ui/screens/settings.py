@@ -138,8 +138,16 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
             # desabilita o botao, liga o indicador de progresso e manda erro p/ toast.
             self._run_background(
                 self.official_rating_service.import_fide_list_from_url,
+                # As linhas ignoradas entram no resultado (FED-05): antes elas
+                # eram descartadas em silêncio, e um arquivo truncado parecia uma
+                # importação completa.
                 on_success=lambda res: self._show_info(
                     f"{res['imported']} jogadores da FIDE importados."
+                    + (
+                        "\n\nLinhas ignoradas:\n" + "\n".join(res["errors"])
+                        if res.get("errors")
+                        else ""
+                    )
                 ),
                 busy_message="Baixando lista da FIDE...",
                 busy_widget=fide_button,

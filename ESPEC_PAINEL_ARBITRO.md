@@ -1974,7 +1974,27 @@ Criterios de aceite:
 
 #### FED-05 - Lista FIDE: data de nascimento e robustez do download
 
-Status: pendente.
+Status: FEITO (2026-08-03).
+
+Como ficou:
+
+- **quem estava errado era a VALIDACAO, nao o dado**. A FIDE publica so o ANO de
+  nascimento, e o TRF aceita `YYYY` no campo 70-79 — mas `_trf_date_is_valid`
+  exigia data completa, entao todo jogador vindo da lista disparava "sem data de
+  nascimento valida" e envenenava o arquivo do plantel inteiro. O ano continua
+  gravado como ano (completar com 01/01 inventaria um aniversario que ninguem
+  informou, e ele reapareceria num certificado); `YYYY-00-00`, que e como outros
+  programas dizem "so o ano", e lido como a mesma coisa;
+- **o leitor virou modulo puro** (`services/fide_list.py`), com as colunas
+  documentadas. Isso permitiu testar com fixture o que so o download exercitava,
+  e ai apareceram os dois defeitos de robustez: a linha era aceita a partir de
+  120 caracteres enquanto o ano mora em 127-131 (o jogador entrava SEM
+  nascimento), e a linha malformada era descartada em silencio — a lista de erros
+  existia e nunca recebia nada, entao arquivo truncado parecia importacao
+  completa. Agora ha um teto de erros relatados, com resumo do que sobrou;
+- **rede**: `https`, tempo maior, e `HTTPError`/`URLError`/ZIP invalido viram
+  mensagem que diz o que fazer (baixar do site e importar por arquivo) em vez de
+  `URLError` cru na tela. As linhas ignoradas aparecem no aviso de conclusao.
 
 Problema:
 
@@ -1994,9 +2014,9 @@ Escopo:
 
 Criterios de aceite:
 
-- [ ] importar lista FIDE nao gera avisos falsos de nascimento no TRF;
-- [ ] falha de download mostra erro amigavel;
-- [ ] teste do parser de largura fixa com fixture real.
+- [x] importar lista FIDE nao gera avisos falsos de nascimento no TRF;
+- [x] falha de download mostra erro amigavel;
+- [x] teste do parser de largura fixa com fixture real.
 
 #### FED-06 - Normas FIDE corretas e certificados IT
 
@@ -2316,7 +2336,7 @@ Objetivo: arquivo enviavel sem retrabalho e normas confiaveis.
 
 Entregas:
 
-1. [ ] `FED-05` Lista FIDE: data de nascimento e robustez do download.
+1. [x] `FED-05` Lista FIDE: data de nascimento e robustez do download.
 2. [ ] `FED-03` TRF16 de campo completo.
 3. [ ] `FED-04` Round-trip TRF fiel.
 4. [ ] `FED-06` Normas FIDE corretas e certificados IT.

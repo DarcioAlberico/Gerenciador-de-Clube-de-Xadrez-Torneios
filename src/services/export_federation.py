@@ -487,6 +487,12 @@ class FederationReportsMixin:
         raw = str(value or "").strip()
         if not raw:
             return ""
+        ano = FederationReportsMixin._year_only(raw)
+        if ano:
+            # A FIDE publica APENAS o ano na lista de rating, e o TRF aceita
+            # `YYYY` no campo de nascimento (FED-05). Completar com 01/01
+            # inventaria um aniversario que ninguem informou.
+            return ano if long_year else ano[2:]
         parsed: datetime | None = None
         for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%Y.%m.%d", "%d/%m/%Y", "%d. %m. %Y", "%d.%m.%Y"):
             try:
@@ -498,11 +504,36 @@ class FederationReportsMixin:
             return raw.replace("-", "/")[:10]
         return parsed.strftime("%Y/%m/%d" if long_year else "%y/%m/%d")
 
+    @staticmethod
+    def _year_only(value: Any) -> str:
+        """`"1985"` quando o dado e so o ano (inclusive `1985-00-00`); senao `""`.
+
+        `YYYY-00-00` aparece em base importada de outros programas, que usam o
+        zero para dizer "mes e dia desconhecidos" — e a mesma informacao.
+        """
+        raw = str(value or "").strip()
+        if len(raw) == 4 and raw.isdigit():
+            return raw
+        for separador in ("-", "/", "."):
+            partes = raw.split(separador)
+            if len(partes) == 3 and len(partes[0]) == 4 and partes[0].isdigit():
+                if all(parte.strip("0") == "" for parte in partes[1:]):
+                    return partes[0]
+        return ""
+
     @classmethod
     def _trf_date_is_valid(cls, value: Any) -> bool:
+        """Data que o TRF aceita: `YYYY/MM/DD` completa, ou so o ano.
+
+        Ano-so era tratado como data QUEBRADA, e como a lista da FIDE nao publica
+        outra coisa, todo jogador importado dela envenenava o arquivo com um aviso
+        de nascimento invalido (FED-05).
+        """
         raw = str(value or "").strip()
         if not raw:
             return False
+        if cls._year_only(raw):
+            return True
         normalized = cls._trf_date(raw, long_year=True)
         try:
             datetime.strptime(normalized, "%Y/%m/%d")
