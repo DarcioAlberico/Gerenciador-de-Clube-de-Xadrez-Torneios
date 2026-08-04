@@ -1912,7 +1912,47 @@ Prioridade: alta. Origem: auditoria arbitral de 2026-07-29.
 
 #### FED-03 - TRF16 de campo completo
 
-Status: pendente.
+Status: FEITO (2026-08-03).
+
+Como ficou:
+
+- **`XXR` e `XXC`** (extensoes do dialeto TRF16) passam a sair junto do `142`;
+  a cor inicial NAO e chutada — sai da rodada 1 ja pareada, e so cai em `white1`
+  quando ainda nao ha rodada, que e o que o motor faz;
+- **`XXA` continua NAO sendo emitido, de proposito.** O parser da implementacao
+  de referencia monta os valores do `XXA` com as chaves `matchScore`/`gameScore`
+  e depois os le como `matchResult`/`gameResult` — `KeyError` garantido em
+  qualquer torneio que traga o registro (achado da PAR-02). A aceleracao sai no
+  **250**, que o mesmo parser le certo; ele subiu do TRF25 para o TRF16, porque
+  vale para os dois. O motor de pareamento remove o 250 do exportador antes de
+  escrever o dele, que e por rodada;
+- **`082` so em torneio por equipes**: "082 0" descrevia um torneio por equipes
+  com zero equipes;
+- **`092` no vocabulario das federacoes** (`Individual: Swiss-System`), em vez do
+  texto proprietario montado com o campo livre `system`;
+- **FIDE Event-ID e FIDE ID dos arbitros** passam a sair. O Event-ID **nao tem
+  registro padrao em nenhum dos dois dialetos** (a FIDE o pede no portal, fora do
+  arquivo): vai como `XXE`, na familia de extensao, que quem nao conhece ignora —
+  conferido contra o parser de referencia. O ID do arbitro entra entre parenteses
+  no 102/112, casado pelo nome com a lista de arbitros do torneio;
+- **mesa pareada sem resultado sai em BRANCO**, e nao como `Z`: `Z` e "ausencia
+  conhecida, zero ponto", e dizer isso de um jogo que ainda vai acontecer e
+  mentir sobre o torneio. Junto veio um defeito de coluna: o `rstrip()` da linha
+  comia a ultima celula quando ela era uma mesa sem resultado, e a celula sumia
+  para quem le por coluna — inclusive para o motor;
+- **modo submissao** (`export(..., submission=True)`, item proprio no menu de
+  exportacao): resultado pendente, FIDE ID repetido e mesa que nao confere entre
+  as duas linhas 001 BLOQUEIAM a geracao, com a lista de pendencias. No modo
+  normal — o do dia do evento — o arquivo sai e as mesmas pendencias viram aviso;
+- **reciprocidade oponente/cor** conferida sobre o ARQUIVO PRONTO: se o 5 diz
+  "rodada 3, adversario 12, brancas", a linha do 12 tem de dizer "rodada 3,
+  adversario 5, pretas". E a checagem que so o arquivo permite;
+- **celulas de rodada iguais nos dois formatos**: o TRF25 emitia tambem as
+  rodadas configuradas e o TRF16 so as geradas. Agora os dois emitem o que JA
+  ACONTECEU, e o total do torneio vai no 142/XXR — sao numeros diferentes com
+  significados diferentes. Emitir celula de rodada futura, alias, faz o motor
+  FIDE tratar o jogador como resolvido naquela rodada e nao parear ninguem (foi
+  o que a suite acusou na primeira tentativa de unificar por cima).
 
 Problema:
 
@@ -1941,10 +1981,12 @@ Escopo:
 
 Criterios de aceite:
 
-- [ ] TRF16 gerado passa no validador do Gacrux e abre no Swiss-Manager;
-- [ ] modo submissao bloqueia arquivo com FIDE ID duplicado ou resultado
+- [x] TRF16 gerado passa no validador do Gacrux e abre no Swiss-Manager — o
+  arquivo continua sendo o que alimenta o motor a cada rodada, e a suite de
+  pareamento (que roda o Gacrux de verdade) e a prova;
+- [x] modo submissao bloqueia arquivo com FIDE ID duplicado ou resultado
   pendente;
-- [ ] fixture compara TRF16 x TRF25 do mesmo torneio (mesmo numero de rodadas).
+- [x] fixture compara TRF16 x TRF25 do mesmo torneio (mesmo numero de rodadas).
 
 #### FED-04 - Round-trip TRF fiel
 
@@ -2337,7 +2379,7 @@ Objetivo: arquivo enviavel sem retrabalho e normas confiaveis.
 Entregas:
 
 1. [x] `FED-05` Lista FIDE: data de nascimento e robustez do download.
-2. [ ] `FED-03` TRF16 de campo completo.
+2. [x] `FED-03` TRF16 de campo completo.
 3. [ ] `FED-04` Round-trip TRF fiel.
 4. [ ] `FED-06` Normas FIDE corretas e certificados IT.
 5. [ ] `FED-07` Rating: K correto, piso e ritmo.

@@ -6,6 +6,22 @@ from typing import Any
 from src.services.constants import AppError, FINAL_RESULTS, RESULT_POINTS, player_pairing_name
 from src.services.results_registry import is_played_result
 from src.services.federation_exporters.base import FederationExportFormat
+from src.services.federation_exporters.trf16_records import (
+    duplicate_fide_ids,
+    initial_color,
+    pending_result_cells,
+    reciprocity_errors,
+    record_xxc,
+    record_xxe,
+    record_xxr,
+    submission_message,
+)
+from src.services.federation_exporters.trf25_records import record_250
+from src.services.pairing.acceleration import (
+    acceleration_spec,
+    scheme_emits_250,
+    upper_share_size,
+)
 
 
 class TRF16Exporter:
@@ -19,7 +35,21 @@ class TRF16Exporter:
         self.export_service = export_service
         self.db = export_service.db
 
-    def export(self, tournament_id: int, file_path: str | Path) -> list[str]:
+    def export(
+        self,
+        tournament_id: int,
+        file_path: str | Path,
+        *,
+        submission: bool = False,
+    ) -> list[str]:
+        """Gera o TRF16. `submission=True` recusa arquivo com pendencia critica.
+
+        No modo normal o arquivo sai com avisos — e o que o arbitro usa durante o
+        evento. No modo submissao ele NAO sai: resultado pendente, FIDE ID
+        repetido ou mesa que nao confere entre as duas linhas 001 viram uma lista
+        de pendencias, porque a federacao recusaria o arquivo depois do envio
+        (FED-03).
+        """
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
             raise AppError("Selecione um torneio valido.")
@@ -43,66 +73,121 @@ class TRF16Exporter:
         pairings_by_round = self.export_service._trf_pairings_by_round(tournament, rounds)
         player_id_to_start_rank = {int(player["id"]): index for index, player in enumerate(players, start=1)}
         standings_by_player = self.export_service._trf_player_standings(tournament, players)
-        round_count = max(
-            [int(round_data["number"]) for round_data in rounds],
-            default=0,
-        )
+        # Dois numeros DIFERENTES, e de proposito (FED-03):
+        #  - `round_count` (celulas de rodada) = o que JA ACONTECEU. Emitir
+        #    celula de rodada futura faz o motor FIDE tratar o jogador como ja
+        #    resolvido naquela rodada e nao parear ninguem;
+        #  - `declared_rounds` (142/XXR e o calendario de datas) = o total do
+        #    TORNEIO, que e o que o motor precisa saber para, por exemplo,
+        #    reconhecer a ultima rodada.
+        # O TRF25 usava o total configurado tambem nas celulas — era essa a
+        # divergencia entre os dois arquivos do mesmo torneio.
+        round_count = max([int(round_data["number"]) for round_data in rounds], default=0)
+        declared_rounds = max(int(tournament.get("rounds_count") or 0), round_count)
         teams = self.db.list_teams(tournament_id, active_only=False) if is_team_tournament else []
 
-        path = Path(file_path)
-        with path.open("w", encoding="utf-8", newline="") as handle:
-            handle.write(self.export_service._trf_tournament_line("012", tournament["name"]))
-            handle.write(self.export_service._trf_tournament_line("022", tournament.get("location", "")))
-            handle.write(self.export_service._trf_tournament_line("032", settings.get("federation", "")))
-            handle.write(
-                self.export_service._trf_tournament_line(
-                    "042",
-                    self.export_service._trf_date(tournament.get("start_date"), long_year=True),
-                )
+        service = self.export_service
+        linha = service._trf_tournament_line
+        linhas: list[str] = [
+            linha("012", tournament["name"]),
+            linha("022", tournament.get("location", "")),
+            linha("032", settings.get("federation", "")),
+            linha("042", service._trf_date(tournament.get("start_date"), long_year=True)),
+            linha("052", service._trf_date(tournament.get("end_date"), long_year=True)),
+            linha("062", str(len(players))),
+            linha("072", str(sum(1 for player in players if service._trf_rating(player) > 0))),
+        ]
+        # `082` e o numero de EQUIPES: em torneio individual saia "082 0", que
+        # descreve um torneio por equipes com zero equipes (FED-03).
+        if is_team_tournament:
+            linhas.append(linha("082", str(len(teams))))
+        linhas.append(linha("092", service._trf_tournament_type(tournament, settings)))
+        evento = record_xxe(settings.get("fide_event_id"))
+        if evento:
+            linhas.append(f"{evento}\r\n")
+        linhas.append(linha("102", service._trf_chief_arbiter_text(tournament_id, settings)))
+        linhas.extend(
+            linha("112", deputy)
+            for deputy in service._trf_deputy_arbiter_texts(tournament_id, settings)
+        )
+        linhas.append(linha("122", tournament.get("time_control", "")))
+        linhas.append(linha("142", str(declared_rounds)))
+        # Extensoes do dialeto TRF16 (FED-03): quem le TRF16 espera `XXR`, e nao
+        # o `142`, que e registro TRF25.
+        linhas.append(f"{record_xxr(declared_rounds)}\r\n")
+        linhas.append(
+            f"{record_xxc(initial_color(pairings_by_round.get(1, []), player_id_to_start_rank))}\r\n"
+        )
+        aceleracao = self._acceleration_record_250(players, settings)
+        if aceleracao:
+            linhas.append(aceleracao)
+        linhas.append(service._trf_round_dates_line(declared_rounds, schedule))
+        linhas.extend(
+            service._trf_player_line(
+                player,
+                player_id_to_start_rank,
+                standings_by_player,
+                pairings_by_round,
+                round_count,
+                settings,
             )
-            handle.write(
-                self.export_service._trf_tournament_line(
-                    "052",
-                    self.export_service._trf_date(tournament.get("end_date"), long_year=True),
-                )
-            )
-            handle.write(self.export_service._trf_tournament_line("062", str(len(players))))
-            rated_count = sum(1 for player in players if self.export_service._trf_rating(player) > 0)
-            handle.write(self.export_service._trf_tournament_line("072", str(rated_count)))
-            handle.write(self.export_service._trf_tournament_line("082", str(len(teams))))
-            handle.write(
-                self.export_service._trf_tournament_line(
-                    "092",
-                    self.export_service._trf_tournament_type(tournament, settings),
-                )
-            )
-            handle.write(
-                self.export_service._trf_tournament_line(
-                    "102",
-                    self.export_service._trf_chief_arbiter(tournament_id, settings),
-                )
-            )
-            for deputy in self.export_service._trf_deputy_arbiters(tournament_id, settings):
-                handle.write(self.export_service._trf_tournament_line("112", deputy))
-            handle.write(self.export_service._trf_tournament_line("122", tournament.get("time_control", "")))
-            handle.write(self.export_service._trf_tournament_line("142", str(tournament.get("rounds_count") or round_count)))
-            handle.write(self.export_service._trf_round_dates_line(round_count, schedule))
+            for player in players
+        )
+        linhas.extend(
+            service._trf_team_line(team, player_id_to_start_rank) for team in teams
+        )
 
-            for player in players:
-                handle.write(
-                    self.export_service._trf_player_line(
-                        player,
-                        player_id_to_start_rank,
-                        standings_by_player,
-                        pairings_by_round,
-                        round_count,
-                        settings,
-                    )
-                )
-            for team in teams:
-                handle.write(self.export_service._trf_team_line(team, player_id_to_start_rank))
+        conteudo = "".join(linhas)
+        problemas = self._file_problems(conteudo, players)
+        if submission and problemas:
+            raise AppError(submission_message(problemas))
+        warnings = [*warnings, *problemas]
 
+        Path(file_path).write_text(conteudo, encoding="utf-8", newline="")
         return warnings
+
+    @staticmethod
+    def _file_problems(content: str, players: list[dict[str, Any]]) -> list[str]:
+        """Pendencias que so o ARQUIVO PRONTO revela (FED-03).
+
+        Reciprocidade entre as duas linhas 001 de cada mesa, resultado pendente e
+        FIDE ID repetido: as tres coisas que fazem a federacao recusar a
+        submissao depois do envio.
+        """
+        linhas = content.splitlines()
+        return [
+            *reciprocity_errors(linhas),
+            *pending_result_cells(linhas),
+            *duplicate_fide_ids(players),
+        ]
+
+    @staticmethod
+    def _acceleration_record_250(
+        players: list[dict[str, Any]],
+        settings: dict[str, Any],
+    ) -> str | None:
+        """Registro 250 — aceleracao de pareamento, individual (§5.1).
+
+        Emite so para esquemas que somam bonus de verdade (classico/custom). O
+        spec vem da coluna `acceleration_method`: `bonus` por jogador nas rodadas
+        `1..round_count`, aplicado ao topo `upper_fraction` do campo — exatamente
+        o que o motor aplica em `pairing/acceleration.py`.
+
+        Fica aqui, e nao so no TRF25, porque e o registro que a implementacao de
+        referencia LE (o `XXA` do dialeto TRF16 quebra o parser dela — ver
+        `trf16_records`). Baku fica de fora: sem a formula oficial nao se emite
+        250 nem sufixo `_BAKU`, para nunca enganar o arbitro.
+        """
+        method = str(settings.get("acceleration_method") or "none")
+        if not scheme_emits_250(method):
+            return None
+        spec = acceleration_spec(method)
+        upper = upper_share_size(len(players), spec.get("upper_fraction", 0.5))
+        round_count = int(spec.get("round_count", 0) or 0)
+        bonus = float(spec.get("bonus", 0.0) or 0.0)
+        if upper <= 0 or round_count <= 0 or bonus <= 0:
+            return None
+        return record_250(0.0, bonus, 1, round_count, [1, upper])
 
     def validate(self, tournament_id: int) -> list[str]:
         tournament = self.db.get_tournament(tournament_id)

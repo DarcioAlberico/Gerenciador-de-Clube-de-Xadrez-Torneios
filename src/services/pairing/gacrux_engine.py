@@ -223,6 +223,11 @@ class GacruxEngine:
         with open(input_path, "r", encoding="utf-8", newline="") as handle:
             lines = handle.read().splitlines()
 
+        # O exportador tambem declara a aceleracao (registro 250, FED-03), mas
+        # para o TORNEIO inteiro; aqui o que vale e o conjunto acelerado DESTA
+        # rodada (PAR-02). Duas declaracoes deixariam a ultima vencer por ordem
+        # no arquivo — preferimos remover a do exportador e escrever a nossa.
+        lines = [line for line in lines if not line.startswith("250")]
         lines, warnings = reconcile_scores(lines)
         lines.extend(acceleration_records(bonus, round_number, accelerated_ranks))
         self.warnings = warnings

@@ -190,6 +190,10 @@ class TRF25Exporter(TRF16Exporter):
         pairings_by_round = service._trf_pairings_by_round(tournament, rounds)
         start_rank_by_player = {int(p["id"]): i for i, p in enumerate(players, start=1)}
         standings_by_player = service._trf_player_standings(tournament, players)
+        # Celulas de rodada = o que JA ACONTECEU, como no TRF16 (FED-03). Este
+        # arquivo usava o total configurado tambem nas celulas, e o mesmo torneio
+        # saia com contagens diferentes nos dois formatos.
+        cells_round_count = max([int(r["number"]) for r in rounds], default=0)
         round_count = max(
             [int(tournament.get("rounds_count") or 0), *(int(r["number"]) for r in rounds)],
             default=0,
@@ -240,7 +244,7 @@ class TRF25Exporter(TRF16Exporter):
                 handle.write(
                     service._trf_player_line(
                         player, start_rank_by_player, standings_by_player,
-                        pairings_by_round, round_count, settings,
+                        pairings_by_round, cells_round_count, settings,
                     )
                 )
             for line in self._national_rating_records(players, start_rank_by_player, settings):
@@ -288,32 +292,9 @@ class TRF25Exporter(TRF16Exporter):
 
         return warnings
 
-    @staticmethod
-    def _acceleration_record_250(
-        players: list[dict[str, Any]],
-        settings: dict[str, Any],
-    ) -> str | None:
-        """Registro 250 — aceleração de pareamento, individual (§5.1).
-
-        Emite só para esquemas que somam bônus de verdade (clássico/custom). O spec
-        vem da coluna `acceleration_method`: `bonus` por jogador nas rodadas
-        `1..round_count`, aplicado ao topo `upper_fraction` do campo — exatamente o
-        que o motor aplica em `pairing/acceleration.py`. Match points ficam em
-        branco (individual); o intervalo de jogadores é contíguo [1, topo].
-
-        Baku fica de fora: enquanto a fórmula oficial não estiver implementada, não
-        emitimos 250 nem o sufixo `_BAKU`, para nunca enganar o árbitro."""
-        method = str(settings.get("acceleration_method") or "none")
-        if not scheme_emits_250(method):
-            return None
-        spec = acceleration_spec(method)
-        upper = upper_share_size(len(players), spec.get("upper_fraction", 0.5))
-        round_count = int(spec.get("round_count", 0) or 0)
-        bonus = float(spec.get("bonus", 0.0) or 0.0)
-        # Sem topo, sem rodadas ou sem bônus efetivo → não há aceleração a declarar.
-        if upper <= 0 or round_count <= 0 or bonus <= 0:
-            return None
-        return record_250(0.0, bonus, 1, round_count, [1, upper])
+    # O registro 250 (aceleracao) subiu para o TRF16 (FED-03): e o registro
+    # que a implementacao de referencia LE, entao vale para os dois formatos.
+    # Este exportador o herda.
 
     def _prohibited_pairing_records_260(
         self,

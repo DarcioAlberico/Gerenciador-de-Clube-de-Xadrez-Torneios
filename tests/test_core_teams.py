@@ -632,7 +632,8 @@ class TeamTournamentsTest(CoreServiceTestCase):
         team_lines = [line for line in lines if line.startswith("013 ")]
 
         self.assertIn("082 2", content)
-        self.assertIn("092 Team: Suico (Standard)", content)
+        # 092 no vocabulario das federacoes (FED-03), e nao no texto proprietario.
+        self.assertIn("092 Team: Swiss-System", content)
         self.assertEqual(len(player_lines), 4)
         self.assertEqual(len(team_lines), 2)
         self.assertTrue(any("Equipe 1" in line and "1" in line and "2" in line for line in team_lines))
