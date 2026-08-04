@@ -265,21 +265,26 @@ class FidePrizesNormsTest(CoreServiceTestCase):
         self.assertIn("Total líquido distribuido", content)
 
     def test_norm_verdict_meets_and_lists_missing(self) -> None:
-        from src.services.fide_norms import evaluate_titles
+        from src.services.norms import evaluate_norms
+        from tests.support.norm_fixtures import gm_norm_opponents, weak_field_opponents
 
         meets = next(
-            item for item in evaluate_titles({"sex": "M"}, 2650, 9, 3, 3, 2400) if item["title"] == "GM"
+            item
+            for item in evaluate_norms("BRA", "M", gm_norm_opponents())
+            if item.title == "GM"
         )
-        self.assertTrue(meets["meets"])
-        self.assertEqual(meets["missing"], [])
+        self.assertTrue(meets.meets)
+        self.assertEqual(meets.missing, [])
 
         fails = next(
-            item for item in evaluate_titles({"sex": "M"}, 2500, 9, 2, 1, 2200) if item["title"] == "GM"
+            item
+            for item in evaluate_norms("BRA", "M", weak_field_opponents())
+            if item.title == "GM"
         )
-        self.assertFalse(fails["meets"])
-        joined = " | ".join(fails["missing"])
+        self.assertFalse(fails.meets)
+        joined = " | ".join(fails.missing)
         self.assertIn("Performance", joined)
-        self.assertIn("Federacoes", joined)
+        self.assertIn("Federações", joined)
 
     def test_norm_report_identifies_gm_candidate(self) -> None:
         from src.services.fide_norms import build_norm_report

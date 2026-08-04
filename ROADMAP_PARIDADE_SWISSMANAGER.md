@@ -424,11 +424,14 @@ Detalhamento original abaixo.
 
 ### Implementação entregue
 
-- Motor puro `src/services/fide_norms.py`: `TITLE_NORM_REQUIREMENTS` (GM/IM e,
-  para jogadoras, WGM/WIM, com limiares parametrizados) + `build_norm_report`
-  com indicadores (performance, partidas válidas, federações dos adversários,
-  adversários titulados ≈ 1/3, média de rating) e **veredito por título** com a
-  lista do que falta. Reaproveita `fide_performance`/`player_rating_for_type`.
+- Motor puro `src/services/norms/` (era `fide_norms.py`, que virou fachada):
+  `handbook` só com o regulamento, `opponents` com o que conta como partida e
+  com que rating, `evaluation` com o veredito por título e `report` com o
+  relatório do torneio. Indicadores conforme o Handbook B.01 §1.4 — ver
+  `FED-06` na `ESPEC_PAINEL_ARBITRO.md`. Reaproveita
+  `fide_performance`/`player_rating_for_type`.
+- Certificado `IT3` preenchido em PDF (`norms/it3.py` + `norms/it3_pdf.py`),
+  exportado por `export_it3_certificate`, um por norma detectada.
 - `NormAssistantService` (`evaluate_tournament` / `evaluate`) em
   `rating_service.py`, wired em app/support/core.services.
 - UI/export: opção **`Normas FIDE`** no hub de `Relatorios` →

@@ -24,8 +24,11 @@ from src.services.federation_exporters.trf16_records import (
     tournament_type_text as _trf16_tournament_type_text,
 )
 from src.services.fide_norms import build_norm_report
-from src.services.fide_rating import build_fide_report_rows
+from src.services.fide_rating import build_fide_report_rows, player_rating_for_type
 from src.services.list_layouts import STANDINGS_COLUMNS, resolve_column_specs, resolve_columns
+from src.services.norms.it3 import build_certificate as build_it3_certificate
+from src.services.norms.it3_pdf import write_it3_pdf
+from src.services.norms.report import norm_candidates
 from src.services.pairing.tiebreak_engine import legacy_engine_note
 from src.services.prizes import PRIZE_KINDS, PRIZE_POLICIES, allocate_prizes
 from src.services.text_ascii import headers_to_ascii
@@ -137,6 +140,71 @@ class FederationReportsMixin:
 
     def export_norm_report(self, tournament_id: int, file_path: str | Path) -> None:
         self._write_multi_report(Path(file_path), self._norm_sections(tournament_id))
+
+    def export_it3_certificate(
+        self,
+        tournament_id: int,
+        file_path: str | Path,
+        player_id: int | None = None,
+        title: str | None = None,
+        rating_type: str = "fide",
+    ) -> Path:
+        """Certificado IT3 preenchido (FED-06), um por norma detectada.
+
+        Sem `player_id`, sai o IT3 de **cada** norma atingida no torneio. Com
+        ele, sai o do candidato pedido mesmo que a norma não feche — o papel
+        lista as pendências, que é o que o árbitro precisa ver antes de brigar
+        com o regulamento.
+        """
+        tournament = self._individual_tournament(tournament_id, "Certificado IT3")
+        settings = self.db.get_tournament_settings(tournament_id) or {}
+        players = self.db.list_players(tournament_id, active_only=False)
+        closed = self.db.get_pairings_for_tournament(tournament_id, closed_only=True)
+        rounds = self.db.list_rounds(tournament_id)
+
+        candidates = norm_candidates(
+            players,
+            closed,
+            rating_type,
+            pairing_system=settings.get("pairing_method"),
+            achieved_only=player_id is None,
+            player_id=player_id,
+            title=title,
+            name_of=player_pairing_name,
+        )
+        if not candidates:
+            raise AppError(
+                "Nenhuma norma atingida neste torneio. Confira os indicadores "
+                "no relatório Normas FIDE antes de emitir o IT3."
+            )
+
+        chief_arbiter = self._trf_chief_arbiter(tournament_id, settings)
+        tournament_type = self._trf_tournament_type(tournament, settings)
+        declared_rounds = max(
+            int(tournament.get("rounds_count") or 0),
+            max((int(item["number"]) for item in rounds), default=0),
+        )
+
+        certificates = [
+            build_it3_certificate(
+                tournament,
+                settings,
+                candidate.player,
+                candidate.opponents,
+                candidate.evaluation,
+                candidate_name=player_pairing_name(candidate.player),
+                candidate_rating=player_rating_for_type(candidate.player, rating_type),
+                chief_arbiter=chief_arbiter,
+                tournament_type=tournament_type,
+                rounds=declared_rounds,
+            )
+            for candidate in candidates
+        ]
+        path = write_it3_pdf(certificates, file_path)
+        logger.info(
+            "Certificado IT3 gerado em %s (%d norma(s))", path, len(certificates)
+        )
+        return path
 
     def export_arbiter_norm_report(self, tournament_id: int, file_path: str | Path) -> None:
         self._write_multi_report(Path(file_path), self._arbiter_norm_sections(tournament_id))

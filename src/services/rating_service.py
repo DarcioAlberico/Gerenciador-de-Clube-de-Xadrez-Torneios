@@ -1125,12 +1125,18 @@ class NormAssistantService:
             raise AppError("Selecione um torneio valido.")
         if tournament.get("competition_type") == "team":
             raise AppError("Normas FIDE disponiveis apenas para torneios individuais.")
+        settings = self.db.get_tournament_settings(tournament_id) or {}
         players = self.db.list_players(tournament_id, active_only=False)
         closed_pairings = self.db.get_pairings_for_tournament(tournament_id, closed_only=True)
         return {
             "tournament": tournament,
             "rating_type": rating_type,
-            "players": build_norm_report(players, closed_pairings, rating_type),
+            "players": build_norm_report(
+                players,
+                closed_pairings,
+                rating_type,
+                pairing_system=settings.get("pairing_method"),
+            ),
         }
 
     def evaluate(self, tournament_id: int, player_id: int, rating_type: str = "fide") -> dict[str, Any] | None:

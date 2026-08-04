@@ -483,8 +483,8 @@ Entregas, em ordem de prioridade:
    Event-ID e modo submissao
    (`FED-03` — ENTREGUE em 2026-08-03), round-trip TRF fiel (`FED-04` — ENTREGUE em 2026-08-03), normas
    FIDE corretas com
-   certificado IT3 (`FED-06`), rating com K/piso/ritmo corretos e relatorio
-   CBX real (`FED-07`).
+   certificado IT3 (`FED-06` — ENTREGUE em 2026-08-04), rating com K/piso/ritmo
+   corretos e relatorio CBX real (`FED-07`).
 6. **Organizacao (Sprint 12)**: categorias configuraveis por torneio
    (`ORG-01`), premiacao conforme edital, inclusive Feminino automatico
    (`ORG-02`), agenda e controle de tempo estruturados (`ORG-03`), remocao ou
@@ -541,7 +541,10 @@ colunas, TRF25) foram entregues nas fases 0 a 11 e nos EPICs A a E da
   modo submissao bloqueante e celulas iguais as do TRF25.
 - ~~Round-trip TRF fiel (`FED-04`).~~ FEITO 2026-08-03 — `U` deixou de ser `F`,
   `Z` preservado, e arbitro/calendario/equipes deixaram de ser descartados.
-- Normas FIDE corretas + certificado IT3 (`FED-06`).
+- ~~Normas FIDE corretas + certificado IT3 (`FED-06`).~~ FEITO 2026-08-04 —
+  titulado por nivel (CM/WCM fora), piso de rating ajustado que sobe UM
+  adversario, tetos de federacao e de nao ratados, e a tabela do Anexo derivada
+  das fracoes em vez de copiada. IT3 preenchido em PDF por norma detectada.
 - Premiacao conforme edital (Feminino automatico, multi-categoria) (`ORG-02`).
 
 ### Alto impacto / alta complexidade

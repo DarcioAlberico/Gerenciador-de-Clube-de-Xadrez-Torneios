@@ -2089,7 +2089,57 @@ Criterios de aceite:
 
 #### FED-06 - Normas FIDE corretas e certificados IT
 
-Status: pendente.
+Status: FEITO (2026-08-04).
+
+Como ficou:
+
+- **o regulamento virou modulo**. `src/services/norms/handbook.py` guarda os
+  numeros do B.01 (secao 1.4, edicao de 2024) e MAIS NADA — nao sabe o que e
+  torneio. `opponents` decide que partida conta e com que rating, `evaluation`
+  julga uma norma, `report` monta o relatorio, `it3` descreve o certificado e
+  `it3_pdf` desenha. `fide_norms.py` virou fachada: ninguem precisou trocar
+  import.
+- **titulado passou a ser por NIVEL**. CM e WCM saem por texto expresso do
+  1.4.5; NM e WNM nunca foram titulo FIDE. Alem do piso de 50% de titulados, a
+  norma cobra 1/3 (minimo 3) do SEU nivel: GM exige GMs, IM exige GM ou IM, e
+  assim por diante. Nove FMs cumprem os 50% e nao cumprem o 1/3 de GM — que era
+  exatamente o open que o motor antigo aprovava.
+- **o piso de rating ajustado (1.4.6) sobe UM adversario, o mais fraco.** Subir
+  todos era generoso demais (qualquer open indicaria norma); nao subir nenhum
+  seria severo demais com quem enfrentou um adversario abaixo do piso. Como o
+  piso e por norma (2200/2050/2000/1850), o **Ra e o Rp sao calculados por
+  norma**, e nao uma vez por jogador — foi a mudanca estrutural do item.
+- **a tabela do Anexo nao foi copiada, foi derivada.** As fracoes do texto
+  (50%, 1/3, 3/5, 2/3, 20% de n+1) com o arredondamento de cada uma reproduzem
+  a tabela publicada de 9 a 13 rodadas — o teste compara com o Anexo. Assim 15,
+  17 e 19 rodadas tambem saem certas.
+- **IT3 preenchido em PDF**, um por norma detectada, com o torneio, o candidato,
+  a tabela de adversarios rodada a rodada (titulo, federacao, rating real,
+  rating usado pela norma, cor e resultado) e o fechamento com Ra, Rp e as
+  contagens. Rotulos em ingles porque o formulario e entregue a FIDE; o aviso de
+  que isto e apoio, e nao homologacao, sai em portugues. Sem norma atingida o
+  export avisa em vez de gerar papel em branco.
+
+Fora do entregue (de proposito):
+
+- **IT1 e IT2 continuam sem formulario proprio.** O IT1 e registro do torneio
+  ANTES do evento (nao ha dado no sistema para preencher) e o apoio ao IT2 e o
+  relatorio `Rating FIDE`, que ja existe — a correcao do que ele calcula (K,
+  piso, ritmo) e o `FED-07`, e emitir o formulario com numero errado seria
+  pior do que nao emitir.
+- **O IT3 ficou fora da exportacao em lote.** O lote isola falhas, mas a
+  ausencia de norma nao e falha: sairia uma linha de erro em quase todo
+  torneio, e erro que e o caso normal vira ruido que ninguem le.
+
+Armadilhas anotadas:
+
+- a federacao do candidato saia na conta de federacoes por um `add` explicito —
+  o codigo antigo somava a propria federacao ao conjunto dos adversarios;
+- `unrated = 1400` e da edicao de 2024 (era 1000 antes), e por isso mora no
+  modulo do regulamento, nao espalhado no calculo;
+- em round-robin, partida contra nao ratado que zerou contra ratados nao conta
+  (1.4.2) — a exclusao so se aplica quando o metodo de pareamento e round-robin,
+  entao o relatorio precisa das configuracoes do torneio, que antes nao lia.
 
 Problema:
 
@@ -2112,9 +2162,13 @@ Escopo:
 
 Criterios de aceite:
 
-- [ ] fixture de norma conhecida (torneio real) valida os indicadores;
-- [ ] IT3 sai preenchido com os dados do torneio e do candidato;
-- [ ] federacao do candidato fora da contagem de federacoes.
+- [x] fixture de norma valida os indicadores — e a tabela do Anexo do B.01 (9 a
+  13 rodadas) e conferida contra os limites derivados. O campo de teste e
+  SINTETICO de proposito: o que precisa ser exercitado e a fronteira de cada
+  regra (o terceiro GM, o quinto titulado, a segunda federacao), e num torneio
+  real esses numeros caem onde caem;
+- [x] IT3 sai preenchido com os dados do torneio e do candidato;
+- [x] federacao do candidato fora da contagem de federacoes.
 
 #### FED-07 - Rating: K correto, piso e ritmo
 
@@ -2408,7 +2462,7 @@ Entregas:
 1. [x] `FED-05` Lista FIDE: data de nascimento e robustez do download.
 2. [x] `FED-03` TRF16 de campo completo.
 3. [x] `FED-04` Round-trip TRF fiel.
-4. [ ] `FED-06` Normas FIDE corretas e certificados IT.
+4. [x] `FED-06` Normas FIDE corretas e certificados IT.
 5. [ ] `FED-07` Rating: K correto, piso e ritmo.
 
 ### Sprint 12 - Organizacao do torneio
