@@ -18,6 +18,7 @@ from typing import Any, Mapping, TYPE_CHECKING
 from src.core.database import BASE_DIR, DEFAULT_CERTIFICATE_TEMPLATES, Database
 from src.services.constants import *
 from src.services.export_service import ImportService
+from src.services.fide_list import parse_rating_list as parse_fide_rating_list
 from src.services.fide_norms import build_norm_report
 from src.services.fide_rating import build_fide_report_rows
 from src.services.foreign_rating_lists import map_row, normalize_federation_code, seed_federations
@@ -298,63 +299,53 @@ class OfficialRatingService:
             "errors": errors,
         }
 
+    FIDE_LIST_URL = "https://ratings.fide.com/download/standard_rating_list.zip"
+
     def import_fide_list_from_url(self) -> dict[str, Any]:
+        """Baixa e importa a lista oficial da FIDE (FED-05).
+
+        A leitura do arquivo mora em `services/fide_list.py` (pura, testavel com
+        fixture); aqui fica so o que e I/O: baixar, abrir o ZIP e gravar. Falha de
+        rede vira mensagem, e nao `URLError` cru subindo ate a tela.
+        """
+        import urllib.error
         import urllib.request
         import zipfile
         import io
 
-        url = "http://ratings.fide.com/download/standard_rating_list.zip"
-        logger.info("Baixando lista da FIDE de %s", url)
-        
-        req = urllib.request.Request(url, headers={"User-Agent": "Albericus Chess Club Manager"})
-        with urllib.request.urlopen(req, timeout=30) as response:
-            zip_data = response.read()
+        logger.info("Baixando lista da FIDE de %s", self.FIDE_LIST_URL)
+        req = urllib.request.Request(
+            self.FIDE_LIST_URL, headers={"User-Agent": "Albericus Chess Club Manager"}
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=60) as response:
+                zip_data = response.read()
+        except urllib.error.HTTPError as exc:
+            raise AppError(
+                f"A FIDE respondeu {exc.code} ao pedido da lista de rating. "
+                "Tente de novo mais tarde ou baixe o arquivo do site e use a "
+                "importacao por arquivo."
+            ) from exc
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            raise AppError(
+                "Nao foi possivel baixar a lista da FIDE (sem conexao, DNS ou "
+                "tempo esgotado). Verifique a internet ou baixe o arquivo do site "
+                "e use a importacao por arquivo."
+            ) from exc
 
-        payloads: list[dict[str, Any]] = []
-        errors: list[str] = []
-        
-        with zipfile.ZipFile(io.BytesIO(zip_data)) as z:
-            name = z.namelist()[0]
-            with z.open(name) as file:
-                # Ler linha por linha
-                lines = io.TextIOWrapper(file, encoding="utf-8-sig", errors="replace")
-                next(lines, None) # Ignorar cabeçalho
-                
-                for line_number, line in enumerate(lines, start=2):
-                    if len(line) < 120:
-                        continue
-                        
-                    fide_id = line[0:15].strip()
-                    name = line[15:76].strip()
-                    fed = line[76:80].strip()
-                    sex = line[80:84].strip()
-                    title = line[84:89].strip()
-                    rating_str = line[113:119].strip()
-                    birth_year = line[126:131].strip()
-
-                    if not fide_id or not name:
-                        continue
-                        
-                    rating = int(rating_str) if rating_str.isdigit() else 0
-
-                    payloads.append({
-                        "external_id": fide_id,
-                        "fide_id": fide_id,
-                        "cbx_id": "",
-                        "name": name,
-                        "surname": "",
-                        "given_name": "",
-                        "title": title,
-                        "sex": sex,
-                        "federation": fed,
-                        "club": "",
-                        "birth_date": birth_year,
-                        "national_rating": 0,
-                        "international_rating": rating,
-                        "standard_rating": rating,
-                        "rapid_rating": 0,
-                        "blitz_rating": 0,
-                    })
+        try:
+            with zipfile.ZipFile(io.BytesIO(zip_data)) as z:
+                nomes = z.namelist()
+                if not nomes:
+                    raise AppError("O arquivo da FIDE veio vazio.")
+                with z.open(nomes[0]) as file:
+                    lines = io.TextIOWrapper(file, encoding="utf-8-sig", errors="replace")
+                    payloads, errors = parse_fide_rating_list(lines)
+        except zipfile.BadZipFile as exc:
+            raise AppError(
+                "O download da FIDE nao veio como ZIP valido (a resposta pode ter "
+                "sido uma pagina de erro). Tente de novo mais tarde."
+            ) from exc
 
         snapshot_id = None
         if payloads:

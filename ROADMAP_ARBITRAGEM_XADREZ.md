@@ -479,7 +479,8 @@ Entregas, em ordem de prioridade:
    2026-08-01), knockout com desempate registrado e Scheveningen robusto
    (`PAR-03` — ENTREGUE em 2026-08-01).
 5. **Submissao federativa (Sprint 11)**: correcao do `birth_date` da lista
-   FIDE (`FED-05`), TRF16 com `XXR`/`XXC`/`XXA`, Event-ID e modo submissao
+   FIDE (`FED-05` — ENTREGUE em 2026-08-03), TRF16 com `XXR`/`XXC`/`XXA`,
+   Event-ID e modo submissao
    (`FED-03`), round-trip TRF fiel (`FED-04`), normas FIDE corretas com
    certificado IT3 (`FED-06`), rating com K/piso/ritmo corretos e relatorio
    CBX real (`FED-07`).
@@ -515,7 +516,9 @@ colunas, TRF25) foram entregues nas fases 0 a 11 e nos EPICs A a E da
 - ~~Troca de cores via servico com auditoria (`PAR-04`, parte).~~ FEITO 2026-07-30.
 - ~~Destravar round-robin por equipes (constante duplicada) (`PAR-04`, parte).~~
   FEITO 2026-07-30 — e o metodo passou a de fato parear, nao so a ser aceito.
-- Corrigir `birth_date` da importacao da lista FIDE (`FED-05`).
+- ~~Corrigir `birth_date` da importacao da lista FIDE (`FED-05`).~~ FEITO
+  2026-08-03 — o ano da FIDE e data VALIDA no TRF; quem estava errado era a
+  validacao. Junto: leitor puro com fixture, https e falha de rede com recado.
 - ~~W.O. no lancamento inline do painel (`ARB-02`, parte).~~ FEITO 2026-07-31
   — junto com partida adiada e os codigos `W`/`D`/`L`.
 
