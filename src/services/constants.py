@@ -269,9 +269,15 @@ OPERATOR_ROLES = {
     # "publico" não é login role: o portal público é servido por rotas
     # anônimas (export_site / LocalResultServer), não por sessão autenticada.
 }
+# ORG-04: uma opcao visivel que nao faz nada e pior do que opcao nenhuma — o
+# arbitro marca e acredita. Sairam daqui (e da tela) `accelerated_system` (a
+# aceleracao de verdade e `acceleration_method`), `allow_public_registration` e
+# `allow_player_result_edit` (nao existe inscricao publica nem edicao direta:
+# o envio por QR passa pela fila de aprovacao), `hide_color_names`,
+# `show_opponents_in_standings` e `calculate_performance` (a performance sempre
+# foi calculada). As COLUNAS ficam no banco: bases antigas as tem, e derrubar
+# coluna no SQLite custa reescrever a tabela para apagar o que ninguem le.
 TOURNAMENT_FLAG_FIELDS = {
-    "allow_public_registration",
-    "allow_player_result_edit",
     "allow_dangerous_changes",
     "disable_bye",
     # Returno do rodizio (PAR-01). Nao vale para o Suico: la o numero de rodadas
@@ -279,11 +285,7 @@ TOURNAMENT_FLAG_FIELDS = {
     "round_robin_double",
     # Disputa de 3o lugar no mata-mata (PAR-03).
     "knockout_third_place",
-    "accelerated_system",
     "hide_standings",
-    "calculate_performance",
-    "hide_color_names",
-    "show_opponents_in_standings",
     "tiebreak_strict",
     # Excluir desistentes da premiacao (ORG-02).
     "prize_exclude_withdrawn",

@@ -332,18 +332,28 @@ class TournamentCoreMixin(_DatabaseInfra):
         with self.connect() as connection:
             connection.execute("DELETE FROM tournaments WHERE id = ?", (tournament_id,))
 
-    def list_tournaments(self) -> list[dict[str, Any]]:
+    def list_tournaments(self, include_archived: bool = False) -> list[dict[str, Any]]:
+        """Torneios do sistema. Arquivado FICA DE FORA por padrao (ORG-04).
+
+        A opcao "Arquivado" existia na tela e nao arquivava nada — o torneio
+        continuava na lista igual aos outros. Quem precisa dos arquivados pede
+        explicitamente, que e o que o filtro da tela de torneios faz.
+        """
+        filtro = "" if include_archived else "WHERE COALESCE(s.archived, 0) = 0"
         with self.connect() as connection:
             rows = connection.execute(
-                """
+                f"""
                 SELECT
                     t.*,
                     c.name AS club_name,
                     c.kind AS club_kind,
-                    cl.name AS class_name
+                    cl.name AS class_name,
+                    COALESCE(s.archived, 0) AS archived
                 FROM tournaments t
                 LEFT JOIN clubs c ON c.id = t.club_id
                 LEFT JOIN classes cl ON cl.id = t.class_id
+                LEFT JOIN tournament_settings s ON s.tournament_id = t.id
+                {filtro}
                 ORDER BY t.created_at DESC, t.id DESC
                 """
             ).fetchall()

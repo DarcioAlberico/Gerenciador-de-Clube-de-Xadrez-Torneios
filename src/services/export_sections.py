@@ -67,7 +67,6 @@ class ReportSectionsMixin:
                 ["Data de corte", settings.get("cutoff_date", "")],
                 ["Ordem inicial", settings.get("initial_order", "")],
                 ["Tipo de torneio", settings.get("tournament_type", "")],
-                ["Calcular desempenho", "Sim" if settings.get("calculate_performance") else "Não"],
             ]
         )
         if tournament.get("competition_type") == "team":

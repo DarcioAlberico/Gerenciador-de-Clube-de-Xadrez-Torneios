@@ -61,7 +61,8 @@ Aplicativo desktop em Python para Gerenciar Clube/Escolas_Turmas e Torneios de X
   jogador por tabuleiro dentro da equipe.
 - Busca de jogadores e filtro de classificacao por categoria.
 - Configuracao avancada de torneios com dados oficiais, regras basicas,
-  flags de interface/publicacao e agenda por rodada com data, hora, **local,
+  flags de interface/publicacao (apenas as que fazem alguma coisa: seis opcoes
+  inertes foram removidas) e agenda por rodada com data, hora, **local,
   ritmo e dia de folga**. Reduzir o total de rodadas com agenda preenchida pede
   confirmacao e registra auditoria — antes as datas eram apagadas em silencio.
 - Ritmo de jogo entendido tambem na grafia do edital (`90'+30"`, `90+30`,
@@ -97,6 +98,10 @@ Aplicativo desktop em Python para Gerenciar Clube/Escolas_Turmas e Torneios de X
   oficiais incompletos antes da geracao do arquivo `.trf`.
 - Auditoria operacional do torneio com snapshots de emparceiramento,
   classificacao e correcoes de resultado.
+- Mudanca estrutural (ordem inicial, aceleracao, sequencia de desempates) com o
+  torneio em andamento exige motivo e gera evento de auditoria — antes dava para
+  trocar no meio do torneio e a classificacao publicada mudava sozinha.
+- Torneio marcado como `Arquivado` sai da lista padrao e reaparece com filtro.
 - Pre-visualizacao da proxima rodada antes de gravar o emparceiramento.
 - Painel do arbitro com pendencias, correcoes e acoes rapidas.
 - Lancamento inline de resultados no painel do arbitro, com botoes, atalhos e

@@ -486,10 +486,10 @@ Entregas, em ordem de prioridade:
    certificado IT3 (`FED-06` — ENTREGUE em 2026-08-04), rating com K/piso/ritmo
    corretos e regulamento modelado (`FED-07` — ENTREGUE em 2026-08-04; o arquivo
    de submissao CBX aguarda o formato publicado).
-6. **Organizacao (Sprint 12)**: categorias configuraveis por torneio
-   (`ORG-01`), premiacao conforme edital, inclusive Feminino automatico
-   (`ORG-02`), agenda e controle de tempo estruturados (`ORG-03`), remocao ou
-   implementacao das flags mortas de configuracao (`ORG-04`).
+6. **Organizacao (Sprint 12 — CONCLUIDA em 2026-08-04)**: categorias
+   configuraveis por torneio (`ORG-01`), premiacao conforme edital, inclusive
+   Feminino automatico (`ORG-02`), agenda e controle de tempo estruturados
+   (`ORG-03`), remocao das flags mortas de configuracao (`ORG-04`).
 
 Criterios de aceite:
 

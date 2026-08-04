@@ -448,8 +448,6 @@ class TournamentSettingsMixin:
             team_fixed_board_order_check.select()
 
         flag_labels = {
-            "allow_public_registration": "Permitir inscricao publica",
-            "allow_player_result_edit": "Jogador pode alterar resultado",
             "allow_dangerous_changes": "Permitir mudancas perigosas",
             # `disable_bye` desativa o bye ALOCADO (o PAB de quem sobra num numero
             # impar). O bye SOLICITADO — o jogador avisando que faltaria — tem
@@ -461,11 +459,7 @@ class TournamentSettingsMixin:
             # So tem efeito no formato "Mata-mata": os dois perdedores da
             # semifinal jogam pelo 3o lugar, na mesma rodada da final.
             "knockout_third_place": "Disputa de 3o lugar no mata-mata",
-            "accelerated_system": "Sistema acelerado",
             "hide_standings": "Ocultar classificacao",
-            "calculate_performance": "Calcular desempenho do jogador",
-            "hide_color_names": "Ocultar nomes de cores",
-            "show_opponents_in_standings": "Mostrar adversarios na classificacao",
             "tiebreak_strict": "Falhar em vez de degradar (motor de desempate)",
             "archived": "Arquivado",
         }
@@ -953,23 +947,37 @@ class TournamentSettingsMixin:
                         schedule_payload,
                     )
                 except AppError as exc:
-                    # ORG-03: reduzir rodadas apaga data ja publicada. O servico
-                    # recusa e explica; aqui a decisao volta para o arbitro.
-                    if "Confirme para apagar essas datas" not in str(exc):
+                    # O servico recusa e explica; aqui a decisao volta para o
+                    # arbitro. Reduzir rodadas apaga data ja publicada (ORG-03);
+                    # mudanca estrutural com torneio em andamento reescreve a
+                    # classificacao ja publicada (ORG-04).
+                    if "Confirme para apagar essas datas" in str(exc):
+                        if not self._confirm_action(
+                            "Reduzir rodadas",
+                            f"{exc}\n\nApagar as datas excedentes?",
+                            danger=True,
+                        ):
+                            return
+                        self.tournament_service.save_profile(
+                            self.current_tournament_id,
+                            tournament_payload,
+                            settings_payload,
+                            schedule_payload,
+                            confirm_schedule_loss=True,
+                        )
+                    elif "Informe o motivo da mudanca" in str(exc):
+                        motivo = self._ask_string("Mudança estrutural", str(exc))
+                        if not str(motivo or "").strip():
+                            return
+                        self.tournament_service.save_profile(
+                            self.current_tournament_id,
+                            tournament_payload,
+                            settings_payload,
+                            schedule_payload,
+                            structural_change_reason=str(motivo),
+                        )
+                    else:
                         raise
-                    if not self._confirm_action(
-                        "Reduzir rodadas",
-                        f"{exc}\n\nApagar as datas excedentes?",
-                        danger=True,
-                    ):
-                        return
-                    self.tournament_service.save_profile(
-                        self.current_tournament_id,
-                        tournament_payload,
-                        settings_payload,
-                        schedule_payload,
-                        confirm_schedule_loss=True,
-                    )
                 # Salvamento unificado: premios e colunas vao junto com as configuracoes.
                 self.prize_service.replace_prizes(self.current_tournament_id, prize_editor.get_rows())
                 self.tournament_service.replace_categories(

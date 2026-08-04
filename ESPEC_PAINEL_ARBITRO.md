@@ -2453,7 +2453,38 @@ Criterios de aceite:
 
 #### ORG-04 - Configuracao honesta (flags mortas e bloqueios pos-R1)
 
-Status: pendente.
+Status: FEITO (2026-08-04). Sem mudanca de schema.
+
+Como ficou:
+
+- **seis flags inertes sairam da tela e do registro**, com decisao por flag:
+  `accelerated_system` (a aceleracao de verdade e `acceleration_method`; a flag
+  fazia o arbitro acreditar que tinha acelerado o torneio),
+  `allow_public_registration` e `allow_player_result_edit` (nao existe inscricao
+  publica nem edicao direta — o envio por QR sempre passou pela fila de
+  aprovacao), `hide_color_names`, `show_opponents_in_standings` e
+  `calculate_performance` (a performance sempre foi calculada; a flag so
+  aparecia como linha no relatorio, dizendo "Sim" sem consequencia).
+- **as COLUNAS ficam no banco.** Derrubar coluna no SQLite custa reescrever a
+  tabela, e o que fazia mal era a opcao na TELA, nao o campo parado.
+- **rede contra a proxima flag morta**: um teste varre `src/` e reprova qualquer
+  flag do registro que nao seja lida fora do esquema, da migracao e da
+  persistencia. E o que faltava para as seis nunca terem sido notadas.
+- **mudanca estrutural depois da rodada 1 exige motivo e vira auditoria**
+  (`tournament_structural_change`): ordem inicial, aceleracao e sequencia de
+  desempates (individual e por equipes). Antes dava para trocar qualquer uma no
+  meio do torneio sem aviso e sem rastro — e a classificacao publicada mudava
+  sozinha entre uma rodada e outra. Salvar a tela sem mexer nesses campos
+  continua sendo rotina: o que exige motivo e a MUDANCA, nao o salvamento.
+- **`archived` passou a arquivar**: `list_tournaments()` exclui arquivados por
+  padrao e `include_archived=True` os traz de volta.
+
+Fora do entregue (de proposito):
+
+- **`tournaments.system`** (o legado dessincronizado de `pairing_method`) nao foi
+  removido: ele aparece em relatorio, no site publico e no TRF, e trocar a fonte
+  desse texto e mudanca de conteudo publicado — item proprio, nao rabo de um
+  item de limpeza.
 
 Problema:
 
@@ -2476,9 +2507,10 @@ Escopo:
 
 Criterios de aceite:
 
-- [ ] nenhuma opcao visivel na UI e inerte;
-- [ ] trocar desempates com torneio em andamento gera auditoria;
-- [ ] torneio arquivado some da lista padrao e reaparece com filtro.
+- [x] nenhuma opcao visivel na UI e inerte — com teste que varre `src/` e
+  reprova flag do registro sem consumidor;
+- [x] trocar desempates com torneio em andamento gera auditoria;
+- [x] torneio arquivado some da lista padrao e reaparece com filtro.
 
 ## 6. Fora de Escopo
 
@@ -2638,7 +2670,7 @@ Entregas:
 1. [x] `ORG-01` Categorias configuraveis por torneio.
 2. [x] `ORG-02` Premiacao conforme edital.
 3. [x] `ORG-03` Agenda e controle de tempo estruturados.
-4. [ ] `ORG-04` Configuracao honesta (flags mortas e bloqueios pos-R1).
+4. [x] `ORG-04` Configuracao honesta (flags mortas e bloqueios pos-R1).
 
 ## 8. Definicao de Pronto
 

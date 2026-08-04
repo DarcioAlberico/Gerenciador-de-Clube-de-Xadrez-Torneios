@@ -188,8 +188,7 @@ class TournamentSetupTest(CoreServiceTestCase):
                 "initial_order": "international_then_national",
                 "tournament_type": "real",
                 "tournament_profile": "club",
-                "allow_public_registration": 1,
-                "calculate_performance": 1,
+                "hide_standings": 1,
                 "late_entry_points": "0.5",
                 "rating_fee_fide": "2.50",
                 "rating_fee_cbx": "3.75",
@@ -211,8 +210,9 @@ class TournamentSetupTest(CoreServiceTestCase):
         self.assertEqual(settings["fide_event_id"], "123456")
         self.assertEqual(settings["initial_order"], "international_then_national")
         self.assertEqual(settings["tournament_profile"], "club")
-        self.assertEqual(settings["allow_public_registration"], 1)
-        self.assertEqual(settings["calculate_performance"], 1)
+        # ORG-04: `allow_public_registration` e `calculate_performance` sairam —
+        # eram opcoes visiveis que nao faziam nada.
+        self.assertEqual(settings["hide_standings"], 1)
         self.assertEqual(settings["late_entry_points"], 0.5)
         self.assertEqual(settings["rating_fee_fide"], 2.5)
         self.assertEqual(settings["rating_fee_cbx"], 3.75)
@@ -518,7 +518,7 @@ class TournamentSetupTest(CoreServiceTestCase):
                 "team_tiebreak_sequence": '[{"code":"game_points","params":{}}]',
                 "prize_policy": "cumulative",
                 "prize_tax_percent": 12.5,
-                "allow_public_registration": 1,
+                "hide_standings": 1,
                 "rating_fee_fide": 2.5,
             },
         )
@@ -531,7 +531,7 @@ class TournamentSetupTest(CoreServiceTestCase):
         self.assertEqual(settings["team_tiebreak_sequence"], '[{"code":"game_points","params":{}}]')
         self.assertEqual(settings["prize_policy"], "cumulative")
         self.assertEqual(settings["prize_tax_percent"], 12.5)
-        self.assertEqual(settings["allow_public_registration"], 1)
+        self.assertEqual(settings["hide_standings"], 1)
         self.assertEqual(settings["rating_fee_fide"], 2.5)
 
     def test_save_profile_partial_settings_preserves_existing_values(self) -> None:
@@ -542,7 +542,7 @@ class TournamentSetupTest(CoreServiceTestCase):
                 "team_tiebreak_sequence": '[{"code":"game_points","params":{}}]',
                 "prize_policy": "cumulative",
                 "prize_tax_percent": 12.5,
-                "allow_public_registration": 1,
+                "hide_standings": 1,
                 "rating_fee_fide": 2.5,
             },
         )
@@ -565,7 +565,7 @@ class TournamentSetupTest(CoreServiceTestCase):
         self.assertEqual(settings["team_tiebreak_sequence"], '[{"code": "game_points", "params": {}}]')
         self.assertEqual(settings["prize_policy"], "cumulative")
         self.assertEqual(settings["prize_tax_percent"], 12.5)
-        self.assertEqual(settings["allow_public_registration"], 1)
+        self.assertEqual(settings["hide_standings"], 1)
         self.assertEqual(settings["rating_fee_fide"], 2.5)
 
     def test_split_tournament_partitions_by_ranking(self) -> None:
