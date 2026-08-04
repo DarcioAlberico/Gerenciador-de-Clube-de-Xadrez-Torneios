@@ -281,12 +281,14 @@ antigos não mudam de resultado.
 
 ### Implementação entregue
 
-- Núcleo puro em `src/services/fide_rating.py`: tabela oficial de expectativa
-  FIDE + **regra dos 400**, `fide_k_factor` (10/20/40, override por jogador,
-  sub-18 < 2300), performance via tabela `p→dp`, e `build_fide_report_rows`
-  (Ro, K, n, W, We, ΔElo, Rc, Rp por jogador). Conta só partidas jogadas no
-  tabuleiro (exclui bye/WO/forfait) e contra adversários **com rating**;
-  jogador sem rating recebe apenas Rp.
+- Núcleo puro em `src/services/rating/` (era `fide_rating.py`, que virou
+  fachada na `FED-07`): `tables` com a expectativa FIDE e a **regra dos 400**,
+  `regulation`/`profiles` com o regulamento como DADO (faixas de K, piso, teto
+  de K×n, regra de estreia) por base e ritmo, `kfactor` e `initial` aplicando-o,
+  e `report` montando as linhas (Ro, K, n, W, We, ΔElo, Rc, Rp). Conta só
+  partidas jogadas no tabuleiro (exclui bye/WO/forfait) e contra adversários
+  **com rating**; quem não tem rating recebe Rp e a estimativa de rating
+  inicial (B.02 8.2). Ver `FED-07` na `ESPEC_PAINEL_ARBITRO.md`.
 - Persistência: tabela `fide_rating_reports` (idempotente por torneio+base) e
   coluna opcional `players.k_factor` (migração v36, retrocompatível, sem alterar
   classificações). `FideRatingService` (compute/save/get) + métodos de banco.

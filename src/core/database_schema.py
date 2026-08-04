@@ -365,6 +365,15 @@ CREATE TABLE IF NOT EXISTS players (
     rating INTEGER NOT NULL DEFAULT 0,
     national_rating INTEGER NOT NULL DEFAULT 0,
     international_rating INTEGER NOT NULL DEFAULT 0,
+    -- Ratings por ritmo (FED-07). O snapshot da lista oficial ja guardava os
+    -- tres; o jogador do torneio so tinha um, e por isso um torneio de rapidas
+    -- calculava variacao contra a lista de standard.
+    rapid_rating INTEGER NOT NULL DEFAULT 0,
+    blitz_rating INTEGER NOT NULL DEFAULT 0,
+    -- Partidas ja ratadas do jogador. `0` e DESCONHECIDO, nao estreante: a
+    -- coluna nasce vazia para todo mundo, e tratar isso como estreia daria
+    -- K = 40 ao plantel inteiro.
+    games_played INTEGER NOT NULL DEFAULT 0,
     category TEXT DEFAULT '',
     age_category TEXT DEFAULT '',
     rating_category TEXT DEFAULT '',
@@ -602,6 +611,14 @@ CREATE TABLE IF NOT EXISTS tournament_settings (
     rating_fee_fide REAL NOT NULL DEFAULT 0.0,
     rating_fee_cbx REAL NOT NULL DEFAULT 0.0,
     rating_fee_lbx REAL NOT NULL DEFAULT 0.0,
+    -- Ritmo do torneio para efeito de rating (FED-07). Vazio = deduzir do
+    -- campo de ritmo de jogo; `standard`/`rapid`/`blitz` = declarado.
+    rating_speed TEXT NOT NULL DEFAULT '',
+    -- Ajustes do regulamento de rating, em JSON por base:
+    -- `{"cbx": {"k_top": 10, "rating_floor": 1400}}`. Coluna unica em vez de
+    -- uma por parametro: o regulamento e DADO, e dado com forma propria cabe
+    -- melhor num campo do que em quatorze colunas que ninguem consulta.
+    rating_regulation TEXT NOT NULL DEFAULT '',
     archived INTEGER NOT NULL DEFAULT 0,
     chess_results_url TEXT NOT NULL DEFAULT '',
     updated_at TEXT NOT NULL,

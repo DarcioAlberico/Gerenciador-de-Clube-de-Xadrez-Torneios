@@ -26,7 +26,31 @@ from src.services.pairing import (
 from src.services.prizes import PRIZE_POLICIES
 from src.services.list_layouts import DEFAULT_STANDINGS_COLUMNS, STANDINGS_COLUMNS
 from src.services.chess_results import normalize_results_url
+from src.services.rating import parse_regulation_overrides
 from .tournament_widgets import ColumnLayoutEditor, PrizeEditor, TiebreakSequenceEditor
+
+# Ritmo para efeito de rating. Vazio = deduzir do campo "Ritmo" do torneio.
+RATING_SPEED_LABELS = {
+    "": "Automático (pelo ritmo de jogo)",
+    "standard": "Standard (clássico)",
+    "rapid": "Rápido",
+    "blitz": "Blitz",
+}
+
+# Parâmetros do regulamento de rating que o árbitro pode ajustar. Deixar em
+# branco mantém o valor do perfil publicado.
+RATING_REGULATION_FIELDS = [
+    ("k_new", "K de jogador novo", "Ex.: 40"),
+    ("k_new_games", "Partidas até deixar de ser novo", "Ex.: 30"),
+    ("k_youth", "K de sub-18", "Ex.: 40"),
+    ("k_youth_max_rating", "Rating máximo para o K de sub-18", "Ex.: 2300"),
+    ("k_top", "K de rating alto", "Ex.: 10"),
+    ("k_top_rating", "Rating a partir do qual vale o K alto", "Ex.: 2300"),
+    ("k_default", "K padrão", "Ex.: 20"),
+    ("rating_floor", "Piso de rating", "Ex.: 1400"),
+    ("initial_min_games", "Partidas mínimas para rating inicial", "Ex.: 5"),
+    ("initial_max_rating", "Teto do rating inicial", "Ex.: 2200"),
+]
 
 
 class TournamentSettingsMixin:
@@ -261,6 +285,33 @@ class TournamentSettingsMixin:
                 value = settings.get(key)
                 entry.insert(0, "" if value is None else str(value))
                 setting_entries[key] = entry
+
+        # ------------------------------------------------------------------ #
+        # Regulamento de rating (FED-07)
+        # ------------------------------------------------------------------ #
+        # O ritmo decide a LISTA de rating usada (standard, rápido ou blitz) e o
+        # perfil do regulamento. Vazio = deduzir do campo Ritmo da aba anterior.
+        form_official.section("Rating")
+        rating_speed_option = form_official.select(
+            "Ritmo para rating", list(RATING_SPEED_LABELS.values())
+        )
+        rating_speed_option.set(
+            RATING_SPEED_LABELS.get(
+                str(settings.get("rating_speed") or ""), RATING_SPEED_LABELS[""]
+            )
+        )
+
+        # O regulamento da CBX não está publicado em formato que o programa
+        # consiga ler. Em vez de fingir que sabe, o perfil sai editável: o que o
+        # árbitro preencher aqui vale, e o relatório diz que veio daqui.
+        rating_regulation_entries: dict[str, Any] = {}
+        saved_overrides = parse_regulation_overrides(settings.get("rating_regulation")).get("cbx", {})
+        form_official.section("Regulamento CBX (conferir no texto vigente)")
+        for key, label, dica in RATING_REGULATION_FIELDS:
+            entry = form_official.text(label, placeholder=dica)
+            value = saved_overrides.get(key)
+            entry.insert(0, "" if value in (None, "") else str(value))
+            rating_regulation_entries[key] = entry
 
         # ------------------------------------------------------------------ #
         # Aba 3 - Regras e desempates
@@ -762,6 +813,17 @@ class TournamentSettingsMixin:
             settings_payload["team_standing_secondary"] = team_criterion_by_label[team_secondary_option.get()]
             settings_payload["tiebreak_sequence"] = serialize_tiebreak_sequence(tiebreak_editor.get_sequence())
             settings_payload["team_tiebreak_sequence"] = serialize_tiebreak_sequence(team_tiebreak_editor.get_sequence())
+            speed_by_label = {label: value for value, label in RATING_SPEED_LABELS.items()}
+            settings_payload["rating_speed"] = speed_by_label.get(rating_speed_option.get(), "")
+            # Campo em branco = "vale o perfil publicado"; por isso o vazio não
+            # entra no JSON, em vez de virar zero e zerar o regulamento.
+            settings_payload["rating_regulation"] = {
+                "cbx": {
+                    key: entry.get().strip()
+                    for key, entry in rating_regulation_entries.items()
+                    if entry.get().strip()
+                }
+            }
             settings_payload["prize_policy"] = prize_policy_by_label[prize_policy_option.get()]
             settings_payload["prize_tax_percent"] = prize_tax_entry.get()
             settings_payload["team_fixed_board_order"] = team_fixed_board_order_check.get()

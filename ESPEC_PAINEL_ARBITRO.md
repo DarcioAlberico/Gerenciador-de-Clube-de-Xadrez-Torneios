@@ -2172,7 +2172,53 @@ Criterios de aceite:
 
 #### FED-07 - Rating: K correto, piso e ritmo
 
-Status: pendente.
+Status: FEITO (2026-08-04). Schema v53.
+
+Como ficou:
+
+- **o regulamento virou DADO** (`src/services/rating/regulation.py`): faixas de
+  K, piso, teto de K x n e regra de estreia sao campos de um `RatingRegulation`,
+  e cada perfil declara de ONDE vieram seus numeros e se alguem os conferiu. O
+  perfil FIDE sai conferido contra o B.02 (edicao em vigor desde 2024); o da CBX
+  sai com a forma certa e marcado como NAO conferido — o regulamento nacional
+  nao esta publicado em lugar que o programa consiga ler, e inventar numero de
+  regulamento e pior do que admitir que nao se sabe. O arbitro edita os valores
+  em `Config. torneio -> Oficial`, e o relatorio diz que vieram dali.
+- **um interpretador de ritmo so** (`src/services/time_control.py`). O registro
+  222 do TRF25 e a classificacao standard/rapido/blitz liam o mesmo texto por
+  caminhos diferentes; agora leem pelo mesmo. Dois interpretadores acabariam
+  discordando, e o arquivo da federacao diria um ritmo enquanto o relatorio
+  calculava por outro.
+- **cada ritmo usa a SUA lista.** `players` ganhou `rapid_rating` e
+  `blitz_rating` (o snapshot da lista oficial ja guardava os tres; so o standard
+  chegava ao jogador do torneio). Faltando o rating do ritmo, o relatorio cai no
+  standard e AVISA, com a contagem de quantos jogadores — trocar de lista calado
+  produz um ΔElo que parece certo e nao e.
+- **K = 40 de jogador novo passou a disparar.** A regra existia e o relatorio
+  nunca passava `games_played`: o argumento ficava `None` e a regra caia fora
+  sozinha. A coluna nova comeca em `0`, que aqui e DESCONHECIDO e nao estreante
+  — tratar o plantel inteiro como estreante daria K = 40 a todo mundo.
+- **sub-18 saia um ano antes**: o B.02 da o K de desenvolvimento ate o FIM DO
+  ANO do aniversario de 18, e o codigo usava `< 18`.
+- **piso e rating inicial**: Rc abaixo do piso sai no piso, sinalizado; quem nao
+  tem rating recebe a estimativa do 8.2.2, que NAO e a performance — a conta
+  acrescenta dois adversarios ficticios de 1800 empatados, tem teto de 2200,
+  minimo de 5 partidas e descarta quem zerou na estreia (8.2.1).
+- o relatorio passou a mostrar a origem do Ro e o MOTIVO de cada K: "K = 40" sem
+  motivo nao se confere.
+
+Fora do entregue (de proposito):
+
+- **o arquivo de submissao da CBX.** O formato aceito nao esta publicado; sem
+  ele, gerar arquivo seria adivinhar o layout de quem recebe. O que da para
+  fazer sem o documento — modelar o regulamento — esta feito.
+- **`SGm` da lista da FIDE nao vira `games_played`.** A coluna publica as
+  partidas do PERIODO de rating, nao o total da vida do jogador; usa-la na regra
+  das 30 partidas daria K = 40 a mestres. `games_played` e preenchido pelo
+  arbitro ou por fonte que publique o total.
+- **o teto de K x n e aplicado ao torneio**, nao ao periodo de rating inteiro,
+  que e o que o B.02 descreve: o programa so conhece o torneio. Praticamente
+  nunca morde, e quando morde e para menos.
 
 Problema:
 
@@ -2194,9 +2240,14 @@ Escopo:
 
 Criterios de aceite:
 
-- [ ] jogador com menos de 30 partidas recebe K=40 no relatorio;
-- [ ] torneio rapido usa rating rapido dos inscritos;
-- [ ] relatorio CBX documentado contra o regulamento vigente.
+- [x] jogador com menos de 30 partidas recebe K=40 no relatorio;
+- [x] torneio rapido usa rating rapido dos inscritos;
+- [~] relatorio CBX documentado contra o regulamento vigente — o regulamento da
+  CBX nao esta publicado em formato legivel pelo programa (o site expoe so a
+  busca de rating e o Caderno de Regulamento de Torneios nao traz a formula).
+  Em vez de afirmar numeros que ninguem conferiu, o perfil CBX e editavel e sai
+  marcado como NAO conferido, e o relatorio repete a marca. Fecha quando o
+  regulamento for obtido: e preencher o perfil.
 
 ### EPIC J - Organizacao do torneio (categorias, premios, agenda)
 
@@ -2463,7 +2514,8 @@ Entregas:
 2. [x] `FED-03` TRF16 de campo completo.
 3. [x] `FED-04` Round-trip TRF fiel.
 4. [x] `FED-06` Normas FIDE corretas e certificados IT.
-5. [ ] `FED-07` Rating: K correto, piso e ritmo.
+5. [x] `FED-07` Rating: K correto, piso e ritmo (arquivo de submissao CBX
+   aguarda o regulamento).
 
 ### Sprint 12 - Organizacao do torneio
 

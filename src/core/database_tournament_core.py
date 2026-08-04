@@ -440,6 +440,7 @@ class TournamentCoreMixin(_DatabaseInfra):
                     team_lineup_deadline = ?, team_rating_tolerance = ?,
                     team_max_substitutions = ?,
                     rating_fee_fide = ?, rating_fee_cbx = ?, rating_fee_lbx = ?,
+                    rating_speed = ?, rating_regulation = ?,
                     archived = ?, updated_at = ?
                 WHERE tournament_id = ?
                 """,
@@ -498,6 +499,8 @@ class TournamentCoreMixin(_DatabaseInfra):
                     float(data.get("rating_fee_fide", 0.0) or 0.0),
                     float(data.get("rating_fee_cbx", 0.0) or 0.0),
                     float(data.get("rating_fee_lbx", 0.0) or 0.0),
+                    str(data.get("rating_speed", "")).strip(),
+                    str(data.get("rating_regulation", "")).strip(),
                     int(data.get("archived", 0) or 0),
                     self.now(),
                     tournament_id,
@@ -986,6 +989,11 @@ class TournamentCoreMixin(_DatabaseInfra):
             rating = pick_int("rating")
             national_rating = pick_int("national_rating")
             international_rating = pick_int("international_rating")
+            # Ratings por ritmo (FED-07): a lista oficial ja trazia os tres e o
+            # jogador do torneio so recebia um.
+            rapid_rating = pick_int("rapid_rating")
+            blitz_rating = pick_int("blitz_rating")
+            games_played = pick_int("games_played")
             category_payload = self._player_category_payload(
                 connection,
                 tournament_id=int(current["tournament_id"]),
@@ -1005,6 +1013,7 @@ class TournamentCoreMixin(_DatabaseInfra):
                 SET name = ?, surname = ?, given_name = ?, title = ?, sex = ?,
                     club = ?, federation_id = ?, fide_id = ?, cbx_id = ?, lbx_id = ?,
                     rating = ?, national_rating = ?, international_rating = ?,
+                    rapid_rating = ?, blitz_rating = ?, games_played = ?,
                     category = ?, age_category = ?, rating_category = ?,
                     prize_tags = ?, birth_date = ?
                 WHERE id = ?
@@ -1023,6 +1032,9 @@ class TournamentCoreMixin(_DatabaseInfra):
                     rating,
                     national_rating,
                     international_rating,
+                    rapid_rating,
+                    blitz_rating,
+                    games_played,
                     category_payload["category"],
                     category_payload["age_category"],
                     category_payload["rating_category"],
@@ -1101,6 +1113,9 @@ class TournamentCoreMixin(_DatabaseInfra):
         lbx_id: str = "",
         national_rating: int = 0,
         international_rating: int = 0,
+        rapid_rating: int = 0,
+        blitz_rating: int = 0,
+        games_played: int = 0,
         player_status: str = "active",
         starting_points: float | None = None,
     ) -> int:
@@ -1125,10 +1140,11 @@ class TournamentCoreMixin(_DatabaseInfra):
                 INSERT INTO players (
                     tournament_id, member_id, name, surname, given_name, title, sex,
                     club, federation_id, fide_id, cbx_id, lbx_id, rating, national_rating,
-                    international_rating, category, age_category, rating_category,
+                    international_rating, rapid_rating, blitz_rating, games_played,
+                    category, age_category, rating_category,
                     prize_tags, birth_date, player_status, starting_points, active,
                     created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     tournament_id,
@@ -1146,6 +1162,9 @@ class TournamentCoreMixin(_DatabaseInfra):
                     int(rating or 0),
                     int(national_rating or 0),
                     int(international_rating or 0),
+                    int(rapid_rating or 0),
+                    int(blitz_rating or 0),
+                    int(games_played or 0),
                     category_payload["category"],
                     category_payload["age_category"],
                     category_payload["rating_category"],
@@ -1178,6 +1197,9 @@ class TournamentCoreMixin(_DatabaseInfra):
         lbx_id: str = "",
         national_rating: int = 0,
         international_rating: int = 0,
+        rapid_rating: int = 0,
+        blitz_rating: int = 0,
+        games_played: int = 0,
         player_status: str | None = None,
         starting_points: float | None = None,
     ) -> None:
@@ -1211,6 +1233,7 @@ class TournamentCoreMixin(_DatabaseInfra):
                 SET name = ?, surname = ?, given_name = ?, title = ?, sex = ?,
                     club = ?, federation_id = ?, fide_id = ?, cbx_id = ?, lbx_id = ?,
                     rating = ?, national_rating = ?, international_rating = ?,
+                    rapid_rating = ?, blitz_rating = ?, games_played = ?,
                     category = ?, age_category = ?, rating_category = ?,
                     prize_tags = ?, birth_date = ?, player_status = ?,
                     starting_points = ?, active = ?
@@ -1230,6 +1253,9 @@ class TournamentCoreMixin(_DatabaseInfra):
                     int(rating or 0),
                     int(national_rating or 0),
                     int(international_rating or 0),
+                    int(rapid_rating or 0),
+                    int(blitz_rating or 0),
+                    int(games_played or 0),
                     category_payload["category"],
                     category_payload["age_category"],
                     category_payload["rating_category"],
