@@ -66,6 +66,7 @@ class LegacyMigrations:
             52: self._migrate_to_v52,
             53: self._migrate_to_v53,
             54: self._migrate_to_v54,
+            55: self._migrate_to_v55,
         }
 
     def _run_schema_migrations(self, connection: sqlite3.Connection) -> None:
@@ -192,6 +193,8 @@ class LegacyMigrations:
             self._migrate_to_v53(connection)
         if self.db.SCHEMA_VERSION >= 54:
             self._migrate_to_v54(connection)
+        if self.db.SCHEMA_VERSION >= 55:
+            self._migrate_to_v55(connection)
 
     def _migrate_to_v1(self, connection: sqlite3.Connection) -> None:
         now = self.db.now()
@@ -2234,4 +2237,69 @@ class LegacyMigrations:
             connection.execute(
                 "ALTER TABLE tournament_settings "
                 "ADD COLUMN category_reference_date TEXT NOT NULL DEFAULT ''"
+            )
+
+    def _migrate_to_v55(self, connection: sqlite3.Connection) -> None:
+        """Premiacao por edital e agenda estruturada (ORG-02 e ORG-03).
+
+        No premio: `cumulative` e a politica POR PREMIO — quase todo edital soma
+        o premio Feminino ao geral, e ate aqui a politica era so do torneio
+        inteiro. `currency` estava previsto na spec E4 e nunca existiu.
+
+        No torneio: `prize_tie_split` escolhe como o bolo e repartido entre
+        EMPATADOS. Atencao ao `hort` antigo — ele vivia em `prize_policy` e
+        combinava geral com categoria, o que **nao e** o Sistema Hort. O Hort de
+        verdade reparte entre empatados (50% do premio da propria posicao no
+        desempate + 50% do bolo por igual), e e para ca que ele veio. Torneio
+        que estava em `prize_policy = 'hort'` passa a `best_only` com
+        `prize_tie_split = 'hort'`: e a leitura mais fiel da intencao de quem
+        escolheu "Sistema Hort" — e agora ele de fato o e.
+
+        Na agenda: local, ritmo e dia de descanso por rodada. Dia de descanso e
+        LINHA da agenda; sem ele a data seguinte parece rodada atrasada.
+        """
+        prize_columns = self.db._table_columns(connection, "tournament_prizes")
+        if "cumulative" not in prize_columns:
+            connection.execute(
+                "ALTER TABLE tournament_prizes ADD COLUMN cumulative INTEGER NOT NULL DEFAULT 0"
+            )
+        if "currency" not in prize_columns:
+            connection.execute(
+                "ALTER TABLE tournament_prizes ADD COLUMN currency TEXT NOT NULL DEFAULT ''"
+            )
+
+        schedule_columns = self.db._table_columns(connection, "round_schedule")
+        for column, tipo in (
+            ("venue", "TEXT NOT NULL DEFAULT ''"),
+            ("time_control", "TEXT NOT NULL DEFAULT ''"),
+            ("rest_day", "INTEGER NOT NULL DEFAULT 0"),
+        ):
+            if column not in schedule_columns:
+                connection.execute(f"ALTER TABLE round_schedule ADD COLUMN {column} {tipo}")
+
+        settings_columns = self.db._table_columns(connection, "tournament_settings")
+        if "prize_tie_split" not in settings_columns:
+            connection.execute(
+                "ALTER TABLE tournament_settings "
+                "ADD COLUMN prize_tie_split TEXT NOT NULL DEFAULT 'equal'"
+            )
+        if "prize_exclude_withdrawn" not in settings_columns:
+            connection.execute(
+                "ALTER TABLE tournament_settings "
+                "ADD COLUMN prize_exclude_withdrawn INTEGER NOT NULL DEFAULT 0"
+            )
+        if "late_tolerance_minutes" not in settings_columns:
+            connection.execute(
+                "ALTER TABLE tournament_settings "
+                "ADD COLUMN late_tolerance_minutes INTEGER NOT NULL DEFAULT 0"
+            )
+
+        # O "hort" antigo nao era o Sistema Hort; mudar de lugar preserva a
+        # intencao de quem o escolheu. A checagem da coluna nao e paranoia: o
+        # `_ensure_current_schema` roda esta funcao sobre bases sinteticas de
+        # versoes antigas, onde `prize_policy` (v37) ainda nao existe.
+        if "prize_policy" in self.db._table_columns(connection, "tournament_settings"):
+            connection.execute(
+                "UPDATE tournament_settings SET prize_tie_split = 'hort', prize_policy = 'best_only' "
+                "WHERE prize_policy = 'hort'"
             )

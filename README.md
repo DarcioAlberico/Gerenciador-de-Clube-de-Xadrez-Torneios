@@ -136,11 +136,23 @@ Aplicativo desktop em Python para Gerenciar Clube/Escolas_Turmas e Torneios de X
   Feminino), e a classificacao por categoria da ata e do podio sai para todas —
   e assim que a classificacao feminina aparece sozinha.
 - Distribuicao de premios em dinheiro: cadastro de premios por colocacao (geral),
-  por categoria, especiais e de tabuleiro na tela `Config. torneio`; politicas de
-  combinacao geral×categoria (apenas o maior, acumular ou Sistema Hort), divisao
-  igual entre empatados por pontos e desconto de imposto do organizador. A lista
-  de premiacao sai na tela `Relatorios` como `Premiacao`, exportavel em
-  CSV/XLSX/PDF.
+  por categoria, especiais e de tabuleiro na tela `Config. torneio`, com desconto
+  de imposto do organizador. A lista sai na tela `Relatorios` como `Premiacao`,
+  exportavel em CSV/XLSX/PDF.
+  - **Premio de categoria vale para TODAS as categorias do jogador**: quem e
+    Sub-12, Sub-1800 e Feminino concorre aos tres. E assim que o premio Feminino
+    passa a ser alocado sozinho.
+  - **Combinacao geral × categoria**: `apenas o maior` ou `acumular`. Alem
+    disso, cada premio pode ser marcado como `Soma` e acumular mesmo quando a
+    politica do torneio e "apenas o maior" — e o caso do premio Feminino em
+    quase todo edital brasileiro.
+  - **Entre empatados**: `dividir por igual` (padrao) ou **Sistema Hort**, em
+    que cada empatado recebe 50% do premio da propria posicao no desempate mais
+    50% do bolo dividido por igual. Atencao: ate a ORG-02 o rotulo "Sistema
+    Hort" nomeava uma combinacao geral×categoria que NAO e o Sistema Hort;
+    torneios que o usavam foram convertidos para o rateio de verdade.
+  - **Excluir desistentes** da premiacao, opcional (o padrao mantem o
+    comportamento anterior).
 - Estatisticas e fichas no padrao FIDE, na tela `Relatorios`: `Estatistica de
   federacoes` (jogadores, % e pontos por federacao), `Estatistica de partidas`
   (vitorias de brancas/empates/pretas, WO e byes) e `Fichas individuais` (resumo

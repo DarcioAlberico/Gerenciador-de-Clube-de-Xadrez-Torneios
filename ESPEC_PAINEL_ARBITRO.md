@@ -2340,7 +2340,35 @@ Criterios de aceite:
 
 #### ORG-02 - Premiacao conforme edital
 
-Status: pendente.
+Status: FEITO (2026-08-04). Schema v55.
+
+Como ficou:
+
+- **premio de categoria casa com TODAS as categorias do jogador** (ORG-01):
+  Sub-12, Sub-1800 e Feminino sao tres disputas, e o alocador so enxergava a
+  principal. E so isso que faltava para o premio Feminino ser alocado sozinho.
+- **politica POR PREMIO** (`tournament_prizes.cumulative`): o edital tipico soma
+  o Feminino ao geral mesmo dizendo "apenas o maior premio" para o resto, e nao
+  havia como dizer isso. `currency` tambem entrou, como a spec E4 previa.
+- **o "Sistema Hort" mudou de lugar, porque nao era o Sistema Hort.** O que
+  existia combinava geral com categoria (`max(geral, (geral+categoria)/2)`) — uma
+  "interpretacao comum" que nao confere com fonte nenhuma. O Hort e regra de
+  rateio entre EMPATADOS: cada um recebe 50% do premio da propria posicao no
+  desempate mais 50% do bolo dividido por igual. Como a classificacao ja chega
+  ordenada pelo desempate, a ordem dentro do grupo empatado E a ordem que o Hort
+  pede. A soma fecha com o bolo — ha teste para isso.
+- **migracao honesta**: torneio em `prize_policy = 'hort'` virou `best_only` com
+  `prize_tie_split = 'hort'`. E a leitura mais fiel de quem escolheu "Sistema
+  Hort" — e agora ele de fato o e.
+- **excluir desistentes** e opcional e vem DESLIGADO: ligar por padrao mudaria a
+  premiacao de todo torneio ja existente.
+
+Fora do entregue (de proposito):
+
+- **alocacao automatica de premio por TABULEIRO em equipes.** Ela depende de uma
+  classificacao por tabuleiro que o programa nao calcula; premio de tabuleiro
+  segue manual, como o `special`. Nenhum criterio de aceite do item depende
+  disso.
 
 Problema:
 
@@ -2363,9 +2391,11 @@ Escopo:
 
 Criterios de aceite:
 
-- [ ] premio Feminino e alocado automaticamente;
-- [ ] jogador multi-categoria segue a politica configurada;
-- [ ] fixture de premiacao conhecida (edital real) confere.
+- [x] premio Feminino e alocado automaticamente;
+- [x] jogador multi-categoria segue a politica configurada;
+- [x] fixture de premiacao conhecida (edital real) confere — open com geral
+  1o/2o/3o, melhor Feminino e melhor Sub-14 somando ao geral, dois empatados no
+  topo e rateio Hort: a soma fecha com a bolsa anunciada.
 
 #### ORG-03 - Agenda e controle de tempo estruturados
 

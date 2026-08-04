@@ -23,7 +23,7 @@ from src.services.pairing import (
     parse_team_tiebreak_sequence,
     serialize_tiebreak_sequence,
 )
-from src.services.prizes import PRIZE_POLICIES
+from src.services.prizes import PRIZE_POLICIES, PRIZE_TIE_SPLITS
 from src.services.list_layouts import DEFAULT_STANDINGS_COLUMNS, STANDINGS_COLUMNS
 from src.services.chess_results import normalize_results_url
 from src.services.rating import parse_regulation_overrides
@@ -601,6 +601,22 @@ class TournamentSettingsMixin:
         prize_policy_option.set(
             PRIZE_POLICIES.get(settings.get("prize_policy", "best_only"), PRIZE_POLICIES["best_only"])
         )
+        ctk.CTkLabel(prize_controls, text="Entre empatados").grid(
+            row=1, column=0, padx=(0, 4), pady=(6, 0), sticky="w"
+        )
+        tie_split_by_label = {label: value for value, label in PRIZE_TIE_SPLITS.items()}
+        tie_split_option = ctk.CTkOptionMenu(
+            prize_controls, values=list(tie_split_by_label.keys()), width=260
+        )
+        tie_split_option.grid(row=1, column=1, padx=(0, 16), pady=(6, 0), sticky="w")
+        tie_split_option.set(
+            PRIZE_TIE_SPLITS.get(settings.get("prize_tie_split", "equal"), PRIZE_TIE_SPLITS["equal"])
+        )
+        exclude_withdrawn_check = ctk.CTkCheckBox(prize_controls, text="Excluir desistentes")
+        exclude_withdrawn_check.grid(row=1, column=2, columnspan=2, padx=(0, 4), pady=(6, 0), sticky="w")
+        if settings.get("prize_exclude_withdrawn"):
+            exclude_withdrawn_check.select()
+
         ctk.CTkLabel(prize_controls, text="Imposto %").grid(row=0, column=2, padx=(0, 4), sticky="w")
         prize_tax_entry = ctk.CTkEntry(prize_controls, width=80)
         prize_tax_entry.grid(row=0, column=3)
@@ -861,6 +877,8 @@ class TournamentSettingsMixin:
                 }
             }
             settings_payload["prize_policy"] = prize_policy_by_label[prize_policy_option.get()]
+            settings_payload["prize_tie_split"] = tie_split_by_label[tie_split_option.get()]
+            settings_payload["prize_exclude_withdrawn"] = exclude_withdrawn_check.get()
             settings_payload["prize_tax_percent"] = prize_tax_entry.get()
             settings_payload["team_fixed_board_order"] = team_fixed_board_order_check.get()
             accel_key = acceleration_by_label[acceleration_option.get()]

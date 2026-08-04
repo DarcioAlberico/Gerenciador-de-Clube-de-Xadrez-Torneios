@@ -229,6 +229,7 @@ class PrizeEditor(ctk.CTkFrame):
             "rank_from": str(prize.get("rank_from") or 1),
             "rank_to": str(prize.get("rank_to") or prize.get("rank_from") or 1),
             "amount": "" if amount in (None, "") else str(amount),
+            "cumulative": bool(prize.get("cumulative")),
         }
 
     def _sync(self) -> None:
@@ -239,6 +240,7 @@ class PrizeEditor(ctk.CTkFrame):
             data["rank_from"] = widgets["rank_from"].get().strip()
             data["rank_to"] = widgets["rank_to"].get().strip()
             data["amount"] = widgets["amount"].get().strip()
+            data["cumulative"] = bool(widgets["cumulative"].get())
 
     def get_rows(self) -> list[dict[str, Any]]:
         self._sync()
@@ -262,38 +264,45 @@ class PrizeEditor(ctk.CTkFrame):
 
         header = ctk.CTkFrame(self, fg_color="transparent")
         header.grid(row=0, column=0, sticky="w", pady=(0, 2))
-        columns = [("Tipo", 110), ("Premio", 170), ("Categoria", 120), ("De", 46), ("Ate", 46), ("Valor", 90), ("", 36)]
+        # "Soma" e a politica POR PREMIO (ORG-02): marcada, o premio acumula
+        # com os demais mesmo quando a politica do torneio e "apenas o maior".
+        columns = [("Tipo", 100), ("Premio", 150), ("Categoria", 110), ("De", 42), ("Ate", 42), ("Valor", 80), ("Soma", 46), ("", 36)]
         for index, (text, width) in enumerate(columns):
             ctk.CTkLabel(header, text=text, width=width, anchor="w").grid(row=0, column=index, padx=2, sticky="w")
 
         for index, data in enumerate(self._data):
             row = ctk.CTkFrame(self, fg_color="transparent")
             row.grid(row=index + 1, column=0, sticky="w", pady=1)
-            kind = ctk.CTkOptionMenu(row, values=list(self.KIND_LABELS.values()), width=110)
+            kind = ctk.CTkOptionMenu(row, values=list(self.KIND_LABELS.values()), width=100)
             kind.set(self.KIND_LABELS.get(data["kind"], "Geral"))
             kind.grid(row=0, column=0, padx=2)
-            label = ctk.CTkEntry(row, width=170)
+            label = ctk.CTkEntry(row, width=150)
             label.insert(0, data["label"])
             label.grid(row=0, column=1, padx=2)
-            category = ctk.CTkEntry(row, width=120)
+            category = ctk.CTkEntry(row, width=110)
             category.insert(0, data["category"])
             category.grid(row=0, column=2, padx=2)
-            rank_from = ctk.CTkEntry(row, width=46)
+            rank_from = ctk.CTkEntry(row, width=42)
             rank_from.insert(0, data["rank_from"])
             rank_from.grid(row=0, column=3, padx=2)
-            rank_to = ctk.CTkEntry(row, width=46)
+            rank_to = ctk.CTkEntry(row, width=42)
             rank_to.insert(0, data["rank_to"])
             rank_to.grid(row=0, column=4, padx=2)
-            amount = ctk.CTkEntry(row, width=90)
+            amount = ctk.CTkEntry(row, width=80)
             amount.insert(0, data["amount"])
             amount.grid(row=0, column=5, padx=2)
+            cumulative = ctk.CTkCheckBox(row, text="", width=46)
+            if data["cumulative"]:
+                cumulative.select()
+            cumulative.grid(row=0, column=6, padx=2)
             ctk.CTkButton(
                 row, text="✕", width=36, fg_color=THEME_DANGER, hover_color=THEME_DANGER_HOVER,
                 command=lambda i=index: self._remove(i),
-            ).grid(row=0, column=6, padx=2)
+            ).grid(row=0, column=7, padx=2)
             self._widgets.append(
                 {"kind": kind, "label": label, "category": category,
-                 "rank_from": rank_from, "rank_to": rank_to, "amount": amount}
+                 "rank_from": rank_from, "rank_to": rank_to, "amount": amount,
+                 "cumulative": cumulative}
             )
 
         ctk.CTkButton(self, text="Adicionar premio", width=160, command=self._add).grid(

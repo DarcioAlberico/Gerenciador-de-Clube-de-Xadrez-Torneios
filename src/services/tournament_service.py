@@ -22,7 +22,7 @@ from src.services.pairing import (
     serialize_tiebreak_sequence,
 )
 from src.services.pairing.constraints import rating_for_initial_order
-from src.services.prizes import PRIZE_POLICIES
+from src.services.prizes import PRIZE_POLICIES, PRIZE_TIE_SPLITS
 from src.services.categories import from_row as category_from_row, normalize as normalize_category
 from src.services.rating import SPEED_CHOICES, serialize_regulation_overrides
 
@@ -575,6 +575,16 @@ class TournamentService:
             raise AppError("Ritmo para rating invalido.")
         rating_regulation = serialize_regulation_overrides(data.get("rating_regulation"))
 
+        prize_tie_split = str(data.get("prize_tie_split", "equal")).strip() or "equal"
+        if prize_tie_split not in PRIZE_TIE_SPLITS:
+            raise AppError("Forma de rateio entre empatados invalida.")
+        try:
+            late_tolerance_minutes = int(data.get("late_tolerance_minutes") or 0)
+        except (TypeError, ValueError) as exc:
+            raise AppError("Tolerancia de atraso invalida.") from exc
+        if late_tolerance_minutes < 0:
+            raise AppError("Tolerancia de atraso nao pode ser negativa.")
+
         prize_policy = str(data.get("prize_policy", "best_only")).strip() or "best_only"
         if prize_policy not in PRIZE_POLICIES:
             raise AppError("Politica de premiacao invalida.")
@@ -624,6 +634,8 @@ class TournamentService:
             "team_max_substitutions": team_max_substitutions,
             "rating_speed": rating_speed,
             "rating_regulation": rating_regulation,
+            "prize_tie_split": prize_tie_split,
+            "late_tolerance_minutes": late_tolerance_minutes,
             **rating_fees,
         }
         if pairing_method is not None:

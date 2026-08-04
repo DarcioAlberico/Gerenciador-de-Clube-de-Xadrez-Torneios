@@ -277,8 +277,8 @@ class TournamentCoreMixin(_DatabaseInfra):
                 """
                 INSERT INTO tournament_prizes (
                     tournament_id, kind, label, category, rank_from, rank_to,
-                    amount, position, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    amount, cumulative, currency, position, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 [
                     (
@@ -289,6 +289,8 @@ class TournamentCoreMixin(_DatabaseInfra):
                         int(row["rank_from"] or 1),
                         int(row["rank_to"] or row["rank_from"] or 1),
                         float(row["amount"] or 0.0),
+                        int(row["cumulative"] or 0),
+                        str(row["currency"] or ""),
                         int(row["position"] or 0),
                         self.now(),
                     )
@@ -668,8 +670,8 @@ class TournamentCoreMixin(_DatabaseInfra):
                 """
                 INSERT INTO tournament_prizes (
                     tournament_id, kind, label, category, rank_from, rank_to,
-                    amount, position, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    amount, cumulative, currency, position, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 [
                     (
@@ -680,6 +682,8 @@ class TournamentCoreMixin(_DatabaseInfra):
                         int(prize.get("rank_from") or 1),
                         int(prize.get("rank_to") or prize.get("rank_from") or 1),
                         float(prize.get("amount") or 0.0),
+                        1 if prize.get("cumulative") else 0,
+                        str(prize.get("currency") or ""),
                         index,
                         now,
                     )

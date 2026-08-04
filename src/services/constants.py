@@ -285,6 +285,8 @@ TOURNAMENT_FLAG_FIELDS = {
     "hide_color_names",
     "show_opponents_in_standings",
     "tiebreak_strict",
+    # Excluir desistentes da premiacao (ORG-02).
+    "prize_exclude_withdrawn",
     "archived",
 }
 
