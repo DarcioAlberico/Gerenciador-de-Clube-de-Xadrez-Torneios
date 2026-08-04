@@ -30,6 +30,8 @@ from src.services.trf_layout import (
     field as _slice,
 )
 
+__all__ = ["BYE_RESULTS", "build_trf_rounds", "parse_trf"]
+
 
 def _trf_date_to_iso(value: str) -> str:
     raw = str(value or "").strip()
@@ -66,10 +68,47 @@ def _parse_round_cells(line: str) -> list[dict[str, str]]:
     return cells
 
 
+def _parse_round_dates(line: str) -> list[str]:
+    """Datas do registro 132 (`YY/MM/DD`), na geometria das células de rodada."""
+    datas: list[str] = []
+    for bloco in _cell_blocks(line):
+        crua = bloco.strip()
+        if not crua:
+            datas.append("")
+            continue
+        partes = crua.split("/")
+        if len(partes) == 3 and len(partes[0]) == 2:
+            crua = f"20{partes[0]}/{partes[1]}/{partes[2]}"
+        datas.append(_trf_date_to_iso(crua))
+    return datas
+
+
+def _parse_team_line(line: str, code: str) -> dict[str, Any] | None:
+    """Equipe do registro 013 (legado) ou 310 (TRF25): nome + start-ranks.
+
+    O 013 traz o nome em largura fixa e os start-ranks de 4 em 4 a partir da
+    coluna 37; o 310 tem o nome deslocado (o registro comeca com o TPN). Sem
+    nome nao ha equipe — e a linha e ignorada em vez de virar "Equipe vazia".
+    """
+    inicio_nome, inicio_ranks = (4, 36) if code == "013" else (8, 40)
+    nome = line[inicio_nome:inicio_ranks].strip()
+    if not nome:
+        return None
+    ranks: list[int] = []
+    for indice in range(inicio_ranks, len(line), 5):
+        bruto = line[indice:indice + 4].strip()
+        if bruto.isdigit():
+            ranks.append(int(bruto))
+    return {"name": nome, "start_ranks": ranks}
+
+
 def parse_trf(content: str) -> dict[str, Any]:
     """Lê um TRF e devolve cabeçalho + jogadores (com células de rodada brutas)."""
     header: dict[str, str] = {}
     players: list[dict[str, Any]] = []
+    deputies: list[str] = []
+    round_dates: list[str] = []
+    teams: list[dict[str, Any]] = []
 
     for raw_line in content.splitlines():
         line = raw_line.rstrip("\r\n")
@@ -87,8 +126,18 @@ def parse_trf(content: str) -> dict[str, Any]:
             header["start_date"] = _trf_date_to_iso(rest)
         elif code == "052":
             header["end_date"] = _trf_date_to_iso(rest)
+        elif code == "102":
+            header["chief_arbiter"] = rest
+        elif code == "112":
+            deputies.append(rest)
         elif code == "122":
             header["time_control"] = rest
+        elif code == "132":
+            round_dates = _parse_round_dates(line)
+        elif code in ("013", "310"):
+            equipe = _parse_team_line(line, code)
+            if equipe:
+                teams.append(equipe)
         elif code == "001":
             rounds = _parse_round_cells(line)
             display, surname, given = _split_name(_slice(line, _NAME))
@@ -125,8 +174,14 @@ def parse_trf(content: str) -> dict[str, Any]:
         "start_date": header.get("start_date", ""),
         "end_date": header.get("end_date", ""),
         "time_control": header.get("time_control", ""),
-        "rounds_count": rounds_count,
+        "rounds_count": max(rounds_count, len(round_dates)),
         "players": players,
+        # Tudo abaixo era LIDO e jogado fora (FED-04): o arquivo trazia arbitro,
+        # calendario e equipes, e a importacao criava um torneio sem nada disso.
+        "chief_arbiter": header.get("chief_arbiter", ""),
+        "deputy_arbiters": deputies,
+        "round_dates": round_dates,
+        "teams": teams,
     }
 
 
@@ -149,14 +204,25 @@ def _decode_game(color: str, code: str) -> str:
     return code_from_trf_letter(letra, is_white=color.lower() != "b")
 
 
+# Letra do TRF para a rodada sem adversário -> resultado gravado no Albericus.
+# `U` (bye alocado pelo pareamento) e `F` (bye de ponto inteiro concedido) eram a
+# MESMA coisa na importação, e viravam `F`: um TRF do Swiss-Manager com `U`
+# inflava a pontuação em todo torneio cujo `bye_points` não fosse 1,0, porque o
+# `F` vale ponto cheio por definição e o `U` vale o que o regulamento disser.
+# `Z` (ausência conhecida, zero ponto) era simplesmente DESCARTADO — a rodada
+# sumia do histórico do jogador, e o TRF exportado depois não a trazia de volta.
+BYE_RESULTS: dict[str, str] = {
+    "U": "BYE",  # alocado: pontua por `bye_points`, como o bye do próprio motor
+    "F": "F",    # ponto inteiro
+    "H": "H",    # meio ponto
+    "Z": "Z",    # zero ponto, mas REGISTRADO
+    "-": "Z",    # ausência sem adversário: mesma coisa
+}
+
+
 def _trf_bye_result(code: str) -> str:
-    """Bye alocado/solicitado -> resultado Albericus. 'Z'/'-'/vazio = não pareado."""
-    upper = (code or "").upper()
-    if upper in ("U", "F"):
-        return "F"
-    if upper == "H":
-        return "H"
-    return ""
+    """Rodada sem adversário -> resultado Albericus. Vazio = não pareado."""
+    return BYE_RESULTS.get((code or "").strip().upper(), "")
 
 
 def build_trf_rounds(
@@ -165,9 +231,15 @@ def build_trf_rounds(
 ) -> list[tuple[int, list[dict[str, Any]]]]:
     """Reconstrói rodadas (pareamentos + resultados) a partir das células TRF.
 
-    Devolve (numero_da_rodada, pareamentos) apenas para rodadas com ao menos um
-    jogo/bye reconhecido. Cada jogo é criado uma única vez (deduplicado pelos
-    dois jogadores). Códigos 'Z'/'-' (não pareado) não viram pareamento.
+    Devolve (numero_da_rodada, pareamentos) apenas para rodadas que tiveram
+    JOGO — pelo menos uma mesa com dois jogadores. Cada jogo é criado uma única
+    vez (deduplicado pelos dois jogadores).
+
+    A exigência do jogo é o que separa rodada JOGADA de declaração de ausência
+    (FED-04): num TRF de torneio em andamento, um `0000 - Z` na próxima rodada
+    quer dizer "este jogador não será pareado nela", e não "esta rodada
+    aconteceu". Tratar a segunda como a primeira criava uma rodada fantasma e
+    empurrava o torneio importado uma rodada à frente.
     """
     by_rank = {int(player["start_rank"]): player for player in players}
     max_rounds = max((len(player["rounds"]) for player in players), default=0)
@@ -232,6 +304,6 @@ def build_trf_rounds(
             processed.add(rank)
             processed.add(opponent_rank)
 
-        if pairings:
+        if any(not pairing["is_bye"] for pairing in pairings):
             rounds.append((round_index, pairings))
     return rounds

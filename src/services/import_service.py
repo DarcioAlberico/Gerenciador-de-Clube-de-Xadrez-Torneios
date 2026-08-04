@@ -329,8 +329,9 @@ class ImportService:
     def import_trf(self, file_path: str | Path) -> dict[str, Any]:
         """Cria um novo torneio a partir de um arquivo TRF (FIDE/Swiss-Manager).
 
-        Importa cabecalho + jogadores. A reconstrucao de rodadas/resultados a
-        partir das celulas de rodada fica como evolucao futura.
+        Importa cabecalho, arbitros, calendario, jogadores, rodadas e equipes
+        (FED-04). O que o arquivo nao tem — clube, categoria, inscricao — fica
+        vazio; o round-trip promete o que o TRF carrega, e nao mais do que isso.
         """
         path = Path(file_path)
         try:
@@ -352,10 +353,30 @@ class ImportService:
             start_date=parsed["start_date"],
             end_date=parsed["end_date"],
         )
-        if parsed["federation"]:
+        # Federacao, arbitros e calendario vinham no arquivo e eram descartados
+        # (FED-04): o torneio importado nascia sem arbitro e sem datas, e o TRF
+        # que ele exportava depois ja nao era o mesmo arquivo.
+        ajustes = {
+            chave: valor
+            for chave, valor in (
+                ("federation", parsed["federation"]),
+                ("chief_arbiter", parsed.get("chief_arbiter", "")),
+                ("arbiters", "\n".join(parsed.get("deputy_arbiters") or [])),
+            )
+            if valor
+        }
+        if ajustes:
             settings = self.db.get_tournament_settings(tournament_id) or {}
-            settings["federation"] = parsed["federation"]
+            settings.update(ajustes)
             self.db.save_tournament_settings(tournament_id, settings)
+
+        agenda = [
+            {"round_number": numero, "date": data, "time": ""}
+            for numero, data in enumerate(parsed.get("round_dates") or [], start=1)
+            if data
+        ]
+        if agenda:
+            self.db.save_round_schedule(tournament_id, agenda)
 
         rank_to_id: dict[int, int] = {}
         for player in parsed["players"]:
@@ -374,6 +395,7 @@ class ImportService:
             )
             rank_to_id[int(player["start_rank"])] = player_id
 
+        equipes = self._create_imported_teams(tournament_id, parsed.get("teams") or [], rank_to_id)
         rounds = build_trf_rounds(parsed["players"], rank_to_id)
         for round_number, pairings in rounds:
             round_id = self.db.create_round_with_pairings(
@@ -398,7 +420,34 @@ class ImportService:
             "players_imported": len(parsed["players"]),
             "rounds_imported": len(rounds),
             "rounds_count": rounds_count,
+            "teams_imported": equipes,
         }
+
+    def _create_imported_teams(
+        self,
+        tournament_id: int,
+        teams: list[dict[str, Any]],
+        rank_to_id: dict[int, int],
+    ) -> int:
+        """Recria a secao de equipes do TRF (registros 013/310) — FED-04.
+
+        O tabuleiro sai da ORDEM em que os start-ranks aparecem na linha, que e
+        como o TRF declara a ordem de forca da equipe. Jogador que a linha cita e
+        o arquivo nao traz e ignorado: melhor uma equipe menor do que uma equipe
+        com um jogador inventado.
+        """
+        criadas = 0
+        for equipe in teams:
+            membros = [
+                rank_to_id[int(rank)] for rank in equipe.get("start_ranks", []) if int(rank) in rank_to_id
+            ]
+            if not membros:
+                continue
+            team_id = self.db.create_team(tournament_id, str(equipe["name"]))
+            for tabuleiro, player_id in enumerate(membros, start=1):
+                self.db.add_player_to_team(team_id, player_id, board_number=tabuleiro)
+            criadas += 1
+        return criadas
 
     def import_players(self, tournament_id: int, file_path: str | Path) -> dict[str, Any]:
         path = Path(file_path)

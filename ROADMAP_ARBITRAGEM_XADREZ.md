@@ -481,7 +481,7 @@ Entregas, em ordem de prioridade:
 5. **Submissao federativa (Sprint 11)**: correcao do `birth_date` da lista
    FIDE (`FED-05` — ENTREGUE em 2026-08-03), TRF16 com `XXR`/`XXC`/`XXA`,
    Event-ID e modo submissao
-   (`FED-03` — ENTREGUE em 2026-08-03), round-trip TRF fiel (`FED-04`), normas
+   (`FED-03` — ENTREGUE em 2026-08-03), round-trip TRF fiel (`FED-04` — ENTREGUE em 2026-08-03), normas
    FIDE corretas com
    certificado IT3 (`FED-06`), rating com K/piso/ritmo corretos e relatorio
    CBX real (`FED-07`).
@@ -539,7 +539,8 @@ colunas, TRF25) foram entregues nas fases 0 a 11 e nos EPICs A a E da
   2026-08-03 — `XXR`/`XXC` sim; `XXA` NAO, porque quebra o parser da
   implementacao de referencia (a aceleracao sai no 250). Event-ID como `XXE`,
   modo submissao bloqueante e celulas iguais as do TRF25.
-- Round-trip TRF fiel (`FED-04`).
+- ~~Round-trip TRF fiel (`FED-04`).~~ FEITO 2026-08-03 — `U` deixou de ser `F`,
+  `Z` preservado, e arbitro/calendario/equipes deixaram de ser descartados.
 - Normas FIDE corretas + certificado IT3 (`FED-06`).
 - Premiacao conforme edital (Feminino automatico, multi-categoria) (`ORG-02`).
 

@@ -1990,7 +1990,34 @@ Criterios de aceite:
 
 #### FED-04 - Round-trip TRF fiel
 
-Status: pendente.
+Status: FEITO (2026-08-03).
+
+Como ficou:
+
+- **`U` deixou de ser `F`**. O bye ALOCADO pelo pareamento (`U`) vale o que o
+  regulamento do torneio disser (`bye_points`); o `F` vale ponto inteiro por
+  definicao. Trata-los como a mesma coisa inflava a pontuacao de todo TRF de
+  Swiss-Manager importado num torneio cujo `bye_points` nao fosse 1,0;
+- **`Z` preservado**: a ausencia conhecida virava NADA, e a rodada sumia do
+  historico do jogador — o TRF exportado depois ja nao dizia o que o arquivo
+  original dizia. Agora ela volta como bye de zero ponto, que e o que ela e;
+- **`W`/`D`/`L` ja voltavam** desde a ARB-02 (o registro de resultados fez a
+  decodificacao virar tabela unica); o item da auditoria estava resolvido antes
+  desta tarefa;
+- **arbitro, calendario e equipes** eram lidos e jogados fora. O 102/112 vira
+  arbitro-chefe e adjuntos, o 132 vira o calendario de rodadas, e o 013/310 vira
+  equipe de verdade, com o tabuleiro saindo da ORDEM dos start-ranks na linha
+  (que e como o TRF declara a ordem de forca). Equipe cujos jogadores o arquivo
+  nao traz e ignorada — melhor equipe menor do que jogador inventado;
+- **round-trip com teste**: exportar -> importar -> exportar devolve as mesmas
+  celulas de rodada, jogador por jogador;
+- **rodada sem jogo nao e rodada jogada**: preservar o `Z` fez aparecer um efeito
+  colateral que a fixture do bbpPairings pegou na hora. Num TRF de torneio EM
+  ANDAMENTO, um `0000 - Z` na proxima rodada quer dizer "este jogador nao sera
+  pareado nela" — e uma declaracao, e nao um resultado. Tratar aquilo como rodada
+  jogada criava uma rodada fantasma e empurrava o torneio importado uma rodada a
+  frente. A regra passou a ser: so e rodada quem teve pelo menos uma mesa com
+  dois jogadores.
 
 Problema:
 
@@ -2010,9 +2037,9 @@ Escopo:
 
 Criterios de aceite:
 
-- [ ] TRF do proprio Albericus reimporta sem perda de byes/ausencias;
-- [ ] TRF do Swiss-Manager com bye `U` pontua conforme configuracao;
-- [ ] round-trip coberto por teste automatizado.
+- [x] TRF do proprio Albericus reimporta sem perda de byes/ausencias;
+- [x] TRF do Swiss-Manager com bye `U` pontua conforme configuracao;
+- [x] round-trip coberto por teste automatizado.
 
 #### FED-05 - Lista FIDE: data de nascimento e robustez do download
 
@@ -2380,7 +2407,7 @@ Entregas:
 
 1. [x] `FED-05` Lista FIDE: data de nascimento e robustez do download.
 2. [x] `FED-03` TRF16 de campo completo.
-3. [ ] `FED-04` Round-trip TRF fiel.
+3. [x] `FED-04` Round-trip TRF fiel.
 4. [ ] `FED-06` Normas FIDE corretas e certificados IT.
 5. [ ] `FED-07` Rating: K correto, piso e ritmo.
 
