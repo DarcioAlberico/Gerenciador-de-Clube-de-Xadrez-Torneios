@@ -230,8 +230,12 @@ class FederationExportTest(CoreServiceTestCase):
         self.assertIn("052 2026/05/24", content)
         self.assertIn("062 2", content)
         self.assertIn("072 2", content)
-        self.assertIn("082 0", content)
-        self.assertIn("092 Individual: Suico (FIDE-rated)", content)
+        # `082` e o numero de EQUIPES e nao sai em torneio individual (FED-03):
+        # "082 0" descrevia um torneio por equipes com zero equipes.
+        self.assertNotIn("082 ", content)
+        # 092 no vocabulario das federacoes, e nao no texto proprietario antigo
+        # ("Individual: Suico (Standard)").
+        self.assertIn("092 Individual: Swiss-System (FIDE-rated)", content)
         self.assertIn("102 Arbitro Chefe", content)
         self.assertIn("112 Adjunto Um", content)
         self.assertIn("122 90 min + 30 sec", content)

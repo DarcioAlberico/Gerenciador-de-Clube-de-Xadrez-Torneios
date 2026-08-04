@@ -19,12 +19,21 @@ from urllib.request import Request, urlopen
 from src.core.database import BASE_DIR, DEFAULT_CERTIFICATE_TEMPLATES, Database
 from src.services.access_export import access_driver_available, write_accdb, write_csv_bundle
 from src.services.constants import *
+from src.services.federation_exporters.trf16_records import (
+    arbiter_text as _trf16_arbiter_text,
+    tournament_type_text as _trf16_tournament_type_text,
+)
 from src.services.fide_norms import build_norm_report
 from src.services.fide_rating import build_fide_report_rows
 from src.services.list_layouts import STANDINGS_COLUMNS, resolve_column_specs, resolve_columns
 from src.services.pairing.tiebreak_engine import legacy_engine_note
 from src.services.prizes import PRIZE_KINDS, PRIZE_POLICIES, allocate_prizes
 from src.services.text_ascii import headers_to_ascii
+from src.services.trf_layout import (
+    CELL_RESULT as TRF_CELL_RESULT,
+    ROUND_CELLS_START as TRF_CELLS_START,
+    ROUND_CELL_WIDTH as TRF_CELL_WIDTH,
+)
 from src.services.trf_import import build_trf_rounds, parse_trf
 
 if TYPE_CHECKING:
@@ -420,8 +429,17 @@ class FederationReportsMixin:
     def export_trf(self, tournament_id: int, file_path: str | Path) -> list[str]:
         return self.export_chess_results_trf(tournament_id, file_path)
 
-    def export_chess_results_trf(self, tournament_id: int, file_path: str | Path) -> list[str]:
-        return self._federation_exporter("trf16").export(tournament_id, file_path)
+    def export_chess_results_trf(
+        self,
+        tournament_id: int,
+        file_path: str | Path,
+        *,
+        submission: bool = False,
+    ) -> list[str]:
+        """TRF16. `submission=True` recusa o arquivo com pendencia critica (FED-03)."""
+        return self._federation_exporter("trf16").export(
+            tournament_id, file_path, submission=submission
+        )
 
     def export_chess_results_trf25(self, tournament_id: int, file_path: str | Path) -> list[str]:
         return self._federation_exporter("trf25").export(tournament_id, file_path)
@@ -583,7 +601,11 @@ class FederationReportsMixin:
             return "U"
         letras = trf_letters(result)
         if letras is None:
-            return "Z"
+            # Mesa PAREADA e ainda sem resultado sai em BRANCO, e nao como `Z`
+            # (FED-03): `Z` e "ausencia conhecida, zero ponto" — dizer isso de um
+            # jogo que ainda vai acontecer e mentir sobre o torneio. O modo
+            # submissao recusa o arquivo com celula em branco.
+            return " " if not str(result or "").strip() else "Z"
         return letras[0] if is_white else letras[1]
 
     @staticmethod
@@ -591,12 +613,43 @@ class FederationReportsMixin:
         return f"{code} {FederationReportsMixin._trf_clean(value)}\r\n"
 
     def _trf_tournament_type(self, tournament: Mapping[str, Any], settings: Mapping[str, Any]) -> str:
-        profile = str(settings.get("tournament_profile") or "").strip()
-        suffix = "FIDE-rated" if profile == "fide" else "Standard"
-        system = str(tournament.get("system") or "Suico").strip()
-        if tournament.get("competition_type") == "team":
-            return f"Team: {system} ({suffix})"
-        return f"Individual: {system} ({suffix})"
+        """Registro 092 no vocabulario das federacoes (FED-03).
+
+        Era texto proprietario ("Individual: Suico (Standard)"), montado com o
+        campo `system` do torneio — que o usuario escreve a mao. Quem recebe o
+        arquivo espera os termos do Swiss-Manager/Chess-Results.
+        """
+        return _trf16_tournament_type_text(
+            str(tournament.get("competition_type") or "individual"),
+            str(settings.get("pairing_method") or "swiss"),
+            fide_rated=str(settings.get("tournament_profile") or "").strip() == "fide",
+        )
+
+    def _trf_chief_arbiter_text(self, tournament_id: int, settings: Mapping[str, Any]) -> str:
+        """Arbitro principal com o FIDE ID, quando o cadastro tem (FED-03)."""
+        nome = self._trf_chief_arbiter(tournament_id, settings)
+        return _trf16_arbiter_text(nome, self._referee_fide_id(tournament_id, nome))
+
+    def _trf_deputy_arbiter_texts(self, tournament_id: int, settings: Mapping[str, Any]) -> list[str]:
+        return [
+            _trf16_arbiter_text(nome, self._referee_fide_id(tournament_id, nome))
+            for nome in self._trf_deputy_arbiters(tournament_id, settings)
+        ]
+
+    def _referee_fide_id(self, tournament_id: int, name: str) -> str:
+        """FIDE ID do arbitro pelo nome; `""` quando ele nao esta no cadastro.
+
+        Os arbitros vem de dois lugares — a lista de arbitros do torneio (que tem
+        FIDE ID) e os campos de texto das configuracoes (que nao tem). Casar pelo
+        nome e o unico vinculo que existe hoje.
+        """
+        alvo = str(name or "").strip().casefold()
+        if not alvo:
+            return ""
+        for referee in self.db.list_tournament_referees(tournament_id):
+            if str(referee.get("name") or "").strip().casefold() == alvo:
+                return str(referee.get("fide_id") or "").strip()
+        return ""
 
     def _trf_pairings_by_round(
         self,
@@ -731,7 +784,16 @@ class FederationReportsMixin:
         )
         for round_number in range(1, round_count + 1):
             line += self._trf_round_cell(player_id, player_id_to_start_rank, pairings_by_round.get(round_number, []))
-        return f"{line.rstrip()}\r\n"
+        # O `rstrip` nao pode comer a ULTIMA celula: quando ela e uma mesa ainda
+        # sem resultado (`   2 w  `), o corte leva junto a posicao do resultado e
+        # a celula some para quem le por coluna — inclusive para o motor FIDE
+        # (FED-03). Por isso a linha e cortada e depois recomposta ate o fim do
+        # campo de resultado da ultima rodada.
+        line = line.rstrip()
+        if round_count:
+            minimo = TRF_CELLS_START + (round_count - 1) * TRF_CELL_WIDTH + TRF_CELL_RESULT + 1
+            line = line.ljust(minimo)
+        return f"{line}\r\n"
 
     def _trf_round_cell(
         self,

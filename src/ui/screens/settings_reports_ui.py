@@ -300,6 +300,9 @@ class SettingsReportsMixin:
             "JSON publico",
             "Access (banco)",
             "Chess-Results (TRF16)",
+            # Mesmo arquivo, com as validacoes criticas BLOQUEANDO (FED-03): e o
+            # que se envia para a federacao, e nao o que se usa durante o evento.
+            "Chess-Results (TRF16 submissao)",
             "TRF FIDE",
             "Pendencias TRF",
             "PGN (Partidas)",
@@ -352,7 +355,7 @@ class SettingsReportsMixin:
             format_option.configure(values=formats)
             if format_option.get() not in formats:
                 format_option.set(formats[0])
-            if report_option.get() in ("Site HTML", "JSON publico", "Access (banco)", "Podio (poster)", "Chess-Results (TRF16)", "TRF FIDE", "PGN (Partidas)"):
+            if report_option.get() in ("Site HTML", "JSON publico", "Access (banco)", "Podio (poster)", "Chess-Results (TRF16)", "Chess-Results (TRF16 submissao)", "TRF FIDE", "PGN (Partidas)"):
                 format_option.configure(state="disabled")
             else:
                 format_option.configure(state="normal")
@@ -386,6 +389,7 @@ class SettingsReportsMixin:
                 "Escalacoes equipes": f"{safe_name}_escalacoes_equipes",
                 "JSON publico": f"{safe_name}_publico",
                 "Chess-Results (TRF16)": f"{safe_name}_chess_results_trf16",
+                "Chess-Results (TRF16 submissao)": f"{safe_name}_trf16_submissao",
                 "TRF FIDE": f"{safe_name}_fide",
                 "Pendencias TRF": f"{safe_name}_pendencias_trf",
                 "PGN (Partidas)": f"{safe_name}_partidas",
@@ -428,7 +432,7 @@ class SettingsReportsMixin:
             try:
                 report = report_option.get()
                 extension = format_option.get()
-                if report in ("Chess-Results (TRF16)", "TRF FIDE"):
+                if report in ("Chess-Results (TRF16)", "Chess-Results (TRF16 submissao)", "TRF FIDE"):
                     extension = "trf"
                 elif report == "JSON publico":
                     extension = "json"
@@ -548,6 +552,10 @@ class SettingsReportsMixin:
                         self.export_service.export_public_json(tournament_id, path)
                     elif report == "Chess-Results (TRF16)":
                         return self.export_service.export_chess_results_trf(tournament_id, path)
+                    elif report == "Chess-Results (TRF16 submissao)":
+                        return self.export_service.export_chess_results_trf(
+                            tournament_id, path, submission=True
+                        )
                     elif report == "TRF FIDE":
                         return self.export_service.export_chess_results_trf25(tournament_id, path)
                     elif report == "Pendencias TRF":
