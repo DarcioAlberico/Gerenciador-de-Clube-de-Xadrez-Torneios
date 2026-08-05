@@ -94,6 +94,11 @@ from pathlib import Path
 from typing import Any
 
 from src.services.constants import RESULT_POINTS, AppError, player_pairing_name
+from src.services.starting_rank import (
+    order_players,
+    trf_starting_rank_method,
+    unsupported_order_warning,
+)
 from src.services.federation_exporters.base import FederationExportFormat
 from src.services.federation_exporters.trf16 import TRF16Exporter
 from src.services.federation_exporters.trf25_records import (
@@ -173,13 +178,10 @@ class TRF25Exporter(TRF16Exporter):
         order_warning = self._starting_rank_order_warning(settings)
         if order_warning:
             warnings.append(order_warning)
-        players = sorted(
+        players = order_players(
             self.db.list_players(tournament_id, active_only=False),
-            key=lambda player: (
-                -service._trf_rating(player),
-                player_pairing_name(player).casefold(),
-                int(player.get("id") or 0),
-            ),
+            settings.get("initial_order"),
+            fide_rating=service._trf_rating,
         )
         rounds = sorted(self.db.list_rounds(tournament_id), key=lambda r: r["number"])
         schedule = {
@@ -687,28 +689,27 @@ class TRF25Exporter(TRF16Exporter):
         """Registro 172 — obrigatório quando há registros NRS (§1.2). Emite só
         sob a mesma condição do `_national_rating_records`: federação válida e ao
         menos um jogador com rating nacional. O starting-rank do TRF é sempre
-        montado pela ordem do rating FIDE (ver `export`), independente do
-        `initial_order` do torneio, então o método declarado é `FIDE`; quando o
-        torneio usa outra ordem inicial, o `export` emite um aviso."""
+        montado pela ordem inicial DECLARADA no torneio (ver `starting_rank`),
+        então o método declarado aqui e a ordem usada no arquivo são a mesma
+        coisa. Ordem cujo código a spec não define sai como `OTHER`, que é o
+        código que a própria spec oferece para isso."""
         federation = str(settings.get("federation") or "").strip()
         if not self.export_service._trf_valid_federation_code(federation):
             return None
         if not any(int(p.get("national_rating") or 0) > 0 for p in players):
             return None
-        return record_172(federation, "FIDE")
+        return record_172(federation, trf_starting_rank_method(settings.get("initial_order")))
 
     @staticmethod
     def _starting_rank_order_warning(settings: dict[str, Any]) -> str | None:
-        """Aviso quando a ordem inicial do torneio não é o rating FIDE: o SNo do
-        TRF segue o rating FIDE e pode divergir do seeding usado no pareamento."""
-        initial_order = str(settings.get("initial_order") or "rating").strip()
-        if initial_order in ("rating", "international_rating"):
-            return None
-        return (
-            f"Ordem inicial '{initial_order}' nao e o rating FIDE: o numero de "
-            "ordem (SNo) do TRF segue o rating FIDE e pode nao corresponder ao "
-            "seeding usado no pareamento (o registro 172 declara o metodo FIDE)."
-        )
+        """Aviso quando a ordem inicial nao tem como ser obedecida.
+
+        O aviso antigo dizia que o SNo do TRF seguia o rating FIDE e podia
+        divergir do seeding — e era verdade. Agora os dois saem da mesma fonte
+        (`services/starting_rank.py`), entao o unico caso que ainda merece aviso
+        e a ordem `manual`, que nao tem onde ser gravada.
+        """
+        return unsupported_order_warning(settings.get("initial_order"))
 
     def _national_rating_records(
         self,

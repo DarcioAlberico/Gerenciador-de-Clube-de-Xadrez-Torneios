@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Sequence
 
 from src.services.constants import AppError, player_pairing_name
+from src.services.starting_rank import order_players
 from src.services.export_service import ExportService
 from src.services.federation_exporters.trf16 import TRF16Exporter
 from src.services.pairing.gacrux_trf import acceleration_records, reconcile_scores
@@ -52,14 +53,19 @@ class GacruxEngine:
         export_service = ExportService(self.db, pairing_service)
         exporter = TRF16Exporter(export_service)
 
-        # Get all players for rank mapping
-        all_players = sorted(
+        # Get all players for rank mapping.
+        #
+        # A ordem TEM de ser a mesma que o TRF16Exporter escreve no arquivo: o
+        # motor devolve pares por NUMERO DE ORDEM, e um mapa fora de sincronia
+        # com o arquivo devolveria os jogadores trocados. Por isso as duas
+        # pontas saem de `services/starting_rank.py`, que tambem e quem passou a
+        # respeitar o `initial_order` do torneio — antes esta ordenacao era pelo
+        # rating FIDE e a ordem inicial declarada nao valia no motor padrao.
+        settings = self.db.get_tournament_settings(tournament_id) or {}
+        all_players = order_players(
             self.db.list_players(tournament_id, active_only=False),
-            key=lambda player: (
-                -export_service._trf_rating(player),
-                player_pairing_name(player).casefold(),
-                int(player.get("id") or 0),
-            ),
+            settings.get("initial_order"),
+            fide_rating=export_service._trf_rating,
         )
         
         # Map FIDE TRF 1-based rank back to the player ID

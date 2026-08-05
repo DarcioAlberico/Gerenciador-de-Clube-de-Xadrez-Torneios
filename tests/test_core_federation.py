@@ -540,23 +540,32 @@ class FederationExportTest(CoreServiceTestCase):
         self.assertEqual(line[22:26].strip(), "1")  # primeiro jogador (rank 1)
         self.assertEqual(line[27:31].strip(), "4")  # último jogador (N//2 = 4)
 
-    def test_trf25_warns_when_initial_order_not_fide(self) -> None:
+    def test_trf25_so_avisa_ordem_que_nao_tem_como_obedecer(self) -> None:
+        """O aviso de divergencia do SNo deixou de existir — e de ser verdade.
+
+        Ele dizia que o SNo do TRF seguia o rating FIDE e podia divergir do
+        seeding do pareamento. Agora os dois saem da mesma fonte
+        (`services/starting_rank.py`), entao ordem nacional NAO gera aviso: o
+        arquivo a obedece. Sobra o `manual`, que nao tem onde ser gravado.
+        """
         from src.services.federation_exporters import TRF25Exporter
 
         self._create_players(4)
         exporter = TRF25Exporter(self.export_service)
         output_path = Path(self.temp_dir.name) / "order.trf"
 
-        def has_sno_warning(messages: list[str]) -> bool:
-            return any("numero de ordem (SNo)" in message for message in messages)
+        def has_order_warning(messages: list[str]) -> bool:
+            return any("Ordem inicial" in message for message in messages)
 
-        # Ordem inicial = rating principal (FIDE-compativel): sem aviso de SNo.
-        self.db.save_tournament_settings(self.tournament_id, {"initial_order": "rating"})
-        self.assertFalse(has_sno_warning(exporter.export(self.tournament_id, output_path)))
+        for ordem in ("rating", "national_rating", "international_then_national"):
+            with self.subTest(ordem=ordem):
+                self.db.save_tournament_settings(self.tournament_id, {"initial_order": ordem})
+                self.assertFalse(
+                    has_order_warning(exporter.export(self.tournament_id, output_path))
+                )
 
-        # Ordem inicial nacional: avisa que o SNo do TRF pode divergir do seeding.
-        self.db.save_tournament_settings(self.tournament_id, {"initial_order": "national_rating"})
-        self.assertTrue(has_sno_warning(exporter.export(self.tournament_id, output_path)))
+        self.db.save_tournament_settings(self.tournament_id, {"initial_order": "manual"})
+        self.assertTrue(has_order_warning(exporter.export(self.tournament_id, output_path)))
 
     def test_trf25_802_marks_full_match_forfeit(self) -> None:
         from src.services.federation_exporters import TRF25Exporter
