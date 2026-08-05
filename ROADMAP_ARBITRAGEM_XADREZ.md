@@ -36,10 +36,46 @@ homologado FIDE) como padrao de emparceiramento (`gacrux_swiss`) e de
 desempates (`tiebreak_engine = gacrux`, com adversario virtual e regras FIDE
 por data de vigencia), mantendo o motor proprio como fallback.
 
-O backlog prioritario atual vem da auditoria arbitral de 2026-07-29 (Fase 12
-abaixo): conformidade de desempates e classificacao, fluxo arbitral de salao,
-correcoes nos motores secundarios e submissao federativa. O detalhamento
-executivo esta nos EPICs F a J de `ESPEC_PAINEL_ARBITRO.md`.
+### Fase 12 CONCLUIDA (2026-08-04)
+
+A auditoria arbitral de 2026-07-29 virou seis sprints (7 a 12), todas
+entregues. Schema atual: **v55**. Suite: **1792 testes**.
+
+O que mudou de natureza — e nao so de funcionalidade — nestas sprints: o que
+antes era **codigo** virou **dado**, e o que era **silencio** virou **aviso**.
+
+- **Regulamento como dado.** Os limiares de norma do Handbook B.01
+  (`services/norms`), o regulamento de rating por base e ritmo
+  (`services/rating`) e as categorias do edital (`services/categories`) sao
+  registros, nao `if`s. Trocar um limiar deixou de ser reescrever o calculo.
+- **Nada mais some calado.** Reduzir rodadas com agenda pede confirmacao e
+  audita; mudanca estrutural depois da rodada 1 exige motivo e audita; falta de
+  rating do ritmo cai no standard AVISANDO; motor de desempate que cai avisa.
+- **Configuracao honesta.** Seis flags que nao faziam nada sairam da tela, e um
+  teste varre `src/` para reprovar a proxima.
+- **Erros de conformidade corrigidos**, cada um com fonte citada: titulados por
+  nivel e piso de rating ajustado nas normas (B.01 1.4), K de novato e sub-18
+  ate o fim do ano no rating (B.02), e o "Sistema Hort" da premiacao — que
+  combinava geral com categoria e **nao era** o Sistema Hort (o Hort reparte
+  entre empatados).
+
+O detalhamento executivo, item a item e com as armadilhas anotadas, esta nos
+EPICs F a J de `ESPEC_PAINEL_ARBITRO.md`.
+
+### O que resta
+
+Nao ha item de conformidade pendente por decisao propria. O que sobrou depende
+de **fonte externa** e esta listado em "Baixa prioridade inicial" e na secao
+"Fora de Escopo" da `ESPEC_PAINEL_ARBITRO.md`:
+
+- **regulamento de rating da CBX** — nao publicado em formato legivel; o perfil
+  ja e editavel na tela e sai marcado como NAO conferido;
+- **arquivo de submissao da CBX** — formato nao publicado;
+- **aceleracao de Baku** — formula nao publicada pela FIDE;
+- relogio de hardware, app nativo e submissao automatica a federacao.
+
+A proxima entrega deve partir de um **teste piloto presencial** ou de um
+requisito novo trazido por torneio real.
 
 ## Principios de implementacao
 
@@ -503,10 +539,11 @@ Criterios de aceite:
 
 ## Backlog priorizado
 
-Atualizado em 2026-07-29. Os itens do backlog original (previa, painel,
-snapshots, componentes de desempate, QR, portal, Google Forms, mapeamento de
-colunas, TRF25) foram entregues nas fases 0 a 11 e nos EPICs A a E da
-`ESPEC_PAINEL_ARBITRO.md`. O backlog atual deriva da Fase 12.
+Atualizado em 2026-08-04 — **todos os itens da Fase 12 estao entregues**. Os
+itens do backlog original (previa, painel, snapshots, componentes de desempate,
+QR, portal, Google Forms, mapeamento de colunas, TRF25) foram entregues nas
+fases 0 a 11 e nos EPICs A a E da `ESPEC_PAINEL_ARBITRO.md`. O que segue riscado
+abaixo e registro; o que sobra sem risco depende de fonte externa.
 
 ### Muito alto impacto / baixa complexidade
 
@@ -576,15 +613,36 @@ colunas, TRF25) foram entregues nas fases 0 a 11 e nos EPICs A a E da
   `90'+30"` e a forma compacta da FIDE entendidas pelo mesmo interpretador do
   TRF25, agenda com local/ritmo/folga por rodada, confirmacao ao reduzir
   rodadas e tolerancia de atraso no painel e na sumula.
+- ~~Configuracao honesta: flags mortas e bloqueios pos-R1 (`ORG-04`).~~ FEITO
+  2026-08-04 — seis opcoes inertes fora da tela (com teste que varre `src/` para
+  pegar a proxima), mudanca estrutural pos-R1 com motivo e auditoria, e
+  `archived` finalmente arquivando.
+
+### Bloqueado por fonte externa
+
+Nao iniciar sem o documento ou o equipamento; o codigo ja esta preparado onde
+fazia sentido preparar.
+
+- **Regulamento de rating da CBX** — o site expoe so a busca de rating e o
+  Caderno de Regulamento de Torneios nao traz a formula. O perfil de rating ja e
+  editavel em `Config. torneio -> Oficial` e sai marcado como NAO conferido.
+- **Arquivo de submissao da CBX** — formato aceito nao publicado.
+- **Aceleracao de Baku** — formula nao publicada pela FIDE; o exportador emite
+  aviso (`BAKU_NOT_IMPLEMENTED`).
+- **Submissao automatica para federacao** — sem API publica utilizavel.
+- **Relogio de hardware** — a interface de plugins existe; falta equipamento
+  alvo.
 
 ### Baixa prioridade inicial
 
-- Integracao com relogios (hardware).
 - App nativo Android/iOS.
-- Submissao automatica para federacao.
 - CRDT completo.
 - IA para arbitragem.
-- Aceleracao de Baku (aguardando formula publicada pela FIDE).
+- Alocacao automatica de premio por tabuleiro em equipes (depende de uma
+  classificacao por tabuleiro que o programa nao calcula).
+- `tournaments.system`: legado dessincronizado de `pairing_method`. Aparece em
+  relatorio, site publico e TRF — trocar a fonte desse texto e mudanca de
+  conteudo publicado, e merece item proprio.
 
 ## Primeiras sprints recomendadas
 

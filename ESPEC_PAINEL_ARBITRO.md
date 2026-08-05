@@ -2648,7 +2648,7 @@ Entregas:
 
 **Sprint 10 CONCLUIDA (2026-08-03).**
 
-### Sprint 11 - Submissao federativa
+### Sprint 11 - Submissao federativa (CONCLUIDA em 2026-08-04)
 
 Objetivo: arquivo enviavel sem retrabalho e normas confiaveis.
 
@@ -2661,7 +2661,7 @@ Entregas:
 5. [x] `FED-07` Rating: K correto, piso e ritmo (arquivo de submissao CBX
    aguarda o regulamento).
 
-### Sprint 12 - Organizacao do torneio
+### Sprint 12 - Organizacao do torneio (CONCLUIDA em 2026-08-04)
 
 Objetivo: edital real configuravel sem texto livre nem contorno manual.
 
@@ -2702,36 +2702,41 @@ Uma entrega so esta pronta quando:
 
 ## 10. Ordem Recomendada para Inicio
 
-Roadmap atual concluido ate `FED-02`, mais os aprofundamentos de 2026-06-02
-(`UX-10`, `UX-11`, `DOC-05`, `DOC-06` — secao 4.3; `DOC-07`, `DOC-08`, `UX-12`,
-`DOC-09` — secao 4.4; `DOC-10`, `DOC-11`, `UX-13` — secao 4.5).
+**Atualizado em 2026-08-04: as Sprints 1 a 12 estao TODAS concluidas.** Os EPICs
+A a J desta spec foram entregues; a auditoria arbitral de 2026-07-29, que gerou
+os EPICs F a J, esta integralmente coberta.
 
-Motivo:
+Historico da ordem executada:
 
-- o painel cobre papel, publicacao, classificacao, operacao rapida, equipes e
-  conferencia de dados oficiais;
-- a operacionalizacao foi consolidada no guia imprimivel
-  `docs/Manual_Operacional_Arbitragem.pdf`;
-- o ensaio automatizado reproduzivel foi registrado em
-  `docs/PILOTO_OPERACIONAL_BASELINE.md`;
-- a proxima entrega deve partir de um teste piloto presencial e de um novo
-  requisito operacional priorizado.
+1. **Sprints 1-6** (papel, previa, painel, desempates explicaveis, QR,
+   inscricoes) — entregues ate 2026-06-03.
+2. **Sprint 7 (bloqueantes)** — `TBK-01`, `TBK-02`, `ARB-01`, `PAR-04` parcial —
+   2026-07-30.
+3. **Sprint 8 (desempates conformes)** — `TBK-03`, `TBK-04`, `TBK-05` —
+   2026-07-30/31.
+4. **Sprint 9 (fluxo de salao)** — `ARB-02`, `ARB-04`, `ARB-05`, `ARB-03` —
+   2026-07-31.
+5. **Sprint 10 (motores secundarios)** — `PAR-02`, `PAR-01`, `PAR-03`,
+   `PAR-04` — 2026-07-31/08-01.
+6. **Sprint 11 (submissao federativa)** — `FED-05`, `FED-03`, `FED-04`,
+   `FED-06`, `FED-07` — 2026-08-03/04.
+7. **Sprint 12 (organizacao)** — `ORG-01`, `ORG-02`, `ORG-03`, `ORG-04` —
+   2026-08-04.
 
-`EPIC E - Inscricoes e importacao flexivel` (`REG-01` formulario padronizado
-Google Forms e `REG-02` assistente de importacao com mapeamento de colunas) foi
-concluido em 2026-06-03 (secao 5, Sprint 6 da secao 7).
+### O que vem depois
 
-O "novo requisito operacional priorizado" chegou em 2026-07-29 com a auditoria
-arbitral completa dos modulos de gestao de torneio (EPICs F a J na secao 5).
-Ordem recomendada:
+Nao ha item de conformidade pendente por decisao propria. As duas fontes de
+trabalho novo sao:
 
-1. **Sprint 7 (bloqueantes)** — `TBK-01`, `TBK-02` e `ARB-01` corrigem casos em
-   que a classificacao publicada pode estar errada ou mudar sem rastro; nenhum
-   outro trabalho deve passar na frente.
-2. **Sprint 8 (desempates)** — conformidade FIDE do motor proprio e controle
-   real dos criterios pelo arbitro.
-3. **Sprints 9-12** — fluxo de salao, motores secundarios, submissao
-   federativa e organizacao, nesta ordem, salvo demanda de torneio real.
+1. **Teste piloto presencial.** Continua sendo a recomendacao mais forte: o
+   ensaio automatizado (`docs/PILOTO_OPERACIONAL_BASELINE.md`) cobre volume,
+   rede caida e concorrencia, mas nao cobre o salao. Um torneio real produz o
+   proximo backlog melhor do que qualquer auditoria de codigo.
+2. **Documento externo que destrave item bloqueado.** Tres itens estao prontos
+   para receber a fonte: o regulamento de rating da CBX (o perfil ja e editavel
+   e sai marcado como NAO conferido), o formato do arquivo de submissao da CBX e
+   a formula de aceleracao de Baku.
 
-O teste piloto presencial continua recomendado e pode rodar em paralelo ao
-Sprint 7.
+Ficaram registrados como itens proprios, com o motivo, em "Fora de Escopo" e no
+backlog do `ROADMAP_ARBITRAGEM_XADREZ.md`: alocacao automatica de premio por
+tabuleiro em equipes e a remocao do legado `tournaments.system`.
