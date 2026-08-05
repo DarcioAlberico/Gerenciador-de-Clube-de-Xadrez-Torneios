@@ -5,6 +5,36 @@ Gerenciador de clube de xadrez com gerenciador de torneios embutidos. Gerencia C
 
 Aplicativo desktop em Python para Gerenciar Clube/Escolas_Turmas e Torneios de Xadrez.
 
+## Estado atual
+
+Atualizado em **2026-08-04**. Schema do banco **v55**; suite com **1792 testes**
+(gate completo: compilacao, ruff, mypy, convencoes e acentuacao de UI, pytest).
+
+O roadmap de arbitragem esta **concluido**: as fases 0 a 12 do
+[`ROADMAP_ARBITRAGEM_XADREZ.md`](ROADMAP_ARBITRAGEM_XADREZ.md) e os EPICs A a J
+da [`ESPEC_PAINEL_ARBITRO.md`](ESPEC_PAINEL_ARBITRO.md) foram entregues, incluindo
+a auditoria arbitral de 2026-07-29 inteira. O roadmap de paridade com o
+Swiss-Manager ([`ROADMAP_PARIDADE_SWISSMANAGER.md`](ROADMAP_PARIDADE_SWISSMANAGER.md))
+tambem esta fechado.
+
+As entregas mais recentes mudaram a NATUREZA de tres partes do sistema: o que era
+codigo passou a ser dado, e o que era silencio passou a ser aviso.
+
+- **Regulamento como dado.** Limiares de norma (FIDE Handbook B.01), regulamento
+  de rating por base e ritmo (B.02) e categorias do edital sao registros
+  editaveis, nao `if`s no meio do calculo.
+- **Nada some calado.** Reduzir rodadas com agenda pede confirmacao e audita;
+  mudanca estrutural depois da rodada 1 exige motivo; rating de ritmo ausente cai
+  no standard AVISANDO; motor de desempate que cai avisa.
+- **Configuracao honesta.** Opcao visivel que nao fazia nada foi removida — e um
+  teste varre o codigo para reprovar a proxima.
+
+**O que falta depende de fonte externa**, nao de decisao do projeto: o
+regulamento de rating e o formato do arquivo de submissao da CBX (nao
+publicados), a formula de aceleracao de Baku (nao publicada pela FIDE), relogio
+de hardware e app nativo. A proxima entrega deve sair de um **teste piloto
+presencial** ou de um requisito trazido por torneio real.
+
 ## Funcionalidades implementadas
 
 - Cadastro de torneios avulsos, por clube/escola ou por turma.
