@@ -368,10 +368,17 @@ class ClubPagesMixin(ClubMembersMixin):
         class_tree.bind("<<TreeviewSelect>>", on_class_select)
         clear_club_form()
         load_clubs()
-        first_club = self.db.list_clubs(active_only=False)
-        if first_club:
-            selected_club_id["value"] = int(first_club[0]["id"])
-            load_classes(selected_club_id["value"])
+        # Selecionar de VERDADE a primeira unidade, em vez de so apontar o id
+        # interno para ela. Antes o formulario abria em branco enquanto
+        # `selected_club_id` ja apontava para a primeira unidade cadastrada: quem
+        # digitasse uma unidade nova e salvasse sem clicar em "Nova unidade"
+        # SOBRESCREVIA a existente — nome, cidade e contatos trocados, e os
+        # membros vinculados seguindo a unidade renomeada. O toast dizia
+        # "Unidade salva.". Agora o que esta na tela e o que esta selecionado.
+        primeira_linha = club_tree.get_children()
+        if primeira_linha:
+            club_tree.selection_set(primeira_linha[0])
+            on_club_select()
 
     def show_learning_levels(self) -> None:
         self._clear_content()

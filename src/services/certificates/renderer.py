@@ -57,6 +57,7 @@ def render_certificate(surface: DrawingSurface, preset: StylePreset, palette: Pa
     if opts.seal_enabled and preset.seal_shape != "none":
         _draw_seal(surface, preset, palette, zones, content, opts)
     _draw_signatures(surface, preset, palette, zones, content)
+    _draw_footer(surface, preset, palette, zones, content)
     _draw_code(surface, preset, palette, zones, content)
 
 
@@ -217,6 +218,26 @@ def _draw_signatures(surface, preset, palette, zones, content):
         half = 1.9 * CM
         surface.line(cx - half, y, cx + half, y, stroke=palette.ink, line_width=1.0)
         surface.text(cx, y - 0.5 * CM, sig, font=preset.meta_font, size=11, fill=palette.ink, anchor="middle")
+
+
+def _draw_footer(surface, preset, palette, zones, content):
+    """Rodape do modelo (`footer_template`) — local e periodo do evento.
+
+    Ele existia em toda a cadeia menos aqui: a tela oferece o campo, o servico
+    valida, o banco grava e `adapter.build_inputs` renderiza o texto para
+    `content.footer`. So ninguem o DESENHAVA — o desenho vivia na fachada antiga
+    e se perdeu na reforma do pacote. O diploma do modelo semeado "Participacao
+    padrao" (`footer_template = "{local} - {periodo}"`) saia sem dizer onde nem
+    quando o torneio aconteceu.
+
+    Vai abaixo da linha das assinaturas e acima do codigo de verificacao, que e
+    o unico outro texto daquela faixa.
+    """
+    if not content.footer:
+        return
+    y = zones.margin + (1.0 * CM if preset.border_kind == "chess_strip" else 0.5 * CM)
+    surface.text(zones.center_x, y, content.footer,
+                 font=preset.meta_font, size=9, fill=palette.muted, anchor="middle")
 
 
 def _draw_code(surface, preset, palette, zones, content):
