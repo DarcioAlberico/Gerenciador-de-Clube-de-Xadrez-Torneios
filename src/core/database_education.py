@@ -863,6 +863,12 @@ class EducationMixin(_DatabaseInfra):
                 SELECT
                     a.*,
                     m.name AS member_name,
+                    -- O sobrenome ja era usado no ORDER BY desta mesma consulta
+                    -- e nao vinha no SELECT: o certificado de aula emitido a
+                    -- partir da linha de presenca saia com o nome pela metade,
+                    -- enquanto o mesmo aluno SEM presenca lancada (outro ramo,
+                    -- com `SELECT m.*`) saia completo.
+                    m.surname AS surname,
                     m.phone AS member_phone,
                     m.category AS member_category,
                     m.status AS member_status,

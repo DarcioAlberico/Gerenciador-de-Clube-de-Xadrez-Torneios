@@ -1,7 +1,7 @@
 """Modo "imagem com campos" (template_kind = image_overlay).
 
 Desenha a imagem importada cobrindo a página e sobrepõe apenas os dados
-(saudação, nome-herói, texto, assinaturas e código). Sem moldura, banner ou
+(saudação, nome-herói, texto, assinaturas, rodapé e código). Sem moldura, banner ou
 selo gerados — a arte do usuário já traz o design. Posições vindas de
 ``layout.compute_zones`` para casarem com o guia de ``standard_size``.
 """
@@ -38,6 +38,11 @@ def render_overlay(surface: DrawingSurface, palette: Palette, content: Certifica
         if signature:
             surface.text(zones.width * frac, zones.footer_y - 0.3 * CM, signature,
                          font="Times-Italic", size=11, fill=palette.ink, anchor="middle")
+    # O rodape do modelo (local e periodo) tambem sumia aqui, pelo mesmo motivo
+    # do modo gerado: `adapter.build_inputs` o renderiza e ninguem o desenhava.
+    if content.footer:
+        surface.text(cx, zones.margin + 0.5 * CM, content.footer,
+                     font="Times-Italic", size=9, fill=palette.muted, anchor="middle")
     if content.verification_code:
         surface.text(zones.content_right, zones.margin + 0.4 * CM,
                      f"Codigo {content.verification_code}", font="Helvetica", size=8,

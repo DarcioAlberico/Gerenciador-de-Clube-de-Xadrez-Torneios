@@ -55,17 +55,30 @@ class LocalResultServer:
                 return "<!doctype html><html><body><h1>Portal Albericus ativo</h1><p>Nenhum torneio publicado.</p></body></html>"
             return self._export_service.live_portal_html(self._published_tournament_id, mode=self._portal_mode)
 
+        # O `mode` da querystring e ACEITO e IGNORADO de proposito. Estas duas
+        # rotas sao anonimas — o servidor sobe em 0.0.0.0 e qualquer um na rede
+        # do salao as alcanca. Enquanto o modo vinha do parametro, o visitante
+        # promovia a si mesmo com `?mode=privado` e recebia justamente o que o
+        # modo publico existe para esconder: e-mail de contato e comentarios
+        # internos do torneio, FIDE ID e CBX ID de todos os inscritos e o
+        # capitao das equipes. Quem decide o modo e o arbitro, em
+        # `publish_tournament`. O parametro continua na assinatura para que o
+        # link ja divulgado (que carrega `?mode=publico`) nao vire 404.
         @app.get("/portal/{tournament_id}", response_class=HTMLResponse)
         def live_portal(tournament_id: int, mode: str = "") -> str:
             if self._export_service is None:
                 return "<!doctype html><html><body><h1>Portal indisponivel</h1></body></html>"
-            return self._export_service.live_portal_html(tournament_id, mode=mode or self._portal_mode)
+            return self._export_service.live_portal_html(tournament_id, mode=self._portal_mode)
 
         @app.get("/api/tournaments/{tournament_id}/public")
         def public_json(tournament_id: int, mode: str = "") -> JSONResponse:
             if self._export_service is None:
                 return JSONResponse({"error": "portal_not_published"}, status_code=404)
-            return JSONResponse(self._export_service.public_tournament_payload(tournament_id, mode=mode or self._portal_mode))
+            return JSONResponse(
+                self._export_service.public_tournament_payload(
+                    tournament_id, mode=self._portal_mode
+                )
+            )
 
         config = uvicorn.Config(app, host=self.host, port=self.port, log_level="warning")
         self._server = uvicorn.Server(config)
