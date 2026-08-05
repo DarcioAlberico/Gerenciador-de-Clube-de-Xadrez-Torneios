@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from src.services.constants import AppError, FINAL_RESULTS, RESULT_POINTS, player_pairing_name
+from src.services.starting_rank import order_players
 from src.services.results_registry import is_played_result
 from src.services.federation_exporters.base import FederationExportFormat
 from src.services.federation_exporters.trf16_records import (
@@ -56,13 +57,14 @@ class TRF16Exporter:
 
         settings = self.db.get_tournament_settings(tournament_id) or {}
         warnings = self.validate(tournament_id)
-        players = sorted(
+        # A ordem do SNo e a MESMA que o motor de pareamento usa: fonte unica em
+        # `services/starting_rank.py`. Antes cada um montava a sua, ambas pelo
+        # rating FIDE, e a ordem inicial declarada no torneio nao valia em
+        # lugar nenhum.
+        players = order_players(
             self.db.list_players(tournament_id, active_only=False),
-            key=lambda player: (
-                -self.export_service._trf_rating(player),
-                player_pairing_name(player).casefold(),
-                int(player.get("id") or 0),
-            ),
+            settings.get("initial_order"),
+            fide_rating=self.export_service._trf_rating,
         )
         rounds = sorted(self.db.list_rounds(tournament_id), key=lambda round_data: round_data["number"])
         schedule = {
