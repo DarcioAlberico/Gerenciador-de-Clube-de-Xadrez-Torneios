@@ -19,6 +19,7 @@ from urllib.request import Request, urlopen
 from src.core.database import BASE_DIR, DEFAULT_CERTIFICATE_TEMPLATES, Database
 from src.services.access_export import access_driver_available, write_accdb, write_csv_bundle
 from src.services.constants import *
+from src.services.categories import category_names, category_standings
 from src.services.fide_norms import build_norm_report
 from src.services.fide_rating import build_fide_report_rows
 from src.services.list_layouts import STANDINGS_COLUMNS, resolve_column_specs, resolve_columns
@@ -288,15 +289,32 @@ class CertificateService:
         use_category_ranking = by_category or certificate_type == "category_award"
         selected_ids = {int(player_id) for player_id in player_ids} if player_ids is not None else None
         category_filter = str(category or "").strip()
-        category_positions = self._category_positions(standings)
+        # Com uma categoria escolhida, quem participa dela e como ela numera vem
+        # do motor de categorias (ORG-01): o jogador pertence a VARIAS — Sub-12,
+        # Sub-1800 e Feminino sao tres disputas — e o diploma ficou olhando so a
+        # principal. Efeito: a campea do Feminino nao tinha como receber o
+        # diploma dela ("Nenhum jogador encontrado"), e no Top N por categoria
+        # ela era numerada pela faixa etaria.
+        if category_filter:
+            na_categoria = category_standings(standings, category_filter)
+            category_positions = {
+                int(item["player_id"]): int(item["position"]) for item in na_categoria
+            }
+            permitidos: set[int] | None = set(category_positions)
+        else:
+            category_positions = self._category_positions(standings)
+            permitidos = None
+
         recipients = []
         for standing in standings:
-            recipient = self._recipient_payload(tournament, standing, category_positions)
+            recipient = self._recipient_payload(
+                tournament, standing, category_positions, category_label=category_filter
+            )
             if selected_ids is not None:
                 if int(recipient["player_id"]) not in selected_ids:
                     continue
             else:
-                if category_filter and recipient["category"] != category_filter:
+                if permitidos is not None and int(recipient["player_id"]) not in permitidos:
                     continue
                 if use_category_ranking:
                     if top_limit and int(recipient["category_position"]) > top_limit:
@@ -310,13 +328,15 @@ class CertificateService:
         return recipients
 
     def tournament_categories(self, tournament_id: int) -> list[str]:
+        """TODAS as categorias premiaveis do torneio, e nao so as principais.
+
+        O combo de "diploma por categoria" listava a categoria principal de cada
+        jogador, entao Feminino e as faixas de rating simplesmente nao apareciam
+        — nao havia como emitir o diploma da campea feminina.
+        """
         tournament = self._individual_tournament(tournament_id)
         return sorted(
-            {
-                str(item.get("category") or "").strip()
-                for item in self.pairing_service.standings(int(tournament["id"]))
-                if str(item.get("category") or "").strip()
-            },
+            category_names(self.pairing_service.standings(int(tournament["id"]))),
             key=lambda value: value.casefold(),
         )
 
@@ -1012,11 +1032,18 @@ class CertificateService:
         tournament: dict[str, Any],
         standing: dict[str, Any],
         category_positions: dict[int, int],
+        category_label: str = "",
     ) -> dict[str, Any]:
         from src.services.export_service import ExportService  # lazy: evita ciclo com a fachada export_service
 
         player_id = int(standing["player_id"])
-        category = str(standing.get("category") or "Sem categoria").strip() or "Sem categoria"
+        # Com categoria escolhida, o diploma leva o nome DELA — senao a campea do
+        # Feminino receberia um papel escrito "Sub-12".
+        category = (
+            str(category_label).strip()
+            or str(standing.get("category") or "Sem categoria").strip()
+            or "Sem categoria"
+        )
         return {
             "player_id": player_id,
             "name": str(standing.get("name") or ""),

@@ -1026,7 +1026,15 @@ class ReportSectionsMixin:
         try:
             sections.extend(self._prize_sections(tournament_id))
         except AppError:
-            pass
+            # Torneio por equipes nao tem distribuicao automatica (ela depende da
+            # classificacao individual), mas o cadastro de premios ACEITA
+            # equipes — inclusive o tipo "Tabuleiro (equipes)", que so existe
+            # para elas. A ata engolia o erro e saia sem uma linha sobre o
+            # dinheiro anunciado. Aqui os premios cadastrados vao para o papel
+            # como tabela, que e o que da para afirmar sem a classificacao.
+            registered = self._registered_prizes_section(tournament_id)
+            if registered:
+                sections.append(registered)
         try:
             sections.extend(self._rating_fee_sections(tournament_id))
         except AppError:
@@ -1035,6 +1043,38 @@ class ReportSectionsMixin:
             ("Árbitros e assinaturas", ["Nome", "Função", "FIDE ID", "Categoria", "Assinatura"], arbiter_rows)
         )
         return sections
+
+    def _registered_prizes_section(
+        self, tournament_id: int
+    ) -> tuple[str, list[str], list[list[Any]]] | None:
+        """Premios CADASTRADOS, sem alocacao — para a ata de torneio por equipes.
+
+        Nao ha vencedor calculado aqui de proposito: a distribuicao automatica
+        depende da classificacao individual, que equipes nao produzem. O que a
+        ata precisa e nao omitir o dinheiro anunciado; quem recebeu, o arbitro
+        preenche ao lado.
+        """
+        prizes = self.db.list_tournament_prizes(tournament_id)
+        if not prizes:
+            return None
+        rows = [
+            [
+                PRIZE_KINDS.get(str(prize.get("kind")), str(prize.get("kind") or "")),
+                str(prize.get("label") or ""),
+                str(prize.get("category") or "-"),
+                f"{int(prize.get('rank_from') or 1)}-{int(prize.get('rank_to') or prize.get('rank_from') or 1)}",
+                self._format_currency(prize.get("amount") or 0.0),
+                "",
+            ]
+            for prize in prizes
+        ]
+        total = sum(float(prize.get("amount") or 0.0) for prize in prizes)
+        rows.append(["", "Total anunciado", "", "", self._format_currency(total), ""])
+        return (
+            "Premiação cadastrada",
+            ["Tipo", "Prêmio", "Categoria", "Colocação", "Valor", "Recebido por"],
+            rows,
+        )
 
     def _incidents_section(
         self, tournament_id: int
