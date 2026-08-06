@@ -3,6 +3,8 @@ from __future__ import annotations
 from ..support import *
 from ..components import WrapRow, danger_button, debounce
 
+from src.services.finance_plan_options import plan_options, selected_label
+
 
 # Sub-mixin de Admin: treinos e financeiro.
 class TrainingFinanceMixin:
@@ -735,19 +737,20 @@ class TrainingFinanceMixin:
             member_option.set(chosen)
 
         def load_plan_options(selected_id: int | None = None) -> None:
-            plan_option_map.clear()
-            plan_option_map["Sem plano"] = None
-            values = ["Sem plano"]
-            for plan in self.db.list_membership_plans(active_only=True):
-                label = f"{plan['id']} - {plan['name']} ({plan['amount']})"
-                values.append(label)
-                plan_option_map[label] = int(plan["id"])
-            payment_plan_option.configure(values=values)
-            chosen = next(
-                (label for label, plan_id in plan_option_map.items() if plan_id == selected_id),
-                "Sem plano",
+            # O plano do lancamento ABERTO entra na lista mesmo inativo (regra
+            # pura em `services/finance_plan_options.py`). Sem isto, abrir uma
+            # cobranca de plano ja inativado caia em "Sem plano" e QUALQUER
+            # "Salvar lancamento" gravava `plan_id = NULL` sem aviso — e a trava
+            # anti-duplicacao, que e (member_id, plan_id, reference_period),
+            # deixava de reconhecer a cobranca orfa.
+            atual = self.db.get_membership_plan(int(selected_id)) if selected_id else None
+            values, mapa = plan_options(
+                self.db.list_membership_plans(active_only=True), atual
             )
-            payment_plan_option.set(chosen)
+            plan_option_map.clear()
+            plan_option_map.update(mapa)
+            payment_plan_option.configure(values=values)
+            payment_plan_option.set(selected_label(mapa, selected_id))
 
         def plan_payload() -> dict[str, Any]:
             return {
@@ -1164,6 +1167,25 @@ class TrainingFinanceMixin:
             self._show_toast("Transação excluída!", kind="success")
             clear_trans_form()
             load_transactions()
+
+        # Os tres botoes da aba Fluxo de Caixa NAO EXISTIAM. `save_trans` e
+        # `delete_trans` estavam definidas e nunca ligadas a widget nenhum, e nao
+        # havia outro caminho no aplicativo para criar uma transacao: o
+        # tesoureiro preenchia o formulario inteiro e nao tinha onde clicar.
+        # Consequencia silenciosa: `financial_transactions` ficava sempre vazia,
+        # os cards de despesa mostravam R$ 0,00 e o DRE saia com "TOTAL DE
+        # DESPESAS R$ 0,00" — prestacao de contas com numero errado.
+        botoes_trans_row = base_trans_row + len(trans_fields) * 2
+        ctk.CTkButton(caixa_form, text="Salvar transação", command=save_trans).grid(
+            row=botoes_trans_row, column=0, padx=16, pady=(16, 8), sticky="ew"
+        )
+        ctk.CTkButton(
+            caixa_form, text="Nova", command=clear_trans_form,
+            fg_color="transparent", border_width=1,
+        ).grid(row=botoes_trans_row + 1, column=0, padx=16, pady=4, sticky="ew")
+        danger_button(caixa_form, "Excluir", delete_trans).grid(
+            row=botoes_trans_row + 2, column=0, padx=16, pady=4, sticky="ew"
+        )
 
         # --- PATROCÍNIOS ---
         sponsors_body = ctk.CTkFrame(tab_patrocinios, fg_color="transparent")
