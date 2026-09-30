@@ -14,7 +14,9 @@ seguinte). Cada teste limpa os próprios ``after`` e diálogos remanescentes.
 """
 from __future__ import annotations
 
+import time
 import unittest
+from collections.abc import Callable
 from tkinter import TclError
 
 import customtkinter as ctk
@@ -441,31 +443,66 @@ class DialogCanonicoTest(unittest.TestCase):
                     pass
         release_dead_ctk_windows()
 
+    def _esperar(self, condicao: Callable[[], bool], *, timeout: float = 5.0) -> bool:
+        """Espera ``condicao`` em tempo de **relogio**, cedendo o laco de eventos.
+
+        Contar voltas de ``update()`` nao serve como espera: cinquenta voltas
+        custam menos de um milissegundo, e os ``after`` do Tk — que sao quem
+        conclui a abertura de uma janela — contam em milissegundos. Sem o
+        ``sleep`` a espera termina antes de o relogio andar.
+        """
+        prazo = time.monotonic() + timeout
+        while True:
+            self.root.update()
+            if condicao():
+                return True
+            if time.monotonic() >= prazo:
+                return False
+            time.sleep(0.02)
+
     def test_escape_fecha_o_dialogo(self) -> None:
         # ~16 dos 21 dialogos ad-hoc nao tinham este binding (P3-10).
         dialogo = Dialog(self.root, "Teste", size=(400, 300))
-        # O Tk **nao entrega evento de teclado a janela ainda nao mapeada**, e
-        # um `update()` solto nao garante o mapeamento: sozinho o teste passa,
-        # na suite inteira (maquina ocupada) falha. `wait_visibility()` seria a
-        # espera certa, mas **bloqueia para sempre** se o gerenciador de
-        # janelas nao mapear — trocar uma falha intermitente por um travamento
-        # e pior. Dai a espera limitada.
-        for _ in range(50):
-            if dialogo.winfo_ismapped():
-                break
-            dialogo.update()
-        # Ate dez tentativas: com varias janelas abertas na mesma sessao de
-        # testes o primeiro Esc as vezes chega antes de o foco assentar, e o Tk
-        # o descarta em silencio. Repetir e barato e limitado — `wait_visibility`
-        # ou um laco sem teto trocariam a intermitencia por travamento.
-        for _ in range(10):
+
+        # O binding existir nao depende do gerenciador de janelas, e e ele a
+        # regressao que o P3-10 cobra. Vem antes e separado da entrega da tecla,
+        # que depende do SO, para que a falha diga qual dos dois quebrou.
+        self.assertTrue(dialogo.bind("<Escape>"), "Dialog nasceu sem binding de <Escape>")
+
+        # O Tk **nao entrega evento de teclado a janela fora da tela**, e o
+        # customtkinter deixa o dialogo RETIRADO por alguns milissegundos: o
+        # `_windows_set_titlebar_color` do `CTkToplevel` chama `withdraw()`
+        # dentro do proprio `__init__` e so devolve a janela num `after(5, ...)`
+        # (customtkinter 5.2.2, ctk_toplevel.py:245 e :273).
+        #
+        # A versao anterior esperava esse mapeamento com 50 `update()` seguidos
+        # **sem dormir**: o laco inteiro roda em bem menos de 5 ms e terminava
+        # com a janela ainda retirada em quase toda abertura — dai a falha
+        # intermitente na suite (`AssertionError: 1 is not false`). Medir em
+        # tempo de relogio e o conserto; `wait_visibility()` seria a espera
+        # "certa", mas **bloqueia para sempre** se o gerenciador de janelas nao
+        # mapear, e trocar intermitencia por travamento e pior.
+        if not self._esperar(lambda: bool(dialogo.winfo_ismapped())):
+            self.fail(f"o dialogo nunca apareceu na tela (state={dialogo.state()!r})")
+
+        # Com a janela na tela e o grab ativo o Esc chega, mas o primeiro ainda
+        # pode se perder enquanto o foco assenta. Repetir e barato — desde que
+        # as tentativas sejam espacadas no relogio, e nao dez voltas coladas.
+        def escapar() -> bool:
             if not dialogo.winfo_exists():
-                break
+                return True
             dialogo.focus_force()
             dialogo.update()
+            if not dialogo.winfo_exists():
+                # O `update()` acima pode ter entregue o Esc da volta anterior:
+                # gerar evento em janela ja destruida seria um TclError no lugar
+                # de um teste verde.
+                return True
             dialogo.event_generate("<Escape>")
             self.root.update()
-        self.assertFalse(dialogo.winfo_exists())
+            return not dialogo.winfo_exists()
+
+        self.assertTrue(self._esperar(escapar), "o <Escape> nao fechou o dialogo")
 
     def test_fechar_devolve_o_grab_ao_modal_pai(self) -> None:
         pai = Dialog(self.root, "Pai", size=(400, 300))
