@@ -14,6 +14,7 @@ O host precisa ser uma janela CTk e expor ``db`` e ``security_service``.
 from __future__ import annotations
 
 import inspect
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
@@ -23,6 +24,7 @@ import customtkinter as ctk
 from src.core.database import default_backup_dir
 
 from .components import BusyIndicator
+from .components.rule_banner import BannerAction, RuleBannerHost
 from .components.sidebar import (
     MODE_FULL as SIDEBAR_FULL,
 )
@@ -45,6 +47,8 @@ from .theme import (
     THEME_TEXT_MAIN,
     THEME_TEXT_SUB,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class AppShell:
@@ -124,7 +128,7 @@ class AppShell:
         try:
             palette.grab_set()
         except Exception:
-            pass
+            pass  # a paleta ainda não é visível: o grab falha e ela segue sem modal
 
         # Centraliza próximo ao topo da janela principal
         self.update_idletasks()
@@ -147,7 +151,7 @@ class AppShell:
             try:
                 palette.grab_release()
             except Exception:
-                pass
+                pass  # a paleta já foi destruída; não há grab a soltar
             palette.destroy()
 
         def execute(index: int) -> None:
@@ -302,7 +306,7 @@ class AppShell:
                 else:
                     parts.append("✓ sem pendências")
             except Exception:
-                pass
+                logger.debug("Metricas da barra de status indisponiveis", exc_info=True)
         self.metrics_label.configure(text="  ·  ".join(parts))
         if hasattr(self, "status_label"):
             self.status_label.configure(text=self._default_status_text())
@@ -313,6 +317,30 @@ class AppShell:
         if getattr(self, "_toast_stack", None) is None:
             self._toast_stack = ToastStack(self)
         return self._toast_stack
+
+    @property
+    def rule_banner(self) -> RuleBannerHost:
+        """Faixa fixa dos erros de regra (RGS-26), criada sob demanda.
+
+        Fica sobre o pe da área de conteúdo e sobrevive a reconstrução da tela:
+        o painel do árbitro se redesenha sozinho, e uma recusa que sumisse com
+        ele seria o mesmo toast de 5 s com outro nome.
+        """
+        if getattr(self, "_rule_banner_host", None) is None:
+            self._rule_banner_host = RuleBannerHost(
+                self, anchor=lambda: getattr(self, "content", None)
+            )
+        return self._rule_banner_host
+
+    def _show_rule_banner(
+        self,
+        message: str,
+        *,
+        title: str = "",
+        suggestion: str = "",
+        action: BannerAction | None = None,
+    ) -> None:
+        self.rule_banner.show(message, title=title, suggestion=suggestion, action=action)
 
     def _show_toast(
         self,
@@ -354,7 +382,7 @@ class AppShell:
             try:
                 anterior.frame.destroy()
             except Exception:
-                pass
+                pass  # a tela anterior já foi destruída
         # A janela e reconstruida na troca de tema: os inscritos antigos apontam
         # para widgets mortos e precisam sair antes de a nova barra assinar.
         self.navigator.clear_subscribers()
@@ -424,7 +452,7 @@ class AppShell:
             try:
                 self.after_cancel(self._arbitration_refresh_job)
             except Exception:
-                pass
+                pass  # o job já rodou ou foi cancelado; nada a cancelar
             self._arbitration_refresh_job = None
         # Anota o show_* que disparou esta limpeza, para o F5 saber o que
         # recarregar. Fica aqui (e não só no Navigator.go) porque muita tela e

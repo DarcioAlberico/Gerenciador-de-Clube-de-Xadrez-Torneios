@@ -23,6 +23,7 @@ A barra não decide navegação: chama ``navigator.go(chave)`` e deixa o
 """
 from __future__ import annotations
 
+import logging
 from typing import Any, Callable
 
 import customtkinter as ctk
@@ -40,6 +41,8 @@ from ..theme import (
     THEME_TEXT_SUB,
 )
 from .tooltip import Tooltip
+
+logger = logging.getLogger(__name__)
 
 MODE_FULL = "full"
 MODE_RAIL = "rail"
@@ -136,7 +139,7 @@ class Sidebar:
             try:
                 self.frame.grid_remove()
             except Exception:
-                pass
+                pass  # sidebar já destruída (encerramento)
             return
 
         compacto = mode == MODE_RAIL
@@ -149,7 +152,7 @@ class Sidebar:
             try:
                 rotulo.grid_remove() if compacto else rotulo.grid()
             except Exception:
-                pass
+                logger.debug("Rotulo da sidebar nao ajustado ao modo compacto", exc_info=True)
         for metodo, botao in self._items.items():
             try:
                 botao.configure(
@@ -157,7 +160,7 @@ class Sidebar:
                     anchor="center" if compacto else "w",
                 )
             except Exception:
-                pass
+                logger.debug("Botao da sidebar nao ajustado ao modo compacto", exc_info=True)
 
     # -- interação --------------------------------------------------------
 

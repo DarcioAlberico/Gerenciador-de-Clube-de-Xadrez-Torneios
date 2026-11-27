@@ -182,7 +182,7 @@ THEME_TREE_ODD        = ColorToken("#FFFFFF", "#1E293B")
 THEME_TREE_EVEN       = ColorToken("#F1F5F9", "#172032")
 THEME_TREE_HEADING    = ColorToken("#CBD5E1", "#0F172A")
 # Seleção escurecida na face clara (B-2): o azul 500 dava 3.68:1 com texto
-# branco. A linha selecionada e a que o operador esta lendo para digitar o
+# branco. A linha selecionada e a que o operador é lendo para digitar o
 # resultado — ela não pode ser a menos legível da tabela.
 THEME_TREE_SELECTED   = ColorToken("#1D4ED8", "#334155")
 THEME_TREE_SELECTED_FG = ColorToken("#FFFFFF", "#F1F5F9")
@@ -482,7 +482,7 @@ def apply_accent_preset(preset_key: str) -> None:
             if widget_cls in tm:
                 tm[widget_cls].update(overrides)
     except Exception:
-        pass
+        logger.debug("Overrides do tema do CustomTkinter nao aplicados", exc_info=True)
 
     THEME_ACCENT.set(l_color, d_color)
     notify_theme_change()
@@ -541,7 +541,7 @@ def _patch_field_defaults() -> None:
             if widget_cls in tm:
                 tm[widget_cls].update(overrides)
     except Exception:
-        pass
+        logger.debug("Overrides de campo do tema do CustomTkinter nao aplicados", exc_info=True)
 
 
 def apply_frame_bg_preset(preset_key: str) -> None:

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from src.domain.dates import Data
 
 from ..support import *
 from ..components import (
@@ -12,6 +12,7 @@ from ..components import (
 )
 
 from src.services.pairing.acceleration import acceleration_spec
+from src.services.pairing.initial_color import resolve_initial_color
 from src.services.pairing.tiebreak_engine import LEGACY_ENGINE_CHOICE_HINT
 from src.services.constants import PAIRING_SYSTEMS, TIEBREAK_ENGINES
 from src.services.pairing import (
@@ -27,6 +28,7 @@ from src.services.prizes import PRIZE_POLICIES, PRIZE_TIE_SPLITS
 from src.services.list_layouts import DEFAULT_STANDINGS_COLUMNS, STANDINGS_COLUMNS
 from src.services.chess_results import normalize_results_url
 from src.services.rating import parse_regulation_overrides
+from src.services.tournament_configuration import Confirmacao, PerfilTorneio
 from .tournament_widgets import (
     CategoryEditor,
     ColumnLayoutEditor,
@@ -41,6 +43,9 @@ RATING_SPEED_LABELS = {
     "rapid": "Rápido",
     "blitz": "Blitz",
 }
+
+# Cor inicial do torneio (RGS-14): a do nº 1 na mesa 1 da rodada 1.
+INITIAL_COLOR_LABELS = {"W": "Brancas", "B": "Pretas"}
 
 # Parâmetros do regulamento de rating que o árbitro pode ajustar. Deixar em
 # branco mantém o valor do perfil publicado.
@@ -97,6 +102,94 @@ class TournamentSettingsMixin:
             return pilha.place(widget, "widget")
         return pilha.widget(widget, label=label, help_text=help_text)
 
+    def _build_dangerous_changes_section(self, tab: Any, settings: dict[str, Any]) -> None:
+        """Aba Avançado: "Permitir mudanças perigosas", gravando sozinha (RGS-20).
+
+        Saiu da aba Regras porque era a rota do incidente: ligada junto com o
+        formulário inteiro, ficava gravada pela metade quando outro campo era
+        recusado — e corrigir resultado nunca precisou dela. Marcar grava na
+        hora pelo mesmo plano de confirmações das Configurações (um diálogo).
+        """
+        pilha = form_of(tab)
+        pilha.section(
+            "Permissões amplas (legado)",
+            help_text=(
+                "Para corrigir um resultado, use “Corrigir resultado…” na mesa "
+                "(clique direito ou Ctrl+E, em Rodadas ou no Painel): o motivo "
+                "desbloqueia só aquela rodada, por 15 min."
+            ),
+        )
+        caixa = ctk.CTkCheckBox(tab, text="Permitir mudanças perigosas")
+        pilha.widget(
+            caixa,
+            help_text=(
+                "Libera a edição de qualquer rodada fechada do torneio, sem prazo. "
+                "Grava ao marcar ou desmarcar, sem depender do botão Salvar."
+            ),
+        )
+        if settings.get("allow_dangerous_changes"):
+            caixa.select()
+        self._dangerous_changes_check = caixa
+
+        def voltar(ligar: bool) -> None:
+            if ligar:
+                caixa.deselect()
+            else:
+                caixa.select()
+
+        def alternar() -> None:
+            ligar = bool(caixa.get())
+            try:
+                confirmacoes = self.tournament_service.plan_dangerous_changes(
+                    self.current_tournament_id, ligar
+                )
+                motivo = ""
+                if confirmacoes:
+                    resposta = self._confirm_configuration(confirmacoes)
+                    if resposta is None:
+                        voltar(ligar)
+                        return
+                    motivo = resposta
+                self.tournament_service.save_dangerous_changes(
+                    self.current_tournament_id,
+                    ligar,
+                    confirmadas=[item.tipo for item in confirmacoes],
+                    motivo=motivo,
+                )
+                self._show_toast(
+                    "Mudanças perigosas ligadas." if ligar else "Mudanças perigosas desligadas.",
+                    kind="success",
+                )
+            except Exception as exc:
+                voltar(ligar)
+                self._show_error(exc)
+
+        caixa.configure(command=alternar)
+        self._disable_if_unauthorized(caixa, "tournament_write")
+
+    def _confirm_configuration(self, confirmacoes: list[Confirmacao]) -> str | None:
+        """UM diálogo com todas as confirmações do plano (RGS-09).
+
+        Devolve ``None`` se o árbitro cancelou; senão, o motivo digitado (vazio
+        quando nenhuma confirmação pede motivo).
+        """
+        from ..components.dialogs import confirm_dialog, reason_dialog
+
+        itens = "\n\n".join(f"• {item.mensagem}" for item in confirmacoes)
+        if any(item.exige_motivo for item in confirmacoes):
+            return reason_dialog(
+                self,
+                "Confirmar alterações",
+                f"{itens}\n\nMotivo (vai para a auditoria):",
+                confirm_text="Salvar",
+                danger=True,
+                size=(620, 300 + 60 * len(confirmacoes)),
+            )
+        confirmado = confirm_dialog(
+            self, "Confirmar alterações", itens, danger=True, confirm_text="Salvar"
+        )
+        return "" if confirmado else None
+
     def show_tournament_settings(self) -> None:
         if not self._require_tournament():
             return
@@ -126,6 +219,9 @@ class TournamentSettingsMixin:
         tab_rules = self._settings_tab(tabview, "Regras e desempates")
         tab_prizes = self._settings_tab(tabview, "Premiação")
         tab_reports = self._settings_tab(tabview, "Classificação e agenda")
+        # RGS-20: "mudanças perigosas" mora aqui, longe das regras do dia a dia,
+        # e grava sozinha — não vai junto com o "Salvar" do formulário.
+        tab_advanced = self._settings_tab(tabview, "Avançado")
 
         stack = self._settings_stack
         form_general = form_of(tab_general)
@@ -242,7 +338,7 @@ class TournamentSettingsMixin:
         # Aba 2 - Dados oficiais (campos para exportacao/identificacao + taxas)
         # ------------------------------------------------------------------ #
         # Dezesseis campos numa coluna so: quatro secoes, porque quem preenche
-        # "Taxa rating CBX" nao esta na mesma tarefa de quem preenche "FIDE
+        # "Taxa rating CBX" não é na mesma tarefa de quem preenche "FIDE
         # Event-ID" — e a exportação oficial cobra os três primeiros grupos.
         setting_entries: dict[str, Any] = {}
         official_sections: list[tuple[str, list[tuple[str, str, str]]]] = [
@@ -275,7 +371,7 @@ class TournamentSettingsMixin:
             (
                 "Prazos e taxas",
                 [
-                    ("cutoff_date", "Data de corte", "aaaa-mm-dd"),
+                    ("cutoff_date", "Data de corte", ""),
                     ("late_entry_points", "Pontos por adesão tardia", "Ex.: 0"),
                     ("rating_fee_fide", "Taxa rating FIDE por inscrito", "Ex.: 2,50"),
                     ("rating_fee_cbx", "Taxa rating CBX por inscrito", "Ex.: 3,00"),
@@ -286,7 +382,12 @@ class TournamentSettingsMixin:
         for titulo, campos in official_sections:
             form_official.section(titulo)
             for key, label, dica in campos:
-                entry = form_official.text(label, placeholder=dica)
+                # Data de corte era texto livre (RGS-07): aceitava qualquer coisa
+                # e a exportação publicava o que viesse.
+                if key == "cutoff_date":
+                    entry = form_official.date(label)
+                else:
+                    entry = form_official.text(label, placeholder=dica)
                 value = settings.get(key)
                 entry.insert(0, "" if value is None else str(value))
                 setting_entries[key] = entry
@@ -360,6 +461,20 @@ class TournamentSettingsMixin:
                 settings.get("pairing_system", "gacrux_swiss"),
                 PAIRING_SYSTEMS["gacrux_swiss"],
             )
+        )
+
+        # Cor inicial (RGS-14): sorteada quando o torneio nasce, a mesma na
+        # prévia, na geração e no Gacrux. Torneio antigo com R1 mostra a da R1.
+        initial_color_by_label = {label: value for value, label in INITIAL_COLOR_LABELS.items()}
+        initial_color_option = form_rules.select(
+            "Cor inicial (nº 1 na mesa 1 da rodada 1)",
+            list(initial_color_by_label.keys()),
+            help_text="Sorteada na criação do torneio. Pode ser trocada até gerar a rodada 1.",
+        )
+        initial_color_option.set(
+            INITIAL_COLOR_LABELS[
+                resolve_initial_color(self.db, self.current_tournament_id, settings)
+            ]
         )
 
         tiebreak_engine_option = form_rules.select(
@@ -448,10 +563,9 @@ class TournamentSettingsMixin:
             team_fixed_board_order_check.select()
 
         flag_labels = {
-            "allow_dangerous_changes": "Permitir mudancas perigosas",
-            # `disable_bye` desativa o bye ALOCADO (o PAB de quem sobra num numero
-            # impar). O bye SOLICITADO — o jogador avisando que faltaria — tem
-            # politica propria (ARB-04) e nao passa por aqui.
+            # `disable_bye` desativa o bye ALOCADO (o PAB de quem sobra num número
+            # ímpar). O bye SOLICITADO — o jogador avisando que faltaria — tem
+            # política própria (ARB-04) e não passa por aqui.
             "disable_bye": "Desativar bye alocado (PAB)",
             # Só tem efeito no formato "Schuring (Todos contra todos)": o
             # calendário roda duas vezes, com as cores invertidas na volta.
@@ -465,12 +579,15 @@ class TournamentSettingsMixin:
         }
         flag_checks: dict[str, ctk.CTkCheckBox] = {}
         form_rules.section("Permissões e visibilidade")
-        for key in sorted(TOURNAMENT_FLAG_FIELDS):
+        for key in sorted(set(TOURNAMENT_FLAG_FIELDS) - {"allow_dangerous_changes"}):
             checkbox = ctk.CTkCheckBox(tab_rules, text=flag_labels.get(key, key))
             form_rules.widget(checkbox)
             if settings.get(key):
                 checkbox.select()
             flag_checks[key] = checkbox
+
+        self._build_friendly_mode_section(tab_advanced, settings)  # MA-07
+        self._build_dangerous_changes_section(tab_advanced, settings)
 
         current_spec = acceleration_spec(settings.get("acceleration_method", "none"))
         scheme_to_key = {"none": "none", "classic": "accelerated", "custom": "custom", "baku": "baku"}
@@ -571,7 +688,7 @@ class TournamentSettingsMixin:
                 try:
                     widget.configure(state=state)
                 except Exception:
-                    pass
+                    pass  # widget sem a opção state (rótulo, moldura): não há o que travar
 
         competition_option.configure(command=refresh_team_fields_state)
         refresh_team_fields_state()
@@ -636,7 +753,8 @@ class TournamentSettingsMixin:
             ),
         )
 
-        category_reference_entry = ctk.CTkEntry(tab_prizes, width=160)
+        # Data ou só o ano (RGS-07): a idade e a que o jogador COMPLETA no ano.
+        category_reference_entry = self._make_date_entry(tab_prizes, width=20, permite_ano=True)
         category_reference_entry.insert(0, str(settings.get("category_reference_date") or ""))
         stack(
             tab_prizes,
@@ -765,6 +883,7 @@ class TournamentSettingsMixin:
 
         def apply_auto_schedule() -> None:
             try:
+                self._refuse_invalid_dates(auto_entries["start_date"])
                 rounds_count = int(tournament_entries["rounds_count"].get() or tournament.get("rounds_count") or 1)
                 rounds_per_day = rounds_count if all_same_day_check.get() else auto_entries["rounds_per_day"].get()
                 generated_schedule = self.tournament_service.generate_round_schedule(
@@ -794,6 +913,13 @@ class TournamentSettingsMixin:
         # Coleta dos campos e persistência
         # ------------------------------------------------------------------ #
         def profile_payloads() -> tuple[dict[str, Any], dict[str, Any], list[dict[str, Any]]]:
+            # Campo de data inválido devolve "" no get(): salvar assim apagaria
+            # a data gravada (RGS-06). Recusa antes de ler o formulário.
+            self._refuse_invalid_dates(
+                tournament_entries,
+                setting_entries,
+                [campos["date"] for campos in schedule_entries.values()],
+            )
             tournament_payload = {key: entry.get() for key, entry in tournament_entries.items()}
             settings_payload = {key: entry.get() for key, entry in setting_entries.items()}
 
@@ -806,15 +932,6 @@ class TournamentSettingsMixin:
             def _flag_invalid(entry: Any, message: str) -> None:
                 set_field_error(entry, message)
                 raise AppError(message)
-
-            def _parse_date(value: str) -> datetime | None:
-                value = (value or "").strip()
-                for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"):
-                    try:
-                        return datetime.strptime(value, fmt)
-                    except ValueError:
-                        continue
-                return None
 
             for _vkey in ("rounds_count", "start_date", "end_date", "bye_points"):
                 _reset_border(tournament_entries[_vkey])
@@ -857,9 +974,9 @@ class TournamentSettingsMixin:
                         "Pontos do bye deve ser um número maior ou igual a zero.",
                     )
 
-            start_date = _parse_date(tournament_payload.get("start_date", ""))
-            end_date = _parse_date(tournament_payload.get("end_date", ""))
-            if start_date and end_date and start_date > end_date:
+            start_date = tournament_entries["start_date"].value()
+            end_date = tournament_entries["end_date"].value()
+            if isinstance(start_date, Data) and isinstance(end_date, Data) and start_date.valor > end_date.valor:
                 _flag_invalid(
                     tournament_entries["end_date"],
                     "A data final não pode ser anterior a data inicial.",
@@ -882,6 +999,7 @@ class TournamentSettingsMixin:
             settings_payload["tournament_type"] = type_by_label[tournament_type_option.get()]
             settings_payload["pairing_method"] = pairing_by_label[pairing_option.get()]
             settings_payload["pairing_system"] = system_by_label[system_option.get()]
+            settings_payload["initial_color"] = initial_color_by_label[initial_color_option.get()]
             settings_payload["tiebreak_engine"] = tiebreak_engine_by_label[tiebreak_engine_option.get()]
             settings_payload["team_pairing_method"] = team_pairing_by_label[team_pairing_option.get()]
             settings_payload["team_standing_primary"] = team_criterion_by_label[team_primary_option.get()]
@@ -939,52 +1057,33 @@ class TournamentSettingsMixin:
         def save_settings(show_message: bool = True) -> None:
             try:
                 tournament_payload, settings_payload, schedule_payload = profile_payloads()
-                try:
-                    self.tournament_service.save_profile(
-                        self.current_tournament_id,
-                        tournament_payload,
-                        settings_payload,
-                        schedule_payload,
-                    )
-                except AppError as exc:
-                    # O servico recusa e explica; aqui a decisao volta para o
-                    # arbitro. Reduzir rodadas apaga data ja publicada (ORG-03);
-                    # mudanca estrutural com torneio em andamento reescreve a
-                    # classificacao ja publicada (ORG-04).
-                    if "Confirme para apagar essas datas" in str(exc):
-                        if not self._confirm_action(
-                            "Reduzir rodadas",
-                            f"{exc}\n\nApagar as datas excedentes?",
-                            danger=True,
-                        ):
-                            return
-                        self.tournament_service.save_profile(
-                            self.current_tournament_id,
-                            tournament_payload,
-                            settings_payload,
-                            schedule_payload,
-                            confirm_schedule_loss=True,
-                        )
-                    elif "Informe o motivo da mudanca" in str(exc):
-                        motivo = self._ask_string("Mudança estrutural", str(exc))
-                        if not str(motivo or "").strip():
-                            return
-                        self.tournament_service.save_profile(
-                            self.current_tournament_id,
-                            tournament_payload,
-                            settings_payload,
-                            schedule_payload,
-                            structural_change_reason=str(motivo),
-                        )
-                    else:
-                        raise
-                # Salvamento unificado: premios e colunas vao junto com as configuracoes.
-                self.prize_service.replace_prizes(self.current_tournament_id, prize_editor.get_rows())
-                self.tournament_service.replace_categories(
-                    self.current_tournament_id, category_editor.get_rows()
+                perfil = PerfilTorneio(tournament_payload, settings_payload, schedule_payload)
+                premios = prize_editor.get_rows()
+                categorias = category_editor.get_rows()
+                colunas = columns_editor.get_columns()
+                # RGS-09: o serviço valida TUDO e devolve de uma vez o que o
+                # árbitro precisa confirmar. Antes era um laço de recusas
+                # ("Confirme..." -> "Informe o motivo...") em que cada volta já
+                # tinha gravado metade do formulário e um evento de auditoria.
+                confirmacoes = self.tournament_service.plan_configuration(
+                    self.current_tournament_id, perfil, premios, categorias, colunas
                 )
-                self.list_layout_service.save_columns(
-                    self.current_tournament_id, columns_editor.get_columns(), "standings"
+                motivo = ""
+                if confirmacoes:
+                    resposta = self._confirm_configuration(confirmacoes)
+                    if resposta is None:
+                        return
+                    motivo = resposta
+                # RGS-08: uma gravação só — perfil, auditoria, prêmios,
+                # categorias e colunas entram juntos, depois de um backup.
+                self.tournament_service.save_tournament_configuration(
+                    self.current_tournament_id,
+                    perfil,
+                    premios,
+                    categorias,
+                    colunas,
+                    confirmadas=[item.tipo for item in confirmacoes],
+                    motivo=motivo,
                 )
                 self._set_current_tournament(self.current_tournament_id)
                 if show_message:

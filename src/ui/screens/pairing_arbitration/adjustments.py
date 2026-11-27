@@ -58,7 +58,7 @@ class AdjustmentsPage(TournamentRegistryPage):
             Field(
                 KEY_TARGET,
                 t("arbitration.field.team") if self.is_team else t("arbitration.field.player"),
-                Field.OPTION,
+                Field.SEARCH,
                 values=self.target_labels(
                     t("arbitration.common.no_teams")
                     if self.is_team

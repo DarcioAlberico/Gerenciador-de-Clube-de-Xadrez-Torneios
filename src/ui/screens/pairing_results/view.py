@@ -29,13 +29,16 @@ from ...components import (
 )
 from ...components.wrap_row import WrapRow
 
-from src.services.pairing.corrections import (
-    DEFAULT_UNLOCK_MINUTES,
-    cascade_message,
-    cascade_rounds,
-    correction_reason_error,
-    unlock_reason_error,
-)
+from src.services.friendly_mode import FRIENDLY_MODE_LABEL
+from src.services.pairing.corrections import round_deletion_reason_error
+
+import queue
+import tkinter
+from tkinter import TclError
+
+from ...support import _unbind_exact
+
+from src.services.snapshot_reconciler import SnapshotReconciler
 
 from .exports import RoundExportActions
 from .initial_call import InitialCallSection
@@ -43,18 +46,31 @@ from .projector import ProjectorWindow
 from .knockout import KnockoutActions
 from .qr import QrResultActions
 from .swaps import BoardSwapActions
+from .correction import ResultCorrectionActions
 from .state import (
     RESULT_COLUMN_INDEX,
     RESULT_SHORTCUTS,
+    WALKOVER_SHORTCUTS,
+    PrimaryRoundAction,
     allowed_results,
     first_pending_index,
     format_pairing_preview,
     individual_result_state,
     needs_round_count_warning,
+    primary_round_action,
     recommended_rounds_for_players,
     result_state_tag,
+    results_counter_text,
     team_board_result_state,
 )
+
+# Rótulo do botão do toast de lançamento (RGS-21): diz o atalho junto, para o
+# árbitro aprender o Ctrl+Z sem abrir manual.
+UNDO_LABEL = "Desfazer (Ctrl+Z)"
+
+# Onde as teclas são do campo, e não da tela (RGS-21). O foco do CTkEntry e do
+# CTkTextbox cai no Entry/Text de dentro deles.
+_CAIXAS_DE_TEXTO = (tkinter.Entry, tkinter.Text, tkinter.Spinbox, ttk.Entry)
 
 
 class PairingResultsMixin:
@@ -73,8 +89,9 @@ class PairingResultsMixin:
     def _round_more_menu_items(self):
         """Itens do menu 'Mais' da rodada (pre-visualizacao, ajustes de mesa e QR)."""
         items = [
-            ("Pre-visualizar proxima rodada", self._preview_next_round),
-            ("Fechar rodada", self._close_current_round),
+            ("Pré-visualizar próxima rodada", self._preview_next_round),
+            # "Fechar rodada" saiu daqui (RGS-25): fechava sem confirmar. Agora
+            # e o estado do botão primário, com a confirmação das pendências.
             None,
             ("Trocar cores da mesa", self._swap_selected_colors),
             ("Trocar jogador da mesa", self._open_player_swap_dialog),
@@ -88,8 +105,14 @@ class PairingResultsMixin:
             ("Submissões via QR", self._open_qr_submissions_queue),
             ("Servidor de resultados QR", self._start_qr_result_server),
         ]
-        if self._is_free_mode():
-            items += [None, ("Re-emparceirar (Modo Livre)", self.free_mode_repair_round)]
+        # MA-13: os itens do modo amistoso ficam sempre aqui e conferem a marca
+        # no clique. Antes entravam só quando a barra era montada num torneio
+        # já amistoso: ligar o modo em Configurações não os trazia.
+        items += [
+            None,
+            (f"Re-emparceirar ({FRIENDLY_MODE_LABEL})", self.free_mode_repair_round),
+            (f"Mais uma rodada ({FRIENDLY_MODE_LABEL})", self.free_mode_add_round),
+        ]
         return items
 
     def _build_round_toolbar(self, toolbar) -> None:
@@ -98,14 +121,19 @@ class PairingResultsMixin:
         # Linha 1 - ação principal + menus de secundárias + destrutiva isolada a direita.
         actions = ctk.CTkFrame(toolbar, fg_color="transparent")
         actions.grid(row=0, column=0, padx=SPACE_MD, pady=(SPACE_MD, SPACE_SM), sticky="ew")
-        actions.grid_columnconfigure(3, weight=1)  # espaco flexivel isola a acao destrutiva
-        self._generate_round_button = primary_button(
+        actions.grid_columnconfigure(3, weight=1)  # espaço flexível isola a ação destrutiva
+        # RGS-25: o botão primário diz o próximo passo da rodada — "Lançar
+        # resultados (32/40)" → "Fechar rodada 3" → "Gerar rodada 4". Rótulo e
+        # ação vem de `_refresh_round_progress`, a cada recarga da rodada.
+        self._round_primary_button = primary_button(
             actions,
-            "Gerar próxima rodada",
-            self._generate_round,
-            tip="Emparceira a próxima rodada a partir dos resultados ja lançados.",
+            "Lançar resultados",
+            self._run_round_primary_action,
+            tip="O próximo passo da rodada: lançar resultados, fechar a rodada (com confirmação) ou gerar a seguinte.",
         )
-        self._generate_round_button.grid(row=0, column=0, padx=(0, SPACE_SM))
+        self._round_primary_button.grid(row=0, column=0, padx=(0, SPACE_SM))
+        # A geração em segundo plano ocupa este mesmo botão enquanto roda.
+        self._generate_round_button = self._round_primary_button
         menu_button(
             actions,
             "Exportar",
@@ -116,8 +144,15 @@ class PairingResultsMixin:
             actions,
             "Mais",
             self._round_more_menu_items(),
-            tip="Pre-visualizar, fechar rodada, ajustes de mesa e ferramentas de QR.",
+            tip="Pré-visualizar, ajustes de mesa e ferramentas de QR.",
         ).grid(row=0, column=2, padx=(0, SPACE_SM))
+        # RGS-24: entrada tardia numa tela só (o mesmo assistente do Painel).
+        secondary_button(
+            actions,
+            "Entrada tardia…",
+            lambda: self.open_late_entry_dialog(refresh=self.show_pairings),
+            tip="Inscreve quem chega depois da 1ª rodada: rodada de entrada e pontos das rodadas perdidas.",
+        ).grid(row=0, column=3, padx=(0, SPACE_SM), sticky="w")
         danger_button(
             actions,
             "Excluir rodada",
@@ -151,6 +186,11 @@ class PairingResultsMixin:
             width=190,
         )
         Tooltip(self.round_option, "Escolhe qual rodada visualizar/editar.")
+        # Contador da rodada exibida (RGS-21): "32/40 lançadas".
+        self._round_progress_label = entry.add(
+            ctk.CTkLabel(entry.frame, text="", text_color=THEME_TEXT_SUB, anchor="w"),
+            width=120,
+        )
         self.result_option = entry.add(
             select_field(entry.frame, values=RESULTS, width=130), width=130
         )
@@ -227,6 +267,10 @@ class PairingResultsMixin:
         # sem isto, _run_background tentaria reabilitar um widget destruído.
         self._generate_round_button = None
         self._preview_round_button = None
+        self._round_primary_button = None
+        self._round_progress_label = None
+        # Desfazer vale para o lançamento feito NESTA tela (RGS-21).
+        self._last_result_entry = None
 
         if show_initial_call:
             # Antes da 1a rodada não há rodada para editar/exportar: só gerar e pré-visualizar.
@@ -243,7 +287,7 @@ class PairingResultsMixin:
                 launch,
                 "Pré-visualizar rodada",
                 self._preview_next_round,
-                tip="Mostra como ficaria o emparceiramento da primeira rodada sem grava-lo.",
+                tip="Mostra como ficaria o emparceiramento da primeira rodada sem gravá-lo.",
             )
             self._preview_round_button.pack(side="left")
         else:
@@ -262,6 +306,12 @@ class PairingResultsMixin:
         table_panel.grid(row=1, column=0, sticky="nsew")
         table_panel.grid_columnconfigure(0, weight=1)
         table_panel.grid_rowconfigure(0, weight=1)
+        # Aviso PERMANENTE da rodada (RGS-16/RGS-18): motor reserva ou rodada
+        # que difere do holandês. Fica embaixo da tabela enquanto a rodada
+        # estiver na tela; vazio, não ocupa espaço.
+        self._round_notice_label = ctk.CTkLabel(
+            body, text="", text_color=THEME_WARNING_TEXT, anchor="w", justify="left", wraplength=900,
+        )
 
         if self.pairing_team_mode:
             self.pairing_tree = self._make_tree(
@@ -325,7 +375,21 @@ class PairingResultsMixin:
         self.pairing_tree.bind("<BackSpace>", lambda event: self._quick_save_result(""))
         self.pairing_tree.bind("<Delete>", lambda event: self._quick_save_result(""))
         self.pairing_tree.bind("<Return>", lambda event: self._save_selected_result())
+        # W.O. por tecla (RGS-21): as letras do painel, com a mesma confirmação
+        # que nomeia mesa e jogadores. Só na tabela — numa caixa de texto a
+        # letra e letra.
+        for tecla, resultado in WALKOVER_SHORTCUTS.items():
+            self.pairing_tree.bind(tecla, lambda event, valor=resultado: self._quick_save_result(valor))
+        # "Corrigir resultado…" (RGS-20): a ação mora na mesa. Clique direito,
+        # Shift+F10 (a tecla de menu de contexto) e Ctrl+E abrem o MESMO
+        # diálogo — sem menu no meio, que custaria uma ação a mais.
+        for sequencia in ("<Button-3>", "<Shift-F10>", "<App>", "<Control-e>", "<Control-E>"):
+            try:
+                self.pairing_tree.bind(sequencia, self._open_result_correction)
+            except TclError:  # tecla que esta plataforma não conhece (<App>)
+                pass
         self._bind_pairing_result_shortcuts()
+        self._bind_screen_undo()
         self.pairing_tree.focus_set()
         self._load_round_options()
 
@@ -377,7 +441,9 @@ class PairingResultsMixin:
         self._round_exports().export_table_cards()
 
     def _load_round_options(self) -> None:
-        if not hasattr(self, "round_option"):
+        # Fechar rodada pelo painel chega aqui com a tela de Rodadas já
+        # desmontada: o atributo sobra, o widget não.
+        if not hasattr(self, "round_option") or not self.round_option.winfo_exists():
             return
         rounds = self.db.list_rounds(self.current_tournament_id)
         self.round_option_map = {}
@@ -393,7 +459,7 @@ class PairingResultsMixin:
 
         values = []
         for round_data in rounds:
-            label = f"Rodada {round_data['number']} - {round_data['status']}"
+            label = round_option_label(round_data)
             values.append(label)
             self.round_option_map[label] = round_data["id"]
 
@@ -411,11 +477,13 @@ class PairingResultsMixin:
         self.pairing_tree.delete(*self.pairing_tree.get_children())
         self.pairing_row_map = {}
         self.pairing_detail_map = {}
+        self._refresh_round_progress()
         if not self.current_round_id:
             return
         if getattr(self, "pairing_team_mode", False):
             self._load_selected_team_round()
             return
+        self._show_round_notices()
         pairings = self.db.get_pairings_for_round(self.current_round_id)
         submissions_by_pairing, corrected_pairing_ids, _corrected_team_board_ids = self._result_state_context()
         for row_index, pairing in enumerate(pairings):
@@ -447,6 +515,21 @@ class PairingResultsMixin:
                 "result_state": state,
             }
         self._select_first_pending_pairing()
+
+    def _show_round_notices(self) -> None:
+        """Motor reserva / divergência do holandês da rodada exibida (RGS-16/18)."""
+        label = getattr(self, "_round_notice_label", None)
+        if label is None or not label.winfo_exists():
+            return
+        avisos = self.pairing_service.round_pairing_notices(
+            int(self.current_tournament_id), int(self.current_round_id)
+        )
+        if not avisos:
+            label.configure(text="")
+            label.grid_remove()
+            return
+        label.configure(text="\n".join(f"⚠ {aviso}" for aviso in avisos))
+        label.grid(row=2, column=0, sticky="ew", pady=(8, 0))
 
     def _load_selected_team_round(self) -> None:
         if not self.current_round_id:
@@ -650,6 +733,10 @@ class PairingResultsMixin:
         focus = self.focus_get()
         if focus is None:
             return True
+        # Numa caixa de texto a tecla é do campo: "1", BackSpace, Enter e
+        # Ctrl+Z não podem lançar, apagar nem desfazer o resultado da mesa.
+        if isinstance(focus, _CAIXAS_DE_TEXTO):
+            return False
         while focus is not None:
             if focus == self.content:
                 return True
@@ -716,16 +803,77 @@ class PairingResultsMixin:
             self.require_permission("tournament_write")
             if not self._confirm_short_tournament_round_count():
                 return
+            # MA-09: no limite de rodadas do modo amistoso, oferece mais uma.
+            if not self.free_mode_offer_extra_round(self.current_tournament_id):
+                return
         except Exception as exc:
             self._show_error(exc)
             return
-        tournament_id = self.current_tournament_id
+        self._start_round_generation(self.current_tournament_id, reserve_engine=False)
+
+    def _start_round_generation(
+        self, tournament_id: int, *, reserve_engine: bool, forfeit_empty_teams: bool = False
+    ) -> None:
         self._run_background(
-            lambda: self.pairing_service.generate_next_round(tournament_id),
+            lambda: self.pairing_service.generate_next_round(
+                tournament_id,
+                reserve_engine=reserve_engine,
+                forfeit_empty_teams=forfeit_empty_teams,
+            ),
             on_success=lambda _result: self.show_pairings(),
             busy_message="Gerando emparceiramento...",
             busy_widget=getattr(self, "_generate_round_button", None),
+            on_error=None if (reserve_engine or forfeit_empty_teams) else (
+                lambda error: self._offer_round_way_out(tournament_id, error)
+            ),
         )
+
+    def _offer_round_way_out(self, tournament_id: int, error: Exception) -> bool:
+        """A geração recusou com saída que é decisão do árbitro: pergunta qual.
+
+        Recusa do Gacrux → motor reserva; equipe sem ninguém presente
+        (EQ-02.4) → W.O. do confronto inteiro. Outro erro segue o caminho
+        normal (``False``).
+        """
+        from src.services.pairing.team_swiss import TeamWithoutPlayersError
+        from src.ui.components.dialogs import confirm_dialog
+
+        if not isinstance(error, TeamWithoutPlayersError):
+            return self._offer_reserve_engine(tournament_id, error)
+        if confirm_dialog(
+            self,
+            "Equipe sem jogadores presentes",
+            f"{error}\n\nConfirmar: a rodada sai com o W.O. do confronto inteiro. "
+            "Cancelar: volte e registre o bye Z da equipe.",
+            confirm_text="Confirmar o W.O.",
+            cancel_text="Cancelar",
+        ):
+            self._start_round_generation(
+                tournament_id, reserve_engine=False, forfeit_empty_teams=True
+            )
+        return True
+
+    def _offer_reserve_engine(self, tournament_id: int, error: Exception) -> bool:
+        """Recusa do Gacrux (RGS-03/19): pergunta se a rodada sai pelo motor reserva.
+
+        Pontuação que o TRF não diz ou saída do motor que não confere: as duas
+        são ``GacruxRefusal``. Devolve ``False`` para qualquer outro erro, que
+        segue o caminho normal.
+        """
+        from src.services.pairing.gacrux_engine import GacruxRefusal
+        from src.ui.components.dialogs import confirm_dialog
+
+        if not isinstance(error, GacruxRefusal):
+            return False
+        if confirm_dialog(
+            self,
+            "Motor FIDE recusou a rodada",
+            f"{error}\n\nA escolha fica registrada na auditoria do torneio.",
+            confirm_text="Parear com o motor reserva",
+            cancel_text="Cancelar",
+        ):
+            self._start_round_generation(tournament_id, reserve_engine=True)
+        return True
 
     def _preview_next_round(self) -> None:
         tournament_id = self.current_tournament_id
@@ -738,7 +886,13 @@ class PairingResultsMixin:
 
     _format_pairing_preview = staticmethod(format_pairing_preview)
 
-    def _save_selected_result(self) -> None:
+    def _save_selected_result(self) -> bool:
+        """Grava o resultado do campo na mesa selecionada. Devolve se seguiu.
+
+        ``False`` quando nada foi feito (cancelou um aviso, recusa de regra): o
+        lançamento por tecla só avança para a mesa seguinte quando esta foi
+        resolvida — cancelar um W.O. e ver o cursor pular confunde.
+        """
         try:
             self.require_permission("tournament_write")
             pairing_id = self._selected_pairing_id()
@@ -769,94 +923,414 @@ class PairingResultsMixin:
                     if choice == "cancel":
                         # Restore previous result in OptionMenu
                         self.result_option.set(pairing_detail.get("result") or "")
-                        return
+                        return False
                     elif choice == "restore":
                         result = default_result
                         self.result_option.set(result)
 
-            motivo = ""
             if self.current_round_id:
                 round_data = self.db.get_round(self.current_round_id)
                 if round_data and round_data["status"] == "closed":
-                    motivo = self._prompt_closed_round_correction(int(self.current_round_id))
-                    if not motivo:
-                        return
+                    # RGS-20: rodada fechada vai para o diálogo único, já com o
+                    # resultado escolhido — falta so o motivo + Enter. Eram dois
+                    # diálogos e dois motivos (desbloquear, depois corrigir).
+                    self._result_corrections().open(
+                        int(pairing_id),
+                        detail=pairing_detail,
+                        preselect=result,
+                        on_done=self._reload_current_round,
+                    )
+                    return True
+            if not self._confirm_walkover_entry(result, pairing_detail):
+                self.result_option.set((pairing_detail or {}).get("result") or "")
+                return False
+            anterior = self._current_entry_result(int(pairing_id))
             self.pairing_service.update_result(
-                self.current_tournament_id, pairing_id, result, motivo
+                self.current_tournament_id, pairing_id, result, ""
             )
             self._load_selected_round_pairings()
-            if motivo:
-                self._warn_correction_cascade()
+            self._offer_result_undo(int(pairing_id), pairing_detail, applied=result, previous=anterior)
+            return True
         except Exception as exc:
             self._show_error(exc)
+            return False
 
-    def _warn_correction_cascade(self) -> None:
-        """Avisa na hora quando a correção alcança rodadas já pareadas (ARB-01).
+    # ---- Desfazer, contador e W.O. por tecla (RGS-21) ---------------------- #
 
-        A pendência do painel guarda o mesmo recado, mas o árbitro que acabou de
-        corrigir está **aqui** — e a decisão de reparear é agora, não na próxima
-        vez que ele abrir a Central. Usa a mesma função pura do serviço, então os
-        dois lugares não podem divergir.
-        """
-        rodada = self.db.get_round(int(self.current_round_id or 0))
-        afetadas = cascade_rounds(
-            self.db.list_rounds(int(self.current_tournament_id)),
-            int((rodada or {}).get("number") or 0),
-        )
-        if afetadas:
-            self._show_warning(cascade_message(int(rodada["number"]), afetadas))
+    def _confirm_walkover_entry(self, result: str, detail: dict[str, Any] | None) -> bool:
+        """W.O. e decisao, nao transcricao: a confirmacao do painel (ARB-02)."""
+        from ..pairing_arbitration.pending import CONFIRMED_RESULTS, confirm_walkover
 
-    def _prompt_closed_round_correction(self, round_id: int) -> str:
-        """Desbloqueio (se preciso) + motivo da correção. ``""`` = desistiu.
-
-        Duas perguntas, e nessa ordem, porque são duas decisões diferentes:
-        *abrir a rodada* (permissão, com prazo) e *o que aconteceu* (o registro
-        que sustenta a decisão). Antes havia só um "Alterar mesmo assim?" — e a
-        permissão vinha de um interruptor global do torneio que, ligado uma vez,
-        deixava todas as rodadas fechadas editáveis.
-        """
-        estado = self.pairing_service.correction_unlock_state(
-            int(self.current_tournament_id), round_id
-        )
-        if not estado.allowed:
-            justificativa = reason_dialog(
-                self,
-                "Desbloquear rodada fechada",
-                "Esta rodada está fechada. Para corrigir um resultado é preciso "
-                f"desbloqueá-la: a permissão vale {DEFAULT_UNLOCK_MINUTES} minutos, "
-                "fica registrada na auditoria e não afeta as outras rodadas.\n\n"
-                "Por que a rodada precisa ser reaberta?",
-                validate=unlock_reason_error,
-                confirm_text="Desbloquear",
-                danger=True,
-            )
-            if justificativa is None:
-                return ""
-            aberta = self.pairing_service.unlock_round_for_correction(
-                int(self.current_tournament_id), round_id, justificativa
-            )
-            self._show_warning(
-                f"Rodada desbloqueada para correção até {aberta['expires_at']}."
-            )
-            estado = self.pairing_service.correction_unlock_state(
-                int(self.current_tournament_id), round_id
-            )
-
-        return reason_dialog(
+        if result not in CONFIRMED_RESULTS:
+            return True
+        detail = detail or {}
+        return confirm_walkover(
             self,
-            "Corrigir resultado de rodada fechada",
-            # A primeira linha diz de onde vem a permissão e até quando ela vale:
-            # numa segunda correção da mesma súmula o árbitro já entra aqui, e
-            # precisa saber se está usando a janela ou o interruptor global.
-            f"{estado.label()}\n\n"
-            "A rodada está fechada e o resultado já entrou na classificação "
-            "publicada. O motivo abaixo vai para a trilha de auditoria e para a "
-            "ata — é o que sustenta a decisão numa apelação.\n\n"
-            "O que aconteceu?",
-            validate=correction_reason_error,
-            confirm_text="Corrigir",
-            danger=True,
-        ) or ""
+            result,
+            mesa=detail.get("board_number", "?"),
+            brancas=detail.get("white_display_name", "?"),
+            pretas=detail.get("black_display_name", "?"),
+        )
+
+    def _current_entry_result(self, entry_id: int) -> str:
+        """Resultado gravado agora na mesa (ou tabuleiro de equipes)."""
+        if getattr(self, "pairing_team_mode", False):
+            linha = self.db.get_team_board(entry_id)
+        else:
+            linha = self.db.get_pairing(entry_id)
+        return str((linha or {}).get("result") or "")
+
+    @staticmethod
+    def _entry_label(detail: dict[str, Any] | None) -> str:
+        detail = detail or {}
+        if detail.get("row_type") == "team_board":
+            return f"Tabuleiro {detail.get('board_number', '?')}"
+        return f"Mesa {detail.get('board_number', '?')}"
+
+    def _offer_result_undo(
+        self, entry_id: int, detail: dict[str, Any] | None, *, applied: str, previous: str
+    ) -> None:
+        """Toast "Mesa 7 → 1-0 · Desfazer (Ctrl+Z)" depois de um lançamento.
+
+        O botão do toast desfaz ESTE lançamento; o Ctrl+Z, o ultimo. Sem
+        mudança (mesmo resultado de novo) não há o que desfazer.
+        """
+        if applied == previous:
+            return
+        rotulo = self._entry_label(detail)
+        entrada = {
+            "entry_id": entry_id,
+            "applied": applied,
+            "previous": previous,
+            "label": rotulo,
+            "done": False,
+        }
+        self._last_result_entry = entrada
+        self._show_toast(
+            f"{rotulo} → {applied or 'pendente'}",
+            kind="success",
+            action=(UNDO_LABEL, lambda: self._undo_result_entry(entrada)),
+        )
+
+    def _bind_screen_undo(self) -> None:
+        """Ctrl+Z na tela de Rodadas inteira (RGS-21), e só enquanto ela existir.
+
+        A janela e a única etiqueta de evento comum a todo widget da tela, e e
+        nela que a tecla e ligada; a ligação sai junto com a tabela. Sem
+        ``bind_all`` e sem Ctrl+Z sobrando na tela seguinte.
+        """
+        for sequencia in ("<Control-z>", "<Control-Z>"):
+            funcid = self.bind(sequencia, self._undo_last_result_from_screen, add="+")
+            self.pairing_tree.bind(
+                "<Destroy>",
+                lambda _event, seq=sequencia, ligacao=funcid: _unbind_exact(self, seq, ligacao),
+                add="+",
+            )
+
+    def _undo_last_result_from_screen(self, event: Any = None) -> str | None:
+        """Numa caixa de texto o Ctrl+Z e o desfazer do proprio campo."""
+        if not self._pairing_shortcuts_active():
+            return None
+        return self._undo_last_result(event)
+
+    def _undo_last_result(self, _event: Any = None) -> str:
+        """Desfaz o ultimo lancamento desta tela (Ctrl+Z ou botao do toast)."""
+        entrada = getattr(self, "_last_result_entry", None)
+        if entrada is not None:
+            self._undo_result_entry(entrada)
+        return "break"
+
+    def _undo_result_entry(self, entrada: dict[str, Any]) -> None:
+        if entrada.get("done"):
+            self._show_toast(f"{entrada['label']}: lançamento já desfeito.", kind="info")
+            return
+        try:
+            self.require_permission("tournament_write")
+            self.pairing_service.undo_result(
+                self.current_tournament_id,
+                int(entrada["entry_id"]),
+                applied=str(entrada["applied"]),
+                previous=str(entrada["previous"]),
+            )
+        except Exception as exc:
+            self._show_error(exc)
+            return
+        finally:
+            # Recusado ou feito, este lançamento não se desfaz de novo.
+            entrada["done"] = True
+            if getattr(self, "_last_result_entry", None) is entrada:
+                self._last_result_entry = None
+        self._reload_selecting(int(entrada["entry_id"]))
+        self._show_toast(
+            f"Desfeito: {entrada['label']} → {entrada['previous'] or 'pendente'}", kind="info"
+        )
+
+    def _reload_selecting(self, entry_id: int) -> None:
+        """Recarrega a rodada e poe o cursor na mesa indicada."""
+        if not hasattr(self, "pairing_tree") or not self.pairing_tree.winfo_exists():
+            return
+        self._load_selected_round_pairings()
+        for item, pairing_id in getattr(self, "pairing_row_map", {}).items():
+            if pairing_id == entry_id:
+                self.pairing_tree.selection_set(item)
+                self.pairing_tree.focus(item)
+                self.pairing_tree.see(item)
+                break
+
+    # ---- Botão primário e contador da rodada (RGS-21 / RGS-25) ------------ #
+
+    def _latest_round(self) -> dict[str, Any] | None:
+        rodadas = self.db.list_rounds(self.current_tournament_id)
+        if not rodadas:
+            return None
+        return max(rodadas, key=lambda item: int(item["number"]))
+
+    def _round_primary_state(self) -> tuple[PrimaryRoundAction, dict[str, Any]] | None:
+        """O proximo passo do torneio, sempre a partir da ULTIMA rodada."""
+        ultima = self._latest_round()
+        if ultima is None:
+            return None
+        progresso = self.pairing_service.round_progress(
+            int(self.current_tournament_id), int(ultima["id"])
+        )
+        torneio = self.db.get_tournament(self.current_tournament_id) or {}
+        acao = primary_round_action(
+            round_number=int(ultima["number"]),
+            round_status=str(ultima.get("status") or ""),
+            resolved=int(progresso["resolved_results"]),
+            total=int(progresso["total_results"]),
+            pending=int(progresso["pending_results"]),
+            rounds_count=int(torneio.get("rounds_count") or 0),
+        )
+        return acao, ultima
+
+    def _refresh_round_progress(self) -> None:
+        """Contador da rodada exibida e rotulo do botao primario."""
+        contador = getattr(self, "_round_progress_label", None)
+        if contador is not None and contador.winfo_exists():
+            texto = ""
+            if self.current_round_id:
+                progresso = self.pairing_service.round_progress(
+                    int(self.current_tournament_id), int(self.current_round_id)
+                )
+                texto = results_counter_text(
+                    int(progresso["resolved_results"]), int(progresso["total_results"])
+                )
+            contador.configure(text=texto)
+        botao = getattr(self, "_round_primary_button", None)
+        if botao is None or not botao.winfo_exists():
+            return
+        estado = self._round_primary_state()
+        if estado is not None:
+            botao.configure(text=estado[0].label)
+
+    def _run_round_primary_action(self) -> None:
+        """Clique no botão primário: o estado e relido na hora do clique.
+
+        Toda transição que muda o rótulo por baixo do cursor e segura: "Fechar"
+        sempre passa pela confirmação.
+        """
+        try:
+            estado = self._round_primary_state()
+        except Exception as exc:
+            self._show_error(exc)
+            return
+        if estado is None:
+            return
+        acao, ultima = estado
+        if acao.kind == "launch":
+            self._focus_round_pending(int(ultima["id"]))
+        elif acao.kind == "close":
+            self._confirm_and_close_round(ultima)
+        elif acao.kind == "generate":
+            self._generate_round()
+        else:
+            self.show_standings()
+
+    def _focus_round_pending(self, round_id: int) -> None:
+        """Leva a rodada indicada para a tela e o cursor para a 1a mesa pendente."""
+        if self.current_round_id != round_id:
+            rotulo = next(
+                (r for r, rid in getattr(self, "round_option_map", {}).items() if rid == round_id),
+                None,
+            )
+            if rotulo is not None:
+                self.round_option.set(rotulo)
+                self._load_selected_round_pairings()
+        self._select_first_pending_pairing()
+
+    def _confirm_and_close_round(self, rodada: dict[str, Any]) -> None:
+        """Fechar rodada com a lista de pendencias na frente (RGS-25)."""
+        if self._confirm_round_closing(rodada):
+            self._close_current_round()
+
+    def _round_closing_effect(self, numero: int) -> str:
+        """O que fechar a rodada faz — dito na confirmacao e no checklist do painel."""
+        torneio = self.db.get_tournament(self.current_tournament_id) or {}
+        if numero < int(torneio.get("rounds_count") or 0):
+            efeito = f"libera o emparceiramento da rodada {numero + 1}"
+        else:
+            efeito = "grava a classificação final"
+        return (
+            "Fechar trava os resultados (depois, só Corrigir resultado…, "
+            f"com motivo) e {efeito}."
+        )
+
+    def _confirm_round_closing(self, rodada: dict[str, Any], *, confirmed: bool = False) -> bool:
+        """A confirmação de fechar rodada — a única, da tela de Rodadas e do painel.
+
+        Item reprovado no checklist (QR aguardando, pendência bloqueante) não
+        vira confirmação inútil — o serviço recusaria: vai para a faixa de
+        regra, com o "Resolver". Tudo certo: confirmação com a lista; Esc ou
+        "Voltar" não fecham. Confirmada, a rodada vira a ``current_round_id``.
+        ``confirmed``: o usuário já confirmou olhando a mesma lista (o
+        "Checklist" do painel) — confere de novo, mas não pergunta duas vezes.
+        """
+        from ...components.dialogs import confirm_dialog
+
+        try:
+            self.require_permission("tournament_write")
+            numero = int(rodada["number"])
+            itens = [
+                item
+                for item in self.pairing_service.closing_checklist(int(self.current_tournament_id))
+                if item.get("action") != "ready_to_close"
+            ]
+            falhas = [item for item in itens if not item.get("ok")]
+            if falhas:
+                resolver = None
+                destino = getattr(self, "_arbitration_action", None)
+                comando = destino(str(falhas[0].get("action") or "")) if destino else None
+                if comando is not None:
+                    resolver = ("Resolver", comando)
+                self._show_rule_error(
+                    "\n".join(f"✗ {item['label']}" for item in falhas),
+                    title=f"A rodada {numero} ainda não pode ser fechada",
+                    suggestion="Resolva os itens marcados e tente fechar de novo.",
+                    action=resolver,
+                )
+                return False
+            lista = "\n".join(f"✓ {item['label']}" for item in itens)
+            if not confirmed and not confirm_dialog(
+                self,
+                f"Fechar rodada {numero}",
+                f"{lista}\n\n{self._round_closing_effect(numero)}",
+                confirm_text=f"Fechar rodada {numero}",
+                cancel_text="Voltar",
+            ):
+                return False
+            self.current_round_id = int(rodada["id"])
+        except Exception as exc:
+            self._show_error(exc)
+            return False
+        return True
+
+    # ---- "Corrigir resultado…" na mesa (RGS-20) ---------------------------- #
+
+    def _result_corrections(self) -> ResultCorrectionActions:
+        return ResultCorrectionActions(self)
+
+    def _open_result_correction(self, event: Any = None) -> str:
+        """Clique direito / Shift+F10 / Ctrl+E numa mesa: abre o dialogo unico."""
+        tree = getattr(self, "pairing_tree", None)
+        if tree is None:
+            return "break"
+        if event is not None and getattr(event, "num", None) == 3:
+            # Clique direito numa linha não selecionada corrige ESSA linha.
+            linha = tree.identify_row(event.y)
+            if linha:
+                tree.selection_set(linha)
+                tree.focus(linha)
+        target_id = self._selected_pairing_id()
+        if not target_id:
+            self._show_error(
+                AppError(
+                    "Selecione um tabuleiro." if getattr(self, "pairing_team_mode", False) else "Selecione uma mesa.",
+                    suggestion="Clique com o botão direito na mesa, ou selecione-a e tecle Ctrl+E.",
+                )
+            )
+            return "break"
+        self._result_corrections().open(
+            int(target_id),
+            detail=self._selected_pairing(),
+            on_done=self._reload_current_round,
+        )
+        return "break"
+
+    def _reload_current_round(self) -> None:
+        """Recarrega a rodada exibida, mantendo a mesa que estava selecionada."""
+        if not hasattr(self, "pairing_tree") or not self.pairing_tree.winfo_exists():
+            return
+        anterior = self._selected_pairing_id()
+        self._load_selected_round_pairings()
+        for item, pairing_id in getattr(self, "pairing_row_map", {}).items():
+            if pairing_id == anterior:
+                self.pairing_tree.selection_set(item)
+                self.pairing_tree.focus(item)
+                self.pairing_tree.see(item)
+                break
+
+    # ---- Reconciliação dos retratos em segundo plano (RGS-10) ------------- #
+
+    _RECONCILE_POLL_MS = 400
+
+    def _start_snapshot_reconciler(self) -> None:
+        """Liga o trabalhador dos retratos e termina o que ficou pendente.
+
+        A correção só marca os retratos; quem regrava e o trabalhador, numa
+        thread, e ele só fala com a tela pelo `after()`. Chamado na abertura
+        (depois do login): uma reconciliação interrompida — falha, app fechado —
+        e terminada aqui, sem o árbitro pedir.
+
+        O aviso entra numa fila que a PRÓPRIA thread da tela esvazia por um
+        `after()` periódico: chamar `after()` de outra thread só funciona com o
+        `mainloop` já rodando (senão o Tk levanta "main thread is not in main
+        loop" e o aviso se perde).
+        """
+        avisos: queue.SimpleQueue[Callable[[], None]] = queue.SimpleQueue()
+        reconciler = SnapshotReconciler(
+            self.pairing_service,
+            notify=avisos.put,
+            on_done=self._on_snapshots_reconciled,
+            on_error=self._on_snapshot_reconcile_error,
+        )
+        self.snapshot_reconciler = reconciler
+        self.pairing_service.on_snapshots_pending = reconciler.start
+
+        def drenar() -> None:
+            while True:
+                try:
+                    aviso = avisos.get_nowait()
+                except queue.Empty:
+                    break
+                try:
+                    aviso()
+                except Exception:
+                    logger.exception("Falha ao mostrar o aviso da reconciliacao")
+            try:
+                self.after(self._RECONCILE_POLL_MS, drenar)
+            except Exception:  # janela destruída: o laço acaba aqui
+                pass
+
+        drenar()
+        reconciler.start()
+
+    def _on_snapshots_reconciled(self, total: int) -> None:
+        if hasattr(self, "status_label"):
+            plural = "s" if total != 1 else ""
+            self.status_label.configure(
+                text=f"{total} retrato{plural} de classificação reconciliado{plural}."
+            )
+
+    def _on_snapshot_reconcile_error(self, error: Exception) -> None:
+        # O erro já foi para o log com o traceback; a pendência fica no banco.
+        if hasattr(self, "status_label"):
+            self.status_label.configure(
+                text=(
+                    "Falha ao reconciliar os retratos de classificação; a pendência "
+                    f"será retomada na próxima abertura. ({error})"
+                )
+            )
 
     def _prompt_bye_edit_warning(self, default_result: str, chosen_result: str) -> str:
         """Aviso de editar um BYE — o diálogo de cores contraditórias do P3-10.
@@ -916,7 +1390,8 @@ class PairingResultsMixin:
             selected_before = self.pairing_tree.selection()
             children_before = list(self.pairing_tree.get_children())
             selected_index = children_before.index(selected_before[0]) if selected_before else -1
-            self._save_selected_result()
+            if not self._save_selected_result():
+                return "break"
             if selected_index >= 0 and hasattr(self, "pairing_tree"):
                 children = list(self.pairing_tree.get_children())
                 next_index = selected_index + 1
@@ -971,12 +1446,41 @@ class PairingResultsMixin:
             self.require_permission("tournament_write")
             if not self.current_round_id:
                 raise AppError("Selecione uma rodada.")
-            if not self._confirm_action("Confirmar", "Excluir a rodada selecionada?", danger=True):
-                return
-            self.pairing_service.delete_generated_round(self.current_round_id)
-            self._load_round_options()
+            if self._confirm_and_delete_round(int(self.current_round_id)):
+                self._load_round_options()
         except Exception as exc:
             self._show_error(exc)
+
+    def _confirm_and_delete_round(self, round_id: int) -> bool:
+        """Exclui rodada gerada perguntando o que ela custa (RGS-34).
+
+        Sem resultado lançado, a confirmação de sempre. Com resultado, o
+        diálogo diz quantos somem e pede o motivo — que vai para a auditoria
+        junto com os resultados apagados. Devolve se excluiu.
+        """
+        previa = self.pairing_service.round_deletion_preview(int(round_id))
+        numero = previa["number"]
+        if not previa["results"]:
+            if not self._confirm_action("Confirmar", f"Excluir a rodada {numero}?", danger=True):
+                return False
+            self.pairing_service.delete_generated_round(int(round_id))
+            return True
+        total = int(previa["results"])
+        motivo = reason_dialog(
+            self,
+            f"Excluir rodada {numero}",
+            f"{previa['message']}. Eles ficam guardados na auditoria, junto com o "
+            "motivo, mas saem da rodada e da classificação.\n\n"
+            "Por que a rodada precisa ser excluída?",
+            validate=lambda texto: round_deletion_reason_error(texto, total),
+            confirm_text="Excluir rodada",
+            danger=True,
+        )
+        if motivo is None:
+            return False
+        self.pairing_service.delete_generated_round(int(round_id), reason=motivo)
+        self._show_toast(f"Rodada {numero} excluída ({previa['message']}).", kind="success")
+        return True
 
     def _projector_rows(self) -> list[dict[str, str]]:
         """As mesas da rodada no formato que a projeção mostra.

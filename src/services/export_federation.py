@@ -16,6 +16,7 @@ from typing import Any, Mapping, TYPE_CHECKING
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 from urllib.request import Request, urlopen
 
+from src.domain.dates import Data, parse_date, parse_trf_date
 from src.core.database import BASE_DIR, DEFAULT_CERTIFICATE_TEMPLATES, Database
 from src.services.access_export import access_driver_available, write_accdb, write_csv_bundle
 from src.services.constants import *
@@ -579,16 +580,12 @@ class FederationReportsMixin:
             # `YYYY` no campo de nascimento (FED-05). Completar com 01/01
             # inventaria um aniversário que ninguém informou.
             return ano if long_year else ano[2:]
-        parsed: datetime | None = None
-        for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%Y.%m.%d", "%d/%m/%Y", "%d. %m. %Y", "%d.%m.%Y"):
-            try:
-                parsed = datetime.strptime(raw, fmt)
-                break
-            except ValueError:
-                continue
-        if not parsed:
+        lido = parse_trf_date(raw)
+        if not isinstance(lido, Data):
+            lido = parse_date(raw)
+        if not isinstance(lido, Data):
             return raw.replace("-", "/")[:10]
-        return parsed.strftime("%Y/%m/%d" if long_year else "%y/%m/%d")
+        return lido.valor.strftime("%Y/%m/%d" if long_year else "%y/%m/%d")
 
     @staticmethod
     def _year_only(value: Any) -> str:
@@ -621,11 +618,7 @@ class FederationReportsMixin:
         if cls._year_only(raw):
             return True
         normalized = cls._trf_date(raw, long_year=True)
-        try:
-            datetime.strptime(normalized, "%Y/%m/%d")
-            return True
-        except ValueError:
-            return False
+        return isinstance(parse_date(normalized), Data)
 
     @staticmethod
     def _trf_valid_federation_code(value: Any) -> bool:
@@ -705,7 +698,7 @@ class FederationReportsMixin:
         ]
 
     def _referee_fide_id(self, tournament_id: int, name: str) -> str:
-        """FIDE ID do arbitro pelo nome; `""` quando ele nao esta no cadastro.
+        """FIDE ID do arbitro pelo nome; `""` quando ele não é no cadastro.
 
         Os árbitros vem de dois lugares — a lista de árbitros do torneio (que tem
         FIDE ID) e os campos de texto das configurações (que não tem). Casar pelo
@@ -738,6 +731,9 @@ class FederationReportsMixin:
                     continue
                 for board in self.db.list_team_boards(int(match["id"])):
                     if not board.get("white_player_id") or not board.get("black_player_id"):
+                        vaga = self._trf_empty_seat_pairing(board)
+                        if vaga:
+                            board_pairings.append(vaga)
                         continue
                     board_pairings.append(
                         {
@@ -750,16 +746,52 @@ class FederationReportsMixin:
             pairings_by_round[int(round_data["number"])] = board_pairings
         return pairings_by_round
 
+    @staticmethod
+    def _trf_empty_seat_pairing(board: Mapping[str, Any]) -> dict[str, Any] | None:
+        """Tabuleiro com vaga (EQ-02) visto pelo jogador que estava sentado.
+
+        Ele não tem adversário para a célula, então sai como ponto sem jogo:
+        `F` se o W.O. foi a favor dele, `Z` se não — o Gacrux lê `F` como o `+`
+        (vitória não jogada). Antes a mesa era descartada e a célula saia `Z`,
+        um ponto de jogo a menos na equipe.
+        """
+        white_id = int(board.get("white_player_id") or 0)
+        black_id = int(board.get("black_player_id") or 0)
+        present = white_id or black_id
+        if not present:
+            return None
+        white_points, black_points = RESULT_POINTS.get(str(board.get("result") or ""), (0.0, 0.0))
+        points = white_points if white_id else black_points
+        return {
+            "white_player_id": present,
+            "black_player_id": None,
+            "result": "F" if points > 0 else "Z",
+            "is_bye": 1,
+        }
+
     def _trf_player_standings(
         self,
         tournament: Mapping[str, Any],
         players: list[dict[str, Any]],
+        up_to_round: int | None = None,
     ) -> dict[int, dict[str, Any]]:
+        """Pontos e posição da linha 001, por jogador.
+
+        No retrato da rodada N (`up_to_round`) são os da classificação de até N
+        — a mesma conta que o fechamento da rodada grava no retrato (RGS-10).
+        Sem o corte, o arquivo da R1 de um torneio na R3 trazia nas células a
+        R1 e no campo de pontos a classificação de hoje.
+        """
+        tournament_id = int(tournament["id"])
         if tournament.get("competition_type") != "team":
-            return {
-                int(item["player_id"]): item
-                for item in self.pairing_service.standings(int(tournament["id"]))
-            }
+            standings = (
+                self.pairing_service.standings(tournament_id)
+                if up_to_round is None
+                else self.pairing_service._standings(
+                    tournament_id, honor_strict=True, up_to_round=int(up_to_round)
+                )
+            )
+            return {int(item["player_id"]): item for item in standings}
 
         stats = {
             int(player["id"]): {
@@ -771,13 +803,17 @@ class FederationReportsMixin:
             }
             for player in players
         }
-        for round_data in self.db.list_rounds(int(tournament["id"])):
+        for round_data in self.db.list_rounds(tournament_id):
+            if up_to_round is not None and int(round_data["number"]) > int(up_to_round):
+                continue
             for match in self.db.list_team_matches_for_round(int(round_data["id"])):
                 for board in self.db.list_team_boards(int(match["id"])):
                     white_id = int(board.get("white_player_id") or 0)
                     black_id = int(board.get("black_player_id") or 0)
                     result = str(board.get("result") or "")
-                    if not white_id or not black_id or result not in RESULT_POINTS:
+                    # Tabuleiro vazio (EQ-02) também conta: quem estava sentado
+                    # pontuou o W.O.; o lado sem jogador e 0 e não é em stats.
+                    if not (white_id or black_id) or result not in RESULT_POINTS:
                         continue
                     white_points, black_points = RESULT_POINTS[result]
                     if white_id in stats:

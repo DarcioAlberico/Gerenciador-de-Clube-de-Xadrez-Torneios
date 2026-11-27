@@ -12,6 +12,7 @@ política — quais intervalos valem, qual é o padrão — é dado puro e mora 
 """
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from .state import (
@@ -24,6 +25,8 @@ from .state import (
 )
 
 VIEW_METHOD = "show_arbitration_panel"
+
+logger = logging.getLogger("src.ui.screens.pairing_arbitration")
 
 
 class AutoRefresh:
@@ -57,8 +60,22 @@ class AutoRefresh:
         self.host._arbitration_refresh_job = None
         # A guarda é o ponto todo: sem ela, o painel se redesenharia por cima de
         # qualquer tela que o árbitro tivesse aberto nesse meio-tempo.
-        if getattr(self.host, "_current_view_method", "") == VIEW_METHOD:
+        if getattr(self.host, "_current_view_method", "") != VIEW_METHOD:
+            return
+        try:
             self.host.show_arbitration_panel()
+        except Exception:
+            # RGS-31: quem reagenda é a própria montagem do painel; se ela
+            # falhava, o laço morria calado. O erro vai ao log com o traceback
+            # e não sobe ao Tk — um diálogo a cada ciclo travaria a mesa.
+            logger.exception(
+                "Falha na auto-atualização do painel do árbitro; nova tentativa no próximo ciclo"
+            )
+        finally:
+            # Religa só se a montagem não chegou a agendar (o caminho feliz já
+            # agendou; ``schedule`` respeita a auto-atualização desligada).
+            if self.host._arbitration_refresh_job is None:
+                self.schedule()
 
     # ---- Preferências ----------------------------------------------------- #
 

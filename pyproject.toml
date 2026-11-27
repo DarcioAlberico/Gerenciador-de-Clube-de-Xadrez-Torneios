@@ -101,7 +101,7 @@ ignore = ["E501"]
 
 [tool.mypy]
 python_version = "3.11"
-files = ["src/core"]
+files = ["src/core", "src/domain"]
 ignore_missing_imports = true
 follow_imports = "silent"
 warn_unused_ignores = true

@@ -13,6 +13,7 @@ sentido se a pessoa tiver tempo de ler e clicar.
 """
 from __future__ import annotations
 
+import logging
 from typing import Any, Callable
 
 import customtkinter as ctk
@@ -29,6 +30,8 @@ from ..theme import (
     THEME_SUCCESS,
     THEME_WARNING,
 )
+
+logger = logging.getLogger(__name__)
 
 # Duração padrão e a maior, usada quando há ação para clicar.
 DURATION_MS = 3500
@@ -109,7 +112,7 @@ class ToastStack:
             toast.lift()
             self._host.after(duration_ms, lambda: self.dismiss(toast))
         except Exception:
-            pass
+            logger.debug("Toast nao agendado para sumir", exc_info=True)
         return toast
 
     def dismiss(self, toast: ctk.CTkFrame) -> None:
@@ -120,7 +123,7 @@ class ToastStack:
         try:
             toast.destroy()
         except Exception:
-            pass
+            pass  # o toast já foi destruído (fechado antes do prazo)
         self.restack()
 
     def clear(self) -> None:
@@ -137,7 +140,7 @@ class ToastStack:
                 toast.place(relx=1.0, rely=1.0, x=-self._margin, y=-offset, anchor="se")
                 offset += height + self._gap
             except Exception:
-                pass
+                pass  # toast destruído durante o reposicionamento
 
     def _fire(self, toast: ctk.CTkFrame, callback: Callable[[], None]) -> None:
         """Clique na ação: fecha o toast antes de agir, para o callback poder

@@ -2,8 +2,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import pytest
+
 from src.core.database import Database
 from src.services.pairing_service import PairingService
+
+pytestmark = pytest.mark.gacrux  # RGS-37: roda o motor padrão de verdade
 
 
 class TestPairingGacrux(unittest.TestCase):

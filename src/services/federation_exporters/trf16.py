@@ -4,9 +4,12 @@ from pathlib import Path
 from typing import Any
 
 from src.services.constants import AppError, FINAL_RESULTS, RESULT_POINTS, player_pairing_name
+from src.services import friendly_mode
 from src.services.results_registry import is_played_result
 from src.services.federation_exporters.base import FederationExportFormat
 from src.services.federation_exporters.trf16_records import (
+    BLACK_FIRST,
+    WHITE_FIRST,
     duplicate_fide_ids,
     initial_color,
     pending_result_cells,
@@ -17,9 +20,14 @@ from src.services.federation_exporters.trf16_records import (
     submission_message,
 )
 from src.services.federation_exporters.trf25_records import record_250
+from src.services.pairing.constraints import seeding_order
+from src.services.pairing.standings_cut import players_as_of_round
 from src.services.pairing.acceleration import (
     acceleration_spec,
+    baku_acceleration_blocks,
+    baku_initial_field,
     scheme_emits_250,
+    scheme_is_baku,
     upper_share_size,
 )
 
@@ -50,38 +58,106 @@ class TRF16Exporter:
         de pendências, porque a federação recusaria o arquivo depois do envio
         (FED-03).
         """
+        conteudo, players = self._render(tournament_id, up_to_round=None)
+        warnings = self.validate(tournament_id)
+        problemas = self._file_problems(conteudo, players)
+        if submission and friendly_mode.is_friendly(self.db.get_tournament_settings(tournament_id)):
+            # MA-06: o torneio amistoso flexibiliza entrada, rodada e atraso;
+            # não vai para rating da federação.
+            problemas = [friendly_mode.RATING_REFUSAL, *problemas]
+        if submission and problemas:
+            raise AppError(submission_message(problemas))
+        warnings = [*warnings, *problemas]
+
+        Path(file_path).write_text(conteudo, encoding="utf-8", newline="")
+        return warnings
+
+    def render(self, tournament_id: int, *, up_to_round: int | None = None) -> str:
+        """O conteúdo do TRF16, sem avisos e sem arquivo.
+
+        E o que o motor de desempate recebe — e, pelo hash, a chave do cache
+        dele (RGS-36). `up_to_round` corta as células nas rodadas do cálculo
+        (`-n`): resultado digitado na rodada em aberto não muda o desempate.
+        """
+        return self._render(tournament_id, up_to_round=up_to_round)[0]
+
+    def players(self, tournament_id: int, *, up_to_round: int | None = None) -> list[dict[str, Any]]:
+        """Os jogadores do arquivo, na ordem do número inicial (índice 0 = n. 1).
+
+        Quem lê o resultado do motor (desempate, pareamento) traduz o número do
+        TRF por esta lista — a mesma que `render` numera.
+        """
+        tournament = self.db.get_tournament(tournament_id) or {}
+        rounds = self._rounds(tournament_id, up_to_round)
+        return self._players(
+            tournament_id,
+            self.db.get_tournament_settings(tournament_id) or {},
+            self.export_service._trf_pairings_by_round(tournament, rounds),
+            up_to_round,
+        )
+
+    def _rounds(self, tournament_id: int, up_to_round: int | None) -> list[dict[str, Any]]:
+        rounds = sorted(self.db.list_rounds(tournament_id), key=lambda round_data: round_data["number"])
+        if up_to_round is not None:
+            rounds = [round_data for round_data in rounds if int(round_data["number"]) <= up_to_round]
+        return rounds
+
+    def _players(
+        self,
+        tournament_id: int,
+        settings: dict[str, Any],
+        pairings_by_round: dict[int, list[dict[str, Any]]],
+        up_to_round: int | None,
+    ) -> list[dict[str, Any]]:
+        """Número inicial (start-rank) = ordem inicial do torneio (RGS-13).
+
+        E o número de pareamento que o Gacrux lê. No retrato da rodada N
+        (`up_to_round`), só quem existia nela (RGS-10, `standings_cut`): o
+        entrante tardio inscrito depois de N não entra no desempate de N.
+        """
+        players = self.db.list_players(tournament_id, active_only=False)
+        if up_to_round is not None:
+            players = players_as_of_round(
+                players,
+                self.db.list_player_status_events(tournament_id),
+                [
+                    {**pairing, "round_number": number}
+                    for number, pairings in pairings_by_round.items()
+                    for pairing in pairings
+                ],
+                int(up_to_round),
+            )
+        return seeding_order(players, settings)
+
+    def _render(
+        self, tournament_id: int, *, up_to_round: int | None
+    ) -> tuple[str, list[dict[str, Any]]]:
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
             raise AppError("Selecione um torneio válido.")
 
         settings = self.db.get_tournament_settings(tournament_id) or {}
-        warnings = self.validate(tournament_id)
-        players = sorted(
-            self.db.list_players(tournament_id, active_only=False),
-            key=lambda player: (
-                -self.export_service._trf_rating(player),
-                player_pairing_name(player).casefold(),
-                int(player.get("id") or 0),
-            ),
-        )
-        rounds = sorted(self.db.list_rounds(tournament_id), key=lambda round_data: round_data["number"])
+        rounds = self._rounds(tournament_id, up_to_round)
         schedule = {
             int(item["round_number"]): str(item.get("date") or "").strip()
             for item in self.db.list_round_schedule(tournament_id)
         }
         is_team_tournament = tournament.get("competition_type") == "team"
         pairings_by_round = self.export_service._trf_pairings_by_round(tournament, rounds)
+        players = self._players(tournament_id, settings, pairings_by_round, up_to_round)
         player_id_to_start_rank = {int(player["id"]): index for index, player in enumerate(players, start=1)}
-        standings_by_player = self.export_service._trf_player_standings(tournament, players)
-        # Dois numeros DIFERENTES, e de proposito (FED-03):
-        #  - `round_count` (celulas de rodada) = o que JA ACONTECEU. Emitir
-        #    celula de rodada futura faz o motor FIDE tratar o jogador como ja
-        #    resolvido naquela rodada e nao parear ninguem;
-        #  - `declared_rounds` (142/XXR e o calendario de datas) = o total do
-        #    TORNEIO, que e o que o motor precisa saber para, por exemplo,
-        #    reconhecer a ultima rodada.
-        # O TRF25 usava o total configurado tambem nas celulas — era essa a
-        # divergencia entre os dois arquivos do mesmo torneio.
+        standings_by_player = self.export_service._trf_player_standings(
+            tournament, players, up_to_round
+        )
+        # Dois números DIFERENTES, e de propósito (FED-03):
+        #  - `round_count` (células de rodada) = o que JÁ ACONTECEU. Emitir
+        #    célula de rodada futura faz o motor FIDE tratar o jogador como já
+        #    resolvido naquela rodada e não parear ninguém;
+        #  - `declared_rounds` (142/XXR e o calendário de datas) = o total do
+        #    TORNEIO, que é o que o motor precisa saber para, por exemplo,
+        #    reconhecer a última rodada.
+        # O TRF25 usava o total configurado também nas células — era essa a
+        # divergência entre os dois arquivos do mesmo torneio.
         round_count = max([int(round_data["number"]) for round_data in rounds], default=0)
         declared_rounds = max(int(tournament.get("rounds_count") or 0), round_count)
         teams = self.db.list_teams(tournament_id, active_only=False) if is_team_tournament else []
@@ -115,10 +191,12 @@ class TRF16Exporter:
         # Extensões do dialeto TRF16 (FED-03): quem lê TRF16 espera `XXR`, e não
         # o `142`, que é registro TRF25.
         linhas.append(f"{record_xxr(declared_rounds)}\r\n")
+        # Antes da R1, a cor gravada no torneio (RGS-14) — a que a R1 vai usar.
+        cor_gravada = BLACK_FIRST if str(settings.get("initial_color") or "").upper() == "B" else WHITE_FIRST
         linhas.append(
-            f"{record_xxc(initial_color(pairings_by_round.get(1, []), player_id_to_start_rank))}\r\n"
+            f"{record_xxc(initial_color(pairings_by_round.get(1, []), player_id_to_start_rank, cor_gravada))}\r\n"
         )
-        aceleracao = self._acceleration_record_250(players, settings)
+        aceleracao = self._acceleration_record_250(players, settings, declared_rounds, pairings_by_round)
         if aceleracao:
             linhas.append(aceleracao)
         linhas.append(service._trf_round_dates_line(declared_rounds, schedule))
@@ -137,14 +215,7 @@ class TRF16Exporter:
             service._trf_team_line(team, player_id_to_start_rank) for team in teams
         )
 
-        conteudo = "".join(linhas)
-        problemas = self._file_problems(conteudo, players)
-        if submission and problemas:
-            raise AppError(submission_message(problemas))
-        warnings = [*warnings, *problemas]
-
-        Path(file_path).write_text(conteudo, encoding="utf-8", newline="")
-        return warnings
+        return "".join(linhas), players
 
     @staticmethod
     def _file_problems(content: str, players: list[dict[str, Any]]) -> list[str]:
@@ -165,6 +236,8 @@ class TRF16Exporter:
     def _acceleration_record_250(
         players: list[dict[str, Any]],
         settings: dict[str, Any],
+        declared_rounds: int = 0,
+        pairings_by_round: dict[int, list[dict[str, Any]]] | None = None,
     ) -> str | None:
         """Registro 250 — aceleração de pareamento, individual (§5.1).
 
@@ -173,12 +246,29 @@ class TRF16Exporter:
         `1..round_count`, aplicado ao topo `upper_fraction` do campo — exatamente
         o que o motor aplica em `pairing/acceleration.py`.
 
-        Fica aqui, e nao so no TRF25, porque e o registro que a implementacao de
-        referencia LE (o `XXA` do dialeto TRF16 quebra o parser dela — ver
-        `trf16_records`). Baku fica de fora: sem a formula oficial nao se emite
-        250 nem sufixo `_BAKU`, para nunca enganar o arbitro.
+        Fica aqui, e não só no TRF25, porque é o registro que a implementação de
+        referência LÊ (o `XXA` do dialeto TRF16 quebra o parser dela — ver
+        `trf16_records`). Baku (FIDE C.04.7, RGS-30) sai em blocos de
+        `baku_acceleration_blocks` — a mesma conta do pareamento — sobre o GA, que
+        vai do n. 1 ao ultimo dele; `declared_rounds` e o total do torneio e
+        `pairings_by_round` prova quem estava na R1.
         """
         method = str(settings.get("acceleration_method") or "none")
+        if scheme_is_baku(method):
+            mesas = [
+                {**pairing, "round_number": number}
+                for number, pairings in (pairings_by_round or {}).items()
+                for pairing in pairings
+            ]
+            total, late_above = baku_initial_field(
+                [int(player["id"]) for player in players],
+                [int(player["id"]) for player in players_as_of_round(players, [], mesas, 1)],
+            )
+            blocks = baku_acceleration_blocks(total, declared_rounds, late_above)
+            return "".join(
+                record_250(0.0, vp, first_round, last_round, [first, last])
+                for vp, first_round, last_round, first, last in blocks
+            ) or None
         if not scheme_emits_250(method):
             return None
         spec = acceleration_spec(method)
@@ -198,6 +288,8 @@ class TRF16Exporter:
         players = self.db.list_players(tournament_id, active_only=False)
         rounds = self.db.list_rounds(tournament_id)
         warnings: list[str] = []
+        if friendly_mode.is_friendly(settings):
+            warnings.append(friendly_mode.RATING_REFUSAL)
 
         if not players:
             raise AppError("Cadastre jogadores antes de exportar para Chess-Results/TRF16.")
@@ -326,7 +418,7 @@ class TRF16Exporter:
         if summary["byes"]:
             warnings.append(f"TRF16 contém {summary['byes']} bye(s).")
         if summary["forfeits"]:
-            warnings.append(f"TRF16 contem {summary['forfeits']} resultado(s) por WO.")
+            warnings.append(f"TRF16 contém {summary['forfeits']} resultado(s) por W.O.")
         if summary["double_absences"]:
             warnings.append(f"TRF16 contém {summary['double_absences']} dupla(s) ausência(s).")
         if summary["unpaired"]:

@@ -63,6 +63,43 @@ def unlock_reason_error(reason: Any) -> str:
     return ""
 
 
+def shared_reason_error(reason: Any) -> str:
+    """Motivo único do "Corrigir resultado…" (RGS-20): desbloqueio + correção.
+
+    O mesmo texto vai para os dois registros, então vale a regra mais estrita
+    das duas — hoje iguais (um teste fixa isso). Se um dia uma ficar mais
+    exigente, é ela que fala primeiro, e o árbitro não passa no desbloqueio
+    para tropeçar na correção logo depois.
+    """
+    return correction_reason_error(reason) or unlock_reason_error(reason)
+
+
+def deleted_results_message(total: int) -> str:
+    """ "N resultados serão apagados" — o que a exclusão da rodada custa (RGS-34)."""
+    if total == 1:
+        return "1 resultado será apagado"
+    return f"{int(total)} resultados serão apagados"
+
+
+def round_deletion_reason_error(reason: Any, results: int) -> str:
+    """Motivo da exclusão de rodada gerada; ``""`` quando serve (RGS-34).
+
+    Sem resultado lançado não há o que justificar: excluir uma rodada recém
+    gerada é desfazer um clique. Com resultado, a exclusão apaga o que o
+    árbitro anotou das súmulas — e isso precisa de motivo, como a correção.
+    """
+    if int(results) <= 0:
+        return ""
+    cleaned = clean_reason(reason)
+    if len(cleaned) >= MIN_REASON_LENGTH:
+        return ""
+    return (
+        f"{deleted_results_message(results)}. Informe o motivo da exclusão "
+        f"(pelo menos {MIN_REASON_LENGTH} caracteres): ele fica na auditoria "
+        "junto com os resultados apagados."
+    )
+
+
 # --- Desbloqueio pontual --------------------------------------------------- #
 
 

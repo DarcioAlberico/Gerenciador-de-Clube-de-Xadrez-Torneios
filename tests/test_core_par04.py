@@ -247,6 +247,9 @@ class RoundRobinPorEquipesNoServicoTest(CoreServiceTestCase):
         self.assertIn("calendário é fixo", str(erro.exception))
 
 
+MOTIVO = "Cores trocadas a pedido do árbitro"
+
+
 class TrocaDeCoresTest(CoreServiceTestCase):
     def setUp(self) -> None:
         super().setUp()
@@ -261,19 +264,20 @@ class TrocaDeCoresTest(CoreServiceTestCase):
         preta_antes = int(self.pairing["black_player_id"])
 
         self.service.swap_pairing_colors(
-            self.tournament_id, self.round_id, int(self.pairing["id"])
+            self.tournament_id, self.round_id, int(self.pairing["id"]), reason=MOTIVO
         )
 
         depois = self.db.get_pairing(int(self.pairing["id"]))
         self.assertEqual(preta_antes, int(depois["white_player_id"]))
         self.assertEqual(branca_antes, int(depois["black_player_id"]))
 
+        # RGS-16: a troca de cor é ajuste manual — mesmo evento da troca de jogador.
         eventos = self.db.list_audit_events(
-            self.tournament_id, action="pairing_colors_swapped", limit=5
+            self.tournament_id, action="pairing_manual_adjustment", limit=5
         )
         self.assertEqual(1, len(eventos))
-        self.assertEqual(str(branca_antes), _campo(eventos[0]["before_json"], "white_player_id"))
-        self.assertEqual(str(preta_antes), _campo(eventos[0]["after_json"], "white_player_id"))
+        self.assertEqual(MOTIVO, eventos[0]["reason"])
+        self.assertEqual(str(preta_antes), _campo(_campo_json(eventos[0]["after_json"], "change"), "white_player_id"))
 
     def test_rodada_fechada_recusa_a_troca(self) -> None:
         for pairing in self.db.get_pairings_for_round(self.round_id):
@@ -282,7 +286,7 @@ class TrocaDeCoresTest(CoreServiceTestCase):
 
         with self.assertRaises(AppError) as erro:
             self.service.swap_pairing_colors(
-                self.tournament_id, self.round_id, int(self.pairing["id"])
+                self.tournament_id, self.round_id, int(self.pairing["id"]), reason=MOTIVO
             )
         self.assertIn("fechada", str(erro.exception))
 
@@ -291,14 +295,14 @@ class TrocaDeCoresTest(CoreServiceTestCase):
         self.service.update_result(self.tournament_id, int(self.pairing["id"]), "1-0")
         with self.assertRaises(AppError) as erro:
             self.service.swap_pairing_colors(
-                self.tournament_id, self.round_id, int(self.pairing["id"])
+                self.tournament_id, self.round_id, int(self.pairing["id"]), reason=MOTIVO
             )
         self.assertIn("Limpe o resultado", str(erro.exception))
 
     def test_mesa_de_outro_torneio_e_recusada(self) -> None:
         outro = self.db.create_tournament("Outro", rounds_count=3)
         with self.assertRaises(AppError):
-            self.service.swap_pairing_colors(outro, self.round_id, int(self.pairing["id"]))
+            self.service.swap_pairing_colors(outro, self.round_id, int(self.pairing["id"]), reason=MOTIVO)
 
 
 class TrocaDeCoresPorEquipesTest(CoreServiceTestCase):
@@ -500,6 +504,12 @@ class FlutuacaoPorEquipesTest(unittest.TestCase):
             **argumentos,
         )
         self.assertGreater(com_historico, base)
+
+
+def _campo_json(payload_json: str, chave: str) -> str:
+    import json
+
+    return json.dumps(json.loads(payload_json or "{}").get(chave, {}))
 
 
 def _campo(payload_json: str, chave: str) -> str:

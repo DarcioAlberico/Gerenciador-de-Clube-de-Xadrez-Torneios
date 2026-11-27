@@ -162,6 +162,7 @@ class CalendarRankingMixin:
             tournament_option.set(chosen)
 
         def event_payload() -> dict[str, Any]:
+            self._refuse_invalid_dates(entries)
             return {
                 "club_id": club_option_map.get(club_option.get(), 1),
                 "tournament_id": tournament_option_map.get(tournament_option.get()),
@@ -552,6 +553,8 @@ class CalendarRankingMixin:
                 if not self.current_tournament_id:
                     raise AppError("Selecione um torneio antes de atualizar o rating interno.")
                 tournament_id = int(self.current_tournament_id)
+                if not self.free_mode_confirm_internal_rating(tournament_id):
+                    return
 
                 def show_result(result: dict[str, Any]) -> None:
                     self._show_info(
@@ -563,7 +566,9 @@ class CalendarRankingMixin:
                     load_ranking()
 
                 self._run_background(
-                    lambda: self.internal_rating_service.apply_tournament_ratings(tournament_id),
+                    lambda: self.internal_rating_service.apply_tournament_ratings(
+                        tournament_id, friendly_confirmed=True
+                    ),
                     show_result,
                     "Atualizando rating interno...",
                 )

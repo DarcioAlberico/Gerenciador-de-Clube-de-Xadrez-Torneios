@@ -12,6 +12,7 @@ from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any, Mapping, TYPE_CHECKING
 
+from src.domain.dates import Data, is_iso_date, parse_date
 from src.core.database import BASE_DIR, DEFAULT_CERTIFICATE_TEMPLATES, Database
 from src.services.constants import *
 
@@ -475,10 +476,10 @@ class FinanceService:
         cleaned = value.strip()
         if not cleaned:
             return
-        try:
-            date.fromisoformat(cleaned)
-        except ValueError as exc:
-            raise AppError(message) from exc
+        # Regra única de data (RGS-07); o serviço grava o texto como veio,
+        # então só a forma canônica ISO passa.
+        if not is_iso_date(cleaned):
+            raise AppError(message)
 
     @classmethod
     def _with_effective_status(cls, payment: dict[str, Any]) -> dict[str, Any]:
@@ -491,9 +492,7 @@ class FinanceService:
         status = str(payment.get("status") or "pending")
         due_date = str(payment.get("due_date") or "").strip()
         if status == "pending" and due_date:
-            try:
-                if date.fromisoformat(due_date) < date.today():
-                    return "late"
-            except ValueError:
-                return status
+            vencimento = parse_date(due_date)
+            if isinstance(vencimento, Data) and vencimento.valor < date.today():
+                return "late"
         return status

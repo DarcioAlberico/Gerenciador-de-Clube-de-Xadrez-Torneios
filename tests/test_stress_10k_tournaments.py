@@ -53,10 +53,19 @@ from datetime import date
 from pathlib import Path
 from typing import Any, NamedTuple
 
-logging.disable(logging.CRITICAL)
-
 from src.core.database import Database
 from src.core.services import PairingService, TournamentService
+
+
+def setUpModule() -> None:
+    # Silencia o log SÓ enquanto este arquivo roda. Na importação (como era)
+    # o disable valia para a suite inteira e quebrava todo assertLogs.
+    logging.disable(logging.CRITICAL)
+
+
+def tearDownModule() -> None:
+    logging.disable(logging.NOTSET)
+
 
 # ---------------------------------------------------------------------------
 # Configuração

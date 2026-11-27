@@ -18,6 +18,7 @@ from unittest import mock
 
 import src.services.pairing_service as ps
 from src.services.constants import AppError
+from src.services.pairing.gacrux_tiebreak_engine import GacruxTiebreakEngine
 from src.services.pairing.tiebreak_engine import (
     ENGINE_ALBERICUS,
     ENGINE_GACRUX,
@@ -90,19 +91,15 @@ class FaixaTest(unittest.TestCase):
             self.assertIn("sem mensagem do motor", texto)
 
 
-class _MotorQueFalha:
-    """Dublê do GacruxTiebreakEngine: sempre levanta, e conta as tentativas."""
+class _MotorQueFalha(GacruxTiebreakEngine):
+    """Dublê do GacruxTiebreakEngine: gera o TRF de verdade, mas a execução
+    sempre levanta, e conta as tentativas."""
 
     tentativas = 0
 
-    def __init__(self, db: object) -> None:
-        self.db = db
-
-    def compute(self, *args: object, **kwargs: object) -> dict:
+    def run(self, job: object) -> dict:  # type: ignore[override]
         type(self).tentativas += 1
         raise AppError("Erro no calculo de desempates do Gacrux: subprocesso morreu")
-
-    compute_teams = compute
 
 
 class MotorQueFalhaTest(CoreServiceTestCase):

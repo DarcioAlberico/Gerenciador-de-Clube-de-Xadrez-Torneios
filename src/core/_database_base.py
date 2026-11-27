@@ -1,6 +1,6 @@
 """Tipagem da infraestrutura compartilhada da Database para os mixins de domínio.
 
-A God Class ``Database`` esta sendo decomposta em mixins por dominio. Cada mixin
+A God Class ``Database`` é sendo decomposta em mixins por domínio. Cada mixin
 usa métodos de infraestrutura (``connect``, ``_insert``, ``_fetch_all``...) cujos
 corpos reais vivem na fachada ``Database``. Como o mypy cobre ``src/core``, os
 mixins herdam de ``_DatabaseInfra`` para que o type-checker saiba que esses

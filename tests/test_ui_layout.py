@@ -372,7 +372,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
 
         # e a partir daí o menu vai direto para a criação (que ainda pede o nome)
         pedidos: list[str] = []
-        self.app._ask_string = lambda *a, **kw: pedidos.append("nome") or None
+        self.app._ask_friendly_tournament = lambda: pedidos.append("nome") or None
         self.assertIsNone(self.app.show_free_tournament_mode())
         self.app.update()
         self.assertEqual(["nome"], pedidos, "deveria ir direto ao prompt de nome")
@@ -397,7 +397,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
                 self.app.update()
 
     def test_free_tournament_mode_iniciar_marca_modo_livre(self) -> None:
-        self.app._ask_string = lambda *args, **kwargs: "Festival Escolar"
+        self.app._ask_friendly_tournament = lambda: {"name": "Festival Escolar", "rounds_count": "5", "class_id": None}
         before_ids = {tournament["id"] for tournament in self.db.list_tournaments()}
         dialog = self.app.show_free_tournament_mode()
         self.app.update()
@@ -441,16 +441,44 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.assertFalse(self.app._is_free_mode(self.tournament_id))
 
     def test_free_mode_repair_round_limpa_e_regera(self) -> None:
+        # MA-03: a tela pede a prévia e chama o serviço atômico; sem nada a
+        # apagar, so confirma (motivo vazio).
         self.assertTrue(self.app._is_free_mode(self.tournament_id))
         self.app.current_round_id = 777
-        chamadas = {"delete": [], "generate": []}
-        self.app.pairing_service.delete_generated_round = lambda rid: chamadas["delete"].append(rid)
-        self.app.pairing_service.generate_next_round = lambda tid: chamadas["generate"].append(tid)
+        chamadas: list[tuple] = []
+        self.app.pairing_service.repair_open_round_preview = lambda tid, rid: {
+            "results": 0,
+            "qr_submissions": 0,
+        }
+        self.app.pairing_service.repair_open_round = (
+            lambda tid, rid, motivo, reserve_engine=False: chamadas.append((tid, rid, motivo))
+        )
         self.app._load_round_options = lambda: None
         with mock.patch("src.ui.components.dialogs.confirm_dialog", return_value=True):
             self.app.free_mode_repair_round()
-        self.assertEqual(chamadas["delete"], [777])
-        self.assertEqual(chamadas["generate"], [self.tournament_id])
+        self.assertEqual(chamadas, [(self.tournament_id, 777, "")])
+
+    def test_free_mode_repair_round_com_resultado_pede_motivo(self) -> None:
+        self.app.current_round_id = 777
+        chamadas: list[tuple] = []
+        self.app.pairing_service.repair_open_round_preview = lambda tid, rid: {
+            "results": 2,
+            "qr_submissions": 1,
+        }
+        self.app.pairing_service.repair_open_round = (
+            lambda tid, rid, motivo, reserve_engine=False: chamadas.append((tid, rid, motivo))
+        )
+        self.app._load_round_options = lambda: None
+        mensagens: list[str] = []
+
+        def motivo(_parent, _titulo, mensagem, **_kw):
+            mensagens.append(mensagem)
+            return "Metade da turma faltou"
+
+        with mock.patch("src.ui.components.dialogs.reason_dialog", side_effect=motivo):
+            self.app.free_mode_repair_round()
+        self.assertEqual(chamadas, [(self.tournament_id, 777, "Metade da turma faltou")])
+        self.assertIn("2 resultados anotados e 1 envio por QR", mensagens[0])
 
     def test_free_mode_repair_round_bloqueia_fora_do_modo_livre(self) -> None:
         self._set_free_mode(self.tournament_id, False)
@@ -464,62 +492,74 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.assertEqual(chamadas, [])  # fora do Modo Livre não dispara re-pair
         self.assertTrue(any("Modo Livre" in erro for erro in erros))
 
-    def test_late_entry_sem_rodadas_encerradas_usa_padrao(self) -> None:
+    # MA-04/MA-10: no máximo duas perguntas, com botões que dizem o que fazem.
+    def test_late_entry_sem_rodada_usa_caminho_normal(self) -> None:
+        self.app.db.get_latest_round = lambda _tid: None
         with mock.patch("src.ui.components.dialogs.tri_state_dialog") as pergunta:
-            proceed, points = self.app.free_mode_late_entry_starting_points(self.tournament_id)
-        self.assertTrue(proceed)
-        self.assertIsNone(points)
+            escolha = self.app.free_mode_late_entry_choice(self.tournament_id)
+        self.assertIsNone(escolha)
         pergunta.assert_not_called()
 
-    def test_late_entry_meio_ponto_por_rodada_ausente(self) -> None:
-        self.app.db.list_rounds = lambda _tid: [{"status": "closed"}, {"status": "closed"}]
+    def test_late_entry_rodada_fechada_pergunta_pontos(self) -> None:
+        self.app.db.get_latest_round = lambda _tid: {"id": 9, "number": 2, "status": "closed"}
         with mock.patch(
             "src.ui.components.dialogs.tri_state_dialog", return_value=True
-        ):
-            proceed, points = self.app.free_mode_late_entry_starting_points(self.tournament_id)
-        self.assertTrue(proceed)
-        self.assertEqual(points, 1.0)  # 0,5 x 2 rodadas encerradas
+        ) as pergunta:
+            escolha = self.app.free_mode_late_entry_choice(self.tournament_id)
+        self.assertEqual(escolha, {"per_round_points": 0.5, "join_open_round": False})
+        _args, kwargs = pergunta.call_args
+        self.assertEqual(kwargs["yes_text"], "Dar 0,5 por rodada")
+        self.assertEqual(kwargs["no_text"], "Começar com zero")
+        self.assertIn("perdeu 2 rodadas", pergunta.call_args.args[2])
+        self.assertIn("entra com 1 ponto", pergunta.call_args.args[2])
 
-    def test_late_entry_zero_por_rodada_ausente(self) -> None:
-        self.app.db.list_rounds = lambda _tid: [{"status": "closed"}, {"status": "open"}]
+    def test_late_entry_rodada_aberta_jogar_ja_e_zero(self) -> None:
+        self.app.db.get_latest_round = lambda _tid: {"id": 9, "number": 3, "status": "open"}
         with mock.patch(
-            "src.ui.components.dialogs.tri_state_dialog", return_value=False
-        ):
-            proceed, points = self.app.free_mode_late_entry_starting_points(self.tournament_id)
-        self.assertTrue(proceed)
-        self.assertEqual(points, 0.0)
+            "src.ui.components.dialogs.tri_state_dialog", side_effect=[True, False]
+        ) as pergunta:
+            escolha = self.app.free_mode_late_entry_choice(self.tournament_id)
+        self.assertEqual(escolha, {"per_round_points": 0.0, "join_open_round": True})
+        primeira, segunda = pergunta.call_args_list
+        self.assertEqual(primeira.kwargs["yes_text"], "Jogar já nesta rodada")
+        self.assertEqual(primeira.kwargs["no_text"], "Esperar a próxima")
+        self.assertIn("perdeu 2 rodadas", segunda.args[2])  # R1 e R2: joga a R3
 
     def test_late_entry_cancelar_aborta_adicao(self) -> None:
-        self.app.db.list_rounds = lambda _tid: [{"status": "closed"}]
-        with mock.patch(
-            "src.ui.components.dialogs.tri_state_dialog", return_value=None
-        ):
-            proceed, points = self.app.free_mode_late_entry_starting_points(self.tournament_id)
-        self.assertFalse(proceed)
-        self.assertIsNone(points)
+        self.app.db.get_latest_round = lambda _tid: {"id": 9, "number": 1, "status": "closed"}
+        with mock.patch("src.ui.components.dialogs.tri_state_dialog", return_value=None):
+            escolha = self.app.free_mode_late_entry_choice(self.tournament_id)
+        self.assertIs(escolha, False)
 
     def test_late_entry_fora_do_modo_livre_nao_pergunta(self) -> None:
         self._set_free_mode(self.tournament_id, False)
-        self.app.db.list_rounds = lambda _tid: [{"status": "closed"}]
+        self.app.db.get_latest_round = lambda _tid: {"id": 9, "number": 1, "status": "closed"}
         with mock.patch("src.ui.components.dialogs.tri_state_dialog") as pergunta:
-            proceed, points = self.app.free_mode_late_entry_starting_points(self.tournament_id)
-        self.assertTrue(proceed)
-        self.assertIsNone(points)
+            escolha = self.app.free_mode_late_entry_choice(self.tournament_id)
+        self.assertIsNone(escolha)
         pergunta.assert_not_called()
+
+    def test_add_player_amistoso_chama_o_servico(self) -> None:
+        self.app.db.get_latest_round = lambda _tid: {"id": 9, "number": 2, "status": "closed"}
+        with (
+            mock.patch("src.ui.components.dialogs.tri_state_dialog", return_value=True),
+            mock.patch("src.ui.screens.free_tournament.FriendlyModeService") as servico,
+        ):
+            feito = self.app.free_mode_add_player(self.tournament_id, {"name": "Aluna"})
+        self.assertTrue(feito)
+        servico.return_value.late_entry.assert_called_once_with(
+            self.tournament_id,
+            {"name": "Aluna"},
+            per_round_points=0.5,
+            join_open_round=False,
+            reason="",
+            reserve_engine=False,
+        )
 
     def test_create_player_persiste_starting_points_explicito(self) -> None:
         player_id = self.db.create_player(self.tournament_id, name="Tardio", starting_points=1.5)
         player = self.db.get_player(player_id)
         self.assertEqual(player["starting_points"], 1.5)
-
-    def test_prepare_late_entry_modo_livre_delega_meio_ponto(self) -> None:
-        self.app.db.list_rounds = lambda _tid: [{"status": "closed"}, {"status": "closed"}]
-        with mock.patch(
-            "src.ui.components.dialogs.tri_state_dialog", return_value=True
-        ):
-            proceed, points = self.app.prepare_late_entry(self.tournament_id)
-        self.assertTrue(proceed)
-        self.assertEqual(points, 1.0)
 
     def test_prepare_late_entry_oficial_avisa_e_confirma(self) -> None:
         self._set_free_mode(self.tournament_id, False)
@@ -815,6 +855,22 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.assertIn("Lima, Lucas", row_values)
         self.assertIn("Cruz, Rafael", row_values)
 
+    def test_pairing_screen_shows_reserve_engine_notice(self) -> None:
+        """RGS-18: rodada do motor reserva carrega aviso permanente na tela."""
+        from src.services.constants import RESERVE_ENGINE_LABEL
+
+        self.db.save_tournament_settings(self.tournament_id, {"pairing_system": "fide_dutch"})
+        for index in range(4):
+            self.db.create_player(self.tournament_id, name=f"Reserva {index}", rating=1800 - index)
+        self.app.pairing_service.generate_next_round(self.tournament_id)
+
+        self.app.show_pairings()
+        self.app.update()
+
+        label = self.app._round_notice_label
+        self.assertTrue(label.winfo_ismapped())
+        self.assertIn(RESERVE_ENGINE_LABEL, label.cget("text"))
+
     def test_projector_mode_loads_and_renders_pairings(self) -> None:
         self.db.create_player(
             self.tournament_id,
@@ -933,7 +989,9 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.app._on_pairing_select()
         self.app.result_option.set("0-1")
         self._click_button("Salvar resultado")
-        self._invoke_menu_item("Fechar rodada")
+        # RGS-25: fechar e o estado do botão primário, com confirmação.
+        with mock.patch("src.ui.components.dialogs.confirm_dialog", return_value=True):
+            self._click_button("Fechar rodada 1")
         self.app.update()
 
         updated_match = self.db.list_team_matches_for_round(self.app.current_round_id)[0]
@@ -973,7 +1031,9 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.app._on_pairing_select()
         self.app.result_option.set("1-0")
         self._click_button("Salvar resultado")
-        self._invoke_menu_item("Fechar rodada")
+        # RGS-25: fechar e o estado do botão primário, com confirmação.
+        with mock.patch("src.ui.components.dialogs.confirm_dialog", return_value=True):
+            self._click_button("Fechar rodada 1")
         self.app.update()
 
         rounds = self.db.list_rounds(self.tournament_id)
@@ -2102,8 +2162,17 @@ class UiLayoutSmokeTest(unittest.TestCase):
         raise AssertionError(str(error)) from error
 
     @staticmethod
-    def _run_background_now(work, on_success=None, busy_message: str = "", busy_widget=None) -> None:
-        result = work()
+    def _run_background_now(
+        work, on_success=None, busy_message: str = "", busy_widget=None, on_error=None
+    ) -> None:
+        # Mesmo contrato de AlbericusApp._run_background: on_error devolve True
+        # quando tratou o erro (RGS-03); senão o erro segue adiante.
+        try:
+            result = work()
+        except Exception as exc:
+            if on_error is not None and on_error(exc):
+                return
+            raise
         if on_success:
             on_success(result)
 

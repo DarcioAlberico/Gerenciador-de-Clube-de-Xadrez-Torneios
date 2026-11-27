@@ -5,6 +5,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Any
 
+from src.services.constants import REQUESTED_BYE_POINTS
 from src.services.pairing.constraints import color_hard_violation, is_color_valid_fide
 
 
@@ -50,7 +51,7 @@ def pairing_diagnostics(
             continue
 
         if pairing.get("is_bye"):
-            if white_id in bye_player_ids:
+            if _is_repeated_pairing_allocated_bye(pairing, white_id, bye_player_ids):
                 diagnostics.append(
                     _diagnostic(
                         kind="bye_repeat",
@@ -271,6 +272,23 @@ def _float_repeat_diagnostics(
     return diagnostics
 
 
+def _is_repeated_pairing_allocated_bye(
+    pairing: dict[str, Any],
+    player_id: int,
+    bye_player_ids: set[int],
+) -> bool:
+    """O bye ATUAL e um PAB dado a quem já tinha recebido PAB? (RGS-17)
+
+    FIDE C.04.1 (c) só proíbe repetir o bye ALOCADO pelo pareamento. O bye
+    solicitado (F/H/Z) e o jogador pedindo para não jogar a rodada: não e
+    escolha do motor e não conta como repetição, ainda que ele já tenha tido
+    PAB antes. Antes, quem teve PAB e depois pediu Z/H travava o fechamento.
+    """
+    if player_id not in bye_player_ids:
+        return False
+    return str(pairing.get("result") or "").strip().upper() not in REQUESTED_BYE_POINTS
+
+
 def _current_absolute_quality(
     pairings: list[dict[str, Any]],
     histories: dict[int, list[str]],
@@ -286,7 +304,8 @@ def _current_absolute_quality(
         if white_id is None:
             continue
         if pairing.get("is_bye"):
-            bye_repeats += 1 if white_id in bye_player_ids else 0
+            if _is_repeated_pairing_allocated_bye(pairing, white_id, bye_player_ids):
+                bye_repeats += 1
             continue
         if black_id is None:
             continue

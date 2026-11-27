@@ -20,6 +20,10 @@ class Field:
 
     OPTION = "option"
     ENTRY = "entry"
+    # Seletor com busca (RGS-23): digitar filtra, Enter grava. É o tipo dos
+    # campos de jogador/equipe — num aberto de 100 inscritos, a lista inteira
+    # sem busca era o gargalo do bye solicitado.
+    SEARCH = "search"
 
     key: str
     label: str

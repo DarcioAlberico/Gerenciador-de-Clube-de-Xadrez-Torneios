@@ -13,6 +13,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+import pytest
+
 from src.core.database import Database
 from src.services.pairing.gacrux_tiebreak_engine import GacruxTiebreakEngine
 from src.services.pairing.gacrux_tiebreak_map import (
@@ -24,6 +26,8 @@ from src.services.pairing.gacrux_tiebreak_map import (
 )
 from src.services.pairing_service import PairingService
 from src.services.tournament_service import TeamService, TournamentService
+
+pytestmark = pytest.mark.gacrux  # RGS-37: roda o motor padrão de verdade
 
 
 class TestGacruxTiebreakMap(unittest.TestCase):

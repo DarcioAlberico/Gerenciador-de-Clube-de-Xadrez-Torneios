@@ -337,7 +337,7 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
                 or settings.get("appearance_mode", "System") != appearance_values[appearance_option.get()]
             )
             if _needs_rebuild:
-                # Algum preset de cor mudou: reestiliza o que ja esta na tela.
+                # Algum preset de cor mudou: reestiliza o que já é na tela.
                 # Nada é destruído, então a tela continua onde estava (F1.2).
                 self._rebuild_ui_after_theme_change()
 

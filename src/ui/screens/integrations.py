@@ -563,6 +563,6 @@ class IntegrationPagesMixin:
                     normalized[key] = json.loads(value)
                     continue
                 except json.JSONDecodeError:
-                    pass
+                    pass  # não é JSON: o detalhe mostra o texto como veio
             normalized[key] = value
         return json.dumps(normalized, indent=2, ensure_ascii=False, default=str)

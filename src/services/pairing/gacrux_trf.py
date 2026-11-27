@@ -10,6 +10,9 @@ chegavam nele, e sumiam sem aviso justamente porque o Gacrux é o motor padrão:
   (zero ponto). O entrante tardio era pareado num grupo de pontuação diferente
   do que a classificação publica.
 
+- o **valor do PAB** (`bye_points`) e os **ajustes de pontos** do árbitro: o
+  `U` valia sempre 1 ponto e o ajuste nem aparecia nas células (RGS-03).
+
 Este módulo não lê banco nem arquivo: recebe as **linhas** do TRF já geradas pelo
 exportador e devolve as linhas ajustadas mais os avisos do que não deu para
 representar. Quem faz I/O é o `GacruxEngine`.
@@ -22,9 +25,17 @@ nossa leitura da spec.
 
 from __future__ import annotations
 
-from typing import Any, Iterable, Sequence
+from dataclasses import dataclass
+from dataclasses import field as dataclass_field
+from typing import Any, Iterable, Mapping, Sequence
 
-from src.services.federation_exporters.trf25_records import record_250
+from src.services.federation_exporters.trf25_records import (
+    record_162,
+    record_250,
+    record_260,
+    record_299,
+)
+from src.services.pairing.prohibitions import prohibited_pairs_for_round
 from src.services.trf_layout import (
     CELL_OPPONENT,
     CELL_RESULT,
@@ -61,6 +72,16 @@ EXPRESSIBLE_BONUSES: tuple[float, ...] = (0.5, 1.0)
 
 _TOLERANCE = 0.001
 
+# Valores de PAB que o Gacrux representa: ele lê o `P` do registro 162 e o traduz
+# para o código W/D/L/Z de MESMO valor (`scoresystem.update_gamescore`). Outro
+# valor não tem tradução e derruba o motor — recusamos antes (RGS-03).
+REPRESENTABLE_PAB_POINTS: tuple[float, ...] = (0.0, 0.5, 1.0)
+
+# Sistema de pontos individual padrão FIDE (TRF25 §1.1), sem o PAB.
+STANDARD_GAME_POINTS: tuple[tuple[str, float], ...] = (
+    ("W", 1.0), ("D", 0.5), ("L", 0.0), ("A", 0.0),
+)
+
 
 def is_player_line(line: str) -> bool:
     return line.startswith("001")
@@ -80,15 +101,110 @@ def declared_points(line: str) -> float:
     return _float_or_zero(field(line, POINTS))
 
 
-def cell_points(cell: str) -> float:
-    """Pontos da célula na leitura do Gacrux."""
-    letter = cell[CELL_RESULT] if len(cell) > CELL_RESULT else " "
-    return TRF_LETTER_POINTS.get(letter.upper(), 0.0)
+def cell_points(cell: str, pab_points: float = 1.0) -> float:
+    """Pontos da célula na leitura do Gacrux, com o PAB valendo `pab_points`."""
+    letter = (cell[CELL_RESULT] if len(cell) > CELL_RESULT else " ").upper()
+    if letter == "U":
+        return float(pab_points)
+    return TRF_LETTER_POINTS.get(letter, 0.0)
 
 
-def implied_points(line: str) -> float:
+def implied_points(line: str, pab_points: float = 1.0) -> float:
     """Pontos que o Gacrux vai somar lendo as células desta linha."""
-    return round(sum(cell_points(cell) for cell in cell_blocks(line)), 2)
+    return round(sum(cell_points(cell, pab_points) for cell in cell_blocks(line)), 2)
+
+
+def with_declared_points(line: str, points: float) -> str:
+    """Linha 001 com o campo de pontos (81-84) trocado por `points`."""
+    start, end = POINTS
+    return line[:start] + f"{float(points):>4.1f}"[-(end - start):] + line[end:]
+
+
+# ---------------------------------------------------------------------------- #
+# Sistema de pontos e ajustes (RGS-03)
+# ---------------------------------------------------------------------------- #
+
+
+@dataclass(frozen=True)
+class PairingScore:
+    """O que o arquivo do pareamento diz ao motor sobre a pontuação.
+
+    - `pab_points`: valor do PAB, que vai no registro 162 (TRF25 §1.1, `P`);
+    - `adjustments`: start-rank -> pontos que o Gacrux soma pelos 299 desta
+      rodada; as células da linha 001 ficam só com o resto;
+    - `adjustment_lines`: os registros 299 (TRF25 §7.3), sem quebra de linha.
+    """
+
+    pab_points: float = 1.0
+    adjustments: Mapping[int, float] = dataclass_field(default_factory=dict)
+    adjustment_lines: tuple[str, ...] = ()
+
+    @property
+    def pab_representable(self) -> bool:
+        return any(
+            abs(float(self.pab_points) - value) <= _TOLERANCE
+            for value in REPRESENTABLE_PAB_POINTS
+        )
+
+    def records(self) -> list[str]:
+        """Registros 162 e 299 que entram no arquivo do pareamento.
+
+        PAB sem representação sai do 162 (fica o padrão do motor): só serve
+        enquanto ninguém recebeu PAB — depois disso `reconcile_scores` recusa.
+        """
+        pab = float(self.pab_points) if self.pab_representable else None
+        return [score_system_record(pab), *self.adjustment_lines]
+
+
+def score_system_record(pab_points: float | None) -> str:
+    """Registro 162 (sem quebra de linha) com o PAB valendo `pab_points`.
+
+    Sai SEMPRE no arquivo do pareamento, mesmo no padrão: com o 162 o Gacrux usa
+    o sistema declarado; sem ele, DEDUZ o sistema das células e dos pontos da
+    linha 001 — e foi essa dedução que quebrou com o bye de 0,5 (`KeyError`).
+    `X` (resultado desconhecido) vale um empate, como no padrão da TRF25.
+    `pab_points=None` omite o `P`.
+    """
+    pab = [] if pab_points is None else [("P", float(pab_points))]
+    return record_162([*STANDARD_GAME_POINTS, *pab, ("X", 0.5)]).rstrip("\r\n")
+
+
+def pairing_score(
+    pab_points: float,
+    adjustment_rows: Iterable[Mapping[str, Any]],
+    rank_by_player: Mapping[int, int],
+    round_number: int,
+) -> PairingScore:
+    """Monta o `PairingScore` para parear `round_number`.
+
+    `adjustment_rows` são as linhas da tabela `point_adjustments`; só as de
+    jogador contam (o pareamento é individual). Um ajuste só chega ao motor se
+    for de rodada já disputada (o Gacrux soma o 299 a partir da rodada dele) e
+    se o valor couber no campo `[-]11.5` do registro; os outros ficam fora — a
+    classificação continua contando com eles, e a checagem acusa a diferença.
+    """
+    totals: dict[int, float] = {}
+    lines: list[str] = []
+    for row in adjustment_rows:
+        rank = rank_by_player.get(int(row.get("player_id") or 0))
+        points = round(float(row.get("game_points") or 0.0), 2)
+        played_round = int(row.get("round_number") or 0)
+        if not rank or abs(points) <= _TOLERANCE:
+            continue
+        if played_round >= int(round_number) or not _fits_299(points):
+            continue
+        totals[rank] = round(totals.get(rank, 0.0) + points, 2)
+        lines.append(record_299("", 0.0, points, played_round, [rank]).rstrip("\r\n"))
+    return PairingScore(
+        pab_points=float(pab_points),
+        adjustments=totals,
+        adjustment_lines=tuple(lines),
+    )
+
+
+def _fits_299(points: float) -> bool:
+    """O valor sobrevive ao campo `[-]11.5` (4 colunas, uma casa decimal)?"""
+    return abs(round(points, 1) - points) <= _TOLERANCE and -9.9 <= points <= 99.9
 
 
 def entry_gap_rounds(line: str) -> list[int]:
@@ -143,45 +259,119 @@ def with_round_cells(line: str, letters_by_round: dict[int, str]) -> str:
     return patched.rstrip()
 
 
-def reconcile_scores(lines: Sequence[str]) -> tuple[list[str], list[str]]:
-    """Faz as células baterem com os pontos declarados na linha 001.
+def reconcile_scores(
+    lines: Sequence[str],
+    score: PairingScore | None = None,
+) -> tuple[list[str], list[str]]:
+    """Faz o que o Gacrux soma bater com os pontos declarados na linha 001.
 
     O exportador já escreve na linha 001 os pontos da CLASSIFICAÇÃO (que incluem
-    `starting_points` e ajustes de pontos), mas o Gacrux ignora esse campo e soma
-    as células. A diferença entre os dois é exatamente o que não chegava ao
-    motor; aqui ela vira células de bye nas rodadas anteriores à inscrição.
+    `starting_points`, o valor do PAB e ajustes de pontos), mas o Gacrux ignora
+    esse campo e soma as células — com o PAB valendo `score.pab_points` (162) —
+    mais os ajustes do 299 (`score.adjustments`). O que sobra vira células de
+    bye nas rodadas anteriores à inscrição.
+
+    Com o 162 no arquivo, o Gacrux confere o campo de pontos contra a soma das
+    células e PARA se divergirem; por isso, quando há ajuste, o campo passa a
+    declarar só a parte das células (o 299 leva o resto).
 
     Devolve as linhas ajustadas e os avisos do que sobrou por representar —
     déficit negativo (o motor pareia com MAIS pontos do que a classificação
     mostra) ou déficit que não cabe nas rodadas de ausência.
     """
+    score = score or PairingScore()
     patched: list[str] = []
     warnings: list[str] = []
     for line in lines:
         if not is_player_line(line):
             patched.append(line)
             continue
-        deficit = round(declared_points(line) - implied_points(line), 2)
+        if not score.pab_representable and _has_pab_cell(line):
+            warnings.append(_pab_warning(line, score.pab_points))
+            patched.append(line)
+            continue
+        adjustment = float(score.adjustments.get(start_rank(line), 0.0))
+        target = round(declared_points(line) - adjustment, 2)
+        if abs(adjustment) > _TOLERANCE:
+            line = with_declared_points(line, target)
+        deficit = round(target - implied_points(line, score.pab_points), 2)
         if abs(deficit) <= _TOLERANCE:
             patched.append(line)
             continue
         gaps = entry_gap_rounds(line)
         letters = compensation_letters(deficit, len(gaps)) if deficit > 0 else None
         if letters is None:
-            warnings.append(_divergence_warning(line, deficit))
+            warnings.append(_divergence_warning(line, deficit, score, adjustment))
             patched.append(line)
             continue
         patched.append(with_round_cells(line, dict(zip(gaps, letters))))
     return patched, warnings
 
 
-def _divergence_warning(line: str, deficit: float) -> str:
+def rebased_score_lines(
+    lines: Sequence[str],
+    score: PairingScore,
+    starting_points_by_rank: Mapping[int, float],
+) -> tuple[list[str], list[str]]:
+    """Linhas do TRF com o placar que a classificação conta, pelas CÉLULAS.
+
+    Serve ao TRF do DESEMPATE (RGS-03) e ao da VERIFICAÇÃO (RGS-16).
+
+    É a mesma reconciliação do pareamento (162 + 299 + rodadas de ausência),
+    com uma diferença: o campo de pontos que o exportador escreve é o de HOJE,
+    e o TRF do desempate pode estar recortado numa rodada anterior (retrato).
+    Por isso o alvo de cada linha 001 é recalculado a partir das células do
+    recorte — PAB pelo `score.pab_points` —, mais os ajustes de rodada já
+    disputada (`score.adjustments`) e os pontos de entrada tardia.
+
+    Devolve as linhas com os registros 162/299 no fim e os avisos do que o
+    arquivo não consegue representar (o chamador recusa o Gacrux com eles).
+    """
+    rebased: list[str] = []
+    for line in lines:
+        if line[:3] in {"162", "299"}:
+            continue
+        if is_player_line(line):
+            rank = start_rank(line)
+            target = (
+                implied_points(line, score.pab_points)
+                + float(score.adjustments.get(rank, 0.0))
+                + float(starting_points_by_rank.get(rank, 0.0) or 0.0)
+            )
+            line = with_declared_points(line, round(target, 2))
+        rebased.append(line)
+    patched, warnings = reconcile_scores(rebased, score)
+    return [*patched, *score.records()], warnings
+
+
+def _has_pab_cell(line: str) -> bool:
+    return any(
+        len(cell) > CELL_RESULT and cell[CELL_RESULT].upper() == "U"
+        for cell in cell_blocks(line)
+    )
+
+
+def _pab_warning(line: str, pab_points: float) -> str:
+    return (
+        f"{player_label(line) or f'SNo {start_rank(line)}'} recebeu o bye alocado "
+        f"pelo pareamento (PAB), que neste torneio vale {float(pab_points):g} ponto(s); "
+        "o motor FIDE só representa PAB de 0, 0.5 ou 1 ponto (registro 162)."
+    )
+
+
+def _divergence_warning(
+    line: str,
+    deficit: float,
+    score: PairingScore,
+    adjustment: float,
+) -> str:
+    seen = implied_points(line, score.pab_points) + adjustment
     return (
         f"Gacrux vai parear {player_label(line) or f'SNo {start_rank(line)}'} com "
-        f"{implied_points(line):g} ponto(s), e a classificacao mostra "
-        f"{declared_points(line):g} (diferenca de {deficit:+g}). O motor FIDE soma "
-        "as rodadas do arquivo TRF, e esta diferenca nao cabe nas rodadas de "
-        "ausencia do jogador."
+        f"{seen:g} ponto(s), e a classificação mostra {seen + deficit:g} "
+        f"(diferença de {deficit:+g}). O arquivo TRF não consegue dizer esta "
+        "diferença ao motor: ela não cabe nas rodadas de ausência do jogador nem "
+        "num ajuste de pontos de rodada já disputada (registro 299)."
     )
 
 
@@ -198,10 +388,10 @@ def bonus_is_expressible(bonus: float) -> bool:
 def rank_ranges(start_ranks: Iterable[int]) -> list[tuple[int, int]]:
     """Agrupa start-ranks em faixas contíguas `[primeiro, último]`.
 
-    O registro 250 fala por FAIXA de competidor, e a metade acelerada é contígua
-    só quando a ordem inicial do torneio é a mesma do start-rank do TRF (que sai
-    por rating). Com ordem inicial manual ou por rating nacional as faixas saem
-    picadas — e é por isso que elas são calculadas, não assumidas.
+    O registro 250 fala por FAIXA de competidor. Desde o RGS-13 o start-rank do
+    TRF É a ordem inicial (`seeding_key`), então a metade acelerada sai
+    contígua; as faixas continuam calculadas, não assumidas — o conjunto
+    acelerado da rodada é só de quem está sendo pareado nela.
     """
     ordered = sorted({int(rank) for rank in start_ranks if int(rank) > 0})
     ranges: list[tuple[int, int]] = []
@@ -252,3 +442,36 @@ def _float_or_zero(text: Any) -> float:
         return float(str(text).strip() or 0.0)
     except ValueError:
         return 0.0
+
+
+# ---------------------------------------------------------------------------- #
+# Proibições (RGS-15)
+# ---------------------------------------------------------------------------- #
+
+
+def prohibition_records(
+    prohibitions: Iterable[Mapping[str, Any]],
+    round_number: int,
+    rank_by_player: Mapping[int, int],
+) -> list[str]:
+    """Registros 260 (sem quebra de linha) das proibições que valem na rodada.
+
+    TRF25 §5.2. O Gacrux marca cada par do registro como `canmeet = False`
+    (`crosstable.list_edges`) — o mesmo bloqueio absoluto de um reencontro.
+    Sai sempre `first = last = round_number`: o Gacrux lê `lastRound = 0`
+    como "só a primeira rodada", e no Albericus `last_round = 0` é "até o
+    fim"; o arquivo é gerado a cada rodada, então basta a rodada pareada.
+    Proibição com jogador que não está no arquivo fica de fora.
+    """
+    records: list[str] = []
+    seen: set[tuple[int, int]] = set()
+    for pair in sorted(
+        prohibited_pairs_for_round(list(prohibitions), int(round_number)),
+        key=lambda item: sorted(item),
+    ):
+        ranks = sorted(int(rank_by_player.get(int(pid), 0)) for pid in pair)
+        if len(ranks) != 2 or not all(ranks) or tuple(ranks) in seen:
+            continue
+        seen.add((ranks[0], ranks[1]))
+        records.append(record_260(int(round_number), int(round_number), ranks).rstrip("\r\n"))
+    return records

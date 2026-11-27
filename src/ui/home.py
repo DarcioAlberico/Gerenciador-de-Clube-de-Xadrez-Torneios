@@ -33,6 +33,9 @@ class Pendency:
     destination: str
     severity: str = INFO
     action_label: str = "Abrir"
+    # Texto de relatório que a tela oferece ler antes de ir ao destino (vazio:
+    # só o deep link). Usado pelas "Datas a revisar" (RGS-06).
+    report: str = ""
 
 
 @dataclass(frozen=True)
@@ -52,6 +55,27 @@ class HomeSnapshot:
     defaulters: int = 0
     upcoming_events: tuple[tuple[str, str], ...] = field(default_factory=tuple)
     open_announcements: int = 0
+    # Tabela de cada data gravada que a regra única recusa (RGS-06), e o texto
+    # do relatório. Preenchidos por `src.services.date_review`.
+    dates_to_review: tuple[str, ...] = field(default_factory=tuple)
+    dates_review_report: str = ""
+
+
+# Onde se corrige a data de cada tabela do relatório "Datas a revisar".
+_DESTINO_DA_TABELA = {
+    "players": "players",
+    "tournaments": "tournament_settings",
+    "tournament_settings": "tournament_settings",
+    "tournament_categories": "tournament_settings",
+    "round_schedule": "tournament_settings",
+    "members": "members",
+    "member_class_enrollments": "members",
+    "payments": "finance",
+    "club_events": "calendar",
+    "inventory_items": "inventory",
+    "inventory_loans": "inventory",
+    "inventory_maintenance": "inventory",
+}
 
 
 def _plural(quantidade: int, singular: str, plural: str) -> str:
@@ -160,7 +184,22 @@ def build_pendencies(snapshot: HomeSnapshot) -> list[Pendency]:
         if restantes > 0:
             detalhe += f" (+{restantes} no calendário)"
         itens.append(
-            Pendency("eventos", "Proximo evento", detalhe, "calendar", INFO, action_label="Calendario")
+            Pendency("eventos", "Próximo evento", detalhe, "calendar", INFO, action_label="Calendário")
+        )
+
+    if snapshot.dates_to_review:
+        total = len(snapshot.dates_to_review)
+        itens.append(
+            Pendency(
+                "datas_a_revisar",
+                f"{total} {_plural(total, 'data a revisar', 'datas a revisar')}",
+                "Valores gravados que o programa não consegue ler. Nada foi apagado: "
+                "veja o relatório e corrija no cadastro.",
+                _DESTINO_DA_TABELA.get(snapshot.dates_to_review[0], "home"),
+                ATTENTION,
+                action_label="Abrir cadastro",
+                report=snapshot.dates_review_report,
+            )
         )
 
     itens.sort(key=lambda item: _ORDEM.get(item.severity, len(_ORDEM)))

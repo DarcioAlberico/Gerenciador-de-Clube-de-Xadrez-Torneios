@@ -333,6 +333,7 @@ class ExercisesInventoryMixin:
             return payload
 
         def training_list_payload() -> dict[str, Any]:
+            self._refuse_invalid_dates(list_date_entry)
             return {
                 "name": list_name_entry.get(),
                 "description": list_description_entry.get(),
@@ -866,6 +867,7 @@ class ExercisesInventoryMixin:
             member_option.set(chosen)
 
         def item_payload() -> dict[str, Any]:
+            self._refuse_invalid_dates(entries)
             payload = {key: entry.get() for key, entry in entries.items()}
             payload["club_id"] = club_option_map.get(club_option.get(), 1)
             payload["item_type"] = INVENTORY_ITEM_TYPE_VALUES[type_option.get()]

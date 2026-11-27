@@ -70,7 +70,7 @@ class PhotoAlbumService:
             try:
                 client.voidcmd("NOOP")
             except Exception:
-                pass
+                pass  # NOOP e só um teste extra; o login já provou a conexão
             client.quit()
             return True
         except Exception as exc:
@@ -113,7 +113,7 @@ class PhotoAlbumService:
             try:
                 client.quit()
             except Exception:
-                pass
+                pass  # a conexão já caiu; o quit e só cortesia ao servidor
 
         logger.info("%s arquivos publicados por FTP de %s", len(uploaded), directory)
         return {"uploaded": uploaded, "total": len(uploaded), "gallery": gallery}

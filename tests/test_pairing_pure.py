@@ -17,8 +17,9 @@ from src.services.pairing import (
     played_pairs,
     swiss_pairings,
     team_bye_summary,
+    team_lineup,
     team_match_summary,
-    team_starter_roster,
+    team_seed,
 )
 
 
@@ -129,17 +130,16 @@ class TestTeamStarterRoster(unittest.TestCase):
             self._assignment(2, 11, 1700),
             self._assignment(3, 12, 1600, role="reserve"),  # ignorado
         ]
-        starters, seed = team_starter_roster("Equipe A", assignments, boards_count=2)
-        self.assertEqual(starters, {1: 10, 2: 11})
-        self.assertEqual(seed, 1600)
+        self.assertEqual(team_lineup(assignments, boards_count=2), {1: 10, 2: 11})
+        self.assertEqual(team_seed(assignments, boards_count=2), 1600)
 
-    def test_inactive_starter_is_ignored_and_raises_when_board_missing(self):
+    def test_inactive_starter_leaves_an_empty_board_instead_of_raising(self):
+        # EQ-02: antes levantava AppError e derrubava a rodada do torneio inteiro.
         assignments = [
             self._assignment(1, 10, 1500),
             self._assignment(2, 11, 1700, status="absent"),
         ]
-        with self.assertRaises(AppError):
-            team_starter_roster("Equipe A", assignments, boards_count=2)
+        self.assertEqual(team_lineup(assignments, boards_count=2), {1: 10, 2: None})
 
 
 class TestPlanPairingPlayerSwap(unittest.TestCase):

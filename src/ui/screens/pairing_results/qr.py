@@ -11,12 +11,15 @@ quem manda no placar.
 """
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import customtkinter as ctk
 
 from ...components import Dialog, actions_bar
 from ...support import AppError, LocalResultServer, SPACE_LG, SPACE_MD
+
+logger = logging.getLogger(__name__)
 
 
 class QrResultActions:
@@ -65,7 +68,7 @@ class QrResultActions:
         try:
             host._load_selected_round_pairings()
         except Exception:
-            pass
+            logger.debug("Mesas da rodada nao recarregadas apos o QR", exc_info=True)
         host._show_toast("Resultado QR aprovado.", kind="success")
 
     def reject(self, submission_id: int) -> None:

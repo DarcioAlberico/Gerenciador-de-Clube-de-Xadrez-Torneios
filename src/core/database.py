@@ -7,7 +7,8 @@ import os
 import shutil
 import sqlite3
 import sys
-from contextlib import contextmanager
+import threading
+from contextlib import contextmanager, suppress
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterable, Mapping
@@ -301,9 +302,17 @@ DEFAULT_CERTIFICATE_TEMPLATES = (
 
 APP_NAME = "Albericus"
 APP_DATA_DIR_ENV_VAR = "ALBERICUS_DATA_DIR"
+# Quanto uma conexão espera pelo bloqueio de escrita de outra (RGS-08).
+BUSY_TIMEOUT_MS = 5000
 
 
 def _base_dir() -> Path:
+    """Pasta de DADOS legados (``data/``, ``backups/``...) ao lado do executável.
+
+    Ao lado do `.exe` de propósito (instalação portátil): é dado do usuário e
+    precisa sobreviver ao processo. Recurso EMPACOTADO (textos, ícones, Gacrux)
+    é outra pasta — ``src.core.resources.bundled_resource`` (RGS-02).
+    """
     if getattr(sys, "frozen", False):
         return Path(sys.executable).resolve().parent
     return Path(__file__).resolve().parents[2]
@@ -373,6 +382,23 @@ LEGACY_EXPORTS_DIR = BASE_DIR / "exports"
 LEGACY_LOGS_DIR = BASE_DIR / "logs"
 
 
+def _copy_database(source_path: Path | str, target_path: Path | str) -> None:
+    """Copia um banco pela API de backup do SQLite.
+
+    Em WAL (RGS-08) o estado gravado mora no `.db` MAIS o `-wal`; a API de
+    backup lê os dois de forma consistente, mesmo com outra conexão aberta.
+    """
+    source = sqlite3.connect(source_path, timeout=BUSY_TIMEOUT_MS / 1000)
+    try:
+        target = sqlite3.connect(target_path, timeout=BUSY_TIMEOUT_MS / 1000)
+        try:
+            source.backup(target)
+        finally:
+            target.close()
+    finally:
+        source.close()
+
+
 class Database(
     CertificateMixin,
     MemberMixin,
@@ -388,7 +414,7 @@ class Database(
     RefereesMixin,
     UiPrefsMixin,
 ):
-    SCHEMA_VERSION = 55
+    SCHEMA_VERSION = 59
 
     def __init__(
         self,
@@ -403,6 +429,9 @@ class Database(
         # status sem repetir a copia. Inicializado antes de qualquer backup de
         # migração disparado no __init__.
         self.last_cloud_backup: dict[str, str] | None = None
+        # Conexão da transação aberta em CADA thread (RGS-08): nunca e
+        # compartilhada, entre threads, porque o sqlite3 não permite.
+        self._thread_state = threading.local()
         if using_default_db_path:
             self._copy_legacy_default_database_if_needed()
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -432,11 +461,35 @@ class Database(
             if not target_path.exists():
                 shutil.copy2(backup_path, target_path)
 
-    @contextmanager
-    def connect(self):
+    def _open_connection(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.db_path)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
+        # RGS-08: com WAL, a thread de reconciliação (RGS-10) e o result_server
+        # gravam enquanto a UI lê; quem esbarra no bloqueio de escrita ESPERA até
+        # 5 s em vez de falhar na hora com "database is locked".
+        connection.execute(f"PRAGMA busy_timeout = {BUSY_TIMEOUT_MS}")
+        return connection
+
+    def _active_connection(self) -> sqlite3.Connection | None:
+        return getattr(self._thread_state, "connection", None)
+
+    @contextmanager
+    def connect(self):
+        """Conexão para um bloco de leitura/gravacao.
+
+        Sem transação aberta nesta thread: o comportamento de sempre — conexão
+        própria, commit na saída, rollback na exceção, fechada no fim. Dentro de
+        ``transaction()``: a conexão da transação, num SAVEPOINT, para que o
+        bloco continue atômico por si (uma falha desfaz só a parte dele) e nada
+        chegue ao arquivo antes da saída da transação mais externa (RGS-08).
+        """
+        active = self._active_connection()
+        if active is not None:
+            with self._savepoint(active):
+                yield active
+            return
+        connection = self._open_connection()
         try:
             yield connection
             connection.commit()
@@ -446,6 +499,56 @@ class Database(
         finally:
             connection.close()
 
+    @contextmanager
+    def transaction(self):
+        """Tudo o que esta thread gravar no bloco entra junto, ou nada entra (RGS-08).
+
+        Reentrante: uma transação dentro de outra vira SAVEPOINT da externa, e
+        só a saída da mais externa grava (commit); uma exceção que atravessa a
+        externa desfaz tudo. Enquanto ela é aberta, todo ``db.*`` chamado
+        NESTA thread reutiliza a mesma conexão. Outras threads seguem com
+        conexão própria: leem o ultimo estado gravado (WAL) e, para gravar,
+        esperam a saída desta (``busy_timeout``).
+        """
+        active = self._active_connection()
+        if active is not None:
+            with self._savepoint(active):
+                yield active
+            return
+        connection = self._open_connection()
+        # IMMEDIATE: reserva a escrita já na abertura. Uma transação que só
+        # pedisse o bloqueio na primeira gravação poderia falhar na hora
+        # (SQLITE_BUSY sem espera) se outra thread gravasse no meio.
+        connection.execute("BEGIN IMMEDIATE")
+        self._thread_state.connection = connection
+        try:
+            yield connection
+            connection.commit()
+        except BaseException:
+            connection.rollback()
+            raise
+        finally:
+            self._thread_state.connection = None
+            connection.close()
+
+    @contextmanager
+    def _savepoint(self, connection: sqlite3.Connection):
+        """Trecho aninhado da transacao: a falha desfaz so ele e segue subindo."""
+        self._thread_state.savepoints = getattr(self._thread_state, "savepoints", 0) + 1
+        name = f"albericus_sp_{self._thread_state.savepoints}"
+        connection.execute(f"SAVEPOINT {name}")
+        try:
+            yield
+        except BaseException:
+            # Se o próprio SQLite já desfez a transação inteira (disco cheio,
+            # ON CONFLICT ROLLBACK), o savepoint não existe mais: a exceção que
+            # sobe e a original, não a do ROLLBACK TO.
+            with suppress(sqlite3.Error):
+                connection.execute(f"ROLLBACK TO {name}")
+                connection.execute(f"RELEASE {name}")
+            raise
+        connection.execute(f"RELEASE {name}")
+
     @staticmethod
     def _create_indexes(connection: sqlite3.Connection) -> None:
         connection.executescript(CREATE_INDEXES_SQL)
@@ -453,6 +556,9 @@ class Database(
     def initialize(self) -> None:
         with self.connect() as connection:
             self._ensure_supported_schema_version(connection)
+            # RGS-08: leitor não espera escritor (UI x thread de reconciliação x
+            # result_server). O modo fica gravado no arquivo; repetir e inócuo.
+            connection.execute("PRAGMA journal_mode = WAL")
             connection.executescript(CREATE_TABLES_SQL)
             from src.core.migration_engine import MigrationEngine
             MigrationEngine(self).run_migrations(connection)
@@ -947,21 +1053,26 @@ class Database(
         safe_reason = safe_reason or "manual"
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        backup_path = self.backup_dir / f"{self.db_path.stem}_{safe_reason}_{timestamp}{self.db_path.suffix}"
         self.backup_dir.mkdir(parents=True, exist_ok=True)
-
-        source = sqlite3.connect(self.db_path)
-        try:
-            target = sqlite3.connect(backup_path)
-            try:
-                source.backup(target)
-            finally:
-                target.close()
-        finally:
-            source.close()
+        backup_path = self._unique_backup_path(f"{self.db_path.stem}_{safe_reason}_{timestamp}")
+        _copy_database(self.db_path, backup_path)
 
         self.last_cloud_backup = self.copy_backup_to_cloud(backup_path)
         return backup_path
+
+    def _unique_backup_path(self, stem: str) -> Path:
+        """Nome livre na pasta de backups (RGS-11).
+
+        O carimbo tem resolução de segundos: dois backups no mesmo segundo
+        gravavam no MESMO arquivo, e o segundo apagava o primeiro.
+        """
+        suffix = self.db_path.suffix
+        candidate = self.backup_dir / f"{stem}{suffix}"
+        counter = 2
+        while candidate.exists():
+            candidate = self.backup_dir / f"{stem}_{counter}{suffix}"
+            counter += 1
+        return candidate
 
     def copy_backup_to_cloud(self, backup_path: Path | str) -> dict[str, str]:
         """Copia um backup para a pasta de nuvem configurada (`cloud_sync_dir`),
@@ -1050,18 +1161,12 @@ class Database(
         safety_backup = self.backup("before_restore")
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         try:
-            source = sqlite3.connect(source_path)
-            try:
-                target = sqlite3.connect(self.db_path)
-                try:
-                    source.backup(target)
-                finally:
-                    target.close()
-            finally:
-                source.close()
+            _copy_database(source_path, self.db_path)
             self.initialize()
         except Exception:
-            shutil.copy2(safety_backup, self.db_path)
+            # Pela API de backup, não por copia de arquivo: em WAL, copiar só o
+            # `.db` por cima deixaria o `-wal` antigo ser aplicado ao arquivo novo.
+            _copy_database(safety_backup, self.db_path)
             self.initialize()
             raise
         return safety_backup

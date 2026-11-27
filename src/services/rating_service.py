@@ -15,10 +15,12 @@ from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any, Mapping, TYPE_CHECKING
 
+from src.domain.dates import is_iso_date
 from src.core.database import BASE_DIR, DEFAULT_CERTIFICATE_TEMPLATES, Database
 from src.services.constants import *
 from src.services.export_service import ImportService
 from src.services.fide_list import parse_rating_list as parse_fide_rating_list
+from src.services import friendly_mode
 from src.services.fide_norms import build_norm_report
 from src.services.fide_rating import build_fide_report_rows
 from src.services.foreign_rating_lists import map_row, normalize_federation_code, seed_federations
@@ -784,76 +786,74 @@ class OfficialRatingService:
             default=max(national, international, current),
         )
 
+def _performance_and_games(standing: Mapping[str, Any]) -> tuple[int | None, int]:
+    """Performance e partidas da linha; ``None`` quando não dá para calcular rating."""
+    performance = standing.get("performance")
+    games = len(standing.get("earned_against") or [])
+    if not isinstance(performance, int) or games <= 0:
+        return None, games
+    return performance, games
+
+
 class InternalRatingService:
     HISTORY_REASON = "tournament_performance"
 
     def __init__(self, db: Database) -> None:
         self.db = db
 
-    def apply_tournament_ratings(self, tournament_id: int) -> dict[str, Any]:
+    def apply_tournament_ratings(
+        self, tournament_id: int, *, friendly_confirmed: bool = False
+    ) -> dict[str, Any]:
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
-            raise AppError("Selecione um torneio valido.")
+            raise AppError("Selecione um torneio válido.")
+        # D2 (ESPEC_REVISAO_MODO_AMISTOSO): o amistoso só conta com o "sim" do usuário.
+        pergunta = friendly_mode.internal_rating_question(
+            self.db.get_tournament_settings(int(tournament_id))
+        )
+        if pergunta and not friendly_confirmed:
+            raise AppError(pergunta, suggestion="Responda à pergunta da tela antes de atualizar.")
 
         pairing_service = __import__('src.services.pairing_service', fromlist=['PairingService']).PairingService(self.db)
-        updated = 0
-        duplicates = 0
-        skipped = 0
-        external = 0
-        no_member = 0
-
+        contagem = {"updated": 0, "duplicates": 0, "skipped": 0, "external": 0, "no_member": 0}
         for standing in pairing_service.standings(tournament_id):
-            player = self.db.get_player(int(standing["player_id"]))
-            if not player:
-                skipped += 1
-                continue
-            member_id = int(player.get("member_id") or 0)
-            if not member_id:
-                external += 1
-                continue
-
-            performance = standing.get("performance")
-            games = len(standing.get("earned_against") or [])
-            if not isinstance(performance, int) or games <= 0:
-                skipped += 1
-                continue
-
-            member = self.db.get_member(member_id)
-            if not member:
-                no_member += 1
-                continue
-
-            old_rating = int(member.get("rating") or 0)
-            new_rating = self._next_rating(old_rating, int(performance), games)
-            recorded = self.db.record_internal_rating_update(
-                member_id=member_id,
-                tournament_id=tournament_id,
-                player_id=int(player["id"]),
-                old_rating=old_rating,
-                new_rating=new_rating,
-                performance=int(performance),
-                points=float(standing.get("points") or 0.0),
-                games=games,
-                reason=self.HISTORY_REASON,
-            )
-            if recorded:
-                updated += 1
-            else:
-                duplicates += 1
+            contagem[self._rate_standing(tournament_id, standing)] += 1
 
         logger.info(
             "Rating interno aplicado no torneio %s: %s atualizados, %s ja aplicados",
             tournament_id,
-            updated,
-            duplicates,
+            contagem["updated"],
+            contagem["duplicates"],
         )
-        return {
-            "updated": updated,
-            "duplicates": duplicates,
-            "skipped": skipped,
-            "external": external,
-            "no_member": no_member,
-        }
+        return contagem
+
+    def _rate_standing(self, tournament_id: int, standing: Mapping[str, Any]) -> str:
+        """Aplica o rating de UMA linha da classificação; devolve a chave da contagem."""
+        player = self.db.get_player(int(standing["player_id"]))
+        if not player:
+            return "skipped"
+        member_id = int(player.get("member_id") or 0)
+        if not member_id:
+            return "external"
+        performance, games = _performance_and_games(standing)
+        if performance is None:
+            return "skipped"
+        member = self.db.get_member(member_id)
+        if not member:
+            return "no_member"
+        old_rating = int(member.get("rating") or 0)
+        recorded = self.db.record_internal_rating_update(
+            member_id=member_id,
+            tournament_id=tournament_id,
+            player_id=int(player["id"]),
+            old_rating=old_rating,
+            new_rating=self._next_rating(old_rating, int(performance), games),
+            performance=int(performance),
+            points=float(standing.get("points") or 0.0),
+            games=games,
+            reason=self.HISTORY_REASON,
+        )
+        return "updated" if recorded else "duplicates"
 
     def member_rating_history(self, member_id: int) -> list[dict[str, Any]]:
         member = self.db.get_member(member_id)
@@ -1010,10 +1010,8 @@ class InternalRatingService:
     def _validate_optional_date(value: str, message: str) -> None:
         if not value:
             return
-        try:
-            date.fromisoformat(value)
-        except ValueError as exc:
-            raise AppError(message) from exc
+        if not is_iso_date(value):
+            raise AppError(message)
 
     @staticmethod
     def _date_in_period(value: str, start_date: str, end_date: str) -> bool:

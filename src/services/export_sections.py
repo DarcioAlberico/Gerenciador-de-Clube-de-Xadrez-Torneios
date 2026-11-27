@@ -15,6 +15,7 @@ from src.services.pairing.incidents import (
     infraction_label as incident_infraction_label,
 )
 from src.services.pairing.point_adjustments import format_signed
+from src.services.pairing.constraints import seeding_order
 from src.services.prizes import PRIZE_KINDS, PRIZE_POLICIES, PRIZE_TIE_SPLITS, allocate_prizes
 from src.services.export_federation import FederationReportsMixin
 
@@ -160,8 +161,8 @@ class ReportSectionsMixin:
 
     def _initial_player_list_section(self, tournament_id: int) -> tuple[str, list[str], list[list[Any]]]:
         tournament = self.db.get_tournament(tournament_id)
-        ordered_players = self._initial_ranked_players(
-            self.db.list_players(tournament_id, active_only=False)
+        ordered_players = self.initial_ranked_players(
+            tournament_id, self.db.list_players(tournament_id, active_only=False)
         )
         rows = [
             [
@@ -1026,11 +1027,11 @@ class ReportSectionsMixin:
         try:
             sections.extend(self._prize_sections(tournament_id))
         except AppError:
-            pass
+            logger.debug("Secao de premiacao omitida do relatorio", exc_info=True)
         try:
             sections.extend(self._rating_fee_sections(tournament_id))
         except AppError:
-            pass
+            logger.debug("Secao de taxas de rating omitida do relatorio", exc_info=True)
         sections.append(
             ("Árbitros e assinaturas", ["Nome", "Função", "FIDE ID", "Categoria", "Assinatura"], arbiter_rows)
         )
@@ -1082,7 +1083,7 @@ class ReportSectionsMixin:
         """Desistências, ausências e reentradas, por rodada (ARB-05).
 
         O TRF não tem código para separar "desistiu" de "faltou" — as duas viram
-        `0000 - Z` (nao pareado, zero ponto), e isso esta certo: o que a FIDE
+        `0000 - Z` (não pareado, zero ponto), e isso é certo: o que a FIDE
         distingue e `Z` de `-` (pareado e não compareceu, que exige mesa). A
         diferença entre desistência e ausência e do REGULAMENTO, e por isso ela
         mora aqui, no documento que o árbitro assina.
@@ -1192,16 +1193,15 @@ class ReportSectionsMixin:
     def _format_currency(value: Any) -> str:
         return f"R$ {float(value or 0):.2f}".replace(".", ",")
 
-    @staticmethod
-    def _initial_ranked_players(players: list[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
-        return sorted(
-            players,
-            key=lambda player: (
-                -FederationReportsMixin._trf_rating(player),
-                player_pairing_name(player).casefold(),
-                int(player.get("id") or 0),
-            ),
-        )
+    def initial_ranked_players(
+        self, tournament_id: int, players: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """Lista inicial na ordem inicial do torneio: a `seeding_key` (RGS-13).
+
+        É o mesmo número do TRF e, portanto, do Gacrux. Antes ordenava pelo
+        primeiro rating não nulo e pelo nome — sem título e sem `initial_order`.
+        """
+        return seeding_order(players, self.db.get_tournament_settings(tournament_id) or {})
 
     def _teams_section(self, tournament_id: int) -> tuple[str, list[str], list[list[Any]]]:
         tournament = self.db.get_tournament(tournament_id)

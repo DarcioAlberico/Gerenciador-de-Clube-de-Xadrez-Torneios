@@ -13,6 +13,7 @@ from src.services.pairing.point_adjustments import (
 
 from .pairing_arbitration import ArbitrationPagesMixin
 from .pairing_results import PairingResultsMixin
+from .player_actions import PlayerActions
 
 
 class PairingPagesMixin(ArbitrationPagesMixin, PairingResultsMixin):
@@ -192,8 +193,11 @@ class PairingPagesMixin(ArbitrationPagesMixin, PairingResultsMixin):
 
         def apply_internal_rating() -> None:
             try:
+                tournament_id = int(self.current_tournament_id)
+                if not self.free_mode_confirm_internal_rating(tournament_id):
+                    return
                 result = self.internal_rating_service.apply_tournament_ratings(
-                    int(self.current_tournament_id)
+                    tournament_id, friendly_confirmed=True
                 )
                 self._show_info(
                     "Ratings internos atualizados: {updated}\n"
@@ -287,6 +291,10 @@ class PairingPagesMixin(ArbitrationPagesMixin, PairingResultsMixin):
         )
         self.standings_tree = tree
         row_player_ids: dict[str, int] = {}
+        # Menu da linha do jogador (RGS-22/23): bye, falta, retirada e
+        # reintegração também a partir da classificação.
+        self.standings_player_actions = PlayerActions(self, on_changed=lambda: load_standings())
+        self.standings_player_actions.bind_tree(tree, row_player_ids.get)
 
         def show_tiebreak_detail(criterion: str = "") -> None:
             selected = tree.selection()
@@ -497,7 +505,7 @@ class PairingPagesMixin(ArbitrationPagesMixin, PairingResultsMixin):
                 if anterior.winfo_exists():
                     anterior.destroy()
             except TclError:
-                pass
+                pass  # a janela anterior já foi fechada pelo usuário
         self._standings_legend_label = None
         if not any(has_adjustment(item) for item in standings):
             return

@@ -6,6 +6,7 @@ Recebe a definição e o jogador como mapas e responde sim ou não. Não sabe o 
 
 from __future__ import annotations
 
+import unicodedata
 from typing import Any, Mapping
 
 from src.services.categories.definition import (
@@ -68,9 +69,15 @@ def normalized_sex(value: Any) -> str:
     return ""
 
 
+def tag_key(value: Any) -> str:
+    """Chave da marca: sem acento e sem caixa ("Sócio do Clube" == "sócio do clube")."""
+    decomposed = unicodedata.normalize("NFKD", str(value or "").strip().casefold())
+    return "".join(c for c in decomposed if not unicodedata.combining(c))
+
+
 def player_tags(player: Mapping[str, Any]) -> set[str]:
     raw = str(player.get("prize_tags") or "")
-    return {part.strip().casefold() for part in raw.replace(",", ";").split(";") if part.strip()}
+    return {tag_key(part) for part in raw.replace(",", ";").split(";") if part.strip()}
 
 
 def matches(
@@ -112,7 +119,7 @@ def matches(
         return bool(wanted) and normalized_sex(player.get("sex")) == wanted
 
     if definition.kind == TAG:
-        wanted = str(definition.tag or "").strip().casefold()
+        wanted = tag_key(definition.tag)
         return bool(wanted) and wanted in player_tags(player)
 
     return False

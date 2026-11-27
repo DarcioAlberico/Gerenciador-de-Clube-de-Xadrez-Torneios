@@ -16,6 +16,7 @@ na continuação da **B-3**, junto com o resto da tela.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, Iterable, Sequence
 
 from src.services.constants import RESULTS
@@ -54,6 +55,16 @@ RESULT_SHORTCUTS: dict[str, str] = {
     "<KP_Subtract>": "1/2-1/2",
     "<BackSpace>": "",
     "<Delete>": "",
+}
+
+# W.O. por tecla (RGS-21): as mesmas letras do painel do árbitro. Ficam fora de
+# ``RESULT_SHORTCUTS`` de propósito: aquelas valem na tela inteira, e uma letra
+# digitada num campo não pode virar ausência — estas só valem na tabela, e
+# sempre passam pela confirmação que nomeia a mesa e os jogadores.
+WALKOVER_SHORTCUTS: dict[str, str] = {
+    "w": "1F-0F",
+    "p": "0F-1F",
+    "a": "0F-0F",
 }
 
 # Índice da coluna "resultado" na tabela, por modo. Por equipes a linha carrega
@@ -326,3 +337,47 @@ def next_presence_status(players: Iterable[dict[str, Any]]) -> str:
     if any(player and player.get("player_status") != "active" for player in players):
         return "active"
     return "absent"
+
+
+# ---- Botão primário e contador da rodada (RGS-21 / RGS-25) ---------------- #
+
+
+@dataclass(frozen=True)
+class PrimaryRoundAction:
+    """A próxima coisa a fazer com a rodada: ``kind`` decide, ``label`` mostra.
+
+    ``kind`` ∈ {"launch", "close", "generate", "finished"}.
+    """
+
+    kind: str
+    label: str
+
+
+def primary_round_action(
+    *,
+    round_number: int,
+    round_status: str,
+    resolved: int,
+    total: int,
+    pending: int,
+    rounds_count: int,
+) -> PrimaryRoundAction:
+    """O botão primário da tela de Rodadas, a partir da última rodada.
+
+    "Fechar rodada" morava em "Mais", sem confirmação (RGS-25). O botão diz em
+    que ponto o torneio está: falta resultado → lançar; tudo lançado → fechar;
+    fechada → gerar a seguinte; a última fechada → classificação final.
+    ``pending`` conta o bye sem resultado, que ``total`` (só partidas) não vê.
+    """
+    if round_status != "closed":
+        if pending > 0:
+            return PrimaryRoundAction("launch", f"Lançar resultados ({resolved}/{total})")
+        return PrimaryRoundAction("close", f"Fechar rodada {round_number}")
+    if round_number < rounds_count:
+        return PrimaryRoundAction("generate", f"Gerar rodada {round_number + 1}")
+    return PrimaryRoundAction("finished", "Ver classificação final")
+
+
+def results_counter_text(resolved: int, total: int) -> str:
+    """Contador da rodada exibida: "32/40 lançadas" (RGS-21)."""
+    return f"{resolved}/{total} lançadas"

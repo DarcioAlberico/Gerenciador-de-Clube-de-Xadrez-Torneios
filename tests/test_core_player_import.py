@@ -36,7 +36,6 @@ class PlayerImportTest(CoreServiceTestCase):
             club="Clube",
             rating=1950,
             category="ABS",
-            active=1,
             fide_id="1896",
             cbx_id="1928",
             surname="Ximenes",

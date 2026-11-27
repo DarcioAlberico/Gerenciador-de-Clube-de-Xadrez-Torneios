@@ -978,8 +978,11 @@ class ReportsTest(CoreServiceTestCase):
         self.assertIn("Clube", text)
         self.assertIn("Categoria", text)
         self.assertIn("Assinatura", text)
-        self.assertLess(text.index("Ana Ausente"), text.index("Bruno Presente"))
+        # O número inicial é o do TRF: a `seeding_key` com o `initial_order` do
+        # torneio (padrão: o rating principal), não o primeiro rating não nulo
+        # (RGS-13) — o internacional de Ana não a põe na frente.
         self.assertLess(text.index("Bruno Presente"), text.index("Carla Presente"))
+        self.assertLess(text.index("Carla Presente"), text.index("Ana Ausente"))
 
     def test_initial_player_list_pdf_exports_801_players_under_five_seconds(self) -> None:
         for index in range(801):

@@ -29,6 +29,7 @@ from ...support import (
     font_section,
     player_full_name,
 )
+from ..player_actions import PlayerActions
 from .state import (
     initial_call_searchable,
     initial_call_summary,
@@ -119,6 +120,11 @@ class InitialCallSection:
         for sequencia in ("<Double-1>", "<space>"):
             self.tree.bind(sequencia, lambda _e: self.toggle_selected())
         host.initial_players_tree = self.tree
+        # Menu da linha do jogador (RGS-22/23) na tela de Rodadas: antes da R1
+        # é aqui que o árbitro vê os inscritos — e é aqui que chega o "vou
+        # faltar à rodada 1" (bye) e a desistência antes de começar.
+        self.player_actions = PlayerActions(host, on_changed=self.reload)
+        self.player_actions.bind_tree(self.tree, self.row_map_get)
 
         acoes = ctk.CTkFrame(painel, fg_color="transparent")
         acoes.grid(row=2, column=0, padx=SPACE_MD, pady=(SPACE_SM, SPACE_MD), sticky="ew")
@@ -160,7 +166,7 @@ class InitialCallSection:
             )
 
         consulta = self.search_entry.get() if self.search_entry is not None else ""
-        ordenados = host.export_service._initial_ranked_players(jogadores)
+        ordenados = host.export_service.initial_ranked_players(host.current_tournament_id, jogadores)
         for numero, jogador in enumerate(ordenados, start=1):
             nome = player_full_name(jogador)
             if not matches_initial_query(initial_call_searchable(jogador, nome), consulta):
@@ -180,6 +186,10 @@ class InitialCallSection:
                 ),
             )
             self.row_map[item] = int(jogador["id"])
+
+    def row_map_get(self, item: str) -> int | None:
+        """Id do jogador da linha — lido do mapa CORRENTE (o `reload` o troca)."""
+        return self.row_map.get(item)
 
     # ---- presença --------------------------------------------------------- #
 

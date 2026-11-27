@@ -161,6 +161,8 @@ class tiebreak:
         self.lastplayedround = 0
         self.primaryscore = None  # use default
         self.accelerated = tournament["accelerated"] if "accelerated" in tournament else None
+        # patch local (RGS-03): AAT nominal (registro 299), ver get_abnormal.
+        self.abnormal = tournament.get("abnormalPoints", [])
         self.rating = {"W": Decimal("1.0"), "D": Decimal("0.5"), "L": "Z", "Z": Decimal("0.0"), "A": "Z", "U": "Z"}
 
         if self.isteam:
@@ -1272,6 +1274,19 @@ class tiebreak:
                 acc = val["gameResult"] if prefix == "points_" else val["matchResult"]
         return acc
 
+    # patch local (RGS-03): pontos avulsos do arbitro (registro 299 nominal, tipo
+    # em branco) ja valendo depois da rodada `rnd`. Rodada 0 = desde o inicio.
+    # So entram na pontuacao de PAREAMENTO (acc); o PTS do desempate continua
+    # sendo a soma das rodadas — o Albericus aplica o ajuste na classificacao.
+    def get_abnormal(self, prefix, rnd, startno):
+        total = Decimal("0.0")
+        if prefix != "points_":
+            return total
+        for att in self.abnormal:
+            if att["round"] <= rnd and startno in att["teams"]:
+                total += att["gamePoints"]
+        return total
+
     # STD: 1.0/ 0.5 /0.0 point system
 
     def compute_std(self, tb, cmps, rounds):
@@ -1325,14 +1340,14 @@ class tiebreak:
         for startno, cmp in cmps.items():
             tbscore = cmp["tbval"]
             acc = self.get_accelerated(prefix, 1, startno)
-            val = scoretype[acc]
+            val = scoretype[acc] + self.get_abnormal(prefix, 0, startno)
             tbscore[prefix + "acc"] = {"val": val, 0: val}
             spoints = 0  # Points so far
             for rnd in range(1, rounds + 1):
                 p = cmp["rsts"][rnd][points] if rnd in cmp["rsts"] and points in cmp["rsts"][rnd] else self.zero(scorename)
                 spoints += p
                 acc = self.get_accelerated(prefix, rnd + 1, startno)  # Round 0 shall have the value of 1 and so on
-                val = spoints + scoretype[acc]
+                val = spoints + self.get_abnormal(prefix, rnd, startno) + scoretype[acc]
                 tbscore[prefix + "acc"][rnd] = val
             tbscore[prefix + "acc"]["val"] = val
         return "acc"

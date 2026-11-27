@@ -12,10 +12,13 @@ from typing import Any
 
 import customtkinter as ctk
 
+from src.services.pairing.participation import status_description
+
 from ...components import FormStack, debounce, secondary_button
 from ...i18n import t
 from ...support import (
     FIDE_CATEGORIES,
+    refuse_invalid_dates,
     PLAYER_STATUS_VALUES,
     PLAYER_STATUSES,
     THEME_TEXT_SUB,
@@ -24,6 +27,7 @@ from .chess_results import ChessResultsActions
 from .controller import TournamentPlayersController
 from .forms import RegistrationFormActions
 from .imports import PlayerImportActions
+from ..player_actions import PlayerActions
 from .menu import player_actions
 from .ratings import OfficialRatingActions
 from .state import (
@@ -149,7 +153,9 @@ class TournamentPlayersView:
             pilha.section(titulos[chave_secao])
             for chave in campos:
                 if chave == "birth_date":
-                    campo: Any = pilha.date(rotulos[chave])
+                    # A lista da FIDE publica só o ano (RGS-33): `1985` é
+                    # nascimento válido, e não pode sumir ao corrigir o rating.
+                    campo: Any = pilha.date(rotulos[chave], permite_ano=True)
                 elif chave == "category":
                     campo = pilha.select(rotulos[chave], list(FIDE_CATEGORIES))
                     campo.set("")
@@ -172,8 +178,16 @@ class TournamentPlayersView:
         pilha.place(self.include_out_of_scope, "widget", sticky="w")
         self.include_out_of_scope.configure(command=self.reload_members)
 
-        self.status_option = pilha.select(t("players.status"), list(PLAYER_STATUS_VALUES.keys()))
+        self.status_option = pilha.select(
+            t("players.status"),
+            list(PLAYER_STATUS_VALUES.keys()),
+            command=lambda _valor: self._describe_status(),
+        )
+        # O rótulo sozinho não separa "faltou" de "desistiu" (RGS-22): a linha
+        # de baixo diz o que o estado quer dizer.
+        self.status_note = pilha.note("")
         self.status_option.set(PLAYER_STATUSES["active"])
+        self._describe_status()
 
         # Enter em qualquer campo do cadastro adiciona o jogador (F5.10): e o
         # gesto de quem digita uma lista inteira de inscritos.
@@ -253,6 +267,12 @@ class TournamentPlayersView:
             {codigo: largura for codigo, (_, largura) in colunas.items()},
         )
         self.tree.bind("<<TreeviewSelect>>", self._on_select)
+        # Bye, falta, retirada e reintegração moram na LINHA do jogador
+        # (RGS-22/23): clique direito, Shift+F10 ou a tecla Menu.
+        self.player_actions = PlayerActions(host, on_changed=self.reload)
+        self.player_actions.bind_tree(
+            self.tree, lambda linha: int(self.tree.item(linha, "values")[0])
+        )
 
     # ---- Ponte com o estado ----------------------------------------------- #
 
@@ -261,11 +281,16 @@ class TournamentPlayersView:
         valores = {chave: _read(self.entries[chave]) for chave in PLAYER_FIELDS}
         return PlayerForm(**valores, status=PLAYER_STATUS_VALUES[self.status_option.get()])
 
+    def _describe_status(self) -> None:
+        codigo = PLAYER_STATUS_VALUES.get(self.status_option.get(), "active")
+        self.status_note.configure(text=status_description(codigo))
+
     def clear_form(self) -> None:
         self.selected_player_id = None
         for campo in self.entries.values():
             _write(campo, "")
         self.status_option.set(PLAYER_STATUSES["active"])
+        self._describe_status()
 
     def reload(self) -> None:
         """Recarrega a tabela e o resumo com o filtro corrente."""
@@ -304,6 +329,7 @@ class TournamentPlayersView:
         for chave in PLAYER_FIELDS:
             _write(self.entries[chave], getattr(formulario, chave))
         self.status_option.set(PLAYER_STATUSES.get(formulario.status, PLAYER_STATUSES["active"]))
+        self._describe_status()
         codigo = normalize_scheveningen_group(jogador.get("scheveningen_group"))
         self.scheveningen_option.set(self.scheveningen_labels[codigo])
 
@@ -323,17 +349,21 @@ class TournamentPlayersView:
 
     def _add_player(self) -> None:
         try:
+            refuse_invalid_dates(self.entries)
             formulario = self.current_form()
             erro = formulario.validation_error()
             if erro:
                 raise self._app_error(erro)
-            # Modo Livre: com rodadas encerradas, pergunta 0,0 ou meio-ponto por
-            # rodada ausente. Fora dele devolve (True, None) e o cálculo padrão
-            # de late_entry_points segue intacto.
-            seguir, pontos_iniciais = self.host.prepare_late_entry(self.tournament_id)
-            if not seguir:
+            # Modo amistoso com rodada gerada: o mesmo plano do assistente, com
+            # "jogar já" ou "esperar a próxima" (MA-04). ``None`` = caminho normal.
+            feito = self.host.free_mode_add_player(self.tournament_id, formulario.create_payload())
+            if feito is None:
+                seguir, pontos_iniciais = self.host.prepare_late_entry(self.tournament_id)
+                if not seguir:
+                    return
+                self.controller.create(self.tournament_id, formulario, pontos_iniciais)
+            elif not feito:
                 return
-            self.controller.create(self.tournament_id, formulario, pontos_iniciais)
             self.clear_form()
             self.refresh()
         except Exception as exc:
@@ -343,20 +373,33 @@ class TournamentPlayersView:
         try:
             if not self.selected_player_id:
                 raise self._app_error(t("players.error.select_player"))
+            refuse_invalid_dates(self.entries)
             self.controller.update(self.selected_player_id, self.current_form())
             self.reload()
         except Exception as exc:
             self.host._show_error(exc)
 
-    def _update_status(self) -> None:
+    def _update_status(self) -> Any:
+        """"Atualizar status" abre o diálogo certo, com motivo (RGS-22).
+
+        Gravava o seletor direto pelo serviço, sem perguntar o motivo — e
+        reintegrar um desistente, que o EXIGE, dava erro sem saída: a tela não
+        tinha onde escrevê-lo. Agora "Ativo" abre Reintegrar e os outros estados
+        abrem Retirar já no escopo escolhido; o resto é com o diálogo.
+        """
         try:
             jogador = self._require_selection()
-            self.controller.set_status(
-                int(jogador["id"]), PLAYER_STATUS_VALUES[self.status_option.get()]
-            )
-            self.reload()
+            status = PLAYER_STATUS_VALUES[self.status_option.get()]
+            if status == str(jogador.get("player_status") or "active"):
+                raise self._app_error(
+                    t("players.status.unchanged", status=self.status_option.get())
+                )
+            if status == "active":
+                return self.player_actions.open_reinstate(int(jogador["id"]))
+            return self.player_actions.open_withdraw(int(jogador["id"]), scope=status)
         except Exception as exc:
             self.host._show_error(exc)
+            return None
 
     def _set_scheveningen_group(self) -> None:
         try:

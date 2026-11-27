@@ -15,6 +15,21 @@ from src.services.constants import AppError
 from src.services.prizes import PRIZE_KINDS, allocate_prizes
 
 
+def validated_prizes(prizes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Prêmios limpos, sem gravar (RGS-08: a tela valida tudo antes de gravar).
+
+    A mensagem diz QUAL linha está errada: "Informe o nome de cada prêmio"
+    sozinho deixava o árbitro procurando a linha em branco.
+    """
+    limpos: list[dict[str, Any]] = []
+    for posicao, prize in enumerate(prizes or [], start=1):
+        try:
+            limpos.append(PrizeService._validated_prize(prize))
+        except AppError as exc:
+            raise AppError(f"Prêmio {posicao}: {exc}") from exc
+    return limpos
+
+
 class PrizeService:
     def __init__(self, db: Database) -> None:
         self.db = db
@@ -29,7 +44,7 @@ class PrizeService:
     ) -> list[dict[str, Any]]:
         if not self.db.get_tournament(tournament_id):
             raise AppError("Selecione um torneio válido.")
-        cleaned = [self._validated_prize(prize) for prize in prizes]
+        cleaned = validated_prizes(prizes)
         self.db.replace_tournament_prizes(tournament_id, cleaned)
         return self.db.list_tournament_prizes(tournament_id)
 
@@ -40,7 +55,7 @@ class PrizeService:
             raise AppError("Tipo de prêmio inválido.")
         label = str(prize.get("label") or "").strip()
         if not label:
-            raise AppError("Informe o nome de cada premio.")
+            raise AppError("Informe o nome do prêmio.")
         category = str(prize.get("category") or "").strip()
         if kind == "category" and not category:
             raise AppError("Prêmio de categoria exige o nome da categoria.")

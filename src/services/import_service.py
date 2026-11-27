@@ -23,7 +23,8 @@ from src.services.fide_norms import build_norm_report
 from src.services.fide_rating import build_fide_report_rows
 from src.services.list_layouts import STANDINGS_COLUMNS, resolve_column_specs, resolve_columns
 from src.services.prizes import PRIZE_KINDS, PRIZE_POLICIES, allocate_prizes
-from src.services.trf_import import build_trf_rounds, parse_trf
+from src.domain.dates import DataInvalida, parse_date, storage_text
+from src.services.trf_import import TrfDateError, build_trf_rounds, parse_trf
 
 if TYPE_CHECKING:
     from src.services.club_service import ClubService
@@ -339,73 +340,82 @@ class ImportService:
         except UnicodeDecodeError:
             content = path.read_text(encoding="latin-1")
 
-        parsed = parse_trf(content)
+        try:
+            parsed = parse_trf(content)
+        except TrfDateError as exc:
+            # Data impossível no arquivo (RGS-07): nada é criado, e a mensagem
+            # diz linha e colunas para o árbitro corrigir o TRF.
+            raise AppError(f"{exc} Corrija o arquivo e importe de novo.") from exc
         if not parsed["players"]:
             raise AppError("Arquivo TRF sem jogadores reconhecíveis (linhas 001).")
 
         name = parsed["name"] or f"Torneio importado ({path.stem})"
         rounds_count = parsed["rounds_count"] if parsed["rounds_count"] > 0 else 7
-        tournament_id = self.db.create_tournament(
-            name=name,
-            location=parsed["location"],
-            rounds_count=rounds_count,
-            time_control=parsed["time_control"],
-            start_date=parsed["start_date"],
-            end_date=parsed["end_date"],
-        )
-        # Federacao, arbitros e calendario vinham no arquivo e eram descartados
-        # (FED-04): o torneio importado nascia sem arbitro e sem datas, e o TRF
-        # que ele exportava depois ja nao era o mesmo arquivo.
-        ajustes = {
-            chave: valor
-            for chave, valor in (
-                ("federation", parsed["federation"]),
-                ("chief_arbiter", parsed.get("chief_arbiter", "")),
-                ("arbiters", "\n".join(parsed.get("deputy_arbiters") or [])),
+        # RGS-08: torneio, ajustes, agenda, jogadores, equipes e rodadas entram
+        # juntos ou nada entra. Antes, uma falha no meio deixava um torneio
+        # pela metade na lista (sem rodadas, ou com metade dos jogadores).
+        with self.db.transaction():
+            tournament_id = self.db.create_tournament(
+                name=name,
+                location=parsed["location"],
+                rounds_count=rounds_count,
+                time_control=parsed["time_control"],
+                start_date=parsed["start_date"],
+                end_date=parsed["end_date"],
             )
-            if valor
-        }
-        if ajustes:
-            settings = self.db.get_tournament_settings(tournament_id) or {}
-            settings.update(ajustes)
-            self.db.save_tournament_settings(tournament_id, settings)
+            # Federação, árbitros e calendário vinham no arquivo e eram descartados
+            # (FED-04): o torneio importado nascia sem árbitro e sem datas, e o TRF
+            # que ele exportava depois já não era o mesmo arquivo.
+            ajustes = {
+                chave: valor
+                for chave, valor in (
+                    ("federation", parsed["federation"]),
+                    ("chief_arbiter", parsed.get("chief_arbiter", "")),
+                    ("arbiters", "\n".join(parsed.get("deputy_arbiters") or [])),
+                )
+                if valor
+            }
+            if ajustes:
+                settings = self.db.get_tournament_settings(tournament_id) or {}
+                settings.update(ajustes)
+                self.db.save_tournament_settings(tournament_id, settings)
 
-        agenda = [
-            {"round_number": numero, "date": data, "time": ""}
-            for numero, data in enumerate(parsed.get("round_dates") or [], start=1)
-            if data
-        ]
-        if agenda:
-            self.db.save_round_schedule(tournament_id, agenda)
+            agenda = [
+                {"round_number": numero, "date": data, "time": ""}
+                for numero, data in enumerate(parsed.get("round_dates") or [], start=1)
+                if data
+            ]
+            if agenda:
+                self.db.save_round_schedule(tournament_id, agenda)
 
-        rank_to_id: dict[int, int] = {}
-        for player in parsed["players"]:
-            player_id = self.db.create_player(
-                tournament_id=tournament_id,
-                name=player["name"],
-                surname=player["surname"],
-                given_name=player["given_name"],
-                title=player["title"],
-                sex=player["sex"],
-                rating=player["rating"],
-                international_rating=player["rating"],
-                federation_id=player["federation_id"],
-                fide_id=player["fide_id"],
-                birth_date=player["birth_date"],
-            )
-            rank_to_id[int(player["start_rank"])] = player_id
+            rank_to_id: dict[int, int] = {}
+            for player in parsed["players"]:
+                player_id = self.db.create_player(
+                    tournament_id=tournament_id,
+                    name=player["name"],
+                    surname=player["surname"],
+                    given_name=player["given_name"],
+                    title=player["title"],
+                    sex=player["sex"],
+                    rating=player["rating"],
+                    international_rating=player["rating"],
+                    federation_id=player["federation_id"],
+                    fide_id=player["fide_id"],
+                    birth_date=player["birth_date"],
+                )
+                rank_to_id[int(player["start_rank"])] = player_id
 
-        equipes = self._create_imported_teams(tournament_id, parsed.get("teams") or [], rank_to_id)
-        rounds = build_trf_rounds(parsed["players"], rank_to_id)
-        for round_number, pairings in rounds:
-            round_id = self.db.create_round_with_pairings(
-                tournament_id,
-                round_number,
-                pairings,
-                pairing_engine_version="trf-import",
-                ruleset_version="trf-import",
-            )
-            self.db.close_round(round_id)
+            equipes = self._create_imported_teams(tournament_id, parsed.get("teams") or [], rank_to_id)
+            rounds = build_trf_rounds(parsed["players"], rank_to_id)
+            for round_number, pairings in rounds:
+                round_id = self.db.create_round_with_pairings(
+                    tournament_id,
+                    round_number,
+                    pairings,
+                    pairing_engine_version="trf-import",
+                    ruleset_version="trf-import",
+                )
+                self.db.close_round(round_id)
 
         logger.info(
             "TRF importado de %s: torneio %s com %s jogadores e %s rodadas",
@@ -549,6 +559,11 @@ class ImportService:
             self._pick(row, "learning_level_id", "nivel_id", "id_nivel"),
             self._pick(row, "learning_level", "nivel", "nivel de aprendizagem"),
         )
+        member_birth_date, birth_error = self._pick_date(
+            row, "birth_date", "nascimento", "data nascimento", "data de nascimento", label="data de nascimento"
+        )
+        if birth_error:
+            errors.append(birth_error)
         member_type = self._normalize_member_type(self._pick(row, "member_type", "tipo", "vinculo"))
         status = self._normalize_member_status(self._pick(row, "status", "situacao"))
 
@@ -562,7 +577,7 @@ class ImportService:
             "phone": self._pick(row, "phone", "telefone", "celular", "whatsapp"),
             "email": self._pick(row, "email", "e-mail"),
             "document": self._pick(row, "document", "documento", "cpf", "rg"),
-            "birth_date": self._pick(row, "birth_date", "nascimento", "data nascimento", "data de nascimento"),
+            "birth_date": member_birth_date,
             "rating": rating,
             "category": self._pick(row, "category", "categoria"),
             "member_type": member_type,
@@ -710,6 +725,12 @@ class ImportService:
             if not name:
                 errors.append(f"Linha {line_number}: nome vazio.")
                 continue
+            birth_date, birth_error = self._pick_date(
+                row, "birth_date", "nascimento", "data_nascimento", label="data de nascimento"
+            )
+            if birth_error:
+                errors.append(f"Linha {line_number}: {birth_error}.")
+                continue
 
             national_rating = self._parse_optional_int(
                 self._pick(row, "national_rating", "rating_nacional", "elo_nacional", "cbx_rating")
@@ -737,7 +758,7 @@ class ImportService:
                 fide_id=self._pick(row, "fide_id", "fide", "id_fide"),
                 cbx_id=self._pick(row, "cbx_id", "cbx", "id_cbx"),
                 lbx_id=self._pick(row, "lbx_id", "lbx", "id_lbx"),
-                birth_date=self._pick(row, "birth_date", "nascimento", "data_nascimento"),
+                birth_date=birth_date,
                 surname=self._pick(row, "surname", "sobrenome"),
                 given_name=self._pick(row, "given_name", "nome_proprio"),
                 title=self._pick(row, "title", "titulo"),
@@ -817,7 +838,7 @@ class ImportService:
             if pd.isna(value):
                 return ""
         except Exception:
-            pass
+            pass  # pandas ausente ou valor não escalar: a célula segue como veio
         return value
 
     def import_rating_list_csv(self, file_path: str | Path, rating_type: str = "fide") -> dict[str, Any]:
@@ -1022,7 +1043,11 @@ class ImportService:
             rating = 0
             errors.append("rating inválido")
 
-        birth_date = self._pick(row, "birth_date", "nascimento", "data nascimento", "data de nascimento")
+        birth_date, birth_error = self._pick_date(
+            row, "birth_date", "nascimento", "data nascimento", "data de nascimento", label="data de nascimento"
+        )
+        if birth_error:
+            errors.append(birth_error)
         sex = self._pick(row, "sex", "sexo", "genero", "genero do jogador", "gênero")
         payload = {
             "name": name,
@@ -1095,6 +1120,27 @@ class ImportService:
             if value is not None:
                 return str(value).strip()
         return ""
+
+    @classmethod
+    def _pick_date(cls, row: dict[str, Any], *keys: str, label: str = "data") -> tuple[str, str]:
+        """Data de planilha/CSV/Google Forms pela regra única (RGS-07).
+
+        Devolve ``(valor_gravavel, erro)``. O valor sai em ISO (ou o ano, que a
+        lista da FIDE publica); o erro cita a coluna, para o árbitro achar a
+        célula. Célula de data do Excel chega como ``2010-05-12 00:00:00`` e e
+        aceita: a hora e descartada.
+        """
+        normalized = {cls._normalize_key(key): (key, value) for key, value in row.items()}
+        for key in keys:
+            achado = normalized.get(cls._normalize_key(key))
+            if achado is None or achado[1] is None:
+                continue
+            coluna, valor = achado
+            resultado = parse_date(cls._clean_spreadsheet_cell(valor), permite_ano=True)
+            if isinstance(resultado, DataInvalida):
+                return "", f'{label} inválida na coluna "{coluna}": "{resultado.texto}" ({resultado.motivo})'
+            return storage_text(resultado), ""
+        return "", ""
 
     @staticmethod
     def _normalize_key(value: str) -> str:

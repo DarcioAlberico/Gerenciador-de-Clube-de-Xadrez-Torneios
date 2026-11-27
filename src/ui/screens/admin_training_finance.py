@@ -286,6 +286,7 @@ class TrainingFinanceMixin:
             load_training_list_options()
 
         def session_payload() -> dict[str, Any]:
+            self._refuse_invalid_dates(entries)
             payload = {key: entry.get() for key, entry in entries.items()}
             payload["session_type"] = TRAINING_TYPE_VALUES[type_option.get()]
             payload["status"] = TRAINING_STATUS_VALUES[status_option.get()]
@@ -759,6 +760,7 @@ class TrainingFinanceMixin:
             }
 
         def payment_payload() -> dict[str, Any]:
+            self._refuse_invalid_dates(payment_entries)
             return {
                 "member_id": member_option_map.get(member_option.get()),
                 "plan_id": plan_option_map.get(payment_plan_option.get()),
@@ -923,6 +925,7 @@ class TrainingFinanceMixin:
                 if not selected_payment_id["value"]:
                     raise AppError("Selecione um lançamento.")
                 payment_id = selected_payment_id["value"]
+                self._refuse_invalid_dates(payment_entries["payment_date"])
                 self.finance_service.mark_payment_paid(
                     payment_id,
                     payment_entries["payment_date"].get(),
@@ -939,6 +942,7 @@ class TrainingFinanceMixin:
                 if not plan_id:
                     raise AppError("Selecione um plano para gerar mensalidades.")
                 reference_period = payment_entries["reference_period"].get().strip()
+                self._refuse_invalid_dates(payment_entries["due_date"])
                 due_date = payment_entries["due_date"].get().strip()
                 if not self._confirm_action(
                     "Gerar mensalidades",

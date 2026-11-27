@@ -70,12 +70,17 @@ def record_xxc(initial_color: str) -> str:
     return f"XXC {cor if cor in (WHITE_FIRST, BLACK_FIRST) else WHITE_FIRST}"
 
 
-def initial_color(first_round_pairings: Sequence[Mapping[str, Any]], start_ranks: Mapping[int, int]) -> str:
+def initial_color(
+    first_round_pairings: Sequence[Mapping[str, Any]],
+    start_ranks: Mapping[int, int],
+    default: str = WHITE_FIRST,
+) -> str:
     """Cor do tabuleiro 1 na primeira rodada, lida do que foi pareado.
 
-    Sem rodada gerada assume `white1`, que e o que o proprio motor faz quando
-    monta a rodada 1 — declarar o contrario seria descrever um torneio diferente
-    do que vai acontecer.
+    Sem rodada gerada vale `default`: a cor inicial gravada no torneio
+    (`tournament_settings.initial_color`, RGS-14), que é a que a R1 vai usar.
+    O comentário antigo dizia que o motor assume brancas — errado: o Gacrux,
+    sem o registro 152, SORTEIA a cor a cada chamada, e ignora o `XXC`.
     """
     for pairing in first_round_pairings:
         if pairing.get("is_bye") or not pairing.get("black_player_id"):
@@ -84,7 +89,7 @@ def initial_color(first_round_pairings: Sequence[Mapping[str, Any]], start_ranks
         preta = start_ranks.get(int(pairing["black_player_id"]), 0)
         if branca and preta:
             return WHITE_FIRST if branca < preta else BLACK_FIRST
-    return WHITE_FIRST
+    return default if default in (WHITE_FIRST, BLACK_FIRST) else WHITE_FIRST
 
 
 def tournament_type_text(competition_type: str, pairing_method: str, *, fide_rated: bool) -> str:

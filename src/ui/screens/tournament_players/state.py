@@ -191,6 +191,13 @@ class PlayerForm:
 
     def _common_payload(self) -> dict[str, Any]:
         return {
+            **self._registration_payload(),
+            "player_status": self.status,
+        }
+
+    def _registration_payload(self) -> dict[str, Any]:
+        """O cadastro sem o estado de participação (RGS-22)."""
+        return {
             "name": self.name.strip(),
             "club": self.club,
             "rating": self.rating_value("rating"),
@@ -205,7 +212,6 @@ class PlayerForm:
             "lbx_id": self.lbx_id,
             "national_rating": self.rating_value("national_rating"),
             "international_rating": self.rating_value("international_rating"),
-            "player_status": self.status,
         }
 
     def create_payload(self, starting_points: float | None = None) -> dict[str, Any]:
@@ -216,14 +222,15 @@ class PlayerForm:
         return payload
 
     def update_payload(self, current: Mapping[str, Any]) -> dict[str, Any]:
-        """O que vai para ``update_player``.
+        """O que vai para ``update_player`` — o cadastro, sem o status.
 
-        ``active`` e ``federation_id`` vêm do registro atual: são dados que a
-        tela não mostra, e sobrescrevê-los com o padrão apagaria escolha feita
-        em outro lugar.
+        ``federation_id`` vem do registro atual: é dado que a tela não mostra, e
+        sobrescrevê-lo com o padrão apagaria escolha feita em outro lugar. O
+        status (e o ``active``, que é a sombra dele) NÃO vai (RGS-22): mudar
+        participação é com o serviço, que grava o histórico — o "Atualizar"
+        gravava o seletor direto no banco, sem evento nem motivo.
         """
-        payload = self._common_payload()
-        payload["active"] = int(current["active"])
+        payload = self._registration_payload()
         payload["federation_id"] = current.get("federation_id", "")
         return payload
 

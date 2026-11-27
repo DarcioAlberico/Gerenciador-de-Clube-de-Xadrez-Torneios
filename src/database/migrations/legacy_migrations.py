@@ -5,6 +5,46 @@ from datetime import datetime
 
 from src.core.database import DEFAULT_LEARNING_LEVELS, DEFAULT_CERTIFICATE_TEMPLATES
 from src.core.categories import competition_category_payload
+from src.core.database_tournament_core import draw_initial_color
+
+
+def _executar_script(connection: sqlite3.Connection, script: str) -> None:
+    """Roda um script SQL instrução por instrução, dentro da transação aberta (RGS-29).
+
+    `executescript` faz COMMIT implícito antes de começar: dentro de uma
+    migração, ele gravaria pela metade a versão em curso. Aqui o script e
+    cortado nos `;` e só vira instrução quando o próprio SQLite diz que ela
+    é completa (`complete_statement`), o que respeita `;` dentro de texto
+    e o corpo `BEGIN ... END;` de gatilho.
+    """
+    instrucao = ""
+    for trecho in script.split(";"):
+        instrucao += trecho + ";"
+        if sqlite3.complete_statement(instrucao):
+            connection.execute(instrucao)
+            instrucao = ""
+    # Sobra sem instrução (espaço, comentário, o `;` acrescentado no fim).
+    resto = instrucao[:-1].strip()
+    if resto and not all(linha.strip().startswith("--") for linha in resto.splitlines() if linha.strip()):
+        raise sqlite3.ProgrammingError(f"Instrução SQL incompleta no script de migração: {resto[:80]!r}")
+
+
+
+def _ja_semeado(connection: sqlite3.Connection, tabela: str, nome: str) -> bool:
+    """O padrão `nome` já é no banco, com ou sem acento (v59).
+
+    A semente antiga gravou "Basico"; a nova escreve "Básico". Num banco que
+    sobe de versão antiga, as sementes da v4/v5/v8 rodam ANTES da v59 — sem
+    esta checagem o padrão entraria duas vezes, uma de cada grafia.
+    """
+    from src.services.text_ascii import to_ascii
+
+    return (
+        connection.execute(
+            f"SELECT 1 FROM {tabela} WHERE name IN (?, ?) LIMIT 1", (nome, to_ascii(nome))
+        ).fetchone()
+        is not None
+    )
 
 class LegacyMigrations:
     def __init__(self, db) -> None:
@@ -67,22 +107,11 @@ class LegacyMigrations:
             53: self._migrate_to_v53,
             54: self._migrate_to_v54,
             55: self._migrate_to_v55,
+            56: self._migrate_to_v56,
+            57: self._migrate_to_v57,
+            58: self._migrate_to_v58,
+            59: self._migrate_to_v59,
         }
-
-    def _run_schema_migrations(self, connection: sqlite3.Connection) -> None:
-        current_version = self.db._schema_user_version(connection)
-        self._ensure_supported_schema_version(connection)
-
-        migrations = self._schema_migrations()
-        for target_version in range(current_version + 1, self.db.SCHEMA_VERSION + 1):
-            migration = migrations.get(target_version)
-            if migration is None:
-                raise RuntimeError(f"Migracao de banco ausente para a versao {target_version}.")
-            migration(connection)
-            connection.execute(f"PRAGMA user_version = {target_version}")
-
-        if current_version == self.db.SCHEMA_VERSION:
-            self._ensure_current_schema(connection)
 
     def _ensure_current_schema(self, connection: sqlite3.Connection) -> None:
         if self.db.SCHEMA_VERSION >= 1:
@@ -195,6 +224,14 @@ class LegacyMigrations:
             self._migrate_to_v54(connection)
         if self.db.SCHEMA_VERSION >= 55:
             self._migrate_to_v55(connection)
+        if self.db.SCHEMA_VERSION >= 56:
+            self._migrate_to_v56(connection)
+        if self.db.SCHEMA_VERSION >= 57:
+            self._migrate_to_v57(connection)
+        if self.db.SCHEMA_VERSION >= 58:
+            self._migrate_to_v58(connection)
+        if self.db.SCHEMA_VERSION >= 59:
+            self._migrate_to_v59(connection)
 
     def _migrate_to_v1(self, connection: sqlite3.Connection) -> None:
         now = self.db.now()
@@ -315,7 +352,7 @@ class LegacyMigrations:
         self._ensure_security_schema(connection)
 
     def _ensure_security_schema(self, connection: sqlite3.Connection) -> None:
-        connection.executescript(
+        _executar_script(connection, 
             """
             CREATE TABLE IF NOT EXISTS audit_log (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -338,7 +375,7 @@ class LegacyMigrations:
         )
 
     def _ensure_inventory_schema(self, connection: sqlite3.Connection) -> None:
-        connection.executescript(
+        _executar_script(connection, 
             """
             CREATE TABLE IF NOT EXISTS inventory_items (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -403,7 +440,7 @@ class LegacyMigrations:
         )
 
     def _ensure_exercise_library_schema(self, connection: sqlite3.Connection) -> None:
-        connection.executescript(
+        _executar_script(connection, 
             """
             CREATE TABLE IF NOT EXISTS exercise_library (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -480,7 +517,7 @@ class LegacyMigrations:
         training_columns = self.db._table_columns(connection, "training_sessions")
         if "training_list_id" not in training_columns:
             connection.execute("ALTER TABLE training_sessions ADD COLUMN training_list_id INTEGER")
-        connection.executescript(
+        _executar_script(connection, 
             """
             CREATE INDEX IF NOT EXISTS idx_exercise_library_filters
                 ON exercise_library(active, club_id, learning_level_id, theme, difficulty);
@@ -537,7 +574,7 @@ class LegacyMigrations:
             try:
                 connection.execute(f"ALTER TABLE members ADD COLUMN {col} {col_type}")
             except sqlite3.OperationalError:
-                pass
+                pass  # coluna já existe: a migração e idempotente
 
     def _migrate_to_v15(self, connection: sqlite3.Connection) -> None:
         connection.execute(
@@ -558,7 +595,7 @@ class LegacyMigrations:
         )
 
     def _migrate_to_v16(self, connection: sqlite3.Connection) -> None:
-        connection.executescript(
+        _executar_script(connection, 
             """
             CREATE TABLE IF NOT EXISTS calendar_events (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -605,7 +642,7 @@ class LegacyMigrations:
         )
 
     def _migrate_to_v17(self, connection: sqlite3.Connection) -> None:
-        connection.executescript(
+        _executar_script(connection, 
             """
             CREATE TABLE IF NOT EXISTS announcements (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -631,7 +668,7 @@ class LegacyMigrations:
         )
 
     def _migrate_to_v18(self, connection: sqlite3.Connection) -> None:
-        connection.executescript(
+        _executar_script(connection, 
             """
             CREATE TABLE IF NOT EXISTS library_items (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -657,7 +694,7 @@ class LegacyMigrations:
 
     def _migrate_to_v19(self, connection: sqlite3.Connection) -> None:
         """Adiciona tabelas para Coleções/Apostilas e Histórico da Biblioteca."""
-        connection.executescript("""
+        _executar_script(connection, """
             CREATE TABLE IF NOT EXISTS library_collections (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
@@ -694,7 +731,7 @@ class LegacyMigrations:
 
     def _migrate_to_v20(self, connection: sqlite3.Connection) -> None:
         """Adiciona tabela para Patrocínios e Doações."""
-        connection.executescript("""
+        _executar_script(connection, """
             CREATE TABLE IF NOT EXISTS sponsors (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
@@ -882,6 +919,8 @@ class LegacyMigrations:
             (now, now),
         )
         for template in DEFAULT_CERTIFICATE_TEMPLATES:
+            if _ja_semeado(connection, "certificate_templates", template["name"]):
+                continue
             connection.execute(
                 """
                 INSERT OR IGNORE INTO certificate_templates (
@@ -1013,6 +1052,8 @@ class LegacyMigrations:
             """
         )
         for index, (name, description) in enumerate(DEFAULT_LEARNING_LEVELS, start=1):
+            if _ja_semeado(connection, "learning_levels", name):
+                continue
             connection.execute(
                 """
                 INSERT OR IGNORE INTO learning_levels (
@@ -1052,7 +1093,7 @@ class LegacyMigrations:
             if column not in settings_columns:
                 connection.execute(f"ALTER TABLE tournament_settings ADD COLUMN {column} {definition}")
 
-        connection.executescript(
+        _executar_script(connection, 
             """
             CREATE TABLE IF NOT EXISTS teams (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1331,7 +1372,7 @@ class LegacyMigrations:
                 "ALTER TABLE tournament_settings ADD COLUMN tiebreak_engine TEXT NOT NULL DEFAULT 'albericus'"
             )
 
-        connection.executescript(
+        _executar_script(connection, 
             """
             CREATE TABLE IF NOT EXISTS audit_events (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1395,7 +1436,7 @@ class LegacyMigrations:
         )
 
     def _ensure_public_result_submission_schema(self, connection: sqlite3.Connection) -> None:
-        connection.executescript(
+        _executar_script(connection, 
             """
             CREATE TABLE IF NOT EXISTS public_tokens (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1457,7 +1498,7 @@ class LegacyMigrations:
             if column not in settings_columns:
                 connection.execute(f"ALTER TABLE tournament_settings ADD COLUMN {column} {definition}")
 
-        connection.executescript(
+        _executar_script(connection, 
             """
             CREATE TABLE IF NOT EXISTS team_lineups (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1523,7 +1564,7 @@ class LegacyMigrations:
         )
 
     def _ensure_sync_schema(self, connection: sqlite3.Connection) -> None:
-        connection.executescript(
+        _executar_script(connection, 
             """
             CREATE TABLE IF NOT EXISTS devices (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1571,7 +1612,7 @@ class LegacyMigrations:
         )
 
     def _ensure_clock_events_schema(self, connection: sqlite3.Connection) -> None:
-        connection.executescript(
+        _executar_script(connection, 
             """
             CREATE TABLE IF NOT EXISTS clock_events (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1605,7 +1646,7 @@ class LegacyMigrations:
         )
 
     def _ensure_tiebreak_components_schema(self, connection: sqlite3.Connection) -> None:
-        connection.executescript(
+        _executar_script(connection, 
             """
             CREATE TABLE IF NOT EXISTS tiebreak_components (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1639,7 +1680,7 @@ class LegacyMigrations:
             )
 
     def _migrate_to_v31(self, connection: sqlite3.Connection) -> None:
-        connection.executescript(
+        _executar_script(connection, 
             """
             CREATE TABLE IF NOT EXISTS scheduled_messages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1718,7 +1759,7 @@ class LegacyMigrations:
         player_columns = self.db._table_columns(connection, "players")
         if "k_factor" not in player_columns:
             connection.execute("ALTER TABLE players ADD COLUMN k_factor INTEGER")
-        connection.executescript(
+        _executar_script(connection, 
             """
             CREATE TABLE IF NOT EXISTS fide_rating_reports (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1759,7 +1800,7 @@ class LegacyMigrations:
             connection.execute(
                 "ALTER TABLE tournament_settings ADD COLUMN prize_tax_percent REAL NOT NULL DEFAULT 0.0"
             )
-        connection.executescript(
+        _executar_script(connection, 
             """
             CREATE TABLE IF NOT EXISTS tournament_prizes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1784,7 +1825,7 @@ class LegacyMigrations:
 
         Tabela nova e opcional; sem ela, as listas usam as colunas padrão.
         """
-        connection.executescript(
+        _executar_script(connection, 
             """
             CREATE TABLE IF NOT EXISTS report_layouts (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2303,3 +2344,243 @@ class LegacyMigrations:
                 "UPDATE tournament_settings SET prize_tie_split = 'hort', prize_policy = 'best_only' "
                 "WHERE prize_policy = 'hort'"
             )
+
+    def _migrate_to_v56(self, connection: sqlite3.Connection) -> None:
+        """Correção atômica e retrato só com dados até a rodada (RGS-10).
+
+        Nos retratos: `reconcile_pending` e a marca que a correção grava na
+        mesma transação do resultado; o trabalhador em segundo plano regrava o
+        retrato e baixa a marca. `reconcile_reason` guarda o motivo que vai
+        para o histórico e `reconcile_generation` sobe a cada marca, para o
+        trabalhador não baixar uma pendência que chegou enquanto ele calculava.
+
+        No jogador: `entry_round`, a primeira rodada que ele podia jogar. O
+        banco antigo não sabe disso; a melhor leitura e "a seguinte a última
+        rodada criada ANTES da inscrição". O relógio tem resolução de segundos,
+        e por isso a comparação e estrita: inscrição no mesmo segundo da
+        rodada conta como anterior a ela — na duvida o jogador entra no
+        retrato, que era o comportamento de antes.
+        """
+        snapshot_columns = self.db._table_columns(connection, "standings_snapshots")
+        for column, definition in (
+            ("reconcile_pending", "INTEGER NOT NULL DEFAULT 0"),
+            ("reconcile_reason", "TEXT NOT NULL DEFAULT ''"),
+            ("reconcile_generation", "INTEGER NOT NULL DEFAULT 0"),
+        ):
+            if column not in snapshot_columns:
+                connection.execute(
+                    f"ALTER TABLE standings_snapshots ADD COLUMN {column} {definition}"
+                )
+
+        player_columns = self.db._table_columns(connection, "players")
+        if "entry_round" not in player_columns:
+            connection.execute(
+                "ALTER TABLE players ADD COLUMN entry_round INTEGER NOT NULL DEFAULT 0"
+            )
+            # Base sintética antiga sem as datas: fica 0 (desconhecida = entra).
+            if "created_at" not in player_columns or "created_at" not in self.db._table_columns(
+                connection, "rounds"
+            ):
+                return
+            connection.execute(
+                """
+                UPDATE players
+                SET entry_round = 1 + (
+                    SELECT COALESCE(MAX(r.number), 0)
+                    FROM rounds r
+                    WHERE r.tournament_id = players.tournament_id
+                      AND r.created_at < players.created_at
+                )
+                """
+            )
+
+    def _migrate_to_v57(self, connection: sqlite3.Connection) -> None:
+        """Cor inicial gravada no torneio (RGS-14).
+
+        Torneio sem rodada recebe o sorteio agora — e o que aconteceria se ele
+        nascesse hoje. Torneio que já tem rodada fica com a coluna vazia: a cor
+        já aconteceu na R1 e e lida dela (`pairing/initial_color.py`); sortear
+        aqui poderia contradizer o que é no tabuleiro.
+        """
+        settings_columns = self.db._table_columns(connection, "tournament_settings")
+        if "initial_color" not in settings_columns:
+            connection.execute(
+                "ALTER TABLE tournament_settings ADD COLUMN initial_color TEXT NOT NULL DEFAULT ''"
+            )
+        sem_cor = connection.execute(
+            """
+            SELECT s.tournament_id
+            FROM tournament_settings s
+            WHERE COALESCE(s.initial_color, '') = ''
+              AND NOT EXISTS (SELECT 1 FROM rounds r WHERE r.tournament_id = s.tournament_id)
+            """
+        ).fetchall()
+        for linha in sem_cor:
+            connection.execute(
+                "UPDATE tournament_settings SET initial_color = ? WHERE tournament_id = ?",
+                (draw_initial_color(), int(linha[0])),
+            )
+
+    def _migrate_to_v58(self, connection: sqlite3.Connection) -> None:
+        """TPN gravado da equipe e rodada de entrada (EQ-01, E6; RGS-30).
+
+        `pairing_number` (TPN) e `seed_rating` são atribuídos na geração da R1
+        e não mudam mais. Torneio em andamento: o TPN sai da ORDEM DA R1 JÁ
+        GERADA (`tpn_from_first_round`), sem recalcular — o rating de hoje pode
+        não ser o daquela rodada. A semente usada fica vazia (não se sabe qual
+        era); quem precisa dela cai na conta de sempre (`team_seed`).
+
+        `entry_round` da equipe: a mesma leitura do jogador na v56 — a
+        seguinte a última rodada criada ANTES da inscrição.
+        """
+        team_columns = self.db._table_columns(connection, "teams")
+        for column, definition in (
+            ("pairing_number", "INTEGER"),
+            ("seed_rating", "INTEGER"),
+        ):
+            if column not in team_columns:
+                connection.execute(f"ALTER TABLE teams ADD COLUMN {column} {definition}")
+        if "entry_round" not in team_columns:
+            connection.execute(
+                "ALTER TABLE teams ADD COLUMN entry_round INTEGER NOT NULL DEFAULT 0"
+            )
+            if "created_at" in team_columns:
+                connection.execute(
+                    """
+                    UPDATE teams
+                    SET entry_round = 1 + (
+                        SELECT COALESCE(MAX(r.number), 0)
+                        FROM rounds r
+                        WHERE r.tournament_id = teams.tournament_id
+                          AND r.created_at < teams.created_at
+                    )
+                    """
+                )
+        self._fill_team_pairing_numbers_from_r1(connection)
+
+    def _fill_team_pairing_numbers_from_r1(self, connection: sqlite3.Connection) -> None:
+        """TPN de quem ja jogou a R1, lido dela. So mexe em torneio SEM nenhum TPN."""
+        from src.services.pairing.team_swiss import tpn_from_first_round
+
+        if not self.db._table_columns(connection, "team_matches"):
+            return
+        # Base sintética antiga pode não ter a coluna do método: e o Suíço.
+        metodo = (
+            "COALESCE(s.team_pairing_method, 'swiss')"
+            if "team_pairing_method" in self.db._table_columns(connection, "tournament_settings")
+            else "'swiss'"
+        )
+        rodadas = connection.execute(
+            f"""
+            SELECT r.id, r.tournament_id,
+                   {metodo} AS method
+            FROM rounds r
+            LEFT JOIN tournament_settings s ON s.tournament_id = r.tournament_id
+            WHERE r.number = 1
+              AND EXISTS (SELECT 1 FROM team_matches tm WHERE tm.round_id = r.id)
+              AND NOT EXISTS (
+                  SELECT 1 FROM teams t
+                  WHERE t.tournament_id = r.tournament_id AND t.pairing_number IS NOT NULL
+              )
+            """
+        ).fetchall()
+        for round_id, tournament_id, method in rodadas:
+            matches = [
+                {
+                    "match_number": row[0],
+                    "white_team_id": row[1],
+                    "black_team_id": row[2],
+                    "is_bye": row[3],
+                    "result": row[4],
+                }
+                for row in connection.execute(
+                    """
+                    SELECT match_number, white_team_id, black_team_id, is_bye, result
+                    FROM team_matches WHERE round_id = ?
+                    """,
+                    (int(round_id),),
+                ).fetchall()
+            ]
+            for team_id, number in tpn_from_first_round(matches, str(method)).items():
+                connection.execute(
+                    "UPDATE teams SET pairing_number = ? WHERE id = ? AND tournament_id = ?",
+                    (int(number), int(team_id), int(tournament_id)),
+                )
+
+    def _migrate_to_v59(self, connection: sqlite3.Connection) -> None:
+        """Textos semeados com acento: níveis e modelos de certificado.
+
+        As sementes (`DEFAULT_LEARNING_LEVELS`, `DEFAULT_CERTIFICATE_TEMPLATES`
+        e a assinatura da galeria) eram gravadas sem acento e chegam a tela e
+        ao certificado impresso. O padrão antigo não fica guardado em lugar
+        nenhum: ele é o novo dobrado para ASCII (`to_ascii`). Cada campo só e
+        trocado se o valor gravado e EXATAMENTE esse padrão antigo; o que o
+        usuário editou fica como esta. Repetir não muda nada.
+
+        Referencias: nível e modelo são ligados por id (membro, turma, aula,
+        emissão), e o nome só aparece copiado em `certificate_issuances.
+        template_name` — que acompanha o modelo quando ainda é o nome antigo.
+        Caminho de imagem de fundo não muda.
+        """
+        from src.services.certificates.gallery import build_gallery, model_to_template
+
+        niveis = [{"name": nome, "description": descricao} for nome, descricao in DEFAULT_LEARNING_LEVELS]
+        modelos = [*DEFAULT_CERTIFICATE_TEMPLATES, *(model_to_template(m) for m in build_gallery(50))]
+        for padrao in niveis:
+            self._acentuar_semeado(connection, "learning_levels", padrao)
+        for padrao in modelos:
+            self._acentuar_semeado(connection, "certificate_templates", padrao)
+
+    def _acentuar_semeado(
+        self, connection: sqlite3.Connection, tabela: str, padrao: dict[str, Any]
+    ) -> None:
+        """Troca, na linha semeada de `padrao`, cada texto que ainda e o antigo."""
+        from src.services.text_ascii import to_ascii
+
+        colunas = self.db._table_columns(connection, tabela)
+        campos = [
+            campo
+            for campo, valor in padrao.items()
+            if campo in colunas and isinstance(valor, str) and to_ascii(valor) != valor
+        ]
+        nome = str(padrao["name"])
+        if not campos:
+            return
+        linhas = connection.execute(
+            f"SELECT id, {', '.join(campos)} FROM {tabela} WHERE name IN (?, ?)",
+            (nome, to_ascii(nome)),
+        ).fetchall()
+        # Nome acentuado já tomado (o usuário criou "Básico" à mão ao lado do
+        # "Basico" semeado): o semeado fica com o nome antigo — trocar violaria
+        # o UNIQUE, e apagar um dos dois não é decisão de migração.
+        nome_ja_tomado = "name" in campos and any(
+            tuple(linha)[1 + campos.index("name")] == nome for linha in linhas
+        )
+        for linha in linhas:
+            linha_id = int(linha[0])
+            atual = dict(zip(campos, tuple(linha)[1:]))
+            novos = {
+                campo: str(padrao[campo])
+                for campo in campos
+                if atual[campo] == to_ascii(str(padrao[campo]))
+            }
+            if "name" in novos and nome_ja_tomado:
+                del novos["name"]
+            if not novos:
+                continue
+            atribuicoes = ", ".join(f"{campo} = ?" for campo in novos)
+            connection.execute(
+                f"UPDATE {tabela} SET {atribuicoes} WHERE id = ?", (*novos.values(), linha_id)
+            )
+            if (
+                tabela == "certificate_templates"
+                and "name" in novos
+                and "template_name" in self.db._table_columns(connection, "certificate_issuances")
+            ):
+                connection.execute(
+                    """
+                    UPDATE certificate_issuances SET template_name = ?
+                    WHERE template_id = ? AND template_name = ?
+                    """,
+                    (nome, linha_id, atual["name"]),
+                )

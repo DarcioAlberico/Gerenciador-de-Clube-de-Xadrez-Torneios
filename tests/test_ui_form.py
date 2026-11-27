@@ -176,7 +176,7 @@ class FormStackTest(unittest.TestCase):
         campo = pilha.text("Ritmo", placeholder="Ex.: 90'+30\"")
         self.assertEqual(FIELD_HEIGHT, campo.cget("height"))
         self.assertEqual("Ex.: 90'+30\"", campo.cget("placeholder_text"))
-        # E a linha de mensagem da F5.3 esta ligada: o erro escreve sob o campo.
+        # E a linha de mensagem da F5.3 é ligada: o erro escreve sob o campo.
         set_field_error(campo, "Formato invalido.")
         self.assertTrue(field_has_error(campo))
         mensagens = [

@@ -375,8 +375,8 @@ class ParametrosChegamAoMotorTest(CoreServiceTestCase):
     def _especificadores(self, tournament_id: int, equipes: bool) -> tuple[str, ...]:
         capturado: dict[str, tuple[str, ...]] = {}
 
-        def espiao(self_engine, exporter, tid, specifiers, current_round, swiss=True):
-            capturado["specifiers"] = tuple(specifiers)
+        def espiao(self_engine, job):
+            capturado["specifiers"] = tuple(job.plan.specifiers)
             return {"tiebreakResult": {"competitors": []}}
 
         alvo = "src.services.pairing.gacrux_tiebreak_engine.GacruxTiebreakEngine._run_tiebreakchecker"

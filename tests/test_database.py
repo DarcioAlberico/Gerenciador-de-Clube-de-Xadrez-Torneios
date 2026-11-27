@@ -89,9 +89,11 @@ class TestDatabasePublicInterface(DatabaseTestCase):
 
 class TestDatabaseSchema(DatabaseTestCase):
     def test_schema_version(self) -> None:
-        # v55 (ORG-02/ORG-03): politica e moeda por premio, rateio entre
-        # empatados, agenda com local/ritmo/descanso e tolerancia de atraso.
-        self.assertEqual(Database.SCHEMA_VERSION, 55)
+        # v57 (RGS-14): cor inicial do torneio (`tournament_settings.initial_color`),
+        # sorteada uma vez e usada igual pela prévia, pela geração e pelo Gacrux.
+        # v58 (EQ-01/E6, RGS-30): TPN, semente e rodada de entrada da equipe.
+        # v59: textos semeados (níveis e modelos de certificado) com acento.
+        self.assertEqual(Database.SCHEMA_VERSION, 59)
 
     def test_core_tables_exist(self) -> None:
         with self.db.connect() as conn:
@@ -172,7 +174,7 @@ class TestTournamentDomain(DatabaseTestCase):
         player = self.db.get_player(pid)
         assert player is not None
         self.assertEqual(player["name"], "Joao")
-        self.db.update_player(pid, "Joao P", "CX", 1600, "Absoluto", 1)
+        self.db.update_player(pid, "Joao P", "CX", 1600, "Absoluto")
         updated = self.db.get_player(pid)
         assert updated is not None
         self.assertEqual(updated["rating"], 1600)

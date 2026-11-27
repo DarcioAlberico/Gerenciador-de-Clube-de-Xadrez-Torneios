@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Mapping
+
+from src.services.constants import player_pairing_name
 
 
 COLOR_HARD_VIOLATION_PENALTY = 100_000
@@ -165,6 +167,58 @@ def rating_for_initial_order(player: dict[str, Any], initial_order: str) -> int:
     )
 
 
+# Ordem dos títulos FIDE na ordem inicial (C.04.2): GM, IM, WGM, FM, WIM, CM,
+# WFM, WCM e, por último, sem título. Aceita também o dialeto do TRF (campo
+# 011-013 da linha 001: `g`, `m`, `wg`...), que é como o jogador importado vem.
+TITLE_SEEDING_ORDER: tuple[tuple[str, ...], ...] = (
+    ("GM", "G"),
+    ("IM", "M"),
+    ("WGM", "WG"),
+    ("FM", "F"),
+    ("WIM", "WM"),
+    ("CM", "C"),
+    ("WFM", "WF"),
+    ("WCM", "WC"),
+)
+_TITLE_RANK = {alias: rank for rank, aliases in enumerate(TITLE_SEEDING_ORDER) for alias in aliases}
+
+
+def title_seeding_rank(title: Any) -> int:
+    """Posição do título na ordem inicial (0 = GM); sem título fica por último."""
+    return _TITLE_RANK.get(str(title or "").strip().upper(), len(TITLE_SEEDING_ORDER))
+
+
+def seeding_key(player: dict[str, Any], initial_order: str = "rating") -> tuple[Any, ...]:
+    """Chave ÚNICA da ordem inicial (RGS-13): o nº 1 é o primeiro desta chave.
+
+    FIDE C.04.2: força (o rating que `initial_order` escolhe), depois título
+    FIDE, depois ordem alfabética — salvo regulamento. O nome é o de
+    pareamento ("Sobrenome, Nome"), o mesmo que o TRF grava; o `id` só
+    garante uma ordem total entre homônimos.
+
+    Usada pela numeração do TRF (logo, pelo Gacrux), pelo motor reserva e
+    pela aceleração. Antes eram três ordens: o TRF numerava pelo primeiro
+    rating não nulo e ignorava `initial_order`, e os dois motores desempatavam
+    o rating só pelo nome — "Alpha" sem título passava à frente de "Zeta" GM.
+    """
+    nome = player_pairing_name(player) or str(player.get("name") or "")
+    return (
+        -rating_for_initial_order(player, initial_order),
+        title_seeding_rank(player.get("title")),
+        nome.casefold(),
+        int(player.get("id") or 0),
+    )
+
+
+def seeding_order(
+    players: list[dict[str, Any]],
+    settings: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    """Jogadores na ordem inicial do torneio (índice 0 = nº 1)."""
+    initial_order = str((settings or {}).get("initial_order") or "rating")
+    return sorted(players, key=lambda player: seeding_key(player, initial_order))
+
+
 def pairing_order_key(
     player: dict[str, Any],
     standings: dict[int, dict[str, Any]],
@@ -271,7 +325,16 @@ def choose_colors(
     player: dict[str, Any],
     opponent: dict[str, Any],
     histories: dict[int, list[str]],
+    ranking: Mapping[int, tuple[Any, ...]] | None = None,
+    initial_color: str = "W",
 ) -> tuple[int, int]:
+    """(brancas, pretas) da mesa. Preferências primeiro; no empate, C.04.3 E.3–E.5.
+
+    `ranking` e a ordem de classificação do holandês: `{player_id: (-pontos,
+    numero_de_pareamento)}` — menor e melhor. Sem ele (equipes, avaliação de
+    custo) o empate continua indo ao maior rating, como antes.
+    `initial_color` e a cor inicial do torneio (RGS-14), a do E.5.
+    """
     player_id = player["id"]
     opponent_id = opponent["id"]
     first_hard, first_penalty = color_assignment_cost(player_id, "W", histories)
@@ -289,9 +352,51 @@ def choose_colors(
     if (second_hard, second_penalty) < (first_hard, first_penalty):
         return opponent_id, player_id
 
+    if ranking is not None:
+        return _colors_by_ranking(
+            int(player_id), int(opponent_id), histories, ranking, initial_color or INITIAL_COLOR
+        )
     if int(player["rating"] or 0) >= int(opponent["rating"] or 0):
         return player_id, opponent_id
     return opponent_id, player_id
+
+
+# Cor inicial quando ninguém informa outra. A do torneio e sorteada e gravada
+# (`tournament_settings.initial_color`, RGS-14) e chega aqui pelo argumento.
+INITIAL_COLOR = "W"
+
+
+def _colors_by_ranking(
+    player_id: int,
+    opponent_id: int,
+    histories: dict[int, list[str]],
+    ranking: Mapping[int, tuple[Any, ...]],
+    initial_color: str = INITIAL_COLOR,
+) -> tuple[int, int]:
+    """Empate das preferências de cor: C.04.3 E.3, E.4 e E.5 (RGS-18).
+
+    E.3 — alternar a partir da rodada mais recente em que um teve brancas e o
+    outro pretas (só partidas jogadas: C.04.2, W.O. e bye não tem cor);
+    E.4 — atender a preferência do mais bem classificado (pontos, depois
+    número de pareamento); E.5 — sem preferência, o mais bem classificado
+    recebe a cor inicial se o número dele e ímpar, e a oposta se e par.
+    Antes o empate ia ao maior rating, que não é critério de cor na FIDE.
+    """
+    played_a = [color for color in histories.get(player_id, []) if color in {"W", "B"}]
+    played_b = [color for color in histories.get(opponent_id, []) if color in {"W", "B"}]
+    for color_a, color_b in zip(reversed(played_a), reversed(played_b)):
+        if color_a != color_b:
+            return (player_id, opponent_id) if color_a == "B" else (opponent_id, player_id)
+
+    worst = (float("inf"),)
+    higher, lower = sorted(
+        (player_id, opponent_id), key=lambda pid: (tuple(ranking.get(pid, worst)), pid)
+    )
+    due = color_preference(higher, histories).due_color
+    if due is None:
+        number = int((ranking.get(higher) or (0, 0))[-1] or 0)
+        due = initial_color if number % 2 == 1 else _opposite_color(initial_color)
+    return (higher, lower) if due == "W" else (lower, higher)
 
 
 def choose_team_colors(

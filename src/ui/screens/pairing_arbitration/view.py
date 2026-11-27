@@ -111,6 +111,18 @@ class ArbitrationPagesMixin:
             return
         self._arbitration_registry(ProhibitionsPage).build()
 
+    # ---- Entrada tardia (RGS-24) ------------------------------------------ #
+
+    def open_late_entry_dialog(self, refresh: Callable[[], None] | None = None) -> Any:
+        """"Entrada tardia…" — o mesmo assistente em Rodadas e no Painel."""
+        if not self._require_tournament():
+            return None
+        from ..player_actions import PlayerActions
+
+        return PlayerActions(self, on_changed=refresh).open_late_entry(
+            int(self.current_tournament_id)
+        )
+
     # ---- Ações do painel -------------------------------------------------- #
 
     def _save_arbitration_panel_result(self, result: str) -> str:
@@ -119,7 +131,7 @@ class ArbitrationPagesMixin:
     def _open_closing_checklist_dialog(self) -> Any:
         return open_closing_checklist(self, self._arbitration_controller())
 
-    def _close_current_round_from_panel(self) -> None:
+    def _close_current_round_from_panel(self, *, confirmed: bool = False) -> None:
         ultima = self._arbitration_controller().latest_round(self.current_tournament_id)
         if not ultima:
             from src.services.constants import AppError
@@ -128,7 +140,11 @@ class ArbitrationPagesMixin:
 
             self._show_error(AppError(t("arbitration.error.no_round_to_close")))
             return
-        self.current_round_id = int(ultima["id"])
+        # A mesma confirmação da tela de Rodadas (RGS-25): checklist, Esc e
+        # "Voltar" não fecham, item reprovado vai para a faixa de regra. Vindo
+        # do "Checklist" (``confirmed``), a lista já foi vista: não pergunta de novo.
+        if not self._confirm_round_closing(ultima, confirmed=confirmed):
+            return
         self._close_current_round()
         self.show_arbitration_panel()
 

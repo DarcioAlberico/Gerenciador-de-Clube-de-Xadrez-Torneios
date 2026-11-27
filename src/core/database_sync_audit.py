@@ -591,7 +591,9 @@ class SyncAuditMixin(_DatabaseInfra):
                 ON CONFLICT(tournament_id, round_id) DO UPDATE SET
                     standings_json = excluded.standings_json,
                     snapshot_hash = excluded.snapshot_hash,
-                    created_at = excluded.created_at
+                    created_at = excluded.created_at,
+                    reconcile_pending = 0,
+                    reconcile_reason = ''
                 """,
                 (
                     int(tournament_id),
@@ -659,6 +661,93 @@ class SyncAuditMixin(_DatabaseInfra):
                 ),
             )
             return str(row["snapshot_hash"])
+
+    # ---- Reconciliação pendente dos retratos (RGS-10) -------------------- #
+
+    def mark_standings_snapshots_pending(
+        self,
+        tournament_id: int,
+        from_round_number: int,
+        reason: str,
+    ) -> int:
+        """Marca para reconciliar os retratos das rodadas FECHADAS >= a corrigida.
+
+        E só a marca — barata, para caber na transação da correção. Quem
+        regrava e o trabalhador (`PairingService.reconcile_pending_snapshots`).
+        Cada marca sobe `reconcile_generation`; uma segunda correção antes da
+        reconciliação junta o motivo ao anterior, para o histórico dizer as
+        duas. Devolve quantos retratos ficaram pendentes.
+        """
+        motivo = str(reason or "").strip()
+        with self.connect() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE standings_snapshots
+                SET reconcile_pending = 1,
+                    reconcile_generation = reconcile_generation + 1,
+                    reconcile_reason = substr(
+                        CASE
+                            WHEN reconcile_pending = 1
+                                 AND reconcile_reason <> ''
+                                 AND reconcile_reason <> :motivo
+                            THEN reconcile_reason || ' | ' || :motivo
+                            ELSE :motivo
+                        END,
+                        1, 1000
+                    )
+                WHERE tournament_id = :torneio
+                  AND round_number >= :rodada
+                  AND round_id IN (
+                      SELECT id FROM rounds
+                      WHERE tournament_id = :torneio AND status = 'closed'
+                  )
+                """,
+                {
+                    "motivo": motivo,
+                    "torneio": int(tournament_id),
+                    "rodada": int(from_round_number),
+                },
+            )
+            return int(cursor.rowcount or 0)
+
+    def list_pending_standings_snapshots(
+        self, tournament_id: int | None = None
+    ) -> list[dict[str, Any]]:
+        """Retratos a reconciliar, por torneio e rodada (sem o JSON, que e grande)."""
+        query = """
+            SELECT id, tournament_id, round_id, round_number, snapshot_hash,
+                   reconcile_reason, reconcile_generation
+            FROM standings_snapshots
+            WHERE reconcile_pending = 1
+        """
+        params: tuple[Any, ...] = ()
+        if tournament_id is not None:
+            query += " AND tournament_id = ?"
+            params = (int(tournament_id),)
+        query += " ORDER BY tournament_id ASC, round_number ASC, id ASC"
+        with self.connect() as connection:
+            rows = connection.execute(query, params).fetchall()
+            return self.rows_to_dicts(rows)
+
+    def standings_snapshot_reconcile_state(
+        self, tournament_id: int, round_id: int
+    ) -> dict[str, Any] | None:
+        """``{"pending": 0/1, "generation": n}`` do retrato, ou None se nao existe."""
+        with self.connect() as connection:
+            row = connection.execute(
+                """
+                SELECT reconcile_pending, reconcile_generation
+                FROM standings_snapshots
+                WHERE tournament_id = ? AND round_id = ?
+                """,
+                (int(tournament_id), int(round_id)),
+            ).fetchone()
+        if row is None:
+            return None
+        return {
+            "pending": int(row["reconcile_pending"] or 0),
+            "generation": int(row["reconcile_generation"] or 0),
+        }
 
     def list_superseded_standings_snapshots(
         self, tournament_id: int

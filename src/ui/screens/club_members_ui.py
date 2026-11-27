@@ -63,7 +63,8 @@ class ClubMembersMixin:
         for index, (key, label) in enumerate(fields):
             ctk.CTkLabel(form, text=label).grid(row=index * 2, column=0, padx=16, pady=(8, 0), sticky="w")
             if key == "birth_date":
-                entry = self._make_date_entry(form, width=30)
+                # Cadastro importado da lista da FIDE traz só o ano (RGS-33).
+                entry = self._make_date_entry(form, width=30, permite_ano=True)
             elif key == "category":
                 from ..support import FIDE_CATEGORIES
                 entry = ctk.CTkOptionMenu(form, values=FIDE_CATEGORIES, width=250)
@@ -123,13 +124,17 @@ class ClubMembersMixin:
 
         freq_date_entry = self._make_date_entry(freq_frame, width=200)
         freq_date_entry.pack(pady=2)
-        freq_date_entry.insert(0, "DD/MM/AAAA")
         freq_event_entry = ctk.CTkEntry(freq_frame, placeholder_text="Evento/Aula", width=200)
         freq_event_entry.pack(pady=2)
         
         def add_presence():
             mid = selected_member_id["value"]
             if not mid: return
+            try:
+                self._refuse_invalid_dates(freq_date_entry)
+            except Exception as exc:
+                self._show_error(exc)
+                return
             d = freq_date_entry.get().strip()
             e = freq_event_entry.get().strip()
             if d and e:
@@ -174,13 +179,17 @@ class ClubMembersMixin:
         title_name_entry.pack(pady=2)
         title_date_entry = self._make_date_entry(titles_frame, width=200)
         title_date_entry.pack(pady=2)
-        title_date_entry.insert(0, "DD/MM/AAAA")
         title_issuer_entry = ctk.CTkEntry(titles_frame, placeholder_text="Emissor", width=200)
         title_issuer_entry.pack(pady=2)
 
         def add_title_action():
             mid = selected_member_id["value"]
             if not mid: return
+            try:
+                self._refuse_invalid_dates(title_date_entry)
+            except Exception as exc:
+                self._show_error(exc)
+                return
             n = title_name_entry.get().strip()
             d = title_date_entry.get().strip()
             i = title_issuer_entry.get().strip()
@@ -229,6 +238,7 @@ class ClubMembersMixin:
             mid = selected_member_id["value"]
             if not mid: return
             try:
+                self._refuse_invalid_dates(deslig_date)
                 self.member_service.deactivate_member(
                     mid,
                     reason=deslig_reason.get().strip(),
@@ -636,6 +646,7 @@ class ClubMembersMixin:
             load_class_options(club_option_map.get(club_option.get()), None)
 
         def member_payload() -> dict[str, Any]:
+            self._refuse_invalid_dates(entries)
             payload = {key: entry.get() for key, entry in entries.items()}
             payload["member_type"] = MEMBER_TYPE_VALUES[member_type_option.get()]
             payload["status"] = MEMBER_STATUS_VALUES[status_option.get()]

@@ -20,10 +20,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from src.services.pairing.acceleration import (
-    BAKU_NOT_IMPLEMENTED,
-    accelerated_player_ids,
-)
+import pytest
+
+from src.services.pairing.acceleration import accelerated_player_ids
 from src.services.pairing.gacrux_trf import (
     acceleration_records,
     compensation_letters,
@@ -35,6 +34,8 @@ from src.services.pairing.gacrux_trf import (
     with_round_cells,
 )
 from tests.support.core_service_base import CoreServiceTestCase
+
+pytestmark = pytest.mark.gacrux  # RGS-37: roda o motor padrão de verdade
 
 
 def _linha_001(pontos: str, celulas: list[str]) -> str:
@@ -231,11 +232,12 @@ class PareamentoAceleradoTest(CoreServiceTestCase):
         ]
         self.assertEqual(1, len(acoes))
 
-    def test_baku_avisa_que_nao_aplica_bonus(self) -> None:
+    def test_baku_vai_pelo_250_sem_aviso(self) -> None:
+        """Baku era guardado com aviso; desde o RGS-30 é FIDE C.04.7 pelo 250."""
         self._configurar(acceleration_method="baku")
         self._create_players(8)
         previa = self.service.preview_next_round(self.tournament_id)
-        self.assertIn(BAKU_NOT_IMPLEMENTED, previa["warnings"])
+        self.assertEqual([], previa["warnings"])
 
     def test_sem_aceleracao_nao_ha_aviso(self) -> None:
         self._configurar(acceleration_method="none")

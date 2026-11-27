@@ -8,10 +8,13 @@ trocar um diff revisável por um irrevisável.
 """
 from __future__ import annotations
 
+import logging
 from ...support import *
-from ...components import Dialog, actions_bar, danger_button, select_field
+from ...components import Dialog, FormStack, actions_bar, danger_button, select_field, text_area
 
+from src.services import friendly_mode
 from src.services.pairing.acceleration import acceleration_spec
+from src.services.pairing.pairing_check import tpn_correction_reason_error
 from src.services.pairing import (
     DEFAULT_PLAYER_TIEBREAKS,
     DEFAULT_TEAM_TIEBREAKS,
@@ -24,6 +27,8 @@ from src.services.pairing import (
 from src.services.prizes import PRIZE_POLICIES
 from src.services.list_layouts import DEFAULT_STANDINGS_COLUMNS, STANDINGS_COLUMNS
 from src.services.chess_results import normalize_results_url
+
+logger = logging.getLogger(__name__)
 
 
 
@@ -73,6 +78,8 @@ class TournamentOtherPagesMixin:
             ("Rodadas", f"{len(rounds)} geradas de {tournament['rounds_count']}"),
             ("Jogadores", str(len(players))),
             ("Perfil", TOURNAMENT_PROFILES.get(str(settings.get("tournament_profile") or "free"), "Livre")),
+            # MA-12: o perfil padrão de todo torneio é "Livre/Escolar"; o modo é outra coisa.
+            ("Modo", friendly_mode.mode_label(friendly_mode.is_friendly(settings))),
         ]
         if is_team_tournament:
             summary_rows.append(("Equipes", str(len(self.db.list_teams(self.current_tournament_id)))))
@@ -237,9 +244,10 @@ class TournamentOtherPagesMixin:
         ).grid(row=0, column=0, padx=12, pady=(12, 6), sticky="w")
         team_tree = self._make_tree(
             teams_panel,
-            ["id", "name", "club", "captain", "starters", "players", "status"],
+            ["id", "tpn", "name", "club", "captain", "starters", "players", "status"],
             {
                 "id": "ID",
+                "tpn": "TPN",
                 "name": "Equipe",
                 "club": "Clube/Cidade",
                 "captain": "Capitão",
@@ -249,6 +257,7 @@ class TournamentOtherPagesMixin:
             },
             {
                 "id": 60,
+                "tpn": 50,
                 "name": 220,
                 "club": 160,
                 "captain": 150,
@@ -358,6 +367,7 @@ class TournamentOtherPagesMixin:
                     "end",
                     values=(
                         team["id"],
+                        team.get("pairing_number") or "",
                         team["name"],
                         team.get("club", ""),
                         team.get("captain", ""),
@@ -532,6 +542,15 @@ class TournamentOtherPagesMixin:
             except Exception as exc:
                 self._show_error(exc)
 
+        def swap_team_tpn() -> None:
+            try:
+                team_id = selected_team_id["value"]
+                if not team_id:
+                    raise AppError("Selecione uma equipe.")
+                self._open_team_tpn_swap(int(team_id), on_done=load_teams)
+            except Exception as exc:
+                self._show_error(exc)
+
         team_tree.bind("<<TreeviewSelect>>", on_team_select)
         roster_tree.bind("<<TreeviewSelect>>", on_roster_select)
 
@@ -540,6 +559,7 @@ class TournamentOtherPagesMixin:
             ("Atualizar equipe", update_team),
             ("Excluir equipe", delete_team),
             ("Limpar equipe", clear_team_form),
+            ("Trocar TPN", swap_team_tpn),
             ("Adicionar jogador", add_player_to_team),
             ("Atualizar escalação", update_assignment),
             ("Remover jogador", remove_assignment),
@@ -548,6 +568,63 @@ class TournamentOtherPagesMixin:
 
         load_teams()
         load_player_options()
+
+    def _open_team_tpn_swap(self, team_id: int, *, on_done: Any = None) -> None:
+        """Corrige o TPN trocando o número desta equipe com o de outra (EQ-01.5).
+
+        A regra mora no serviço (`TeamService.swap_pairing_numbers`): motivo
+        obrigatório, só entre rodadas, nunca no todos-contra-todos. A tela usa a
+        mesma checagem de motivo antes do clique e mostra o recado no próprio
+        diálogo, sem fechá-lo — fechar apagaria o que já foi digitado.
+        """
+        team = self.db.get_team(team_id)
+        if not team or not team.get("pairing_number"):
+            raise AppError(
+                "O TPN é atribuído na geração da 1ª rodada; antes dela, a ordem "
+                "segue a semente e não há número a corrigir."
+            )
+        outras = {
+            f"TPN {int(item['pairing_number'])} - {item['name']}": int(item["id"])
+            for item in sorted(
+                self.db.list_teams(int(team["tournament_id"]), active_only=False),
+                key=lambda item: int(item.get("pairing_number") or 0),
+            )
+            if item.get("pairing_number") and int(item["id"]) != int(team_id)
+        }
+        if not outras:
+            raise AppError("Não há outra equipe com TPN para a troca.")
+
+        dialog = Dialog(self, "Trocar TPN", size=(520, 420), resizable=False)
+        pilha = FormStack(dialog)
+        pilha.section(
+            f"{team['name']} (TPN {int(team['pairing_number'])})",
+            help_text=(
+                "O TPN só muda por decisão do árbitro-chefe (FIDE C.04.6): as duas "
+                "equipes trocam de número e a troca fica na auditoria."
+            ),
+        )
+        outra = pilha.select("Trocar com", list(outras))
+        motivo = pilha.field("Motivo da correção", lambda box: text_area(box, height=80))
+        aviso = pilha.note("")
+        aviso.configure(text_color=THEME_DANGER)
+
+        def confirmar() -> None:
+            texto = " ".join(motivo.get("1.0", "end").split())
+            erro = tpn_correction_reason_error(texto)
+            if erro:
+                aviso.configure(text=erro)
+                return
+            try:
+                self.team_service.swap_pairing_numbers(team_id, outras[outra.get()], reason=texto)
+            except AppError as exc:
+                aviso.configure(text=str(exc))
+                return
+            dialog.close()
+            if on_done is not None:
+                on_done()
+            self._show_toast("TPN trocado.", kind="success")
+
+        actions_bar(dialog, primary=("Trocar TPN", confirmar), close_text="Cancelar")
 
     def show_tournament_referees_dialog(self) -> None:
         if not self._require_tournament():
@@ -836,7 +913,7 @@ class TournamentOtherPagesMixin:
                 result[0] = out
                 dialog.close()
             except Exception:
-                pass
+                logger.debug("Ritmo de jogo nao confirmado", exc_info=True)
 
         actions_bar(dialog, row=6, primary=("Confirmar", save), close_text="Cancelar")
 

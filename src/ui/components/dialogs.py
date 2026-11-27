@@ -22,6 +22,7 @@ tela e ordem de botões deixem de ser lembrança de quem escreve a tela.
 """
 from __future__ import annotations
 
+import logging
 from typing import Any, Callable, Sequence
 
 import customtkinter as ctk
@@ -43,6 +44,8 @@ from ..theme import (
 )
 from .buttons import danger_button, neutral_button, primary_button, secondary_button
 from .fields import text_area
+
+logger = logging.getLogger(__name__)
 
 # kind do alerta -> cor do título (demais ficam na cor de texto principal)
 _TITLE_COLOR = {
@@ -132,7 +135,7 @@ class _ModalDialog(ctk.CTkToplevel):
         try:
             self.transient(parent.winfo_toplevel())
         except Exception:
-            pass
+            pass  # pai sem janela de topo (já fechado): o diálogo fica solto
         self.grab_set()
         focus_button = (safe_button or main_button) if danger else main_button
         if focus_button is not None:
@@ -144,14 +147,14 @@ class _ModalDialog(ctk.CTkToplevel):
         try:
             self.grab_release()
         except Exception:
-            pass
+            pass  # o diálogo já foi destruído; não há grab a soltar
         self.destroy()
         # devolve o grab ao modal pai, se havia um
         if self._previous_grab is not None:
             try:
                 self._previous_grab.grab_set()
             except Exception:
-                pass
+                pass  # a janela que tinha o grab já fechou
 
     def _center_over(self, parent: Any) -> None:
         self.update_idletasks()
@@ -327,7 +330,7 @@ class _ReportDialog(ctk.CTkToplevel):
         try:
             self.transient(parent.winfo_toplevel())
         except Exception:
-            pass
+            pass  # pai sem janela de topo (já fechado): o diálogo fica solto
         self.grab_set()
         self._body = body
 
@@ -343,13 +346,13 @@ class _ReportDialog(ctk.CTkToplevel):
         try:
             self.grab_release()
         except Exception:
-            pass
+            pass  # o diálogo já foi destruído; não há grab a soltar
         self.destroy()
         if self._previous_grab is not None:
             try:
                 self._previous_grab.grab_set()
             except Exception:
-                pass
+                pass  # a janela que tinha o grab já fechou
 
     def _center_over(self, parent: Any) -> None:
         self.update_idletasks()
@@ -436,7 +439,7 @@ class Dialog(ctk.CTkToplevel):
         try:
             self.transient(parent.winfo_toplevel())
         except Exception:
-            pass
+            pass  # pai sem janela de topo (já fechado): o diálogo fica solto
         self.grab_set()
 
     def close(self) -> None:
@@ -445,17 +448,17 @@ class Dialog(ctk.CTkToplevel):
             try:
                 self._on_close()
             except Exception:
-                pass
+                logger.debug("Callback de fechamento do dialogo falhou", exc_info=True)
         try:
             self.grab_release()
         except Exception:
-            pass
+            pass  # o diálogo já foi destruído; não há grab a soltar
         self.destroy()
         if self._previous_grab is not None:
             try:
                 self._previous_grab.grab_set()
             except Exception:
-                pass
+                pass  # a janela que tinha o grab já fechou
 
     def _center_over(self, parent: Any, pedido: tuple[int, int]) -> None:
         self.update_idletasks()
@@ -533,6 +536,7 @@ def reason_dialog(
     validate: Callable[[str], str] | None = None,
     confirm_text: str | None = None,
     danger: bool = False,
+    size: tuple[int, int] = (560, 320),
 ) -> str | None:
     """Pede um texto obrigatório (motivo, justificativa). ``None`` = cancelou.
 
@@ -545,7 +549,7 @@ def reason_dialog(
     O recado do erro aparece no próprio diálogo, sem fechá-lo, porque fechar
     apagaria o que já foi digitado.
     """
-    dialog = Dialog(parent, title, size=(560, 320), stretch_rows=(1,))
+    dialog = Dialog(parent, title, size=size, stretch_rows=(1,))
     resultado: dict[str, str | None] = {"value": None}
 
     ctk.CTkLabel(
@@ -554,7 +558,7 @@ def reason_dialog(
         text_color=THEME_TEXT_SUB,
         anchor="w",
         justify="left",
-        wraplength=490,
+        wraplength=size[0] - 70,
     ).grid(row=0, column=0, padx=SPACE_LG, pady=(SPACE_LG, SPACE_SM), sticky="ew")
 
     campo = text_area(dialog, height=90)

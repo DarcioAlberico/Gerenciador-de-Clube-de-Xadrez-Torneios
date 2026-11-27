@@ -88,17 +88,25 @@ PAIRING_METHODS = {
     "knockout": "Mata-mata",
     "scheveningen": "Scheveningen (A x B)",
 }
+# Rótulo do motor próprio de pareamento (RGS-18). Tudo que não é `gacrux_swiss`
+# pareia o Suíço individual pelo motor próprio (`fide_dutch.py`), que é reserva:
+# não segue o holandês completo (C.04.3) e não é homologado pela FIDE.
+RESERVE_ENGINE_LABEL = "motor reserva — não homologado FIDE"
 PAIRING_SYSTEMS = {
-    "fide_dutch": "FIDE Dutch",
-    "dubov": "Dubov",
-    "burstein": "Burstein",
-    "lim": "Lim",
+    "fide_dutch": f"FIDE Dutch ({RESERVE_ENGINE_LABEL})",
+    "dubov": f"Dubov ({RESERVE_ENGINE_LABEL})",
+    "burstein": f"Burstein ({RESERVE_ENGINE_LABEL})",
+    "lim": f"Lim ({RESERVE_ENGINE_LABEL})",
     "team_swiss": "Suíço por equipes",
-    "custom_authorized": "Customizado/autorizado",
+    "custom_authorized": f"Customizado/autorizado ({RESERVE_ENGINE_LABEL})",
     "gacrux_swiss": "Suíço (Gacrux)",
 }
-# Motor de calculo dos desempates/classificacao. 'gacrux' usa o motor FIDE
-# oficial (tiebreakchecker.py); 'albericus' usa o calculo proprio (historico).
+# Sistemas que pareiam pelo motor reserva: escolhê-los exige confirmação (RGS-18).
+RESERVE_PAIRING_SYSTEMS = frozenset(
+    sistema for sistema, rotulo in PAIRING_SYSTEMS.items() if RESERVE_ENGINE_LABEL in rotulo
+)
+# Motor de cálculo dos desempates/classificacao. 'gacrux' usa o motor FIDE
+# oficial (tiebreakchecker.py); 'albericus' usa o cálculo próprio (histórico).
 TIEBREAK_ENGINES = {
     "gacrux": "FIDE (Gacrux)",
     "albericus": "Albericus (próprio)",
@@ -107,7 +115,7 @@ ACCELERATION_METHODS = {
     "none": "Sem aceleração",
     "accelerated": "Clássica (Haley)",
     "custom": "Personalizada (parametrizável)",
-    "baku": "Baku (sem formula oficial - nao emite 250)",
+    "baku": "Baku (FIDE C.04.7)",
 }
 TEAM_PAIRING_METHODS = {"swiss": "Suíço", "round_robin": "Schuring (Todos contra todos)"}
 CERTIFICATE_TYPES = {
@@ -294,5 +302,14 @@ TOURNAMENT_FLAG_FIELDS = {
 
 
 class AppError(Exception):
-    """Erro esperado de regra de negocio, seguro para mostrar ao usuario."""
+    """Erro esperado de regra de negócio, seguro para mostrar ao usuário.
+
+    ``suggestion`` e a ação sugerida (RGS-26): a tela mostra a recusa numa faixa
+    fixa, com o que fazer em seguida — recusa sem saída ensina o árbitro a
+    procurar o atalho errado (foi assim que "mudancas perigosas" virou rotina).
+    """
+
+    def __init__(self, *args: object, suggestion: str = "") -> None:
+        super().__init__(*args)
+        self.suggestion = " ".join(str(suggestion or "").split())
 

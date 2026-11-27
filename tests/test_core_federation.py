@@ -540,23 +540,36 @@ class FederationExportTest(CoreServiceTestCase):
         self.assertEqual(line[22:26].strip(), "1")  # primeiro jogador (rank 1)
         self.assertEqual(line[27:31].strip(), "4")  # último jogador (N//2 = 4)
 
-    def test_trf25_warns_when_initial_order_not_fide(self) -> None:
+    def test_trf25_sno_follows_initial_order(self) -> None:
+        """RGS-13: o SNo do TRF E a ordem inicial do torneio — nada a avisar.
+
+        Antes o SNo seguia sempre o rating FIDE e o export avisava que ele podia
+        divergir do seeding do pareamento; agora os dois usam `seeding_key`.
+        """
         from src.services.federation_exporters import TRF25Exporter
 
-        self._create_players(4)
+        ids = self._create_players(4)
+        for offset, player_id in enumerate(ids):
+            with self.db.connect() as connection:
+                connection.execute(
+                    "UPDATE players SET national_rating = ? WHERE id = ?",
+                    (1500 + 100 * offset, player_id),
+                )
         exporter = TRF25Exporter(self.export_service)
         output_path = Path(self.temp_dir.name) / "order.trf"
 
         def has_sno_warning(messages: list[str]) -> bool:
             return any("numero de ordem (SNo)" in message for message in messages)
 
-        # Ordem inicial = rating principal (FIDE-compativel): sem aviso de SNo.
-        self.db.save_tournament_settings(self.tournament_id, {"initial_order": "rating"})
-        self.assertFalse(has_sno_warning(exporter.export(self.tournament_id, output_path)))
-
-        # Ordem inicial nacional: avisa que o SNo do TRF pode divergir do seeding.
         self.db.save_tournament_settings(self.tournament_id, {"initial_order": "national_rating"})
-        self.assertTrue(has_sno_warning(exporter.export(self.tournament_id, output_path)))
+        self.assertFalse(has_sno_warning(exporter.export(self.tournament_id, output_path)))
+        player_lines = [
+            line for line in output_path.read_text(encoding="utf-8").splitlines()
+            if line.startswith("001")
+        ]
+        # Nacional crescente com o id: o ultimo criado e o número 1.
+        names = [self.db.get_player(player_id)["name"] for player_id in reversed(ids)]
+        self.assertEqual(names, [line[14:47].strip() for line in player_lines])
 
     def test_trf25_802_marks_full_match_forfeit(self) -> None:
         from src.services.federation_exporters import TRF25Exporter
@@ -950,7 +963,7 @@ class FederationExportTest(CoreServiceTestCase):
         warnings = self.export_service.validate_chess_results_trf(tournament_id)
 
         self.assertIn("TRF16 contém 1 bye(s).", warnings)
-        self.assertIn("TRF16 contem 1 resultado(s) por WO.", warnings)
+        self.assertIn("TRF16 contém 1 resultado(s) por W.O.", warnings)
         self.assertIn("TRF16 contém 1 dupla(s) ausência(s).", warnings)
         self.assertIn("TRF16 contém 1 jogador(es) não emparceirado(s) em rodadas geradas.", warnings)
 

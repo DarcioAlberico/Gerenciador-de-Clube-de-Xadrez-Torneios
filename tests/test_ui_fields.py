@@ -200,7 +200,7 @@ class EstadosDoCampoTest(unittest.TestCase):
             help_text="Entre 1 e 30.",
         )
         # Mapeado de verdade: o Tk não entrega evento de foco a widget que não
-        # esta na tela (mesma familia da pegadinha registrada na B-4).
+        # é na tela (mesma família da pegadinha registrada na B-4).
         self.box.pack(fill="x")
         self.root.update()
         self.hint = [w for w in self.box.winfo_children() if isinstance(w, ctk.CTkLabel)][-1]

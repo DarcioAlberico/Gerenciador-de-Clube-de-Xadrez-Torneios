@@ -84,6 +84,7 @@ class AuditPagesMixin:
             tree.delete(*tree.get_children())
             metadata_cache.clear()
             try:
+                self._refuse_invalid_dates(start_date, end_date)
                 op = operator_entry.get().strip()
                 act = action_entry.get().strip()
                 ent = entity_entry.get().strip()

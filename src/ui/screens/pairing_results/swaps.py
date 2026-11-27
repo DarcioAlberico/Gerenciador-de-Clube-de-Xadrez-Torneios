@@ -11,7 +11,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from ...components import Dialog, FormStack, actions_bar
+from src.services.pairing.pairing_check import manual_adjustment_reason_error
+
+from ...components import Dialog, FormStack, actions_bar, reason_dialog
 from ...support import AppError, player_pairing_name
 
 
@@ -43,12 +45,26 @@ class BoardSwapActions:
                 raise AppError("Selecione uma mesa.")
             if not host.current_round_id:
                 raise AppError("Selecione uma rodada.")
+            # RGS-16 (FIDE C.04.2): inverter as cores é ajuste manual — pede
+            # motivo, com a mesma regra que o serviço aplica.
+            motivo = reason_dialog(
+                host,
+                "Trocar cores",
+                "Inverter as cores altera o emparceiramento: a troca é comparada "
+                "com o holandês FIDE e fica registrada na auditoria.\n\n"
+                "Por que as cores desta mesa precisam ser trocadas?",
+                validate=manual_adjustment_reason_error,
+                confirm_text="Trocar cores",
+            )
+            if motivo is None:
+                return
             # Passa pelo serviço (PAR-04): a checagem de rodada fechada e a
             # trilha de auditoria moram lá, junto com o caminho de equipes.
             host.pairing_service.swap_pairing_colors(
                 host.current_tournament_id,
                 host.current_round_id,
                 pairing_id,
+                reason=motivo,
             )
             host._load_selected_round_pairings()
         except Exception as exc:
@@ -83,7 +99,7 @@ class BoardSwapActions:
             # `host`, não `self`: `self` aqui e o objeto de ações, não a janela.
             # O `Dialog` e um CTkToplevel — com um pai que não é widget ele nem
             # abre. Mesmo defeito que a extração da B-6 achou no `qr.py`.
-            dialog = Dialog(host, "Trocar jogador", size=(460, 320), resizable=False)
+            dialog = Dialog(host, "Trocar jogador", size=(460, 400), resizable=False)
             pilha = FormStack(dialog)
             pilha.section(
                 f"Mesa {pairing['board_number']}: "
@@ -92,6 +108,13 @@ class BoardSwapActions:
             )
             slot_option = pilha.select("Lado a trocar", slot_options)
             player_option = pilha.select("Jogador", player_options)
+            # RGS-16 (FIDE C.04.2): alteração manual do pareamento é registrada
+            # com motivo; o serviço recusa o ajuste sem ele.
+            reason_entry = pilha.text(
+                "Motivo do ajuste",
+                placeholder="Obrigatório — fica na auditoria",
+                help_text="A troca é comparada com o holandês FIDE e a diferença fica registrada.",
+            )
 
             def apply_swap() -> None:
                 try:
@@ -103,6 +126,7 @@ class BoardSwapActions:
                         pairing["id"],
                         color,
                         replacement_id,
+                        reason=reason_entry.get(),
                     )
                     dialog.close()
                     host._load_selected_round_pairings()

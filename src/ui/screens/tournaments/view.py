@@ -23,6 +23,7 @@ from ...support import (
     TOURNAMENT_SCOPE_VALUES,
     TOURNAMENT_SCOPES,
     filedialog,
+    refuse_invalid_dates,
 )
 from ...components import FormStack, danger_button, primary_button, secondary_button
 from .controller import TournamentListController
@@ -241,6 +242,7 @@ class TournamentListView:
 
     def _create(self) -> None:
         try:
+            refuse_invalid_dates(self.entries)
             tournament_id = self.controller.create(self.current_form())
             self.host._set_current_tournament(tournament_id)
             self.host.show_players()

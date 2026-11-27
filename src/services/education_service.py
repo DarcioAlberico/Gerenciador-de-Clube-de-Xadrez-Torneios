@@ -11,6 +11,7 @@ from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any, Mapping, TYPE_CHECKING
 
+from src.domain.dates import is_iso_date
 from src.core.database import BASE_DIR, DEFAULT_CERTIFICATE_TEMPLATES, Database
 from src.services.constants import *
 
@@ -182,10 +183,10 @@ class TrainingService:
         cleaned = value.strip()
         if not cleaned:
             return
-        try:
-            date.fromisoformat(cleaned)
-        except ValueError as exc:
-            raise AppError(message) from exc
+        # Regra única de data (RGS-07); o serviço grava o texto como veio,
+        # então só a forma canônica ISO passa.
+        if not is_iso_date(cleaned):
+            raise AppError(message)
 
 class ExerciseService:
     def __init__(self, db: Database) -> None:

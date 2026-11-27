@@ -271,7 +271,7 @@ class SettingsReportsMixin:
         export_round_map: dict[str, int] = {}
         round_values = []
         for round_data in rounds:
-            label = f"Rodada {round_data['number']} - {round_data['status']}"
+            label = round_option_label(round_data)
             round_values.append(label)
             export_round_map[label] = round_data["id"]
         if not round_values:

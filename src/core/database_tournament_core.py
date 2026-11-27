@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 import sqlite3
 from typing import Any
 
@@ -28,6 +29,31 @@ def default_pairing_system() -> str:
     return os.environ.get("ALBERICUS_DEFAULT_PAIRING_SYSTEM", "gacrux_swiss")
 
 
+INITIAL_COLORS = ("W", "B")
+
+
+def normalize_initial_color(value: Any) -> str:
+    """'W', 'B' ou '' (sem cor gravada). Aceita 'w'/'b' e 'white1'/'black1'."""
+    texto = str(value or "").strip().upper()
+    if texto in ("WHITE1", "WHITE"):
+        return "W"
+    if texto in ("BLACK1", "BLACK"):
+        return "B"
+    return texto if texto in INITIAL_COLORS else ""
+
+
+def draw_initial_color() -> str:
+    """Sorteio da cor inicial (RGS-14; C.04.3: a cor inicial e sorteada).
+
+    ALBERICUS_INITIAL_COLOR fixa o resultado — os testes usam para que o motor
+    reserva continue determinístico, como `default_pairing_system`.
+    """
+    fixa = normalize_initial_color(os.environ.get("ALBERICUS_INITIAL_COLOR"))
+    if fixa:
+        return fixa
+    return secrets.choice(INITIAL_COLORS)
+
+
 def default_tiebreak_engine() -> str:
     """Motor de desempate/classificacao padrão para novos torneios.
 
@@ -38,6 +64,11 @@ def default_tiebreak_engine() -> str:
     """
     return os.environ.get("ALBERICUS_DEFAULT_TIEBREAK_ENGINE", "gacrux")
 
+
+
+def _as_ints(*valores: Any) -> tuple[int, ...]:
+    """Inteiros, com vazio/None virando 0 (ratings e contagens do jogador)."""
+    return tuple(int(v or 0) for v in valores)
 
 class TournamentCoreMixin(_DatabaseInfra):
     def create_tournament(
@@ -462,7 +493,7 @@ class TournamentCoreMixin(_DatabaseInfra):
                     rating_speed = ?, rating_regulation = ?,
                     category_reference_date = ?,
                     prize_tie_split = ?, prize_exclude_withdrawn = ?,
-                    late_tolerance_minutes = ?,
+                    late_tolerance_minutes = ?, initial_color = ?,
                     archived = ?, updated_at = ?
                 WHERE tournament_id = ?
                 """,
@@ -527,6 +558,7 @@ class TournamentCoreMixin(_DatabaseInfra):
                     str(data.get("prize_tie_split", "equal")).strip() or "equal",
                     int(data.get("prize_exclude_withdrawn", 0) or 0),
                     int(data.get("late_tolerance_minutes", 0) or 0),
+                    normalize_initial_color(data.get("initial_color")),
                     int(data.get("archived", 0) or 0),
                     self.now(),
                     tournament_id,
@@ -1232,6 +1264,7 @@ class TournamentCoreMixin(_DatabaseInfra):
         games_played: int = 0,
         player_status: str = "active",
         starting_points: float | None = None,
+        entry_round: int | None = None,
     ) -> int:
         with self.connect() as connection:
             if starting_points is None:
@@ -1249,6 +1282,13 @@ class TournamentCoreMixin(_DatabaseInfra):
                 club=club,
             )
             active = 1 if player_status == "active" else 0
+            # RGS-10: a primeira rodada que ele pode jogar e a seguinte a última
+            # já gerada — e o retrato da rodada N só traz quem entrou até N.
+            # `entry_round` explicito e o "jogar ja nesta rodada" do Modo
+            # Amistoso (MA-04): a rodada aberta e refeita com ele na mesma
+            # transação.
+            if entry_round is None:
+                entry_round = self._next_entry_round(connection, tournament_id)
             cursor = connection.execute(
                 """
                 INSERT INTO players (
@@ -1257,8 +1297,8 @@ class TournamentCoreMixin(_DatabaseInfra):
                     international_rating, rapid_rating, blitz_rating, games_played,
                     category, age_category, rating_category, categories,
                     prize_tags, birth_date, player_status, starting_points, active,
-                    created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    entry_round, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     tournament_id,
@@ -1273,12 +1313,9 @@ class TournamentCoreMixin(_DatabaseInfra):
                     fide_id.strip(),
                     cbx_id.strip(),
                     lbx_id.strip(),
-                    int(rating or 0),
-                    int(national_rating or 0),
-                    int(international_rating or 0),
-                    int(rapid_rating or 0),
-                    int(blitz_rating or 0),
-                    int(games_played or 0),
+                    *_as_ints(
+                        rating, national_rating, international_rating, rapid_rating, blitz_rating, games_played
+                    ),
                     category_payload["category"],
                     category_payload["age_category"],
                     category_payload["rating_category"],
@@ -1288,10 +1325,21 @@ class TournamentCoreMixin(_DatabaseInfra):
                     player_status.strip() or "active",
                     float(starting_points or 0.0),
                     active,
+                    entry_round,
                     self.now(),
                 ),
             )
             return int(cursor.lastrowid)
+
+    @staticmethod
+    def _next_entry_round(connection: sqlite3.Connection, tournament_id: int) -> int:
+        """A rodada seguinte à última gerada (RGS-10)."""
+        return 1 + int(
+            connection.execute(
+                "SELECT COALESCE(MAX(number), 0) FROM rounds WHERE tournament_id = ?",
+                (int(tournament_id),),
+            ).fetchone()[0]
+        )
 
     def update_player(
         self,
@@ -1300,7 +1348,6 @@ class TournamentCoreMixin(_DatabaseInfra):
         club: str,
         rating: int,
         category: str,
-        active: int,
         federation_id: str = "",
         fide_id: str = "",
         birth_date: str = "",
@@ -1315,11 +1362,16 @@ class TournamentCoreMixin(_DatabaseInfra):
         rapid_rating: int = 0,
         blitz_rating: int = 0,
         games_played: int = 0,
-        player_status: str | None = None,
         starting_points: float | None = None,
     ) -> None:
-        status = (player_status or ("active" if active else "inactive")).strip() or "active"
-        active_value = 1 if status == "active" else 0
+        """Cadastro do jogador — e SÓ o cadastro (RGS-22).
+
+        Não recebe `player_status` nem `active`: toda mudança de participação
+        passa por `PairingService.set_player_participation`, que grava o
+        histórico ARB-05 junto. Aceitar o status aqui era a porta dos fundos do
+        botão "Atualizar" — o jogador mudava de estado sem evento, sem rodada de
+        vigência e sem o motivo que a reentrada de um desistente exige.
+        """
         with self.connect() as connection:
             current = connection.execute(
                 "SELECT tournament_id, member_id, starting_points FROM players WHERE id = ?",
@@ -1350,8 +1402,8 @@ class TournamentCoreMixin(_DatabaseInfra):
                     rating = ?, national_rating = ?, international_rating = ?,
                     rapid_rating = ?, blitz_rating = ?, games_played = ?,
                     category = ?, age_category = ?, rating_category = ?, categories = ?,
-                    prize_tags = ?, birth_date = ?, player_status = ?,
-                    starting_points = ?, active = ?
+                    prize_tags = ?, birth_date = ?,
+                    starting_points = ?
                 WHERE id = ?
                 """,
                 (
@@ -1377,9 +1429,7 @@ class TournamentCoreMixin(_DatabaseInfra):
                     category_payload["categories"],
                     category_payload["prize_tags"],
                     birth_date.strip(),
-                    status,
                     points_value,
-                    active_value,
                     player_id,
                 ),
             )
@@ -1422,11 +1472,20 @@ class TournamentCoreMixin(_DatabaseInfra):
     ) -> int:
         now = self.now()
         with self.connect() as connection:
+            # E6 (como o jogador na RGS-10): a primeira rodada que a equipe pode
+            # jogar e a seguinte a última já gerada.
+            entry_round = 1 + int(
+                connection.execute(
+                    "SELECT COALESCE(MAX(number), 0) FROM rounds WHERE tournament_id = ?",
+                    (int(tournament_id),),
+                ).fetchone()[0]
+            )
             cursor = connection.execute(
                 """
                 INSERT INTO teams (
-                    tournament_id, name, club, captain, notes, active, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    tournament_id, name, club, captain, notes, active, entry_round,
+                    created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     tournament_id,
@@ -1435,11 +1494,67 @@ class TournamentCoreMixin(_DatabaseInfra):
                     captain.strip(),
                     notes.strip(),
                     int(active),
+                    entry_round,
                     now,
                     now,
                 ),
             )
             return int(cursor.lastrowid)
+
+    def save_team_pairing_numbers(
+        self,
+        numbers: dict[int, int],
+        seed_ratings: dict[int, int],
+    ) -> None:
+        """Grava TPN e semente de quem ainda não tem (EQ-01). Gravado não muda.
+
+        `pairing_number IS NULL` na condição torna a gravação idempotente e
+        impede renumerar por engano: corrigir TPN e outra ação, com auditoria.
+        """
+        now = self.now()
+        with self.connect() as connection:
+            connection.executemany(
+                """
+                UPDATE teams
+                SET pairing_number = ?, seed_rating = ?, updated_at = ?
+                WHERE id = ? AND pairing_number IS NULL
+                """,
+                [
+                    (int(number), int(seed_ratings.get(team_id, 0)), now, int(team_id))
+                    for team_id, number in numbers.items()
+                ],
+            )
+
+    def swap_team_pairing_numbers(self, team_a_id: int, team_b_id: int) -> None:
+        """Troca os TPN de duas equipes num UPDATE só (EQ-01.5): a unicidade fica.
+
+        Quem decide se pode (motivo, rodada aberta, calendário fixo) e o
+        `TeamService.swap_pairing_numbers`; aqui e só a troca.
+        """
+        with self.connect() as connection:
+            # Lê os dois números antes: no UPDATE, a subconsulta da segunda
+            # linha já veria o valor novo da primeira.
+            numeros = dict(
+                connection.execute(
+                    "SELECT id, pairing_number FROM teams WHERE id IN (?, ?)",
+                    (int(team_a_id), int(team_b_id)),
+                ).fetchall()
+            )
+            connection.execute(
+                """
+                UPDATE teams
+                SET pairing_number = CASE id WHEN :a THEN :tpn_b ELSE :tpn_a END,
+                    updated_at = :now
+                WHERE id IN (:a, :b)
+                """,
+                {
+                    "a": int(team_a_id),
+                    "b": int(team_b_id),
+                    "tpn_a": numeros.get(int(team_a_id)),
+                    "tpn_b": numeros.get(int(team_b_id)),
+                    "now": self.now(),
+                },
+            )
 
     def update_team(
         self,
@@ -3128,10 +3243,19 @@ class TournamentCoreMixin(_DatabaseInfra):
     ) -> None:
         connection.execute(
             """
-            INSERT OR IGNORE INTO tournament_settings (tournament_id, pairing_system, tiebreak_engine, updated_at)
-            VALUES (?, ?, ?, ?)
+            INSERT OR IGNORE INTO tournament_settings
+                (tournament_id, pairing_system, tiebreak_engine, initial_color, updated_at)
+            VALUES (?, ?, ?, ?, ?)
             """,
-            (tournament_id, default_pairing_system(), default_tiebreak_engine(), self.now()),
+            # A cor inicial e sorteada aqui, quando o torneio nasce (RGS-14): a
+            # prévia e a geração da R1 leem o MESMO valor gravado.
+            (
+                tournament_id,
+                default_pairing_system(),
+                default_tiebreak_engine(),
+                draw_initial_color(),
+                self.now(),
+            ),
         )
 
     def _ensure_round_schedule(
@@ -3166,12 +3290,17 @@ class TournamentCoreMixin(_DatabaseInfra):
         ).fetchone()
         if not settings or not float(settings["late_entry_points"] or 0):
             return 0.0
-        closed_rounds = connection.execute(
+        # RGS-24: as rodadas PERDIDAS são todas as já geradas (o jogador entra
+        # na seguinte a última gerada, ver ntry_round em create_player).
+        # Contar só as fechadas dava ao entrante de uma rodada em andamento
+        # menos pontos do que as células derivadas do TRF representam — e o
+        # assistente de entrada tardia diria outro número.
+        missed_rounds = connection.execute(
             """
-            SELECT COUNT(*) AS total
+            SELECT COALESCE(MAX(number), 0) AS total
             FROM rounds
-            WHERE tournament_id = ? AND status = 'closed'
+            WHERE tournament_id = ?
             """,
             (tournament_id,),
         ).fetchone()
-        return round(float(settings["late_entry_points"] or 0) * int(closed_rounds["total"] or 0), 2)
+        return round(float(settings["late_entry_points"] or 0) * int(missed_rounds["total"] or 0), 2)

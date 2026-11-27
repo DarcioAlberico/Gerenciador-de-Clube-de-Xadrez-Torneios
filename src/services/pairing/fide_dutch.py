@@ -7,6 +7,7 @@ from typing import Any
 
 from src.services.constants import AppError
 from src.services.pairing.constraints import (
+    INITIAL_COLOR,
     choose_bye_player,
     choose_colors,
     color_hard_violation,
@@ -16,16 +17,13 @@ from src.services.pairing.constraints import (
     pairing_order_key,
     pair_penalty,
     rank_by_player_id,
-    rating_for_initial_order,
+    seeding_key,
 )
 
 
-def _initial_order_key(player: dict[str, Any], settings: dict[str, Any] | None) -> tuple[int, str]:
-    initial_order = str((settings or {}).get("initial_order") or "rating")
-    return (
-        -rating_for_initial_order(player, initial_order),
-        str(player.get("name") or "").casefold(),
-    )
+def _initial_order_key(player: dict[str, Any], settings: dict[str, Any] | None) -> tuple[Any, ...]:
+    """Ordem inicial do torneio — a MESMA do TRF e do Gacrux (RGS-13)."""
+    return seeding_key(player, str((settings or {}).get("initial_order") or "rating"))
 
 
 def first_round_pairings(
@@ -39,24 +37,26 @@ def first_round_pairings(
     pairable = ordered[:]
     bye_player = None
     if len(pairable) % 2 == 1:
-        bye_player = min(
-            pairable,
-            key=lambda player: (
-                -_initial_order_key(player, settings)[0],
-                str(player.get("name") or "").casefold(),
-            ),
-        )
-        pairable.remove(bye_player)
+        # PAB da R1 = o ULTIMO da ordem inicial (C.04.3: o de MAIOR número de
+        # pareamento no grupo de menor pontuação). Era o menor rating com
+        # desempate pelo nome em ordem CRESCENTE: com ratings empatados o bye
+        # ia ao primeiro do alfabeto — o cabeça de chave (RGS-18).
+        bye_player = pairable.pop()
 
     half = len(pairable) // 2
     upper = pairable[:half]
     lower = pairable[half:]
     pairings: list[dict[str, Any]] = []
+    # Cor inicial gravada no torneio (RGS-14): com 'B' o nº 1 joga de pretas
+    # na mesa 1 e as mesas seguem alternando a partir dela. Era sempre brancas.
+    brancas_nas_pares = (
+        str((settings or {}).get("initial_color") or INITIAL_COLOR).strip().upper() != "B"
+    )
 
     board = 1
     for index, player in enumerate(upper):
         opponent = lower[index]
-        if index % 2 == 0:
+        if (index % 2 == 0) == brancas_nas_pares:
             white_id = player["id"]
             black_id = opponent["id"]
         else:
@@ -886,9 +886,23 @@ def swiss_pairings(
     score_group_float_penalty: int,
     score_diff_penalty: int,
     topscorers: frozenset[int] | set[int] = frozenset(),
+    pairing_numbers: dict[int, int] | None = None,
+    initial_color: str = INITIAL_COLOR,
 ) -> list[dict[str, Any]]:
-    """Suico do motor proprio. `topscorers` implementa o C.3 (ver A.7)."""
+    """Suíço do motor próprio. `topscorers` implementa o C.3 (ver A.7).
+
+    `pairing_numbers` (ordem inicial, 1 = cabeça de chave) desempata a cor
+    pela C.04.3 E.4/E.5 (RGS-18); sem ele, a posição na classificação faz as
+    vezes do número. `initial_color` e a cor inicial do torneio (E.5, RGS-14).
+    """
     ranks = rank_by_player_id(standings)
+    color_ranking = {
+        int(player["id"]): (
+            -float(standings.get(player["id"], {}).get("points", 0.0) or 0.0),
+            int((pairing_numbers or {}).get(int(player["id"])) or ranks.get(player["id"], 0) or 0),
+        )
+        for player in players
+    }
     pending = sorted(
         players,
         key=lambda player: pairing_order_key(player, standings),
@@ -1130,7 +1144,9 @@ def swiss_pairings(
         ),
     )
     for player, opponent in player_pairs:
-        white_id, black_id = choose_colors(player, opponent, histories)
+        white_id, black_id = choose_colors(
+            player, opponent, histories, color_ranking, initial_color=initial_color
+        )
         pairings.append(
             {
                 "board_number": board,

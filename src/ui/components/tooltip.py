@@ -53,7 +53,7 @@ class Tooltip:
             try:
                 self.widget.after_cancel(self._after_id)
             except Exception:
-                pass
+                pass  # o atraso já disparou ou o widget morreu
             self._after_id = None
 
     def _show(self) -> None:
@@ -92,5 +92,5 @@ class Tooltip:
             try:
                 self._tip.destroy()
             except Exception:
-                pass
+                pass  # a dica já foi destruída junto com o widget
             self._tip = None

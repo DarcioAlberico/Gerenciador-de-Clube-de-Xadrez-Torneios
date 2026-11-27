@@ -186,7 +186,8 @@ class ReportRenderersMixin:
             document.drawRightString(
                 page_width - margin,
                 page_height - 28 * mm,
-                f"Tolerancia de atraso: {tolerancia} min" if tolerancia else "Tolerancia: zero (perde a hora marcada)",
+                tournament.get("late_tolerance_line")
+                or (f"Tolerância de atraso: {tolerancia} min" if tolerancia else "Tolerância: zero (perde a hora marcada)"),
             )
             if scoresheet.get("context"):
                 document.drawString(margin, page_height - 28 * mm, fitted_text(scoresheet["context"], content_width, font_size=9))

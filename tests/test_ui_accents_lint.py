@@ -42,6 +42,11 @@ class RegraTest(unittest.TestCase):
         self.assertIn("classificacao", acentuadas)
         self.assertEqual({"Classificação"}, acentuadas["classificacao"])
 
+    def test_verbo_com_pronome_nao_vira_grafia_da_palavra_solta(self) -> None:
+        # "gravá-lo" não diz que "Grava" (presente) leva acento.
+        acentuadas = lint.grafias_acentuadas([("a", "Prévia sem gravá-lo."), ("b", "Grava a rodada")])
+        self.assertNotIn("grava", acentuadas)
+
     def test_placeholder_nao_e_texto_visivel(self) -> None:
         """``{código}`` é o **nome do parâmetro** que o ``t()`` preenche.
 

@@ -28,7 +28,6 @@ Para extrair uma nova função:
 """
 
 from src.services.pairing.acceleration import (
-    BAKU_NOT_IMPLEMENTED,
     acceleration_bonus,
     acceleration_spec,
     accelerated_player_ids,
@@ -38,6 +37,7 @@ from src.services.pairing.acceleration import (
     scheme_applies_bonus,
     scheme_emits_250,
     scheme_is_baku,
+    standings_with_virtual_points,
     upper_share_size,
 )
 from src.services.pairing.arbitration import (
@@ -95,6 +95,7 @@ from src.services.pairing.histories import (
     team_bye_ids,
     team_color_histories,
     team_float_histories,
+    team_match_unplayed,
     team_played_pairs,
 )
 from src.services.pairing.previews import individual_preview_payload, team_preview_payload
@@ -115,7 +116,14 @@ from src.services.pairing.team_swiss import (
     team_bye_summary,
     team_match_payload,
     team_match_summary,
-    team_starter_roster,
+    TeamWithoutPlayersError,
+    assign_team_pairing_numbers,
+    pairing_strengths,
+    team_seed_order_key,
+    tpn_from_first_round,
+    team_lineup,
+    team_lineup_warnings,
+    team_seed,
 )
 from src.services.pairing.corrections import (
     DEFAULT_UNLOCK_MINUTES,
@@ -205,7 +213,6 @@ __all__ = [
     "parse_team_tiebreak_sequence",
     "player_tiebreak_value",
     "serialize_tiebreak_sequence",
-    "BAKU_NOT_IMPLEMENTED",
     "acceleration_bonus",
     "acceleration_spec",
     "accelerated_player_ids",
@@ -295,6 +302,7 @@ __all__ = [
     "scheme_applies_bonus",
     "scheme_emits_250",
     "scheme_is_baku",
+    "standings_with_virtual_points",
     "score_groups",
     "search_dutch_pairing",
     "search_dutch_team_pairing",
@@ -308,9 +316,17 @@ __all__ = [
     "team_bye_ids",
     "team_color_histories",
     "team_float_histories",
+    "team_match_unplayed",
     "team_match_payload",
     "team_match_summary",
-    "team_starter_roster",
+    "TeamWithoutPlayersError",
+    "assign_team_pairing_numbers",
+    "pairing_strengths",
+    "team_seed_order_key",
+    "tpn_from_first_round",
+    "team_lineup",
+    "team_lineup_warnings",
+    "team_seed",
     "team_pair_penalty",
     "team_pairing_order_key",
     "topscorer_ids",

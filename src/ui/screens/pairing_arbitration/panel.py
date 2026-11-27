@@ -262,6 +262,12 @@ class ArbitrationPanelView:
                     (t("arbitration.action.adjustments.short"), t("arbitration.action.adjustments"), host.show_point_adjustments),
                     (t("arbitration.action.prohibitions.short"), t("arbitration.action.prohibitions"), host.show_prohibited_pairings),
                     (t("arbitration.action.byes.short"), t("arbitration.action.byes"), host.show_requested_byes),
+                    # RGS-24: o mesmo assistente do botão da tela de Rodadas.
+                    (
+                        t("arbitration.action.late_entry"),
+                        t("arbitration.action.late_entry.tip"),
+                        lambda: host.open_late_entry_dialog(refresh=host.show_arbitration_panel),
+                    ),
                 ],
             ),
             (

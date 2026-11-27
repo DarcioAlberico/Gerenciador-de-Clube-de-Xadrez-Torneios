@@ -14,7 +14,7 @@ from src.core.services import (
 from tests.fixtures import load_tournament_fixture
 from tests.support.core_service_base import CoreServiceTestCase
 
-# Fixtures de referencia do bbpPairings: a distribuicao NAO esta no repositorio
+# Fixtures de referência do bbpPairings: a distribuição NÃO é no repositório
 # (ver .gitignore). Sem ela os testes que a usam são pulados com motivo, em vez
 # de falharem — e o que acontecia em qualquer maquina/CI sem o download.
 BBP_FIXTURE_DIR = Path(__file__).resolve().parents[1] / "bbpPairings-6.0.0" / "test" / "tests"
@@ -344,6 +344,7 @@ class PairingRulesTest(CoreServiceTestCase):
             first_pairing["id"],
             "white",
             replacement_player_id,
+            reason="Ajuste de teste (RGS-16: motivo obrigatorio)",
         )
 
         updated_pairings = self.db.get_pairings_for_round(round_data["id"])
@@ -1070,12 +1071,23 @@ class PairingRulesTest(CoreServiceTestCase):
         for index, rating in enumerate([2402, 2391, 2383, 2377, 2371, 2365, 2359], start=1):
             self.db.create_player(tid, name=f"J{index:02d}", rating=rating)
 
+        # RGS-18: desde a cor E.4/E.5 (empate de preferências não vai mais ao
+        # maior rating) o histórico deste torneio muda, e na R6 o ÚNICO
+        # pareamento limpo da o PAB ao líder (4,5 pontos) — o holandês faria
+        # isso descendo o líder até o ultimo grupo; o motor reserva, por
+        # contrato, só da o bye a quem tem a menor pontuação. A regressão
+        # guardada aqui e a do DESEMPATE do bye: havendo pareamento limpo com o
+        # bye no grupo de menor pontuação, o motor tem de achá-lo.
+        evitaveis = 0
         for round_number in range(1, 8):
             histories = self.service._color_histories(tid)
+            avoidable = self._clean_pairing_with_lowest_bye_exists(tid, histories)
             rd = self.service.generate_next_round(tid)
             pairings = self.db.get_pairings_for_round(int(rd["id"]))
             violations = self._hard_color_violations(pairings, histories)
-            self.assertEqual([], violations, f"violacao evitavel na rodada {round_number}: {violations}")
+            if avoidable:
+                evitaveis += 1
+                self.assertEqual([], violations, f"violacao evitavel na rodada {round_number}: {violations}")
 
             for pairing in pairings:
                 if pairing.get("is_bye"):
@@ -1085,6 +1097,47 @@ class PairingRulesTest(CoreServiceTestCase):
                 ]
                 self.service.update_result(tid, int(pairing["id"]), result)
             self.service.close_round(tid, int(rd["id"]))
+        self.assertGreaterEqual(evitaveis, 5)
+
+    def _clean_pairing_with_lowest_bye_exists(
+        self, tid: int, histories: dict[int, list[str]]
+    ) -> bool:
+        """Existe pareamento sem violação dura de cor nem revanche, com o PAB
+        para alguém da menor pontuação (entre quem ainda pode recebê-lo)?"""
+        from src.services.pairing.constraints import is_color_valid_fide
+
+        points = {int(item["player_id"]): float(item["points"]) for item in self.service._standings(tid)}
+        played = self.service._played_pairs(tid)
+        byes = self.service._bye_player_ids(tid)
+        ids = sorted(points)
+
+        def pode(a: int, b: int) -> bool:
+            if frozenset((a, b)) in played:
+                return False
+            return (
+                is_color_valid_fide(a, "W", histories) and is_color_valid_fide(b, "B", histories)
+            ) or (
+                is_color_valid_fide(a, "B", histories) and is_color_valid_fide(b, "W", histories)
+            )
+
+        def fecha(resto: list[int]) -> bool:
+            if not resto:
+                return True
+            primeiro = resto[0]
+            return any(
+                pode(primeiro, outro) and fecha([x for x in resto[1:] if x != outro])
+                for outro in resto[1:]
+            )
+
+        if len(ids) % 2 == 0:
+            return fecha(ids)
+        candidatos = [pid for pid in ids if pid not in byes] or ids
+        menor = min(points[pid] for pid in candidatos)
+        return any(
+            fecha([pid for pid in ids if pid != bye])
+            for bye in candidatos
+            if points[bye] == menor
+        )
 
     @unittest.skipUnless(BBP_DISPONIVEL, BBP_MOTIVO)
     def test_bbp_dutch_2025_c5_fixture_matches_reference(self) -> None:
@@ -1327,12 +1380,12 @@ class PairingRulesTest(CoreServiceTestCase):
                 msg=f"250 indevido para {method}",
             )
 
-    def test_baku_does_not_apply_bonus_or_emit_250(self) -> None:
+    def test_baku_emits_250_and_suffix(self) -> None:
+        """RGS-30: Baku (FIDE C.04.7) sai no 250 e no 192; ver test_rgs30_baku."""
         from src.services.federation_exporters import TRF25Exporter
-        from src.services.federation_exporters.trf25 import BAKU_NOT_IMPLEMENTED
         from src.services.pairing import accelerated_standings
 
-        # Motor: Baku não soma bônus (sem fórmula oficial).
+        # O bônus fixo não vale para Baku: o VP vem do plano da rodada.
         standings = {pid: {"points": 0.0} for pid in range(1, 5)}
         self.assertIs(accelerated_standings(standings, [1, 2, 3, 4], 2, "baku"), standings)
 
@@ -1342,12 +1395,10 @@ class PairingRulesTest(CoreServiceTestCase):
         output_path = Path(self.temp_dir.name) / "baku.trf"
         warnings = exporter.export(self.tournament_id, output_path)
         lines = output_path.read_text(encoding="utf-8").splitlines()
-        # Nenhum 250 e nenhum sufixo _BAKU no registro 192.
-        self.assertFalse([line for line in lines if line.startswith("250 ")])
+        self.assertTrue([line for line in lines if line.startswith("250 ")])
         type_line = next(line for line in lines if line.startswith("192 "))
-        self.assertNotIn("_BAKU", type_line)
-        # Aviso ao árbitro de que Baku não está implementado.
-        self.assertIn(BAKU_NOT_IMPLEMENTED, warnings)
+        self.assertTrue(type_line.rstrip().endswith("_BAKU"))
+        self.assertFalse([warning for warning in warnings if "Baku" in warning])
 
     def test_scoresheets_pdf_skips_bye_and_includes_player_data(self) -> None:
         self.db.create_player(

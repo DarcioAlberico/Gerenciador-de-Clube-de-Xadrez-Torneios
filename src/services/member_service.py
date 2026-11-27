@@ -12,6 +12,7 @@ from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any, Mapping, TYPE_CHECKING
 
+from src.domain.dates import Data, parse_date
 from src.core.database import BASE_DIR, DEFAULT_CERTIFICATE_TEMPLATES, Database
 from src.services.constants import *
 
@@ -125,10 +126,10 @@ class GuardianService:
         value = birth_date.strip()
         if not value:
             return False
-        try:
-            born = date.fromisoformat(value)
-        except ValueError:
+        nascimento = parse_date(value)
+        if not isinstance(nascimento, Data):
             return False
+        born = nascimento.valor
         today = date.today()
         age = today.year - born.year - ((today.month, today.day) < (born.month, born.day))
         return age < 18

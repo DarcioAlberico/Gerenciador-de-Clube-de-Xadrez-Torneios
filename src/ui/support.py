@@ -17,6 +17,8 @@ from tkcalendar import Calendar
 
 from src.core.database import BASE_DIR, Database, default_backup_dir, default_export_dir
 from src.core.logging_config import configure_logging, current_log_path
+from src.core.resources import bundled_resource
+from src.domain.dates import Ano, Data, DataInvalida, ResultadoData, parse_date, storage_text
 from src.core.services import (
     ACCELERATION_METHODS,
     ATTENDANCE_STATUSES,
@@ -173,9 +175,8 @@ logger = logging.getLogger("src.ui")
 
 
 def resource_path(relative_path: str) -> Path:
-    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
-        return Path(sys._MEIPASS) / relative_path
-    return BASE_DIR / relative_path
+    """Recurso empacotado (``assets/...``). Uma regra só: ``src.core.resources``."""
+    return bundled_resource(relative_path)
 
 
 MEMBER_TYPE_LABELS = {
@@ -228,6 +229,22 @@ INVENTORY_MAINTENANCE_STATUS_VALUES = {
 }
 OPERATOR_ROLE_LABELS = {value: label for value, label in OPERATOR_ROLES.items()}
 OPERATOR_ROLE_VALUES = {label: value for value, label in OPERATOR_ROLE_LABELS.items()}
+
+
+def round_option_label(round_data: dict[str, Any]) -> str:
+    """"Rodada 3 - encerrada": rótulo de tela de uma rodada (RGS-27).
+
+    O status gravado em ``rounds.status`` (``generated``/``closed``) é dado,
+    não texto: o rótulo vem do catálogo, ``round.status.*``. As chaves ficam
+    escritas por extenso para o teste do catálogo enxergá-las; status que o
+    banco não grava hoje aparece cru, que ao menos diz o que está gravado.
+    """
+    status = str(round_data["status"])
+    rotulos = {
+        "generated": t("round.status.generated"),
+        "closed": t("round.status.closed"),
+    }
+    return t("round.option", numero=round_data["number"], status=rotulos.get(status, status))
 
 FIDE_CATEGORIES = [
     "",
@@ -314,7 +331,7 @@ class ErrorCatchingMixin:
                     try:
                         widget.configure(state="disabled")
                     except Exception:
-                        pass
+                        pass  # widget sem a opção state: não há o que desabilitar
                         
     def _modal_is_open(self) -> bool:
         """True se ha um modal com grab ativo (um toast ficaria escondido atras)."""
@@ -386,7 +403,34 @@ class ErrorCatchingMixin:
             alert_dialog(self, title, message, kind="error")
         else:
             logger.warning("%s: %s", title, message_or_exception)
-            self._feedback(message, "error", title)
+            self._show_rule_error(
+                message,
+                title="" if title == "Erro" else title,
+                suggestion=getattr(message_or_exception, "suggestion", ""),
+            )
+
+    def _show_rule_error(
+        self,
+        message: str,
+        *,
+        title: str = "",
+        suggestion: str = "",
+        action: tuple[str, Callable[[], None]] | None = None,
+    ) -> None:
+        """Recusa de regra numa faixa fixa, com fechar e ação sugerida (RGS-26).
+
+        Era um toast de 5 s — o mesmo canal do sucesso. Com um modal aberto a
+        faixa da janela ficaria atrás do *grab*; aí vale o alerta, que também
+        não some sozinho. Os diálogos que recusam sem fechar (correção de
+        resultado) montam a própria faixa com ``rule_banner``.
+        """
+        if self._modal_is_open() or not hasattr(self, "_show_rule_banner"):
+            from .components.dialogs import alert_dialog
+
+            corpo = f"{message}\n\n{suggestion}" if suggestion else message
+            alert_dialog(self, title or "Erro", corpo, kind="error")
+            return
+        self._show_rule_banner(message, title=title, suggestion=suggestion, action=action)
 
     def _show_info(self, message: str) -> None:
         self._feedback(message, "success", "Sucesso")
@@ -474,58 +518,138 @@ class ErrorCatchingMixin:
             self._show_error(f"Não foi possível iniciar a impressão: {exc}")
 
         
-def _date_digits_from_any(value: str) -> str:
-    """Extrai os 8 digitos (DDMMAAAA) de um valor ISO, BR ou solto."""
-    text = str(value or "").strip()
-    if not text:
-        return ""
-    try:
-        parsed = date.fromisoformat(text)
-        return f"{parsed.day:02d}{parsed.month:02d}{parsed.year:04d}"
-    except ValueError:
-        pass
-    return re.sub(r"\D", "", text)[:8]
+def clamp_popup_position(
+    x: int,
+    y: int,
+    field_height: int,
+    width: int,
+    height: int,
+    screen_width: int,
+    screen_height: int,
+    gap: int = 2,
+) -> tuple[int, int]:
+    """Posição de um popup ancorado num campo, sempre dentro da tela (RGS-12).
+
+    Abre abaixo do campo; sem espaço abaixo, acima; sem espaço nos dois, encosta
+    na borda. A largura também é contida: campo perto da borda direita puxava o
+    calendário para fora da tela.
+    """
+    abaixo = y + field_height + gap
+    if abaixo + height <= screen_height:
+        topo = abaixo
+    elif y - height - gap >= 0:
+        topo = y - height - gap
+    else:
+        topo = max(0, min(abaixo, screen_height - height))
+    esquerda = max(0, min(x, screen_width - width))
+    return esquerda, topo
 
 
-def parse_br_date(text: str) -> date | None:
-    """Converte 'DD/MM/AAAA' (ou so digitos) em date; None se invalida/incompleta."""
-    digits = re.sub(r"\D", "", str(text or ""))
-    if len(digits) != 8:
-        return None
+def _unbind_exact(widget: Any, sequence: str, funcid: str) -> None:
+    """Remove UM binding, e não todos os da sequência.
+
+    O ``unbind(seq, funcid)`` do tkinter (até o Python 3.12) apaga a sequência
+    inteira — inclusive os bindings de outros campos e do próprio app no mesmo
+    toplevel. Aqui sai só a linha deste ``funcid``.
+    """
     try:
-        return date(int(digits[4:8]), int(digits[2:4]), int(digits[0:2]))
-    except ValueError:
-        return None
+        script = str(widget.tk.call("bind", str(widget), sequence))
+        restante = "\n".join(linha for linha in script.splitlines() if funcid not in linha)
+        widget.tk.call("bind", str(widget), sequence, restante)
+    except Exception:
+        logger.debug("Falha ao remover binding %s", sequence, exc_info=True)
+    try:
+        widget.deletecommand(funcid)
+    except Exception:
+        pass  # o comando Tcl já foi removido junto com o widget
+
+
+_DATA_INCOMPLETA = "data incompleta; use dd/mm/aaaa."
+_LARGURA_BOTAO_CALENDARIO = 22
 
 
 class MaskedDateEntry(ctk.CTkEntry):
     """Campo de data com máscara DD/MM/AAAA, seguindo o tema do app.
 
-    Exibe no formato brasileiro mas faz entrada/saida em ISO (AAAA-MM-DD):
-      - ``insert(0, valor)`` aceita ISO (vindo do banco) ou BR e mostra DD/MM/AAAA;
-      - ``get()`` devolve AAAA-MM-DD quando a data e valida, senao "" (vazio).
+    Exibe no formato brasileiro e faz entrada/saída em ISO (AAAA-MM-DD). A
+    leitura de qualquer valor passa por ``src.domain.dates.parse_date`` (RGS-06):
 
-    A mascara aceita apenas digitos (as barras entram sozinhas), bloqueia mes > 12
-    e dia > 31 enquanto digita, e pinta a borda de vermelho ao sair do campo quando
-    a data esta incompleta/invalida. Datas vazias sao permitidas.
+    - ``insert(0, valor)`` aceita tudo o que a regra única aceita (ISO, ISO com
+      hora, ``dd/mm/aaaa``, ``d/m/aaaa``, ``aaaa/mm/dd``) e mostra DD/MM/AAAA;
+    - valor que a regra **recusa** aparece **como está gravado**, com borda de
+      erro — nunca a máscara mutilada (``2010/05/12`` virava ``0512-10-20``);
+    - ``permite_ano=True`` (nascimento) mostra ``1985`` como ano (RGS-33);
+    - ``value()`` devolve o resultado tri-estado (vazio / data ou ano /
+      inválido) e ``has_invalid()`` diz se há o que recusar;
+    - ``get()`` mantém o contrato antigo: ISO (ou o ano, no nascimento) quando
+      válido, senão ``""``. Por isso quem salva consulta ``has_invalid()``
+      antes — ``""`` gravaria vazio por cima do valor (ver
+      ``refuse_invalid_dates``).
+
+    Calendário (RGS-12): abre por F4, Alt+↓ ou pelo botão ▾ no campo — a seta ↓
+    sozinha é navegação, não atalho. Sem ``grab_set()``: o popup fecha no Esc,
+    ao clicar fora e quando o foco vai para outro campo, e fica dentro da tela.
     """
 
-    def __init__(self, master: Any, **kwargs: Any) -> None:
+    def __init__(self, master: Any, *, permite_ano: bool = False, **kwargs: Any) -> None:
         kwargs.setdefault("placeholder_text", "dd/mm/aaaa")
+        self._permite_ano = bool(permite_ano)
+        # Texto exibido como veio, fora da máscara: valor inválido gravado, ou
+        # o ano sozinho. Qualquer edição recomeça a digitação do zero.
+        self._literal = False
+        self.calendar_button: ctk.CTkButton | None = None
         super().__init__(master, **kwargs)
         self._cal_popup: Toplevel | None = None
-        # Estados (foco/erro/desabilitado) vem do componente unico (F5.3).
+        self._calendar: Calendar | None = None
+        self._outside_click: tuple[Any, str] | None = None
+        # Estados (foco/erro/desabilitado) vem do componente único (F5.3).
         from .components.fields import attach_field_states
 
         attach_field_states(self)
         try:
             self._entry.bind("<KeyPress>", self._on_key)
+            self._entry.bind("<Alt-KeyPress-Down>", self._on_alt_down)
             self._entry.bind("<FocusOut>", self._on_blur, add="+")
             self._entry.bind("<<Paste>>", self._on_paste)
         except Exception:
-            pass
+            logger.debug("Falha ao ligar os eventos do campo de data", exc_info=True)
+        self._build_calendar_button()
 
     # -- helpers internos --------------------------------------------------
+    def _build_calendar_button(self) -> None:
+        try:
+            fundo = self.cget("fg_color")
+            self.calendar_button = ctk.CTkButton(
+                self,
+                text="▾",
+                width=_LARGURA_BOTAO_CALENDARIO,
+                height=max(16, int(self.cget("height")) - 8),
+                corner_radius=4,
+                fg_color=fundo,
+                bg_color=fundo,
+                hover_color=THEME_NEUTRAL_HOVER,
+                text_color=THEME_TEXT_SUB,
+                command=self._toggle_calendar,
+            )
+            borda = int(self.cget("border_width") or 0)
+            self.calendar_button.place(relx=1.0, rely=0.5, x=-(borda + 3), anchor="e")
+            self._create_grid()
+        except Exception:
+            logger.debug("Falha ao criar o botão do calendário", exc_info=True)
+
+    def _create_grid(self) -> None:
+        super()._create_grid()
+        if getattr(self, "calendar_button", None) is None:
+            return
+        # Reserva a faixa do botão à direita, para o texto não passar por baixo.
+        try:
+            padx = self._entry.grid_info().get("padx", 0)
+            esquerda = int(padx[0]) if isinstance(padx, (tuple, list)) else int(str(padx).split()[0])
+        except Exception:
+            esquerda = 6
+        direita = esquerda + int(self._apply_widget_scaling(_LARGURA_BOTAO_CALENDARIO))
+        self._entry.grid_configure(padx=(esquerda, direita))
+
     def _current_digits(self) -> str:
         return re.sub(r"\D", "", super().get())[:8]
 
@@ -556,80 +680,182 @@ class MaskedDateEntry(ctk.CTkEntry):
             out = candidate
         return out
 
-    def _render(self, digits: str) -> None:
+    def _limit(self, digits: str) -> str:
+        # No nascimento o ano sozinho (``1985``) e digitavel: o clamp de dia/mes
+        # descartaria o ``8``. A validação fica com o ``value()``.
+        return digits[:8] if self._permite_ano else self._clamp(digits)
+
+    def _set_text(self, text: str) -> None:
         super().delete(0, "end")
-        masked = self._mask(digits)
-        if masked:
-            super().insert(0, masked)
+        if text:
+            super().insert(0, text)
         try:
             self._entry.icursor("end")
         except Exception:
-            pass
+            pass  # campo destruído antes de posicionar o cursor
+
+    def _render(self, digits: str) -> None:
+        self._literal = False
+        self._set_text(self._mask(digits))
         self._set_valid(True)
 
-    def _set_valid(self, ok: bool) -> None:
-        """Delega ao estado de campo unico (F5.3).
+    def _show_literal(self, text: str) -> None:
+        self._literal = True
+        self._set_text(text)
+        self._refresh_error()
 
-        Antes esta classe guardava a borda padrao e a repintava a mao — uma das
-        tres copias da mesma ideia espalhadas pelo app. Agora quem decide a cor
-        e o `fields.set_field_error`, que ja sabe conviver com foco e com
-        campo desabilitado.
-        """
+    def _show_value(self, raw: Any) -> None:
+        resultado = parse_date(raw, permite_ano=self._permite_ano)
+        if isinstance(resultado, Data):
+            valor = resultado.valor
+            self._render(f"{valor.day:02d}{valor.month:02d}{valor.year:04d}")
+        elif isinstance(resultado, Ano):
+            self._show_literal(str(resultado.valor))
+        elif isinstance(resultado, DataInvalida):
+            self._show_literal(resultado.texto)
+        else:
+            self._render("")
+
+    def _set_valid(self, ok: bool, message: str = "") -> None:
+        """Delega ao estado de campo unico (F5.3)."""
         from .components.fields import clear_field_error, set_field_error
 
         if ok:
             clear_field_error(self)
         else:
-            set_field_error(self, "Data invalida. Use dd/mm/aaaa.")
+            set_field_error(self, message or "Data inválida. Use dd/mm/aaaa.")
+
+    def _refresh_error(self) -> None:
+        resultado = self.value()
+        if isinstance(resultado, DataInvalida):
+            self._set_valid(False, f"Data inválida: {resultado.motivo}")
+        else:
+            self._set_valid(True)
+
+    # -- leitura -------------------------------------------------------------
+    def value(self) -> ResultadoData:
+        """O que o campo contém: ``DataVazia``, ``Data``/``Ano`` ou ``DataInvalida``."""
+        texto = super().get().strip()
+        if self._literal or not texto:
+            return parse_date(texto, permite_ano=self._permite_ano)
+        digitos = self._current_digits()
+        if self._permite_ano and len(digitos) == 4:
+            return parse_date(digitos, permite_ano=True)
+        if len(digitos) != 8:
+            return DataInvalida(texto, _DATA_INCOMPLETA)
+        return parse_date(self._mask(digitos), permite_ano=self._permite_ano)
+
+    def has_invalid(self) -> bool:
+        return isinstance(self.value(), DataInvalida)
 
     # -- eventos -----------------------------------------------------------
     def _on_key(self, event: Any) -> str | None:
         if event.state & 0x4:  # Control: não interfere em copiar/colar/selecionar
             return None
-        if event.keysym in ("Down", "F4"):  # abre o calendario (atalho de date picker)
-            self._open_calendar()
+        if event.keysym == "F4":
+            self._toggle_calendar()
+            return "break"
+        if event.keysym == "Escape" and self._cal_popup is not None:
+            self._close_calendar()
             return "break"
         if event.keysym in (
             "Left", "Right", "Home", "End", "Tab", "ISO_Left_Tab",
-            "Return", "KP_Enter", "Up",
+            "Return", "KP_Enter", "Up", "Down", "Escape",
         ):
             return None
         if event.keysym in ("BackSpace", "Delete"):
-            self._render(self._current_digits()[:-1])
+            self._render("" if self._literal else self._current_digits()[:-1])
             return "break"
-        char = event.char
+        char = event.char or (event.keysym if len(event.keysym) == 1 else "")
         if char and char.isdigit():
-            self._render(self._clamp(self._current_digits() + char))
+            base = "" if self._literal else self._current_digits()
+            self._render(self._limit(base + char))
             return "break"
         if char and char.isprintable():
             return "break"  # bloqueia letras e simbolos
         return None
+
+    def _on_alt_down(self, _event: Any = None) -> str:
+        self._toggle_calendar()
+        return "break"
 
     def _on_paste(self, _event: Any) -> str:
         try:
             text = self.clipboard_get()
         except Exception:
             text = ""
-        self._render(self._clamp(_date_digits_from_any(text)))
+        self._show_value(text)
         return "break"
 
     def _on_blur(self, _event: Any = None) -> None:
-        raw = super().get().strip()
-        self._set_valid(not raw or parse_br_date(raw) is not None)
+        if not self._literal and self._permite_ano and len(self._current_digits()) == 4:
+            resultado = self.value()
+            if isinstance(resultado, Ano):
+                self._show_literal(str(resultado.valor))
+        self._refresh_error()
+        if self._cal_popup is not None:
+            # Depois do evento: o clique que tirou o foco ainda não chegou.
+            self.after(1, self._close_if_focus_left)
 
-    # -- calendario (F4 / seta para baixo) --------------------------------
+    # -- calendário (F4 / Alt+seta / botão) --------------------------------
+    def _inside(self, widget: Any, container: Any) -> bool:
+        if widget is None or container is None:
+            return False
+        caminho, base = str(widget), str(container)
+        return caminho == base or caminho.startswith(base + ".")
+
+    def _close_if_focus_left(self) -> None:
+        popup = self._cal_popup
+        if popup is None:
+            return
+        try:
+            focado = self.focus_get()
+        except Exception:
+            focado = None
+        if focado is not None and (self._inside(focado, self) or self._inside(focado, popup)):
+            return
+        if focado is None:
+            # O foco saiu do app OU foi para o próprio popup (Windows ativa a
+            # janela clicada). Com o ponteiro sobre o calendário, e o segundo.
+            try:
+                sob = self.winfo_containing(*self.winfo_pointerxy())
+            except Exception:
+                sob = None
+            if sob is not None and self._inside(sob, popup):
+                return
+        self._close_calendar()
+
+    def _on_outside_click(self, event: Any) -> None:
+        if self._cal_popup is None:
+            return
+        if self._inside(event.widget, self) or self._inside(event.widget, self._cal_popup):
+            return
+        self._close_calendar()
+
+    def _toggle_calendar(self) -> None:
+        if self._cal_popup is not None:
+            self._close_calendar()
+            return
+        try:
+            if str(self._entry.cget("state")) == "disabled":
+                return
+        except Exception:
+            pass  # campo destruído: segue como se estivesse habilitado
+        self._open_calendar()
+
     def _close_calendar(self) -> None:
         popup = self._cal_popup
         self._cal_popup = None
+        self._calendar = None
+        ligacao = self._outside_click
+        self._outside_click = None
+        if ligacao is not None:
+            _unbind_exact(ligacao[0], "<Button-1>", ligacao[1])
         if popup is not None:
-            try:
-                popup.grab_release()
-            except Exception:
-                pass
             try:
                 popup.destroy()
             except Exception:
-                pass
+                pass  # o popup já foi destruído
 
     def _open_calendar(self) -> None:
         if self._cal_popup is not None:  # já aberto: alterna (fecha)
@@ -644,7 +870,7 @@ class MaskedDateEntry(ctk.CTkEntry):
             popup.transient(self.winfo_toplevel())
             self._cal_popup = popup
 
-            current = parse_br_date(super().get())
+            atual = self.value()
             cal_kwargs: dict[str, Any] = dict(
                 selectmode="day",
                 locale="pt_BR",
@@ -666,14 +892,15 @@ class MaskedDateEntry(ctk.CTkEntry):
                 selectforeground="#FFFFFF",
                 bordercolor=panel,
             )
-            if current:
-                cal_kwargs.update(year=current.year, month=current.month, day=current.day)
+            if isinstance(atual, Data):
+                cal_kwargs.update(year=atual.valor.year, month=atual.valor.month, day=atual.valor.day)
             try:
                 cal = Calendar(popup, **cal_kwargs)
             except Exception:
                 cal_kwargs.pop("locale", None)  # ambiente sem locale pt_BR
                 cal = Calendar(popup, **cal_kwargs)
             cal.pack(padx=6, pady=6)
+            self._calendar = cal
 
             def choose(_event: Any = None) -> None:
                 selected = cal.selection_get()
@@ -683,7 +910,7 @@ class MaskedDateEntry(ctk.CTkEntry):
                 try:
                     self._entry.focus_set()
                 except Exception:
-                    pass
+                    pass  # campo destruído antes do foco
 
             cal.bind("<<CalendarSelected>>", choose)
 
@@ -700,30 +927,97 @@ class MaskedDateEntry(ctk.CTkEntry):
             ).pack(side="right")
 
             popup.update_idletasks()
-            x = self.winfo_rootx()
-            y = self.winfo_rooty() + self.winfo_height() + 2
+            x, y = clamp_popup_position(
+                self.winfo_rootx(),
+                self.winfo_rooty(),
+                self.winfo_height(),
+                popup.winfo_reqwidth(),
+                popup.winfo_reqheight(),
+                self.winfo_screenwidth(),
+                self.winfo_screenheight(),
+            )
             popup.geometry(f"+{x}+{y}")
             popup.lift()
             popup.bind("<Escape>", lambda _e: self._close_calendar())
-            try:
-                popup.grab_set()
-            except Exception:
-                pass
+            # Sem grab_set() (RGS-12): o grab global fazia a janela ignorar
+            # cliques. O "clicar fora" e um binding no toplevel do campo, que
+            # sai junto com o popup.
+            topo = self.winfo_toplevel()
+            funcid = topo.bind("<Button-1>", self._on_outside_click, add="+")
+            self._outside_click = (topo, funcid)
         except Exception:
             logger.debug("Falha ao abrir o calendario do campo de data", exc_info=True)
             self._close_calendar()
 
     # -- API compatível com CTkEntry --------------------------------------
     def insert(self, index: Any, value: Any) -> None:  # type: ignore[override]
-        self._render(_date_digits_from_any(str(value or "")))
+        self._show_value(value)
 
     def delete(self, first_index: Any = 0, last_index: Any = None) -> None:  # type: ignore[override]
+        self._literal = False
         super().delete(0, "end")
         self._set_valid(True)
 
     def get(self) -> str:  # type: ignore[override]
-        parsed = parse_br_date(super().get())
-        return parsed.isoformat() if parsed else ""
+        resultado = self.value()
+        if isinstance(resultado, (Data, Ano)):
+            return storage_text(resultado)
+        return ""
+
+    def destroy(self) -> None:
+        self._close_calendar()
+        super().destroy()
+
+
+def _date_fields(*alvos: Any) -> list[MaskedDateEntry]:
+    """Campos de data em widgets, dicionários, listas ou contêineres."""
+    encontrados: list[MaskedDateEntry] = []
+
+    def visitar(alvo: Any) -> None:
+        if alvo is None:
+            return
+        if isinstance(alvo, MaskedDateEntry):
+            encontrados.append(alvo)
+            return
+        if isinstance(alvo, dict):
+            for item in alvo.values():
+                visitar(item)
+            return
+        if isinstance(alvo, (list, tuple, set)):
+            for item in alvo:
+                visitar(item)
+            return
+        filhos = getattr(alvo, "winfo_children", None)
+        if callable(filhos):
+            for filho in filhos():
+                visitar(filho)
+
+    for alvo in alvos:
+        visitar(alvo)
+    return encontrados
+
+
+def refuse_invalid_dates(*alvos: Any) -> None:
+    """Recusa salvar com data inválida (RGS-06): destaca o campo e levanta.
+
+    O ``get()`` de um campo inválido devolve ``""``; salvar assim apagaria a
+    data gravada sem aviso. Aceita os próprios campos, o dicionário de campos do
+    formulário ou o contêiner inteiro.
+    """
+    invalidos = [campo for campo in _date_fields(*alvos) if campo.has_invalid()]
+    if not invalidos:
+        return
+    for campo in invalidos:
+        campo._refresh_error()
+    primeiro = invalidos[0]
+    try:
+        primeiro._entry.focus_set()
+    except Exception:
+        pass  # campo destruído antes do foco
+    resultado = primeiro.value()
+    motivo = resultado.motivo if isinstance(resultado, DataInvalida) else _DATA_INCOMPLETA
+    texto = resultado.texto if isinstance(resultado, DataInvalida) else ""
+    raise AppError(f"Data inválida \"{texto}\": {motivo} Corrija o campo destacado antes de salvar.")
 
 
 class UIBuilderMixin(ErrorCatchingMixin):
@@ -734,7 +1028,7 @@ class UIBuilderMixin(ErrorCatchingMixin):
     de verdade. Não duplique aqui.
     """
 
-    def _make_date_entry(self, parent: Any, width: int = 20) -> MaskedDateEntry:
+    def _make_date_entry(self, parent: Any, width: int = 20, *, permite_ano: bool = False) -> MaskedDateEntry:
         """Campo de data brasileiro: DD/MM/AAAA na tela, ISO (AAAA-MM-DD) por baixo.
 
         Mantém a assinatura antiga; o ``width`` herdado (em caracteres da época do
@@ -742,5 +1036,9 @@ class UIBuilderMixin(ErrorCatchingMixin):
         ~120-220px. Os call-sites seguem usando get()/insert()/delete() normalmente.
         """
         width_px = max(120, min(220, int(width) * 7))
-        return MaskedDateEntry(parent, width=width_px)
+        return MaskedDateEntry(parent, width=width_px, permite_ano=permite_ano)
+
+    def _refuse_invalid_dates(self, *alvos: Any) -> None:
+        """Atalho de ``refuse_invalid_dates`` para as telas (RGS-06)."""
+        refuse_invalid_dates(*alvos)
 

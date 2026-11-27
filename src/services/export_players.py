@@ -19,6 +19,7 @@ from urllib.request import Request, urlopen
 from src.core.database import BASE_DIR, DEFAULT_CERTIFICATE_TEMPLATES, Database
 from src.services.access_export import access_driver_available, write_accdb, write_csv_bundle
 from src.services.constants import *
+from src.services import friendly_mode
 from src.services.fide_norms import build_norm_report
 from src.services.fide_rating import build_fide_report_rows
 from src.services.list_layouts import STANDINGS_COLUMNS, resolve_column_specs, resolve_columns
@@ -314,9 +315,14 @@ class PlayerRoundReportsMixin:
         # ORG-03: a tolerância de atraso vai impressa na mesa. Quem declara
         # ausência e o árbitro de sala, e ele não tem o edital na mão.
         settings = self.db.get_tournament_settings(int(round_data["tournament_id"])) or {}
+        minutos = int(settings.get("late_tolerance_minutes") or 0)
         tournament = {
             **tournament,
-            "late_tolerance_minutes": int(settings.get("late_tolerance_minutes") or 0),
+            "late_tolerance_minutes": minutos,
+            # MA-05: no modo amistoso, sem tolerância, nada de "perde a hora".
+            "late_tolerance_line": friendly_mode.late_tolerance_line(
+                friendly_mode.is_friendly(settings), minutos
+            ),
         }
         self._write_scoresheets_pdf(path, tournament, round_data, scoresheets)
         logger.info("%s sumulas exportadas em PDF: %s", len(scoresheets), path)

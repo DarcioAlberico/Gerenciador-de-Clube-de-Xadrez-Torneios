@@ -16,6 +16,7 @@ from typing import Any, Mapping, TYPE_CHECKING
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 from urllib.request import Request, urlopen
 
+from src.domain.dates import Data, parse_date
 from src.core.database import BASE_DIR, DEFAULT_CERTIFICATE_TEMPLATES, Database
 from src.services.access_export import access_driver_available, write_accdb, write_csv_bundle
 from src.services.constants import *
@@ -130,14 +131,19 @@ class CertificateService:
         quantos foram criados.
         """
         from src.services.certificates.gallery import build_gallery, model_to_template
+        from src.services.text_ascii import to_ascii
 
-        existing = {str(t.get("name")) for t in self.db.list_certificate_templates(active_only=False)}
+        # Comparado sem acento: a galeria antiga gravou "Premiacao geral", e o
+        # mesmo modelo acentuado não pode entrar de novo como outro.
+        existing = {
+            to_ascii(str(t.get("name"))) for t in self.db.list_certificate_templates(active_only=False)
+        }
         created = 0
         for model in build_gallery(count):
-            if model.name in existing:
+            if to_ascii(model.name) in existing:
                 continue
             self.db.create_certificate_template(**model_to_template(model))
-            existing.add(model.name)
+            existing.add(to_ascii(model.name))
             created += 1
         logger.info("Galeria de diplomas semeada: %s novos modelos de %s", created, count)
         return {"created": created, "total": count}
@@ -1179,11 +1185,10 @@ class CertificateService:
         text = str(value or "").strip()
         if not text:
             return ""
-        try:
-            parsed = date.fromisoformat(text)
-        except ValueError:
+        lido = parse_date(text)
+        if not isinstance(lido, Data):
             return text
-        return parsed.strftime("%d/%m/%Y")
+        return lido.valor.strftime("%d/%m/%Y")
 
     @staticmethod
     def _ordinal_label(value: Any) -> str:

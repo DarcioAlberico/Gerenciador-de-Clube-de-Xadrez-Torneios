@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import threading
 import tkinter as tk
 from pathlib import Path
@@ -10,6 +11,7 @@ from .screens.admin import AdminPagesMixin
 from .screens.club import ClubPagesMixin
 from .screens.dashboard import DashboardPagesMixin
 from .screens.free_tournament import FreeTournamentMixin
+from src.services import friendly_mode
 from .screens.home import HomePagesMixin
 from .screens.library import LibraryMixin
 from .screens.pairings import PairingPagesMixin
@@ -30,6 +32,7 @@ from .components import (
 )
 from .components.dialogs import alert_dialog
 from .components.progress import overlay_of
+from .ctk_patches import aplicar_patches_ctk
 from .form_layout import FORM_PANEL_WIDTH
 from .navigation import by_group as nav_by_group
 from .layout import wrap_positions
@@ -40,8 +43,11 @@ from .screens.audit import AuditPagesMixin
 from .screens.communication import CommunicationPagesMixin
 from .screens.integrations import IntegrationPagesMixin
 from src.core.version import APP_NAME, APP_SITE, APP_TAGLINE, app_title, version_label
+from src.services.date_review import normalize_legacy_dates
 from src.services.message_service import MessageService
 from src.services.report_engine import ReportEngine
+
+logger = logging.getLogger(__name__)
 
 
 class AlbericusApp(
@@ -63,7 +69,25 @@ class AlbericusApp(
     FreeTournamentMixin,
     ctk.CTk,
 ):
+    def report_callback_exception(self, exc: type, val: BaseException, tb: Any) -> None:
+        """Exceção que escapou de um callback do Tk (RGS-04).
+
+        O padrão do Tk imprime no stderr — que no `.exe` (``console=False``)
+        não existe: o clique falhava sem rastro e o árbitro via "o programa
+        parou". Aqui vai ao log com o traceback e ao diálogo de erro de sempre.
+        """
+        logging.getLogger("src.ui").error(
+            "Excecao nao tratada em callback da interface", exc_info=(exc, val, tb)
+        )
+        try:
+            self._show_error(val)
+        except Exception:  # pragma: no cover - nem o dialogo abriu
+            logging.getLogger("src.ui").exception("Falha ao mostrar o erro ao usuario")
+
     def __init__(self, db: Database | None = None) -> None:
+        # RGS-28: antes do primeiro widget, para nenhum menu suspenso nascer
+        # sem o remendo do ScalingTracker (ver ctk_patches.py).
+        aplicar_patches_ctk()
         super().__init__()
         configure_logging()
         logger.info("Aplicativo iniciado")
@@ -83,6 +107,7 @@ class AlbericusApp(
         self.resizable(False, False)
 
         self.db = db or Database()
+        self._review_legacy_dates()
         self._arbitration_auto_refresh_enabled = True
         self._arbitration_refresh_interval_seconds = 15
         self._arbitration_inline_tables_limit = 20
@@ -94,7 +119,7 @@ class AlbericusApp(
             apply_frame_bg_preset(str(_init_settings.get("frame_bg_preset") or "slate"))
             apply_accent_preset(str(_init_settings.get("accent_preset") or "blue"))
         except Exception:
-            pass
+            logger.debug("Preset de tema salvo nao aplicado na abertura", exc_info=True)
         self._apply_app_settings()
         self._set_window_icon()
         self._load_menu_icons()
@@ -152,6 +177,22 @@ class AlbericusApp(
         self.protocol("WM_DELETE_WINDOW", self._on_closing)
         self._build_login_screen()
 
+    def _review_legacy_dates(self) -> None:
+        """Datas legadas na abertura (RGS-06): converte para ISO o que a regra
+        única aceita (com backup antes, só quando há o que converter) e registra
+        no log o que ela recusa. O relatório aparece como pendência na tela
+        inicial. Nunca impede o app de abrir."""
+        try:
+            resultado = normalize_legacy_dates(self.db)
+            if resultado.to_review:
+                logger.warning(
+                    "Datas a revisar: %s valor(es) gravado(s) que a regra de data recusa; "
+                    "veja a tela inicial.",
+                    len(resultado.to_review),
+                )
+        except Exception:
+            logger.exception("Falha ao revisar as datas legadas na abertura")
+
     def _on_closing(self) -> None:
         try:
             self.security_service.create_backup("auto_shutdown")
@@ -161,13 +202,13 @@ class AlbericusApp(
             try:
                 self.after_cancel(self._scheduled_dispatch_job)
             except Exception:
-                pass
+                pass  # o job já rodou ou foi cancelado; nada a cancelar
             self._scheduled_dispatch_job = None
         if self._arbitration_refresh_job is not None:
             try:
                 self.after_cancel(self._arbitration_refresh_job)
             except Exception:
-                pass
+                pass  # o job já rodou ou foi cancelado; nada a cancelar
             self._arbitration_refresh_job = None
         if self.local_result_server is not None:
             self.local_result_server.stop()
@@ -187,7 +228,7 @@ class AlbericusApp(
         )
 
     def _rebuild_ui_after_theme_change(self) -> None:
-        """Aplica o tema **na hora**, reestilizando o que ja esta na tela (P0-6).
+        """Aplica o tema **na hora**, reestilizando o que já é na tela (P0-6).
 
         Antes isto destruía `statusbar` e `content` e remontava tudo: a tela
         voltava ao início, a seleção da tabela sumia, o scroll ia ao topo e o
@@ -373,13 +414,15 @@ class AlbericusApp(
         self.show_home()
         self._refresh_statusbar()
         self._start_scheduled_dispatch()
+        # RGS-10: termina a reconciliação de retratos que ficou pendente.
+        self._start_snapshot_reconciler()
 
     def _configure_tree_style(self, register_callback: bool = True) -> None:
         style = ttk.Style(self)
         try:
             style.theme_use("clam")
         except Exception:
-            pass
+            logger.debug("Tema ttk 'clam' indisponivel", exc_info=True)
         scale = getattr(self, "_ui_scale_percent", 120) / 100
         body_font_size = max(10, int(10 * scale))
         style.configure(
@@ -613,7 +656,7 @@ class AlbericusApp(
 
         Quebrar em duas linhas custa ~38px de altura, que sobra; insistir numa
         linha só custa um botão inacessível, que não tem substituto — o menu
-        nativo leva as mesmas telas, mas quem esta olhando a barra nao sabe
+        nativo leva as mesmas telas, mas quem é olhando a barra não sabe
         disso.
         """
         nav = getattr(self, "_tournament_nav", None)
@@ -629,7 +672,7 @@ class AlbericusApp(
             largura = self.content.winfo_width()
         except Exception:
             return
-        # A conta esta em ui/layout.py, sem Tk: e a mesma que as faixas de
+        # A conta é em ui/layout.py, sem Tk: e a mesma que as faixas de
         # filtro das telas administrativas passaram a usar (continuação da B-8).
         # Largura 1 (antes do primeiro desenho) vira linha única lá dentro, para
         # não piscar um layout intermediário que o próximo <Configure> desfaz.
@@ -705,7 +748,7 @@ class AlbericusApp(
                 try:
                     card.configure(border_color=THEME_ACCENT if active else THEME_PANEL_BG)
                 except Exception:
-                    pass
+                    logger.debug("Destaque do card nao atualizado", exc_info=True)
 
             def left_card(event: Any) -> None:
                 # Os rótulos cobrem o card: sair do rótulo para o card ainda e
@@ -865,7 +908,7 @@ class AlbericusApp(
             self.tournament_label.configure(text="Nenhum torneio selecionado")
             return
         scope = self._tournament_scope_text(tournament)
-        mode = "Modo Livre" if self._is_free_mode(tournament_id) else "Modo Oficial"
+        mode = friendly_mode.mode_label(self._is_free_mode(tournament_id))
         self.tournament_label.configure(
             text=f"{tournament['name']} | {scope} | {tournament['rounds_count']} rodadas | {tournament['status']} | {mode}"
         )
@@ -901,7 +944,7 @@ class AlbericusApp(
                 from src.ui.theme import apply_accent_preset
                 apply_accent_preset(accent_key)
             except Exception:
-                pass
+                logger.debug("Preset de destaque nao aplicado", exc_info=True)
             try:
                 scale_percent = int(str(settings.get("ui_scale_percent") or "120"))
             except ValueError:
@@ -1015,7 +1058,7 @@ class AlbericusApp(
                 if topo is not self:
                     return topo
             except Exception:
-                pass
+                pass  # widget já destruído: o ocupado cai na janela principal
         return getattr(self, "content", self)
 
     def _run_background(
@@ -1024,7 +1067,14 @@ class AlbericusApp(
         on_success: Callable[[Any], None] | None = None,
         busy_message: str = "Processando...",
         busy_widget: Any | None = None,
+        on_error: Callable[[Exception], bool] | None = None,
     ) -> None:
+        """Roda ``work`` fora da thread da UI.
+
+        ``on_error`` recebe a exceção na thread da UI e devolve ``True`` se a
+        tratou (ex.: a recusa do Gacrux vira pergunta, RGS-03); senão, o erro
+        segue para ``_show_error``.
+        """
         if busy_widget is not None:
             try:
                 busy_widget.configure(state="disabled")
@@ -1064,6 +1114,13 @@ class AlbericusApp(
             if hasattr(self, "status_label") and ocioso:
                 self.status_label.configure(text=self._default_status_text())
             if error:
+                if on_error is not None:
+                    try:
+                        if on_error(error):
+                            return
+                    except Exception as exc:
+                        self._show_error(exc)
+                        return
                 self._show_error(error)
                 return
             if on_success:
