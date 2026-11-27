@@ -16,8 +16,12 @@ import os
 
 os.environ.setdefault("ALBERICUS_DEFAULT_PAIRING_SYSTEM", "fide_dutch")
 os.environ.setdefault("ALBERICUS_DEFAULT_TIEBREAK_ENGINE", "albericus")
+# Cor inicial sorteada na criação do torneio (RGS-14): fixa em brancas nos
+# testes, que era o que o motor reserva fazia antes do sorteio. Os testes do
+# RGS-14 trocam a variável quando precisam do outro lado.
+os.environ.setdefault("ALBERICUS_INITIAL_COLOR", "W")
 
-# Nota: manter aqui uma raiz Tk "ancora" viva pela sessao parece resolver os
-# skips de criacao de raiz (ver cancel_pending_callbacks), mas NAO funciona: a
-# ancora vira o _default_root do tkinter e os menus da AlbericusApp passam a ser
-# criados no interpretador errado, quebrando ~6 testes de layout. Ja tentado.
+# Nota: manter aqui uma raiz Tk "ancora" viva pela sessão parece resolver os
+# skips de criação de raiz (ver cancel_pending_callbacks), mas NÃO funciona: a
+# âncora vira o _default_root do tkinter e os menus da AlbericusApp passam a ser
+# criados no interpretador errado, quebrando ~6 testes de layout. Já tentado.

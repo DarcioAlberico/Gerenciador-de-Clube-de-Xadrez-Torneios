@@ -31,18 +31,18 @@ def postpone_error(pairing: Mapping[str, Any] | None) -> str:
     mesa está — e não por segurança: adiar é reversível e não move ponto nenhum.
     """
     if not pairing:
-        return "Mesa nao encontrada para o torneio selecionado."
+        return "Mesa não encontrada para o torneio selecionado."
     if str(pairing.get("round_status") or "") == "closed":
         return (
-            "A rodada esta fechada. Uma partida adiada e uma pendencia da rodada "
-            "em andamento; para mexer numa rodada fechada, use a correcao com motivo."
+            "A rodada está fechada. Uma partida adiada é uma pendência da rodada "
+            "em andamento; para mexer numa rodada fechada, use a correção com motivo."
         )
     if pairing.get("is_bye"):
-        return "Um bye nao e partida: nao ha o que adiar."
+        return "Um bye não é partida: não há o que adiar."
     resultado = str(pairing.get("result") or "")
     if resultado and resultado in FINAL_RESULTS:
         return (
-            "A mesa ja tem resultado lancado. Limpe o resultado antes de marcar "
+            "A mesa já tem resultado lançado. Limpe o resultado antes de marcar "
             "a partida como adiada."
         )
     return ""
@@ -51,9 +51,9 @@ def postpone_error(pairing: Mapping[str, Any] | None) -> str:
 def resume_error(pairing: Mapping[str, Any] | None) -> str:
     """Por que ESTA mesa não pode voltar de adiada. ``""`` quando pode."""
     if not pairing:
-        return "Mesa nao encontrada para o torneio selecionado."
+        return "Mesa não encontrada para o torneio selecionado."
     if not int(pairing.get("postponed") or 0):
-        return "Esta mesa nao esta marcada como adiada."
+        return "Esta mesa não está marcada como adiada."
     return ""
 
 
@@ -96,8 +96,8 @@ def blocking_message(postponed: Sequence[Mapping[str, Any]]) -> str:
     quantas = len(linhas)
     plural = "partida adiada" if quantas == 1 else "partidas adiadas"
     return (
-        f"A rodada tem {quantas} {plural} e nao pode ser fechada: {detalhe}. "
-        "Lance o resultado ou desfaca o adiamento."
+        f"A rodada tem {quantas} {plural} e não pode ser fechada: {detalhe}. "
+        "Lance o resultado ou desfaça o adiamento."
     )
 
 

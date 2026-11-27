@@ -174,8 +174,8 @@ class SettingsUsersMixin:
             pilha = FormStack(add_dlg)
             pilha.section("Credenciais")
             user_entry = pilha.text("Nome de Usuário", placeholder="Ex.: arbitro01")
-            # `show="*"` era o que faltava: a senha provisoria aparecia em
-            # texto limpo, num dialogo aberto na tela do clube.
+            # `show="*"` era o que faltava: a senha provisória aparecia em
+            # texto limpo, num diálogo aberto na tela do clube.
             pwd_entry = pilha.text("Senha Provisória", placeholder="Senha inicial", show="*")
             role_var = ctk.StringVar(value="teacher")
             pilha.select("Perfil", list(OPERATOR_ROLE_VALUES.keys()), variable=role_var)

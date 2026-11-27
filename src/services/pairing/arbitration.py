@@ -60,7 +60,7 @@ def clock_issue(event: dict[str, Any], title: str) -> dict[str, Any]:
         "source": "clock",
         "kind": str(event.get("event_type") or ""),
         "title": title,
-        "detail": event.get("note") or "Apenas alerta; o arbitro deve decidir manualmente.",
+        "detail": event.get("note") or "Apenas alerta; o árbitro deve decidir manualmente.",
         "round_id": event.get("round_id"),
         "entity_id": event.get("id"),
         "created_at": event.get("occurred_at") or event.get("created_at") or "",
@@ -79,9 +79,9 @@ def clock_event_issue(event: dict[str, Any]) -> dict[str, Any] | None:
     if event_type == "flag_fall":
         return clock_issue(event, "Queda de seta registrada")
     if event_type == "absence":
-        return clock_issue(event, "Ausencia registrada")
+        return clock_issue(event, "Ausência registrada")
     if event_type == "time_warning" and seconds <= 60:
-        return clock_issue(event, "Alerta de tempo critico")
+        return clock_issue(event, "Alerta de tempo crítico")
     return None
 
 
@@ -144,7 +144,7 @@ def blocking_issues_message(issues: list[dict[str, Any]]) -> str:
         for issue in issues[:3]
     ]
     suffix = f" ({', '.join(summaries)})" if summaries else ""
-    return f"Resolva as pendencias de arbitragem bloqueantes antes de fechar a rodada{suffix}."
+    return f"Resolva as pendências de arbitragem bloqueantes antes de fechar a rodada{suffix}."
 
 
 def individual_round_dashboard_metrics(
@@ -157,7 +157,7 @@ def individual_round_dashboard_metrics(
         if not item.get("result") or item.get("result") not in final_results
     ]
     byes = [item for item in pairings if item.get("is_bye")]
-    # Progresso = mesas (sem bye) que precisam de resultado x quantas ja tem.
+    # Progresso = mesas (sem bye) que precisam de resultado x quantas já tem.
     games = [item for item in pairings if not item.get("is_bye")]
     resolved = [item for item in games if item.get("result") in final_results]
     return {

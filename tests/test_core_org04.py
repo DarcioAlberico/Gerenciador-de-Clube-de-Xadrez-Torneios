@@ -47,7 +47,7 @@ class FlagsInertesTest(unittest.TestCase):
                 self.assertIn(flag, TOURNAMENT_FLAG_FIELDS)
 
     def test_nenhuma_flag_do_registro_esta_sem_uso(self) -> None:
-        """Rede contra a proxima flag morta: toda flag tem de ser consumida.
+        """Rede contra a próxima flag morta: toda flag tem de ser consumida.
 
         "Consumida" aqui é ter alguma menção fora do esquema, da migração e da
         persistência — que é exatamente o que faltava às seis removidas.

@@ -39,7 +39,7 @@ DEFAULT_RATING_BANDS = (
 
 # Faixas de sobra do comportamento antigo: quem não é de base nem veterano era
 # "Adulto", e quem passava do último corte de rating era "Aberto". Elas viram
-# faixas explicitas para que um torneio sem configuracao continue produzindo os
+# faixas explicitas para que um torneio sem configuração continue produzindo os
 # MESMOS nomes de categoria de antes do ORG-01.
 ADULT_CATEGORY = "Adulto"
 ADULT_RANGE = (21, 49)

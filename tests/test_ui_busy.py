@@ -36,8 +36,8 @@ class BusyIndicatorTest(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls) -> None:
-        # Cancelar os after pendentes ANTES de destruir: a animacao da barra
-        # continua agendada e atrapalha a criacao da raiz do proximo arquivo.
+        # Cancelar os after pendentes ANTES de destruir: a animação da barra
+        # continua agendada e atrapalha a criação da raiz do próximo arquivo.
         cancel_pending_callbacks(cls.root)
         try:
             cls.root.destroy()
@@ -93,7 +93,7 @@ class BusyIndicatorTest(unittest.TestCase):
         self.indicador.stop()
         self.assertEqual(0, self.indicador.active_count)
 
-        # e o proximo start ainda funciona normalmente
+        # e o próximo start ainda funciona normalmente
         self.indicador.start()
         self.root.update()
         self.assertTrue(self.indicador.bar.winfo_ismapped())
@@ -110,7 +110,7 @@ class BusyIndicatorTest(unittest.TestCase):
         """Uma tarefa pode terminar depois da tela morrer — não pode explodir."""
         self.indicador.start()
         self.indicador.bar.destroy()
-        self.indicador.stop()  # nao deve levantar
+        self.indicador.stop()  # não deve levantar
         self.assertFalse(self.indicador.is_running)
 
 

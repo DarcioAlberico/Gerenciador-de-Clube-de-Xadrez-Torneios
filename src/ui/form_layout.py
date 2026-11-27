@@ -45,7 +45,7 @@ _TOP = {
     "note": SPACE_XS,
 }
 _BOTTOM = {
-    "field": 0,  # a linha de mensagem do labeled_field ja e o rodape do campo
+    "field": 0,  # a linha de mensagem do labeled_field já é o rodapé do campo
     "section": SPACE_XS,
     "widget": SPACE_XS,
     "note": SPACE_SM,

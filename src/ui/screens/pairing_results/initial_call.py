@@ -29,6 +29,7 @@ from ...support import (
     font_section,
     player_full_name,
 )
+from ..player_actions import PlayerActions
 from .state import (
     initial_call_searchable,
     initial_call_summary,
@@ -86,8 +87,8 @@ class InitialCallSection:
             cabecalho, text="", text_color=THEME_TEXT_SUB, anchor="w"
         )
         self.summary_label.grid(row=1, column=0, pady=(2, 0), sticky="w")
-        # Expostos no host porque e por eles que o smoke de janela le a tela —
-        # o contrato externo nao muda so porque o interior ganhou dono.
+        # Expostos no host porque é por eles que o smoke de janela lê a tela —
+        # o contrato externo não muda só porque o interior ganhou dono.
         host.initial_call_summary_label = self.summary_label
 
         self.search_entry = ctk.CTkEntry(
@@ -97,7 +98,7 @@ class InitialCallSection:
         self.search_debounced = debounce(self.search_entry, self.reload)
         self.search_entry.bind("<KeyRelease>", self.search_debounced)
         # A tela legada guardava este debounce no host (`initial_player_search_debounced`)
-        # para o teste alcancar; segue exposto, agora com dono claro.
+        # para o teste alcançar; segue exposto, agora com dono claro.
         host.initial_player_search_debounced = self.search_debounced
         host.initial_player_search_entry = self.search_entry
 
@@ -119,14 +120,19 @@ class InitialCallSection:
         for sequencia in ("<Double-1>", "<space>"):
             self.tree.bind(sequencia, lambda _e: self.toggle_selected())
         host.initial_players_tree = self.tree
+        # Menu da linha do jogador (RGS-22/23) na tela de Rodadas: antes da R1
+        # é aqui que o árbitro vê os inscritos — e é aqui que chega o "vou
+        # faltar à rodada 1" (bye) e a desistência antes de começar.
+        self.player_actions = PlayerActions(host, on_changed=self.reload)
+        self.player_actions.bind_tree(self.tree, self.row_map_get)
 
         acoes = ctk.CTkFrame(painel, fg_color="transparent")
         acoes.grid(row=2, column=0, padx=SPACE_MD, pady=(SPACE_SM, SPACE_MD), sticky="ew")
         for coluna in range(3):
             acoes.grid_columnconfigure(coluna, weight=1)
-        # Rotulos resolvidos com `t("chave")` LITERAL: chave vinda de variavel e
-        # invisivel para o `test_ui_i18n`, que cobra que toda chave do catalogo
-        # tenha uso — e chave orfa hoje e texto perdido amanha.
+        # Rótulos resolvidos com `t("chave")` LITERAL: chave vinda de variável e
+        # invisível para o `test_ui_i18n`, que cobra que toda chave do catálogo
+        # tenha uso — e chave órfã hoje e texto perdido amanha.
         for coluna, (rotulo, comando) in enumerate(
             (
                 (t("initial_call.all_present"), self.mark_all_present),
@@ -160,7 +166,7 @@ class InitialCallSection:
             )
 
         consulta = self.search_entry.get() if self.search_entry is not None else ""
-        ordenados = host.export_service._initial_ranked_players(jogadores)
+        ordenados = host.export_service.initial_ranked_players(host.current_tournament_id, jogadores)
         for numero, jogador in enumerate(ordenados, start=1):
             nome = player_full_name(jogador)
             if not matches_initial_query(initial_call_searchable(jogador, nome), consulta):
@@ -180,6 +186,10 @@ class InitialCallSection:
                 ),
             )
             self.row_map[item] = int(jogador["id"])
+
+    def row_map_get(self, item: str) -> int | None:
+        """Id do jogador da linha — lido do mapa CORRENTE (o `reload` o troca)."""
+        return self.row_map.get(item)
 
     # ---- presença --------------------------------------------------------- #
 
@@ -204,9 +214,9 @@ class InitialCallSection:
                 return
             if not player_ids:
                 raise AppError(t("initial_call.select_first"))
-            # Pelo SERVICO (ARB-05): a chamada inicial e onde a ausencia da
-            # rodada 1 nasce, e ela precisa entrar no historico como qualquer
-            # outra — senao a ata nao sabe quem faltou desde o comeco.
+            # Pelo SERVIÇO (ARB-05): a chamada inicial e onde a ausência da
+            # rodada 1 nasce, e ela precisa entrar no histórico como qualquer
+            # outra — senão a ata não sabe quem faltou desde o começo.
             for player_id in player_ids:
                 self.host.pairing_service.set_player_participation(
                     int(self.host.current_tournament_id), int(player_id), status

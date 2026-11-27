@@ -30,7 +30,27 @@ PARTICIPATION_STATUSES: dict[str, str] = {
     STATUS_ACTIVE: "Ativo",
     STATUS_WITHDRAWN: "Desistente",
     STATUS_ABSENT: "Ausente",
-    STATUS_INACTIVE: "Nao emparceirado",
+    STATUS_INACTIVE: "Não emparceirado",
+}
+
+# O que cada estado QUER DIZER, numa linha (RGS-22). O rótulo sozinho não
+# distingue "faltou" de "desistiu", e é essa a diferença que o regulamento
+# cobra: o ausente continua concorrendo a prêmio (RGS-35); o desistente sai até
+# ser reintegrado com motivo; o "não emparceirado" é o arquivamento neutro.
+STATUS_DESCRIPTIONS: dict[str, str] = {
+    STATUS_ACTIVE: "Joga normalmente e entra no pareamento.",
+    STATUS_WITHDRAWN: (
+        "Saiu do torneio em definitivo, com motivo; fica fora do pareamento até "
+        "ser reintegrado."
+    ),
+    STATUS_ABSENT: (
+        "Não compareceu: fica fora do pareamento enquanto ausente, mas não é "
+        "desistência e continua concorrendo a prêmio."
+    ),
+    STATUS_INACTIVE: (
+        "Inscrito que não entra no pareamento (por exemplo, só para registro); "
+        "não é desistência."
+    ),
 }
 
 # Estados que tiram o jogador do pareamento.
@@ -48,6 +68,11 @@ def clean_reason(reason: Any) -> str:
     return " ".join(str(reason or "").split())[:MAX_REASON_LENGTH]
 
 
+def status_description(status: Any) -> str:
+    """Descrição de uma linha do estado. ``""`` para estado desconhecido."""
+    return STATUS_DESCRIPTIONS.get(str(status or "").strip(), "")
+
+
 def is_out(status: Any) -> bool:
     return str(status or STATUS_ACTIVE).strip() in OUT_STATUSES
 
@@ -56,7 +81,7 @@ def status_error(status: Any) -> str:
     """``""`` quando o estado existe. Estado inventado nao entra no historico."""
     if str(status or "").strip() not in PARTICIPATION_STATUSES:
         return (
-            "Estado de participacao invalido. Use: "
+            "Estado de participação inválido. Use: "
             + ", ".join(sorted(PARTICIPATION_STATUSES))
             + "."
         )
@@ -74,14 +99,22 @@ def change_error(
     if erro:
         return erro
     if str(new_status).strip() == str(current_status or STATUS_ACTIVE).strip():
-        return f"O jogador ja esta como \"{PARTICIPATION_STATUSES[new_status]}\"."
+        return f"O jogador já está como \"{PARTICIPATION_STATUSES[new_status]}\"."
+    if str(new_status).strip() == STATUS_WITHDRAWN and not clean_reason(reason):
+        # RGS-22 / glossário: a desistência é saída DEFINITIVA, "com motivo" —
+        # a mesma régua da reentrada, que sem o motivo da saída não tem o que
+        # reverter na ata.
+        return (
+            "A desistência tira o jogador do torneio até ele ser reintegrado: "
+            "descreva o motivo, que vai para a ata e para a auditoria."
+        )
     if (
         str(new_status).strip() == STATUS_ACTIVE
         and str(current_status or "").strip() in REENTRY_NEEDS_REASON
         and not clean_reason(reason)
     ):
         return (
-            "A reentrada de um jogador que DESISTIU e decisao arbitral: descreva o "
+            "A reentrada de um jogador que DESISTIU é decisão arbitral: descreva o "
             "motivo, que vai para a ata e para a auditoria."
         )
     return ""

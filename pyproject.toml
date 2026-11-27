@@ -30,8 +30,11 @@ build = [
     "pyinstaller>=6.11.0",
 ]
 dev = [
+    "coverage>=7.6",
     "mypy>=1.13.0",
     "pytest>=8.3.0",
+    "pytest-timeout>=2.3",
+    "radon>=6.0",
     "ruff>=0.8.0",
 ]
 
@@ -44,6 +47,7 @@ addopts = "-q"
 pythonpath = ["."]
 markers = [
     "gui: abre janela de verdade (Tk mapeado); precisa de display. Roda no Windows, onde o app e entregue. Sem display, use -m 'not gui'.",
+    "gacrux: roda o motor FIDE padrao (Gacrux) de verdade, em subprocesso. O conftest forca o motor proprio no resto da suite; estes testes provam o caminho que o arbitro usa (RGS-37).",
 ]
 
 [tool.ruff]
@@ -97,7 +101,7 @@ ignore = ["E501"]
 
 [tool.mypy]
 python_version = "3.11"
-files = ["src/core"]
+files = ["src/core", "src/domain"]
 ignore_missing_imports = true
 follow_imports = "silent"
 warn_unused_ignores = true

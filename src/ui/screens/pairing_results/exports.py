@@ -76,7 +76,7 @@ class RoundExportActions:
             host._run_background(
                 lambda: host.export_service.export_pairings(round_id, path),
                 lambda _result: host._print_document(path),
-                "Preparando impressao...",
+                "Preparando impressão...",
             )
         except Exception as exc:
             host._show_error(exc)
@@ -97,7 +97,7 @@ class RoundExportActions:
             round_id = self.require_round()
             default_path = self.scoresheets_path()
             file_path = filedialog.asksaveasfilename(
-                title="Exportar sumulas de mesa",
+                title="Exportar súmulas de mesa",
                 initialdir=str(default_path.parent),
                 initialfile=default_path.name,
                 defaultextension=".pdf",
@@ -110,8 +110,8 @@ class RoundExportActions:
                 path = path.with_suffix(".pdf")
             host._run_background(
                 lambda: host.export_service.export_scoresheets(round_id, path),
-                lambda _result: host._show_info(f"Sumulas exportadas:\n{path}"),
-                "Exportando sumulas...",
+                lambda _result: host._show_info(f"Súmulas exportadas:\n{path}"),
+                "Exportando súmulas...",
             )
         except Exception as exc:
             host._show_error(exc)
@@ -124,7 +124,7 @@ class RoundExportActions:
             host._run_background(
                 lambda: host.export_service.export_scoresheets(round_id, path),
                 lambda _result: host._print_document(path),
-                "Preparando sumulas para impressao...",
+                "Preparando súmulas para impressão...",
             )
         except Exception as exc:
             host._show_error(exc)
@@ -136,7 +136,7 @@ class RoundExportActions:
             pairings = host.db.get_pairings_for_round(round_id)
             suggested_end = max((int(pairing["board_number"]) for pairing in pairings), default=1)
             value = host._ask_string(
-                "Cartoes de mesa",
+                "Cartões de mesa",
                 f"Informe o intervalo de mesas (ex.: 1-{suggested_end}):",
             )
             if value is None:
@@ -144,15 +144,15 @@ class RoundExportActions:
             normalized = value.strip().replace(" ", "")
             parts = normalized.split("-", maxsplit=1)
             if len(parts) != 2:
-                raise AppError("Informe o intervalo no formato inicio-fim, por exemplo: 1-60.")
+                raise AppError("Informe o intervalo no formato início-fim, por exemplo: 1-60.")
             start_board, end_board = (int(part) for part in parts)
             include_qr = host._confirm_action(
-                "Cartoes de mesa",
+                "Cartões de mesa",
                 "Incluir QR de envio de resultado para as mesas da rodada aberta?",
             )
             default_path = self.table_cards_path()
             file_path = filedialog.asksaveasfilename(
-                title="Exportar cartoes de mesa",
+                title="Exportar cartões de mesa",
                 initialdir=str(default_path.parent),
                 initialfile=default_path.name,
                 defaultextension=".pdf",
@@ -171,10 +171,10 @@ class RoundExportActions:
                     round_id=round_id,
                     include_qr=include_qr,
                 ),
-                lambda _result: host._show_info(f"Cartoes de mesa exportados:\n{path}"),
-                "Exportando cartoes de mesa...",
+                lambda _result: host._show_info(f"Cartões de mesa exportados:\n{path}"),
+                "Exportando cartões de mesa...",
             )
         except ValueError:
-            host._show_error("Informe o intervalo no formato inicio-fim, por exemplo: 1-60.")
+            host._show_error("Informe o intervalo no formato início-fim, por exemplo: 1-60.")
         except Exception as exc:
             host._show_error(exc)

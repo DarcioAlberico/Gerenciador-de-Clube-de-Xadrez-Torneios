@@ -29,7 +29,7 @@ class SyncService:
         if not name:
             raise AppError("Informe o nome do dispositivo.")
         if role not in DEVICE_ROLES:
-            raise AppError("Perfil de dispositivo invalido.")
+            raise AppError("Perfil de dispositivo inválido.")
         if not device_id:
             device_id = "dev_" + self.db._hash_payload(f"{name}:{self.db.now()}")[:24]
         device = self.db.register_device(
@@ -53,7 +53,7 @@ class SyncService:
     def revoke_device(self, device_id: str) -> None:
         device_id = device_id.strip()
         if not any(item["device_id"] == device_id for item in self.db.list_devices()):
-            raise AppError("Dispositivo nao encontrado.")
+            raise AppError("Dispositivo não encontrado.")
         self.db.update_device_status(device_id, "revoked")
         self.db.create_audit_event(
             action="device_revoked",
@@ -68,14 +68,14 @@ class SyncService:
         settings = self.db.get_app_settings()
         target_url = (server_url or str(settings.get("sync_server_url") or "")).strip()
         if not target_url:
-            raise AppError("Configure a URL do servidor de sincronizacao.")
+            raise AppError("Configure a URL do servidor de sincronização.")
         parsed_url = urlparse(target_url)
         if parsed_url.scheme not in {"http", "https"} or not parsed_url.netloc:
-            raise AppError("URL do servidor de sincronizacao invalida.")
+            raise AppError("URL do servidor de sincronização inválida.")
         if int(limit or 0) <= 0:
-            raise AppError("Limite de sincronizacao deve ser positivo.")
+            raise AppError("Limite de sincronização deve ser positivo.")
         if int(timeout_seconds or 0) <= 0:
-            raise AppError("Timeout de sincronizacao deve ser positivo.")
+            raise AppError("Timeout de sincronização deve ser positivo.")
         endpoint = target_url.rstrip("/") + "/api/sync/events"
         summary = {"sent": 0, "synced": 0, "rejected": 0, "failed": 0}
         for event in self.pending_events(limit=limit):
@@ -111,37 +111,37 @@ class SyncService:
         device_id = str(event.get("device_id") or "").strip()
         device = next((item for item in self.db.list_devices() if item["device_id"] == device_id), None)
         if not device or device.get("status") != "authorized":
-            self._audit_rejected_remote(event, "Dispositivo nao autorizado.")
-            return {"status": "rejected", "reason": "Dispositivo nao autorizado."}
+            self._audit_rejected_remote(event, "Dispositivo não autorizado.")
+            return {"status": "rejected", "reason": "Dispositivo não autorizado."}
         if not self._payload_hash_is_valid(event):
-            reason = "Hash do payload remoto nao confere."
+            reason = "Hash do payload remoto não confere."
             self._audit_rejected_remote(event, reason)
             return {"status": "rejected", "reason": reason}
 
         if action == "result_updated":
             return self._apply_remote_result(event)
 
-        self._audit_rejected_remote(event, "Acao remota nao suportada neste cliente.")
-        return {"status": "rejected", "reason": "Acao remota nao suportada neste cliente."}
+        self._audit_rejected_remote(event, "Ação remota não suportada neste cliente.")
+        return {"status": "rejected", "reason": "Ação remota não suportada neste cliente."}
 
     def _apply_remote_result(self, event: dict[str, Any]) -> dict[str, str]:
         pairing_id = self._event_int(event.get("entity_id"))
         if pairing_id is None:
-            self._audit_rejected_remote(event, "Mesa remota invalida.")
-            return {"status": "rejected", "reason": "Mesa remota invalida."}
+            self._audit_rejected_remote(event, "Mesa remota inválida.")
+            return {"status": "rejected", "reason": "Mesa remota inválida."}
         payload = event.get("payload") or {}
         if not isinstance(payload, dict):
-            self._audit_rejected_remote(event, "Payload remoto invalido.")
-            return {"status": "rejected", "reason": "Payload remoto invalido."}
+            self._audit_rejected_remote(event, "Payload remoto inválido.")
+            return {"status": "rejected", "reason": "Payload remoto inválido."}
         result = str(payload.get("result") or event.get("result") or "").strip()
         pairing = self.db.get_pairing(pairing_id)
         if not pairing:
-            self._audit_rejected_remote(event, "Mesa nao encontrada.")
-            return {"status": "rejected", "reason": "Mesa nao encontrada."}
+            self._audit_rejected_remote(event, "Mesa não encontrada.")
+            return {"status": "rejected", "reason": "Mesa não encontrada."}
         remote_tournament_id = self._event_int(event.get("tournament_id"))
         if event.get("tournament_id") is not None and remote_tournament_id is None:
-            self._audit_rejected_remote(event, "Torneio remoto invalido.")
-            return {"status": "rejected", "reason": "Torneio remoto invalido."}
+            self._audit_rejected_remote(event, "Torneio remoto inválido.")
+            return {"status": "rejected", "reason": "Torneio remoto inválido."}
         if remote_tournament_id is not None and remote_tournament_id != int(pairing["tournament_id"]):
             self._audit_rejected_remote(
                 event,
@@ -151,8 +151,8 @@ class SyncService:
             return {"status": "rejected", "reason": "Evento remoto pertence a outro torneio."}
         remote_round_id = self._event_int(event.get("round_id"))
         if event.get("round_id") is not None and remote_round_id is None:
-            self._audit_rejected_remote(event, "Rodada remota invalida.", tournament_id=int(pairing["tournament_id"]))
-            return {"status": "rejected", "reason": "Rodada remota invalida."}
+            self._audit_rejected_remote(event, "Rodada remota inválida.", tournament_id=int(pairing["tournament_id"]))
+            return {"status": "rejected", "reason": "Rodada remota inválida."}
         if remote_round_id is not None and remote_round_id != int(pairing["round_id"]):
             self._audit_rejected_remote(
                 event,
@@ -162,15 +162,15 @@ class SyncService:
             )
             return {"status": "rejected", "reason": "Evento remoto pertence a outra rodada."}
         if result not in FINAL_RESULTS or result == "BYE":
-            self._audit_rejected_remote(event, "Resultado remoto invalido.")
-            return {"status": "rejected", "reason": "Resultado remoto invalido."}
+            self._audit_rejected_remote(event, "Resultado remoto inválido.")
+            return {"status": "rejected", "reason": "Resultado remoto inválido."}
         if pairing.get("round_status") == "closed":
-            reason = "Rodada fechada: conflito exige aprovacao do arbitro."
+            reason = "Rodada fechada: conflito exige aprovação do árbitro."
             self._audit_rejected_remote(event, reason, tournament_id=int(pairing["tournament_id"]))
             return {"status": "conflict", "reason": reason}
         current_result = str(pairing.get("result") or "")
         if current_result and current_result != result:
-            reason = "Mesa ja possui outro resultado no desktop: conflito exige aprovacao do arbitro."
+            reason = "Mesa já possui outro resultado no desktop: conflito exige aprovação do árbitro."
             self._audit_rejected_remote(
                 event,
                 reason,

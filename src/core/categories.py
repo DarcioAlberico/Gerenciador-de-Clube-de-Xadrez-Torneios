@@ -111,7 +111,7 @@ def special_prize_tags(
         tags.append("Feminino")
 
     if str(member_type or "").strip().casefold() == "socio":
-        tags.append("Socio do Clube")
+        tags.append("Sócio do Clube")
 
     local_sources = {
         str(tournament_location or "").strip().casefold(),

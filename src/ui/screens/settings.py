@@ -14,12 +14,12 @@ def _cloud_status_label(status: str) -> str:
     if status == "success":
         return "copiado para a pasta de nuvem."
     if status == "not_configured":
-        return "pasta de nuvem nao configurada."
+        return "pasta de nuvem não configurada."
     if status == "invalid_directory":
-        return "pasta de nuvem invalida (verifique o caminho)."
+        return "pasta de nuvem inválida (verifique o caminho)."
     if status.startswith("error:"):
         return f"falha ao copiar ({status[len('error:'):].strip()})."
-    return status or "sem informacao."
+    return status or "sem informação."
 
 
 class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, SettingsUsersMixin):
@@ -43,8 +43,8 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
         tab_folders = self._settings_tab(settings_tabs, "Pastas e backup")
         tab_tools = self._settings_tab(settings_tabs, "Segurança e dados")
 
-        # --- Aba: Aparencia ---
-        # Galeria de temas curados (paletas combinadas) + modo avancado.
+        # --- Aba: Aparência ---
+        # Galeria de temas curados (paletas combinadas) + modo avançado.
         appearance_ctl = self._build_appearance_tab(tab_appearance, settings)
         appearance_option = appearance_ctl["appearance_option"]
         appearance_values = appearance_ctl["appearance_values"]
@@ -54,8 +54,8 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
         ui_scale_entry = appearance_ctl["ui_scale_entry"]
 
         # --- Aba: Pastas e backup ---
-        # Tres pastas + retencao, cada uma com o proprio botao "Escolher...":
-        # sem secao, o botao de uma pasta encostava no rotulo da seguinte e o
+        # Três pastas + retenção, cada uma com o próprio botão "Escolher...":
+        # sem seção, o botão de uma pasta encostava no rótulo da seguinte e o
         # olho tinha de decidir a quem ele pertencia (P3-12).
         form_folders = form_of(tab_folders)
         form_tools = form_of(tab_tools)
@@ -123,7 +123,7 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
         )
         retention_entry.insert(0, str(settings.get("backup_retention_count") or "10"))
 
-        # --- Aba: Seguranca e dados ---
+        # --- Aba: Segurança e dados ---
         def open_users_manager() -> None:
             self._show_users_manager()
 
@@ -134,8 +134,8 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
         )
 
         def download_fide() -> None:
-            # Download longo (minutos): vai para o helper unico de background, que
-            # desabilita o botao, liga o indicador de progresso e manda erro p/ toast.
+            # Download longo (minutos): vai para o helper único de background, que
+            # desabilita o botão, liga o indicador de progresso e manda erro p/ toast.
             self._run_background(
                 self.official_rating_service.import_fide_list_from_url,
                 # As linhas ignoradas entram no resultado (FED-05): antes elas
@@ -278,8 +278,8 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
 
         def persist_settings() -> None:
             def _flag_field(entry: Any, message: str) -> None:
-                # Estado de campo unico (F5.3): a borda e a mensagem sob o campo
-                # saem do mesmo lugar, e o foco nao apaga o erro.
+                # Estado de campo único (F5.3): a borda e a mensagem sob o campo
+                # saem do mesmo lugar, e o foco não apaga o erro.
                 set_field_error(entry, message)
                 raise AppError(message)
 
@@ -291,12 +291,12 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
             try:
                 ui_scale_percent = int(ui_scale_entry.get().strip() or "120")
             except ValueError:
-                _flag_field(ui_scale_entry, "Tamanho da fonte/interface deve ser um numero entre 80 e 160.")
+                _flag_field(ui_scale_entry, "Tamanho da fonte/interface deve ser um número entre 80 e 160.")
             if ui_scale_percent < 80 or ui_scale_percent > 160:
                 _flag_field(ui_scale_entry, "Tamanho da fonte/interface deve ficar entre 80 e 160.")
             retention_raw = retention_entry.get().strip()
             if not retention_raw.isdigit() or int(retention_raw) < 1:
-                _flag_field(retention_entry, "Manter ultimos backups: informe um inteiro maior ou igual a 1.")
+                _flag_field(retention_entry, "Manter últimos backups: informe um inteiro maior ou igual a 1.")
 
             # Resolve chaves a partir dos labels selecionados
             _accent_lbl_to_key = {v: k for k, v in ACCENT_PRESET_LABELS.items()}
@@ -337,8 +337,8 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
                 or settings.get("appearance_mode", "System") != appearance_values[appearance_option.get()]
             )
             if _needs_rebuild:
-                # Algum preset de cor mudou: reestiliza o que ja esta na tela.
-                # Nada e destruido, entao a tela continua onde estava (F1.2).
+                # Algum preset de cor mudou: reestiliza o que já é na tela.
+                # Nada é destruído, então a tela continua onde estava (F1.2).
                 self._rebuild_ui_after_theme_change()
 
             self.status_label.configure(text=f"Banco: {Path(self.db.db_path).name}")
@@ -381,10 +381,10 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
                     raise AppError("Selecione um backup para restaurar.")
                 backup_path = backup_paths.get(selected[0])
                 if not backup_path:
-                    raise AppError("Backup selecionado invalido.")
+                    raise AppError("Backup selecionado inválido.")
                 confirmed = self._confirm_action(
                     "Restaurar backup",
-                    "A restauracao substitui o banco atual. Um backup de seguranca sera criado antes. Continuar?",
+                    "A restauração substitui o banco atual. Um backup de segurança será criado antes. Continuar?",
                     danger=True,
                 )
                 if not confirmed:
@@ -395,7 +395,7 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
                     load_audit_logs()
                     self._show_report(
                         "Backup restaurado",
-                        f"Copia de seguranca criada em:\n{safety_backup}",
+                        f"Cópia de segurança criada em:\n{safety_backup}",
                     )
                     self.show_club()
 
@@ -409,12 +409,12 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
 
         def apply_retention() -> None:
             try:
-                # Salva apenas a retencao sem disparar rebuild de tema.
+                # Salva apenas a retenção sem disparar rebuild de tema.
                 # persist_settings() compara snapshots e pode triggerar _rebuild_ui;
-                # aqui so nos importa salvar o retention_count e executar a limpeza.
+                # aqui só nos importa salvar o retention_count e executar a limpeza.
                 retention_raw = retention_entry.get().strip()
                 if not retention_raw.isdigit() or int(retention_raw) < 1:
-                    self._show_error("Manter ultimos backups: informe um inteiro maior ou igual a 1.")
+                    self._show_error("Manter últimos backups: informe um inteiro maior ou igual a 1.")
                     return
                 self.security_service.save_security_settings(
                     {"backup_retention_count": retention_raw}
@@ -422,7 +422,7 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
                 deleted = self.security_service.enforce_backup_retention()
                 load_backups()
                 load_audit_logs()
-                self._show_toast(f"Retencao aplicada. {len(deleted)} backup(s) removido(s).", kind="success")
+                self._show_toast(f"Retenção aplicada. {len(deleted)} backup(s) removido(s).", kind="success")
             except Exception as exc:
                 self._show_error(exc)
 
@@ -450,10 +450,10 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
         load_audit_logs()
 
     def _build_appearance_tab(self, tab: Any, settings: dict[str, Any]) -> dict[str, Any]:
-        """Monta a aba Aparencia: galeria de temas curados + modo avancado.
+        """Monta a aba Aparência: galeria de temas curados + modo avançado.
 
-        Os tres dropdowns (destaque/fundo/frames) continuam existindo como fonte
-        de verdade dos valores; os cartoes de tema apenas os preenchem. Devolve
+        Os três dropdowns (destaque/fundo/frames) continuam existindo como fonte
+        de verdade dos valores; os cartões de tema apenas os preenchem. Devolve
         os controles que ``persist_settings`` consome.
         """
         form = form_of(tab)
@@ -478,7 +478,7 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
         if _saved_frame not in FRAME_BG_PRESET_LABELS:
             _saved_frame = "slate"
 
-        # --- Controles avancados (ocultos ate o usuario pedir) ---
+        # --- Controles avançados (ocultos até o usuário pedir) ---
         advanced = ctk.CTkFrame(tab, fg_color="transparent")
         advanced.grid_columnconfigure(0, weight=1)
         appearance_option = ctk.CTkOptionMenu(advanced, values=list(appearance_values.keys()), width=240)
@@ -487,9 +487,9 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
         frame_bg_option = ctk.CTkOptionMenu(advanced, values=list(FRAME_BG_PRESET_LABELS.values()), width=240)
         for idx, (lbl, opt) in enumerate([
             ("Aparência (claro / escuro)", appearance_option),
-            ("Cor de destaque (botoes, links)", accent_option),
+            ("Cor de destaque (botões, links)", accent_option),
             ("Cor de fundo (janela)", bg_option),
-            ("Cor dos frames (cards, paineis)", frame_bg_option),
+            ("Cor dos frames (cards, painéis)", frame_bg_option),
         ]):
             ctk.CTkLabel(advanced, text=lbl).grid(row=idx * 2, column=0, sticky="w", padx=4, pady=(6, 0))
             opt.grid(row=idx * 2 + 1, column=0, sticky="ew", padx=4, pady=(2, 4))
@@ -529,7 +529,7 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
         form.section("Tema visual")
         form.place(gallery, "widget")
 
-        # --- Alternancia para o modo avancado ---
+        # --- Alternância para o modo avançado ---
         def toggle_advanced() -> None:
             if advanced_switch.get():
                 state["theme"] = "custom"
@@ -554,13 +554,13 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
         ui_scale_entry = form.text(
             "Tamanho da fonte/interface (%)",
             placeholder="Ex.: 120",
-            help_text="Vale para toda a janela; 100% e o tamanho de fabrica.",
+            help_text="Vale para toda a janela; 100% é o tamanho de fábrica.",
         )
         ui_scale_entry.insert(0, str(settings.get("ui_scale_percent") or "120"))
 
-        # --- Largura das colunas (B-1): a saida de quem se perdeu arrastando ---
-        # Arrastar largura nao tem "desfazer" proprio, e o usuario pode espremer
-        # uma coluna ate ela sumir. Este botao e a volta ao estado conhecido.
+        # --- Largura das colunas (B-1): a saída de quem se perdeu arrastando ---
+        # Arrastar largura não tem "desfazer" próprio, e o usuário pode espremer
+        # uma coluna até ela sumir. Este botão e a volta ao estado conhecido.
         form.section(
             "Tabelas",
             help_text="As larguras que você ajusta arrastando ficam guardadas por usuário.",
@@ -571,12 +571,12 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
                 text="Restaurar largura das colunas",
                 command=self._reset_column_widths,
                 width=260,
-                tip="Volta todas as tabelas a largura padrão (so para o seu usuário).",
+                tip="Volta todas as tabelas a largura padrão (só para o seu usuário).",
             ),
             "widget",
         )
 
-        # --- Selecao inicial: tema curado correspondente, senao modo avancado ---
+        # --- Seleção inicial: tema curado correspondente, senão modo avançado ---
         saved_curated = settings.get("curated_theme") or ""
         initial = saved_curated if saved_curated in CURATED_THEMES else match_curated_theme(
             _saved_accent, _saved_bg, _saved_frame
@@ -644,7 +644,7 @@ class SettingsPagesMixin(SettingsReportsMixin, SettingsCertificatesMixin, Settin
             anchor="w", padx=8, pady=(3, 0)
         )
 
-        # Nome + modo (e selo de recomendado, quando aplicavel).
+        # Nome + modo (e selo de recomendado, quando aplicável).
         ctk.CTkLabel(
             card, text=theme["label"], font=font_subsection(),
             text_color=THEME_TEXT_MAIN, anchor="w", justify="left", wraplength=150,

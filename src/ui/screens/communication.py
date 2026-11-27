@@ -76,13 +76,13 @@ class CommunicationPagesMixin:
     def _build_bulk_tab(self, parent: ctk.CTkFrame, msg_service: MessageService) -> None:
         parent.grid_columnconfigure(0, weight=1)
 
-        # Publico-alvo: define como os destinatarios sao resolvidos.
+        # Publico-alvo: define como os destinatários são resolvidos.
         classes = self.db.list_classes(active_only=True)
         class_by_label = {f"{c['name']}": int(c["id"]) for c in classes}
-        # Ordem de exibicao estavel, restrita aos tipos validos (sem drift).
+        # Ordem de exibição estável, restrita aos tipos válidos (sem drift).
         member_types = [t for t in ["socio", "aluno", "convidado", "visitante"] if t in MEMBER_TYPES]
 
-        ctk.CTkLabel(parent, text="Publico-alvo:").grid(row=0, column=0, padx=16, pady=(16, 4), sticky="w")
+        ctk.CTkLabel(parent, text="Público-alvo:").grid(row=0, column=0, padx=16, pady=(16, 4), sticky="w")
         audience_option = ctk.CTkOptionMenu(
             parent, width=240,
             values=["Todos os ativos", "Por turma", "Por tipo de membro"],
@@ -123,7 +123,7 @@ class CommunicationPagesMixin:
         schedule_entry.grid(row=8, column=0, padx=16, pady=(0, 4), sticky="w")
         ctk.CTkLabel(
             parent,
-            text="Agendados so disparam com o app aberto (a fila e salva).",
+            text="Agendados só disparam com o app aberto (a fila é salva).",
             text_color=THEME_TEXT_SUB,
         ).grid(row=9, column=0, padx=16, pady=(0, 8), sticky="w")
 
@@ -163,7 +163,7 @@ class CommunicationPagesMixin:
             if audience == "Por turma":
                 class_id = class_by_label.get(filter_option.get())
                 if not class_id:
-                    raise AppError("Selecione uma turma valida.")
+                    raise AppError("Selecione uma turma válida.")
                 return ({"active_only": True, "class_id": class_id},
                         "class", str(class_id), f"turma {filter_option.get()}")
             if audience == "Por tipo de membro":
@@ -209,7 +209,7 @@ class CommunicationPagesMixin:
                     msg_service, subject, body_text, **kwargs
                 ),
                 on_success=lambda summary: self._show_info(
-                    "Disparo concluido.\n\n"
+                    "Disparo concluído.\n\n"
                     f"Enviados: {summary['sent_count']}\n"
                     f"Falhas: {summary['failed_count']}\n"
                     f"Sem e-mail (ignorados): {summary['skipped_no_email']}"

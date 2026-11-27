@@ -7,6 +7,7 @@ from typing import Any
 
 from src.services.constants import AppError
 from src.services.pairing.constraints import (
+    INITIAL_COLOR,
     choose_bye_player,
     choose_colors,
     color_hard_violation,
@@ -16,16 +17,13 @@ from src.services.pairing.constraints import (
     pairing_order_key,
     pair_penalty,
     rank_by_player_id,
-    rating_for_initial_order,
+    seeding_key,
 )
 
 
-def _initial_order_key(player: dict[str, Any], settings: dict[str, Any] | None) -> tuple[int, str]:
-    initial_order = str((settings or {}).get("initial_order") or "rating")
-    return (
-        -rating_for_initial_order(player, initial_order),
-        str(player.get("name") or "").casefold(),
-    )
+def _initial_order_key(player: dict[str, Any], settings: dict[str, Any] | None) -> tuple[Any, ...]:
+    """Ordem inicial do torneio — a MESMA do TRF e do Gacrux (RGS-13)."""
+    return seeding_key(player, str((settings or {}).get("initial_order") or "rating"))
 
 
 def first_round_pairings(
@@ -39,24 +37,26 @@ def first_round_pairings(
     pairable = ordered[:]
     bye_player = None
     if len(pairable) % 2 == 1:
-        bye_player = min(
-            pairable,
-            key=lambda player: (
-                -_initial_order_key(player, settings)[0],
-                str(player.get("name") or "").casefold(),
-            ),
-        )
-        pairable.remove(bye_player)
+        # PAB da R1 = o ULTIMO da ordem inicial (C.04.3: o de MAIOR número de
+        # pareamento no grupo de menor pontuação). Era o menor rating com
+        # desempate pelo nome em ordem CRESCENTE: com ratings empatados o bye
+        # ia ao primeiro do alfabeto — o cabeça de chave (RGS-18).
+        bye_player = pairable.pop()
 
     half = len(pairable) // 2
     upper = pairable[:half]
     lower = pairable[half:]
     pairings: list[dict[str, Any]] = []
+    # Cor inicial gravada no torneio (RGS-14): com 'B' o nº 1 joga de pretas
+    # na mesa 1 e as mesas seguem alternando a partir dela. Era sempre brancas.
+    brancas_nas_pares = (
+        str((settings or {}).get("initial_color") or INITIAL_COLOR).strip().upper() != "B"
+    )
 
     board = 1
     for index, player in enumerate(upper):
         opponent = lower[index]
-        if index % 2 == 0:
+        if (index % 2 == 0) == brancas_nas_pares:
             white_id = player["id"]
             black_id = opponent["id"]
         else:
@@ -86,19 +86,19 @@ def first_round_pairings(
     return pairings
 
 
-# O round-robin individual morava aqui e recalculava o circulo a cada rodada a
+# O round-robin individual morava aqui e recalculava o círculo a cada rodada a
 # partir da lista de ATIVOS ordenada por rating — o defeito que a PAR-01
-# consertou. O calendario agora sai da tabela de Berger (FIDE C.05, Anexo 1) em
-# `pairing/round_robin.py`, a partir de numeros sorteados UMA vez e guardados.
-# Nao ha versao "simples" aqui de proposito: duas implementacoes do mesmo
-# calendario divergiriam, e a que ficasse esquecida seria a que alguem usaria.
+# consertou. O calendário agora sai da tabela de Berger (FIDE C.05, Anexo 1) em
+# `pairing/round_robin.py`, a partir de números sorteados UMA vez e guardados.
+# Não há versão "simples" aqui de propósito: duas implementações do mesmo
+# calendário divergiriam, e a que ficasse esquecida seria a que alguém usaria.
 
 
-# O Scheveningen tambem morava aqui e recalculava a escala a cada rodada a
-# partir da lista de ATIVOS: uma desistencia deslocava todos os indices
+# O Scheveningen também morava aqui e recalculava a escala a cada rodada a
+# partir da lista de ATIVOS: uma desistência deslocava todos os índices
 # seguintes (os confrontos que faltavam viravam outros) e desigualava os
-# grupos, o que passava a RECUSAR a geracao. A escala agora e guardada no
-# jogador (grupo + numero) e o calendario sai dela, em `pairing/scheveningen.py`.
+# grupos, o que passava a RECUSAR a geração. A escala agora e guardada no
+# jogador (grupo + número) e o calendário sai dela, em `pairing/scheveningen.py`.
 
 
 def knockout_pairings(
@@ -107,13 +107,13 @@ def knockout_pairings(
     settings: dict[str, Any],
     advancing_ids: list[int] | None = None,
 ) -> list[dict[str, Any]]:
-    """Chave da fase, a partir de QUEM avancou (PAR-03).
+    """Chave da fase, a partir de QUEM avançou (PAR-03).
 
-    Quem avancou nao se decide mais aqui: vinha de dois `if` que promoviam o
-    melhor numero inicial em qualquer resultado que nao fosse `1-0`/`0-1` — o
-    empate, a dupla ausencia, a mesa em branco e ate o W.O. e a decisao do
-    arbitro. Agora e o servico quem responde, lendo o placar e as decisoes
-    registradas (`pairing/knockout.py`), e esta funcao so monta a chave.
+    Quem avançou não se decide mais aqui: vinha de dois `if` que promoviam o
+    melhor número inicial em qualquer resultado que não fosse `1-0`/`0-1` — o
+    empate, a dupla ausência, a mesa em branco e até o W.O. e a decisão do
+    árbitro. Agora e o serviço quem responde, lendo o placar e as decisões
+    registradas (`pairing/knockout.py`), e esta função só monta a chave.
     """
     ordered = sorted(
         players,
@@ -168,9 +168,9 @@ def knockout_pairings(
         board += 1
 
     for player in bye_players:
-        # Bye de verdade, como no Suico e no rodizio (PAR-01/03): gravado como
-        # `1-0` ele pontuava certo por acaso (o padrao de `bye_points` e 1,0) e
-        # aparecia como VITORIA em tudo que le o resultado.
+        # Bye de verdade, como no Suíço e no rodízio (PAR-01/03): gravado como
+        # `1-0` ele pontuava certo por acaso (o padrão de `bye_points` e 1,0) e
+        # aparecia como VITÓRIA em tudo que lê o resultado.
         pairings.append(
             {
                 "board_number": board,
@@ -194,10 +194,10 @@ def search_dutch_pairing(
 ) -> list[tuple[dict[str, Any], dict[str, Any]]] | None:
     """Pareamento do bracket com cor absoluta (C.3) respeitada.
 
-    `topscorers` sao os jogadores que a A.7 tira do C.3 na ultima rodada: entre
-    dois deles a cor volta a ser criterio de QUALIDADE, e o par deixa de ser
-    recusado aqui. Sem isso, a rodada que decide o torneio podia nao juntar os
-    dois lideres so porque ambos deviam a mesma cor.
+    `topscorers` são os jogadores que a A.7 tira do C.3 na última rodada: entre
+    dois deles a cor volta a ser critério de QUALIDADE, e o par deixa de ser
+    recusado aqui. Sem isso, a rodada que decide o torneio podia não juntar os
+    dois líderes só porque ambos deviam a mesma cor.
     """
     if not pairable:
         return []
@@ -886,9 +886,23 @@ def swiss_pairings(
     score_group_float_penalty: int,
     score_diff_penalty: int,
     topscorers: frozenset[int] | set[int] = frozenset(),
+    pairing_numbers: dict[int, int] | None = None,
+    initial_color: str = INITIAL_COLOR,
 ) -> list[dict[str, Any]]:
-    """Suico do motor proprio. `topscorers` implementa o C.3 (ver A.7)."""
+    """Suíço do motor próprio. `topscorers` implementa o C.3 (ver A.7).
+
+    `pairing_numbers` (ordem inicial, 1 = cabeça de chave) desempata a cor
+    pela C.04.3 E.4/E.5 (RGS-18); sem ele, a posição na classificação faz as
+    vezes do número. `initial_color` e a cor inicial do torneio (E.5, RGS-14).
+    """
     ranks = rank_by_player_id(standings)
+    color_ranking = {
+        int(player["id"]): (
+            -float(standings.get(player["id"], {}).get("points", 0.0) or 0.0),
+            int((pairing_numbers or {}).get(int(player["id"])) or ranks.get(player["id"], 0) or 0),
+        )
+        for player in players
+    }
     pending = sorted(
         players,
         key=lambda player: pairing_order_key(player, standings),
@@ -981,10 +995,10 @@ def swiss_pairings(
             )
         player_pairs.extend(leftover_pairs)
 
-    # Salvaguarda global para criterios absolutos FIDE. O pareamento por bracket
+    # Salvaguarda global para critérios absolutos FIDE. O pareamento por bracket
     # pode fechar grupos superiores cedo demais e empurrar o fundo da tabela para
-    # repeticao de adversario ou violacao dura de cor; nesses casos re-pareia o
-    # campo inteiro pelo otimo global e adota somente se melhorar esse quadro.
+    # repetição de adversário ou violação dura de cor; nesses casos re-pareia o
+    # campo inteiro pelo ótimo global e adota somente se melhorar esse quadro.
     quality_kwargs = {
         "repeat_pairing_penalty": repeat_pairing_penalty,
         "score_group_float_penalty": score_group_float_penalty,
@@ -1130,7 +1144,9 @@ def swiss_pairings(
         ),
     )
     for player, opponent in player_pairs:
-        white_id, black_id = choose_colors(player, opponent, histories)
+        white_id, black_id = choose_colors(
+            player, opponent, histories, color_ranking, initial_color=initial_color
+        )
         pairings.append(
             {
                 "board_number": board,

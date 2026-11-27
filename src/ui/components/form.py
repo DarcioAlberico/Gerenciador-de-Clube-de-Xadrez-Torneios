@@ -21,7 +21,7 @@ Uso típico::
     form.section("Identificação")
     nome = form.text("Nome do torneio", placeholder="Ex.: Aberto de Verão")
     form.section("Datas")
-    inicio = form.date("Data inicial")
+    início = form.date("Data inicial")
 
 A largura dos campos **não** é passada pela tela: ``sticky="ew"`` faz o campo
 ocupar a coluna, e a coluna é ``FORM_PANEL_WIDTH``. Era daí que vinham as 67

@@ -63,16 +63,16 @@ def assign_scale(
     if not (grupo_a and grupo_b):
         if len(ids) % 2 == 1:
             raise AppError(
-                "Scheveningen exige numero par de jogadores (dois grupos iguais)."
+                "Scheveningen exige número par de jogadores (dois grupos iguais)."
             )
         metade = len(ids) // 2
         grupo_a, grupo_b = ids[:metade], ids[metade:]
     elif len(grupo_a) != len(grupo_b):
-        raise AppError("Scheveningen: os grupos A e B devem ter o mesmo numero de jogadores.")
+        raise AppError("Scheveningen: os grupos A e B devem ter o mesmo número de jogadores.")
     elif len(grupo_a) + len(grupo_b) != len(ids):
         raise AppError(
             "Scheveningen: todos os jogadores precisam estar no grupo A ou no B "
-            "quando a divisao e manual."
+            "quando a divisão é manual."
         )
 
     escala: dict[int, tuple[str, int]] = {}
@@ -103,11 +103,11 @@ def scheveningen_pairings_from_scale(
     """
     total = group_size(scale)
     if total < 1:
-        raise AppError("Scheveningen: a escala do torneio ainda nao foi montada.")
+        raise AppError("Scheveningen: a escala do torneio ainda não foi montada.")
     if round_number < 1 or round_number > total:
         raise AppError(
-            f"Scheveningen: o calendario tem {total} rodada(s) e a rodada "
-            f"{round_number} esta fora dele."
+            f"Scheveningen: o calendário tem {total} rodada(s) e a rodada "
+            f"{round_number} está fora dele."
         )
     por_numero = {
         (grupo, numero): int(player_id) for player_id, (grupo, numero) in scale.items()

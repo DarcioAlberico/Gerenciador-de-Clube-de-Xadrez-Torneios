@@ -99,7 +99,7 @@ class ArbiterPanelDeepeningTest(unittest.TestCase):
         dest = Path(self.temp_dir.name) / "pacote"
         result = self.export_service.export_round_package(int(latest_round["id"]), dest)
         self.assertEqual([], result["errors"])
-        self.assertEqual(3, result["count"])  # mural + sumulas + cartoes
+        self.assertEqual(3, result["count"])  # mural + súmulas + cartões
         self.assertTrue(all(os.path.exists(path) for path in result["generated"]))
 
     def test_export_tournament_minutes(self) -> None:
@@ -320,7 +320,7 @@ class ArbiterPanelExtrasTest(unittest.TestCase):
         self.pairing_service.generate_next_round(tournament_id)
         return tournament_id
 
-    # M1 - Poster do podio
+    # M1 - Pôster do pódio
     def test_podium_data(self) -> None:
         tournament_id = self._individual_with_categories()
         data = self.export_service._podium_data(tournament_id)
@@ -340,7 +340,7 @@ class ArbiterPanelExtrasTest(unittest.TestCase):
         with self.assertRaises(AppError):
             self.export_service.export_podium(tournament_id, Path(self.temp_dir.name) / "podio.csv")
 
-    # M3 - Checklist especifico para equipes
+    # M3 - Checklist específico para equipes
     def test_team_closing_checklist_has_lineups(self) -> None:
         tournament_id = self._team_tournament()
         checklist = self.pairing_service.closing_checklist(tournament_id)

@@ -102,7 +102,7 @@ def restore_in_second_installation(
     rounds = second_db.list_rounds(tournament_id)
     pairings = second_db.get_pairings_for_round(expected_round_id)
     if not tournament or len(rounds) != 1 or len(pairings) != expected_boards:
-        raise RuntimeError("Backup restaurado nao reproduziu torneio, rodada e mesas esperados.")
+        raise RuntimeError("Backup restaurado não reproduziu torneio, rodada e mesas esperados.")
     return f"{len(rounds)} rodada; {len(pairings)} mesas validadas"
 
 
@@ -127,7 +127,7 @@ def verify_offline_local_flow(temp_dir: Path) -> str:
     tournament_id = TournamentService(db).create_tournament(
         {
             "name": "Piloto continuidade offline",
-            "location": "Instalacao isolada",
+            "location": "Instalação isolada",
             "rounds_count": "3",
             "time_control": "15+10",
             "bye_points": "1",
@@ -160,15 +160,15 @@ def verify_offline_local_flow(temp_dir: Path) -> str:
         final_backup = db.backup("offline_final")
 
     if dashboard["metrics"]["pending_results"] != 4:
-        raise RuntimeError("Painel offline nao exibiu as quatro mesas pendentes esperadas.")
+        raise RuntimeError("Painel offline não exibiu as quatro mesas pendentes esperadas.")
     if len(standings) != 8:
-        raise RuntimeError("Classificacao offline nao preservou os oito jogadores esperados.")
+        raise RuntimeError("Classificação offline não preservou os oito jogadores esperados.")
     if not all(
         path.exists()
         for path in (initial_list_path, scoresheets_path, crosstable_path, final_backup)
     ):
-        raise RuntimeError("Fluxo offline nao gerou todas as exportacoes e backup esperados.")
-    return "painel, 4 resultados, fechamento, classificacao, exportacoes e backup validados"
+        raise RuntimeError("Fluxo offline não gerou todas as exportações e backup esperados.")
+    return "painel, 4 resultados, fechamento, classificação, exportações e backup validados"
 
 
 def simulate_simultaneous_qr_submissions(temp_dir: Path, submissions_count: int = 20) -> str:
@@ -176,7 +176,7 @@ def simulate_simultaneous_qr_submissions(temp_dir: Path, submissions_count: int 
     db = Database(qr_root / "qr.db", backup_dir=qr_root / "backups")
     tournament_id = TournamentService(db).create_tournament(
         {
-            "name": "Piloto envios QR simultaneos",
+            "name": "Piloto envios QR simultâneos",
             "location": "Rede local simulada",
             "rounds_count": "3",
             "time_control": "15+10",
@@ -210,18 +210,18 @@ def simulate_simultaneous_qr_submissions(temp_dir: Path, submissions_count: int 
     pending = qr_service.pending_submissions(tournament_id)
     issues = pairing_service.arbitration_issues(tournament_id)
     if len(pending) != submissions_count or issues["metrics"]["qr_pending"] != submissions_count:
-        raise RuntimeError("Fila QR nao exibiu todas as submissoes simultaneas esperadas.")
+        raise RuntimeError("Fila QR não exibiu todas as submissões simultâneas esperadas.")
 
     for submission in submissions:
-        qr_service.approve_submission(int(submission["id"]), reviewer="Arbitro piloto")
+        qr_service.approve_submission(int(submission["id"]), reviewer="Árbitro piloto")
 
     approved = db.list_result_submissions(tournament_id=tournament_id, status="approved")
     pairings_after_review = db.get_pairings_for_round(round_id)
     approved_results = sum(1 for pairing in pairings_after_review if pairing.get("result") == "1-0")
     if len(approved) != submissions_count or approved_results != submissions_count:
-        raise RuntimeError("Aprovacao QR nao aplicou todos os resultados esperados.")
+        raise RuntimeError("Aprovação QR não aplicou todos os resultados esperados.")
     if qr_service.pending_submissions(tournament_id):
-        raise RuntimeError("Fila QR permaneceu com submissoes pendentes depois da aprovacao.")
+        raise RuntimeError("Fila QR permaneceu com submissões pendentes depois da aprovação.")
     return f"{submissions_count} envios concorrentes recebidos e aprovados"
 
 
@@ -230,7 +230,7 @@ def simulate_last_minute_registration(temp_dir: Path, players_count: int) -> tup
     db = Database(late_root / "late.db", backup_dir=late_root / "backups")
     tournament_id = TournamentService(db).create_tournament(
         {
-            "name": f"Piloto inscricao tardia {players_count}",
+            "name": f"Piloto inscrição tardia {players_count}",
             "location": "Secretaria simulada",
             "rounds_count": "3",
             "time_control": "15+10",
@@ -253,7 +253,7 @@ def simulate_last_minute_registration(temp_dir: Path, players_count: int) -> tup
     started_at = perf_counter()
     late_player_id = db.create_player(
         tournament_id,
-        name="Inscrito de ultima hora",
+        name="Inscrito de última hora",
         rating=1500,
         club="Clube visitante",
         category="ABS",
@@ -281,15 +281,15 @@ def simulate_last_minute_registration(temp_dir: Path, players_count: int) -> tup
         if player_id
     }
     if len(refreshed_players) != players_count + 1:
-        raise RuntimeError("Inscricao tardia nao apareceu na lista atualizada.")
+        raise RuntimeError("Inscrição tardia não apareceu na lista atualizada.")
     if float(late_player.get("starting_points") or 0) != 0.5:
-        raise RuntimeError("Inscricao tardia nao recebeu a pontuacao configurada.")
+        raise RuntimeError("Inscrição tardia não recebeu a pontuação configurada.")
     if not late_standing or float(late_standing.get("points") or 0) != 0.5:
-        raise RuntimeError("Classificacao nao incorporou a pontuacao da inscricao tardia.")
+        raise RuntimeError("Classificação não incorporou a pontuação da inscrição tardia.")
     if late_player_id not in scheduled_player_ids or late_player_id in historical_player_ids:
-        raise RuntimeError("Inscricao tardia nao entrou somente na proxima rodada.")
+        raise RuntimeError("Inscrição tardia não entrou somente na próxima rodada.")
     return (
-        f"{players_count + 1} inscritos; 0,5 ponto; historico preservado; jogador presente na previa seguinte",
+        f"{players_count + 1} inscritos; 0,5 ponto; histórico preservado; jogador presente na prévia seguinte",
         elapsed_ms,
     )
 
@@ -302,7 +302,7 @@ def simulate_official_rating_correction_before_round_one(
     db = Database(rating_root / "rating.db", backup_dir=rating_root / "backups")
     tournament_id = TournamentService(db).create_tournament(
         {
-            "name": f"Piloto conferencia oficial {players_count}",
+            "name": f"Piloto conferência oficial {players_count}",
             "location": "Secretaria simulada",
             "rounds_count": "3",
             "time_control": "15+10",
@@ -339,7 +339,7 @@ def simulate_official_rating_correction_before_round_one(
         lambda: rating_service.preview_tournament_player_updates(tournament_id),
     )
     measurement.details = (
-        f"{preview['changed']} alteracoes; {preview['unmatched_count']} sem correspondencia; sem persistir"
+        f"{preview['changed']} alterações; {preview['unmatched_count']} sem correspondência; sem persistir"
     )
     measurements.append(measurement)
 
@@ -350,28 +350,28 @@ def simulate_official_rating_correction_before_round_one(
         if row["status"] == "changed"
     ]
     apply_result, measurement = timed(
-        "Confirmar correcoes oficiais selecionadas",
+        "Confirmar correções oficiais selecionadas",
         10_000,
         lambda: rating_service.apply_tournament_player_updates(tournament_id, changed_player_ids),
     )
-    measurement.details = f"{apply_result['updated']} alteracoes aplicadas seletivamente"
+    measurement.details = f"{apply_result['updated']} alterações aplicadas seletivamente"
     measurements.append(measurement)
 
     first_player_after_apply = db.get_player(1) or {}
     if import_result["imported"] != changed_count:
-        raise RuntimeError("Importacao oficial nao carregou todos os registros esperados.")
+        raise RuntimeError("Importação oficial não carregou todos os registros esperados.")
     if preview["total"] != players_count or preview["changed"] != changed_count:
-        raise RuntimeError("Comparacao oficial nao encontrou todas as divergencias esperadas.")
+        raise RuntimeError("Comparação oficial não encontrou todas as divergências esperadas.")
     if preview["unmatched_count"] != unmatched_count:
-        raise RuntimeError("Comparacao oficial nao separou os inscritos sem correspondencia.")
+        raise RuntimeError("Comparação oficial não separou os inscritos sem correspondência.")
     if first_player_after_preview != first_player_before:
-        raise RuntimeError("Comparacao oficial persistiu dados antes da confirmacao.")
+        raise RuntimeError("Comparação oficial persistiu dados antes da confirmação.")
     if apply_result["updated"] != changed_count:
-        raise RuntimeError("Confirmacao oficial nao aplicou todas as divergencias selecionadas.")
+        raise RuntimeError("Confirmação oficial não aplicou todas as divergências selecionadas.")
     if first_player_after_apply.get("name") == first_player_before.get("name"):
-        raise RuntimeError("Confirmacao oficial nao atualizou o inscrito selecionado.")
+        raise RuntimeError("Confirmação oficial não atualizou o inscrito selecionado.")
     if db.list_rounds(tournament_id):
-        raise RuntimeError("Conferencia oficial gerou rodada antes da aprovacao do arbitro.")
+        raise RuntimeError("Conferência oficial gerou rodada antes da aprovação do árbitro.")
     return measurements
 
 
@@ -398,7 +398,7 @@ def simulate_locate_and_submit_table_result(temp_dir: Path, players_count: int) 
         pending_query=str(target_board),
     )
     if len(dashboard["pending_items"]) != 1:
-        raise RuntimeError("Busca no painel nao localizou exatamente a mesa esperada.")
+        raise RuntimeError("Busca no painel não localizou exatamente a mesa esperada.")
     target = dashboard["pending_items"][0]
     if int(target["board"]) != target_board:
         raise RuntimeError("Busca no painel retornou outra mesa.")
@@ -409,13 +409,13 @@ def simulate_locate_and_submit_table_result(temp_dir: Path, players_count: int) 
         pending_query=str(target_board),
     )
     if refreshed["pending_items"]:
-        raise RuntimeError("Mesa continuou pendente depois do lancamento inline.")
+        raise RuntimeError("Mesa continuou pendente depois do lançamento inline.")
     expected_pending = players_count // 2 - 1
     if int(refreshed["metrics"]["pending_results"]) != expected_pending:
-        raise RuntimeError("Painel nao atualizou a quantidade de mesas pendentes.")
+        raise RuntimeError("Painel não atualizou a quantidade de mesas pendentes.")
     elapsed_ms = (perf_counter() - started_at) * 1000
     return (
-        f"mesa {target_board} localizada fora do recorte inline, lancada e removida das pendencias",
+        f"mesa {target_board} localizada fora do recorte inline, lançada e removida das pendências",
         elapsed_ms,
     )
 
@@ -427,7 +427,7 @@ def run_scenario(players_count: int) -> Scenario:
         tournament_id = TournamentService(db).create_tournament(
             {
                 "name": f"Piloto operacional {players_count}",
-                "location": "Simulacao local",
+                "location": "Simulação local",
                 "rounds_count": "10",
                 "time_control": "15+10",
                 "bye_points": "1",
@@ -445,7 +445,7 @@ def run_scenario(players_count: int) -> Scenario:
         measurements.append(measurement)
 
         preview, measurement = timed(
-            "Pre-visualizar primeira rodada",
+            "Pré-visualizar primeira rodada",
             1_000,
             lambda: pairing_service.preview_next_round(tournament_id),
         )
@@ -461,7 +461,7 @@ def run_scenario(players_count: int) -> Scenario:
         measurements.append(measurement)
 
         dashboard, measurement = timed(
-            "Carregar painel do arbitro",
+            "Carregar painel do árbitro",
             500,
             lambda: pairing_service.arbitration_dashboard(tournament_id, pending_limit=50),
         )
@@ -482,7 +482,7 @@ def run_scenario(players_count: int) -> Scenario:
 
         scoresheets_path = temp_dir / "sumulas.pdf"
         _, measurement = timed(
-            "Exportar sumulas PDF",
+            "Exportar súmulas PDF",
             5_000,
             lambda: export_service.export_scoresheets(round_id, scoresheets_path),
         )
@@ -512,10 +512,10 @@ def run_scenario(players_count: int) -> Scenario:
         launch_average_ms = mean(launch_durations) if launch_durations else 0.0
         measurements.append(
             Measurement(
-                operation="Lancar resultado e recarregar painel",
+                operation="Lançar resultado e recarregar painel",
                 elapsed_ms=launch_average_ms,
                 limit_ms=250,
-                details=f"media de {len(launch_durations)} lancamentos",
+                details=f"media de {len(launch_durations)} lançamentos",
             )
         )
 
@@ -555,7 +555,7 @@ def run_scenario(players_count: int) -> Scenario:
         measurements.append(measurement)
 
         restore_details, measurement = timed(
-            "Restaurar backup em segunda instalacao",
+            "Restaurar backup em segunda instalação",
             5_000,
             lambda: restore_in_second_installation(
                 backup_path,
@@ -577,7 +577,7 @@ def run_scenario(players_count: int) -> Scenario:
         measurements.append(measurement)
 
         qr_details, measurement = timed(
-            "Simular envios QR simultaneos e aprovar",
+            "Simular envios QR simultâneos e aprovar",
             5_000,
             lambda: simulate_simultaneous_qr_submissions(temp_dir),
         )
@@ -587,7 +587,7 @@ def run_scenario(players_count: int) -> Scenario:
         late_details, late_elapsed_ms = simulate_last_minute_registration(temp_dir, players_count)
         measurements.append(
             Measurement(
-                operation="Cadastrar inscricao de ultima hora e atualizar previa",
+                operation="Cadastrar inscrição de última hora e atualizar prévia",
                 elapsed_ms=late_elapsed_ms,
                 limit_ms=2_000,
                 details=late_details,
@@ -601,7 +601,7 @@ def run_scenario(players_count: int) -> Scenario:
         panel_details, panel_elapsed_ms = simulate_locate_and_submit_table_result(temp_dir, players_count)
         measurements.append(
             Measurement(
-                operation="Localizar mesa e lancar resultado pelo painel",
+                operation="Localizar mesa e lançar resultado pelo painel",
                 elapsed_ms=panel_elapsed_ms,
                 limit_ms=1_000,
                 details=panel_details,
@@ -621,8 +621,8 @@ def markdown_report(scenarios: list[Scenario], generated_at: str) -> str:
         "",
         f"Gerado em: {generated_at}",
         "",
-        "Este relatorio executa o fluxo critico do arbitro em banco temporario.",
-        "Ele detecta regressoes locais de desempenho, mas nao substitui o teste",
+        "Este relatório executa o fluxo crítico do árbitro em banco temporário.",
+        "Ele detecta regressões locais de desempenho, mas não substitui o teste",
         "presencial com operadores, impressora e rede do evento.",
         "",
         "## Resultado Automatizado",
@@ -631,13 +631,13 @@ def markdown_report(scenarios: list[Scenario], generated_at: str) -> str:
     for scenario in scenarios:
         lines.extend(
             [
-                f"### Cenario com {scenario.players} jogadores",
+                f"### Cenário com {scenario.players} jogadores",
                 "",
                 f"Status geral: **{scenario.status}**",
                 "",
                 f"Mesas validas na primeira rodada: {scenario.boards}",
                 "",
-                "| Operacao | Tempo | Limite | Status | Detalhes |",
+                "| Operação | Tempo | Limite | Status | Detalhes |",
                 "|---|---:|---:|---|---|",
             ]
         )
@@ -649,30 +649,30 @@ def markdown_report(scenarios: list[Scenario], generated_at: str) -> str:
         lines.append("")
     lines.extend(
         [
-            "## Validacao Presencial Pendente",
+            "## Validação Presencial Pendente",
             "",
-            "Execute ao menos um ensaio com arbitro e auxiliar usando o",
+            "Execute ao menos um ensaio com árbitro e auxiliar usando o",
             "[manual operacional](Manual_Operacional_Arbitragem.pdf).",
             "",
-            "- [x] Cronometrar inscricao de ultima hora (automatizado).",
-            "- [ ] Repetir inscricao de ultima hora com operador no computador do evento.",
-            "- [x] Cronometrar correcao de rating oficial antes da rodada 1 (automatizado).",
-            "- [ ] Repetir correcao de rating oficial com operador antes do evento.",
+            "- [x] Cronometrar inscrição de última hora (automatizado).",
+            "- [ ] Repetir inscrição de última hora com operador no computador do evento.",
+            "- [x] Cronometrar correção de rating oficial antes da rodada 1 (automatizado).",
+            "- [ ] Repetir correção de rating oficial com operador antes do evento.",
             "- [ ] Confirmar legibilidade do mural impresso a distancia.",
-            "- [ ] Testar impressao de sumulas e cartoes na impressora do evento.",
-            "- [x] Medir tempo para localizar e lancar resultado de uma mesa (automatizado).",
-            "- [ ] Repetir localizacao e lancamento de mesa com arbitro no evento.",
-            "- [x] Simular envio QR simultaneo e aprovacao pelo arbitro (automatizado).",
-            "- [ ] Repetir envio QR simultaneo com celulares na rede local do evento.",
+            "- [ ] Testar impressão de súmulas e cartões na impressora do evento.",
+            "- [x] Medir tempo para localizar e lançar resultado de uma mesa (automatizado).",
+            "- [ ] Repetir localização e lançamento de mesa com árbitro no evento.",
+            "- [x] Simular envio QR simultâneo e aprovação pelo árbitro (automatizado).",
+            "- [ ] Repetir envio QR simultâneo com celulares na rede local do evento.",
             "- [x] Desligar a rede e confirmar continuidade local (automatizado).",
-            "- [ ] Repetir teste offline em computador fisico do evento.",
-            "- [x] Restaurar um backup em segunda instalacao temporaria (automatizado).",
-            "- [ ] Repetir restauracao em segundo computador fisico do evento.",
-            "- [ ] Registrar incidentes, cliques desnecessarios e trocas de tela.",
+            "- [ ] Repetir teste offline em computador físico do evento.",
+            "- [x] Restaurar um backup em segunda instalação temporária (automatizado).",
+            "- [ ] Repetir restauração em segundo computador físico do evento.",
+            "- [ ] Registrar incidentes, cliques desnecessários e trocas de tela.",
             "",
-            "## Criterio para Proxima Iteracao",
+            "## Critério para Próxima Iteração",
             "",
-            "Priorizar somente gargalos observados no piloto presencial ou operacoes",
+            "Priorizar somente gargalos observados no piloto presencial ou operações",
             "automatizadas marcadas como `REVISAR`.",
             "",
         ]
@@ -710,11 +710,11 @@ def write_reports(scenarios: list[Scenario], markdown_path: Path, json_path: Pat
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Executa o piloto operacional simulado do painel do arbitro.")
+    parser = argparse.ArgumentParser(description="Executa o piloto operacional simulado do painel do árbitro.")
     parser.add_argument("--players", nargs="+", type=int, default=[121, 801])
     parser.add_argument("--markdown", type=Path, default=DEFAULT_MARKDOWN_PATH)
     parser.add_argument("--json", type=Path, default=DEFAULT_JSON_PATH)
-    parser.add_argument("--strict", action="store_true", help="Retorna erro quando alguma medicao exceder o limite.")
+    parser.add_argument("--strict", action="store_true", help="Retorna erro quando alguma medição exceder o limite.")
     return parser.parse_args()
 
 

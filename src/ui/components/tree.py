@@ -1,6 +1,6 @@
 """Tabela temada — zebra, ordenação por cabeçalho e estado vazio (F5.5 / P3-9).
 
-``ThemedTreeview`` é o ``ttk.Treeview`` que o ``_make_tree`` do app instancia.
+``ThemedTreeview`` é o ``ttk.Treeview`` que o ``_make_tree`` do app instância.
 Tudo acontece por dentro do ``insert``/``delete``, então **nenhum dos ~57
 call-sites muda**:
 

@@ -14,8 +14,8 @@ from src.core.services import (
 from tests.fixtures import load_tournament_fixture
 from tests.support.core_service_base import CoreServiceTestCase
 
-# Fixtures de referencia do bbpPairings: a distribuicao NAO esta no repositorio
-# (ver .gitignore). Sem ela os testes que a usam sao pulados com motivo, em vez
+# Fixtures de referência do bbpPairings: a distribuição NÃO é no repositório
+# (ver .gitignore). Sem ela os testes que a usam são pulados com motivo, em vez
 # de falharem — e o que acontecia em qualquer maquina/CI sem o download.
 BBP_FIXTURE_DIR = Path(__file__).resolve().parents[1] / "bbpPairings-6.0.0" / "test" / "tests"
 BBP_DISPONIVEL = BBP_FIXTURE_DIR.is_dir()
@@ -183,15 +183,15 @@ class PairingRulesTest(CoreServiceTestCase):
         tournament_id = self.tournament_service.create_tournament(
             {"name": "Pareamento global", "rounds_count": "20", "bye_points": "1"}
         )
-        # Pares PERMITIDOS na proxima rodada; todos os demais ja foram jogados.
+        # Pares PERMITIDOS na próxima rodada; todos os demais já foram jogados.
         allowed_index = {(0, 1), (0, 2), (1, 3), (4, 5)}
         played_index = [
             (i, j) for i in range(6) for j in range(i + 1, 6) if (i, j) not in allowed_index
         ]
-        # Cada confronto ja jogado e um empate REAL (0.5 a cada) -- ao contrario
-        # de um W.O., que pela FIDE C.04.2 nao contaria como confronto. Compensamos
-        # com starting_points para que todos terminem no MESMO grupo de pontuacao,
-        # isolando a regra de nao-repeticao (matching global).
+        # Cada confronto já jogado e um empate REAL (0.5 a cada) -- ao contrário
+        # de um W.O., que pela FIDE C.04.2 não contaria como confronto. Compensamos
+        # com starting_points para que todos terminem no MESMO grupo de pontuação,
+        # isolando a regra de não-repeticao (matching global).
         degree = [0] * 6
         for i, j in played_index:
             degree[i] += 1
@@ -344,6 +344,7 @@ class PairingRulesTest(CoreServiceTestCase):
             first_pairing["id"],
             "white",
             replacement_player_id,
+            reason="Ajuste de teste (RGS-16: motivo obrigatorio)",
         )
 
         updated_pairings = self.db.get_pairings_for_round(round_data["id"])
@@ -594,8 +595,8 @@ class PairingRulesTest(CoreServiceTestCase):
         self.assertNotIn(player_ids[4], paired)
 
     def test_requested_bye_makes_odd_field_pairable_under_disable_bye(self) -> None:
-        # disable_bye + 5 ativos (impar): o bye solicitado deixa 4 a parear, par.
-        # A guarda de paridade deve incidir sobre to_pair, nao sobre todos.
+        # disable_bye + 5 ativos (ímpar): o bye solicitado deixa 4 a parear, par.
+        # A guarda de paridade deve incidir sobre to_pair, não sobre todos.
         self._enable_disable_bye()
         player_ids = self._create_players(5)
         self.db.add_requested_bye(self.tournament_id, player_ids[4], 1, "H")
@@ -609,7 +610,7 @@ class PairingRulesTest(CoreServiceTestCase):
         self.assertEqual(len([p for p in pairings if not p["is_bye"]]), 2)
 
     def test_disable_bye_still_blocks_odd_field_without_requested_bye(self) -> None:
-        # Sem bye solicitado, disable_bye + impar continua bloqueando.
+        # Sem bye solicitado, disable_bye + ímpar continua bloqueando.
         self._enable_disable_bye()
         self._create_players(5)
         with self.assertRaises(AppError):
@@ -619,18 +620,18 @@ class PairingRulesTest(CoreServiceTestCase):
         player_ids = self._create_players(4)
         self._set_individual_pairing_method("round_robin")
         self.db.add_requested_bye(self.tournament_id, player_ids[0], 1, "H")
-        with self.assertRaisesRegex(AppError, "exclusivos do sistema Suico"):
+        with self.assertRaisesRegex(AppError, "exclusivos do sistema Suíço"):
             self.service.generate_next_round(self.tournament_id)
 
     def test_requested_bye_rejected_in_knockout(self) -> None:
         player_ids = self._create_players(4)
         self._set_individual_pairing_method("knockout")
         self.db.add_requested_bye(self.tournament_id, player_ids[0], 1, "Z")
-        with self.assertRaisesRegex(AppError, "exclusivos do sistema Suico"):
+        with self.assertRaisesRegex(AppError, "exclusivos do sistema Suíço"):
             self.service.generate_next_round(self.tournament_id)
 
     def test_round_robin_still_generates_without_requested_bye(self) -> None:
-        # Regressao: sem bye solicitado, round-robin continua gerando normalmente.
+        # Regressão: sem bye solicitado, round-robin continua gerando normalmente.
         self._create_players(4)
         self._set_individual_pairing_method("round_robin")
         round_data = self.service.generate_next_round(self.tournament_id)
@@ -669,10 +670,10 @@ class PairingRulesTest(CoreServiceTestCase):
 
         standings = calculate_player_standings(tournament, players, closed)
 
-        # Ordem por pontos (P1>P2>P3>P4) e a sequencia padrao (sem config) e usada.
+        # Ordem por pontos (P1>P2>P3>P4) e a sequência padrão (sem config) e usada.
         self.assertEqual([s["player_id"] for s in standings], [ids[0], ids[1], ids[2], ids[3]])
         self.assertEqual(standings[0]["tiebreak_order"], DEFAULT_PLAYER_TIEBREAKS)
-        # Componentes historicos seguem presentes (compat. com exportacoes).
+        # Componentes históricos seguem presentes (compat. com exportações).
         self.assertLessEqual(
             {"buchholz", "buchholz_median", "sonneborn_berger", "direct_encounter", "wins", "performance"},
             set(standings[0]["tiebreak_components"].keys()),
@@ -718,9 +719,9 @@ class PairingRulesTest(CoreServiceTestCase):
             leader = next(s for s in standings if s["player_id"] == ids[0])
             return leader["tiebreak_values"]["buchholz_cut1"]
 
-        # Adversarios Y e Z terminam com 0 pts. "real" ignora o bye → descarta um 0 → 0.0.
+        # Adversários Y e Z terminam com 0 pts. "real" ignora o bye → descarta um 0 → 0.0.
         self.assertEqual(cut1("real"), 0.0)
-        # "self" injeta a propria pontuacao do jogador (3.0) para a rodada de bye.
+        # "self" injeta a própria pontuação do jogador (3.0) para a rodada de bye.
         self.assertEqual(cut1("self"), 3.0)
 
     def test_tiebreak_sequence_changes_final_order(self) -> None:
@@ -730,11 +731,11 @@ class PairingRulesTest(CoreServiceTestCase):
         tournament = self.db.get_tournament(self.tournament_id)
         players = self.db.list_players(self.tournament_id, active_only=False)
         closed = [
-            # A: 2 vitorias de brancas e 1 derrota → 2 pts, 2 vitorias, 0 partidas de pretas.
+            # A: 2 vitórias de brancas e 1 derrota → 2 pts, 2 vitórias, 0 partidas de pretas.
             {"white_player_id": ids[0], "black_player_id": ids[2], "result": "1-0", "is_bye": 0, "round_number": 1},
             {"white_player_id": ids[0], "black_player_id": ids[3], "result": "1-0", "is_bye": 0, "round_number": 2},
             {"white_player_id": ids[0], "black_player_id": ids[4], "result": "0-1", "is_bye": 0, "round_number": 3},
-            # B: vitoria de pretas + 2 empates de pretas → 2 pts, 1 vitoria, 3 partidas de pretas.
+            # B: vitória de pretas + 2 empates de pretas → 2 pts, 1 vitória, 3 partidas de pretas.
             {"white_player_id": ids[5], "black_player_id": ids[1], "result": "0-1", "is_bye": 0, "round_number": 1},
             {"white_player_id": ids[6], "black_player_id": ids[1], "result": "1/2-1/2", "is_bye": 0, "round_number": 2},
             {"white_player_id": ids[7], "black_player_id": ids[1], "result": "1/2-1/2", "is_bye": 0, "round_number": 3},
@@ -744,7 +745,7 @@ class PairingRulesTest(CoreServiceTestCase):
             standings = calculate_player_standings(tournament, players, closed, sequence=sequence)
             return next(s["position"] for s in standings if s["player_id"] == player_id)
 
-        # Empatados em pontos (2.0). Por vitorias, A (2) fica a frente de B (1).
+        # Empatados em pontos (2.0). Por vitórias, A (2) fica a frente de B (1).
         self.assertLess(position_of(ids[0], [{"code": "wins"}]), position_of(ids[1], [{"code": "wins"}]))
         # Por partidas com pretas, B (3) fica a frente de A (0) — ordem invertida.
         self.assertLess(position_of(ids[1], [{"code": "black_games"}]), position_of(ids[0], [{"code": "black_games"}]))
@@ -764,7 +765,7 @@ class PairingRulesTest(CoreServiceTestCase):
             self.service.update_result(self.tournament_id, int(pairing["id"]), "1-0")
         self.service.close_round(self.tournament_id, round_id)
 
-        # A sequencia gravada chega ate o calculo da classificacao.
+        # A sequência gravada chega até o cálculo da classificação.
         standings = self.service.standings(self.tournament_id)
         self.assertEqual(standings[0]["tiebreak_order"], ["direct_encounter", "cumulative", "wins"])
         settings = self.db.get_tournament_settings(self.tournament_id)
@@ -777,7 +778,7 @@ class PairingRulesTest(CoreServiceTestCase):
             {"tiebreak_sequence": [{"code": "points"}, {"code": "buchholz"}, {"code": "xxx"}, {"code": "buchholz"}]}
         )
 
-        # 'points' (implicito), criterio desconhecido e duplicata sao descartados.
+        # 'points' (implícito), critério desconhecido e duplicata são descartados.
         self.assertEqual(payload["tiebreak_sequence"], serialize_tiebreak_sequence([{"code": "buchholz", "params": {}}]))
         self.assertEqual(payload["team_tiebreak_sequence"], "[]")
 
@@ -787,17 +788,17 @@ class PairingRulesTest(CoreServiceTestCase):
         rows = build_fide_report_rows(
             [self._fide_player(1, 2000), self._fide_player(2, 1800)],
             [
-                {"white_player_id": 1, "black_player_id": 2, "result": "1F-0F", "is_bye": 0},  # WO: nao conta
-                {"white_player_id": 1, "black_player_id": None, "result": "BYE", "is_bye": 1},  # bye: nao conta
+                {"white_player_id": 1, "black_player_id": 2, "result": "1F-0F", "is_bye": 0},  # WO: não conta
+                {"white_player_id": 1, "black_player_id": None, "result": "BYE", "is_bye": 1},  # bye: não conta
             ],
             "fide",
         )
-        # Nenhuma partida valida para rating → ninguem entra no relatorio.
+        # Nenhuma partida valida para rating → ninguém entra no relatório.
         self.assertEqual(rows, [])
 
     def test_scheveningen_requires_even_field(self) -> None:
-        # A regra migrou para a montagem da ESCALA (PAR-03), que e onde os grupos
-        # passaram a ser decididos — uma vez, e nao a cada rodada.
+        # A regra migrou para a montagem da ESCALA (PAR-03), que é onde os grupos
+        # passaram a ser decididos — uma vez, e não a cada rodada.
         from src.services.pairing.scheveningen import assign_scale
 
         with self.assertRaisesRegex(AppError, "par"):
@@ -830,7 +831,7 @@ class PairingRulesTest(CoreServiceTestCase):
 
     def test_scheveningen_uses_manual_groups(self) -> None:
         ids = self._create_players(4)  # ratings 2000,1950,1900,1850
-        # Grupos manuais que NAO sao as metades por ranking: A = mais forte + mais fraco.
+        # Grupos manuais que NÃO são as metades por ranking: A = mais forte + mais fraco.
         self.db.set_player_scheveningen_group(ids[0], "A")
         self.db.set_player_scheveningen_group(ids[3], "A")
         self.db.set_player_scheveningen_group(ids[1], "B")
@@ -856,7 +857,7 @@ class PairingRulesTest(CoreServiceTestCase):
     def test_scheveningen_manual_groups_must_match_size(self) -> None:
         from src.services.pairing.scheveningen import assign_scale
 
-        with self.assertRaisesRegex(AppError, "mesmo numero"):
+        with self.assertRaisesRegex(AppError, "mesmo número"):
             assign_scale([1, 2, 3], {1: "A", 2: "A", 3: "B"})
 
     def test_classic_acceleration_bonus_boundaries(self) -> None:
@@ -935,7 +936,7 @@ class PairingRulesTest(CoreServiceTestCase):
             self.tournament_id,
             {"initial_order": "national_rating", "acceleration_method": "accelerated"},
         )
-        # (rotulo, national, rating): national desc = A..H; rating desc = A,B,E,F,C,D,G,H.
+        # (rótulo, national, rating): national desc = A..H; rating desc = A,B,E,F,C,D,G,H.
         specs = [
             ("A", 2400, 1080),
             ("B", 2300, 1070),
@@ -973,11 +974,11 @@ class PairingRulesTest(CoreServiceTestCase):
         self.assertNotIn(frozenset({ids["A"], ids["E"]}), pairs)
 
     def test_swiss_avoids_avoidable_opponent_repeat(self) -> None:
-        # Regressao confirmada contra o JaVaFo (motor FIDE oficial): com 14
+        # Regressão confirmada contra o JaVaFo (motor FIDE oficial): com 14
         # jogadores e o favorito vencendo, na R6 o pareamento guloso por bracket
-        # repetia um par do fundo (J13xJ14, ja jogados na R3) mesmo existindo um
-        # pareamento sem repeticao. A salvaguarda global deve elimina-la
-        # (regra FIDE C.04.1.b: nao repetir adversario).
+        # repetia um par do fundo (J13xJ14, já jogados na R3) mesmo existindo um
+        # pareamento sem repetição. A salvaguarda global deve eliminá-la
+        # (regra FIDE C.04.1.b: não repetir adversário).
         tid = self.db.create_tournament("Anti-repeticao", rounds_count=7)
         rating_by_id = {}
         for i in range(14):
@@ -1006,9 +1007,9 @@ class PairingRulesTest(CoreServiceTestCase):
         self.assertEqual(repeats, [], f"repeticao de adversario evitavel na R6: {repeats}")
 
     def test_swiss_avoids_avoidable_hard_color_violations_in_bottom_boards(self) -> None:
-        # Regressao comparada contra o JaVaFo/Swiss-Manager: com 10 jogadores e
-        # favoritos vencendo, a R5 antiga mantinha grupos de pontuacao no fundo
-        # mas dava saldo de cor +/-3 e terceira cor igual evitaveis.
+        # Regressão comparada contra o JaVaFo/Swiss-Manager: com 10 jogadores e
+        # favoritos vencendo, a R5 antiga mantinha grupos de pontuação no fundo
+        # mas dava saldo de cor +/-3 e terceira cor igual evitáveis.
         tid = self.db.create_tournament("Cores no fundo", rounds_count=7)
         rating_by_id = {
             self.db.create_player(tid, name=f"J{i + 1:02d}", rating=2400 - i * 10): 2400 - i * 10
@@ -1034,9 +1035,9 @@ class PairingRulesTest(CoreServiceTestCase):
         self.assertEqual([], violations)
 
     def test_swiss_avoids_avoidable_color_third_repeat_after_many_floats(self) -> None:
-        # Mesmo padrao em campo maior: na R6 de 14 jogadores, o fundo da tabela
+        # Mesmo padrão em campo maior: na R6 de 14 jogadores, o fundo da tabela
         # antigo podia produzir terceira cor igual apesar de haver pareamento
-        # global sem essa violacao.
+        # global sem essa violação.
         tid = self.db.create_tournament("Cores apos floats", rounds_count=7)
         rating_by_id = {
             self.db.create_player(tid, name=f"J{i + 1:02d}", rating=2400 - i * 10): 2400 - i * 10
@@ -1062,7 +1063,7 @@ class PairingRulesTest(CoreServiceTestCase):
         self.assertEqual([], violations)
 
     def test_swiss_bye_tiebreak_avoids_avoidable_color_violation(self) -> None:
-        # Regressao achada por stress: com 7 jogadores, a escolha padrao do bye
+        # Regressão achada por stress: com 7 jogadores, a escolha padrão do bye
         # entre jogadores empatados no menor score deixava o restante sem
         # pareamento de cor limpo. O desempate deve considerar a qualidade do
         # pareamento restante sem dar bye a jogador de score superior.
@@ -1070,12 +1071,23 @@ class PairingRulesTest(CoreServiceTestCase):
         for index, rating in enumerate([2402, 2391, 2383, 2377, 2371, 2365, 2359], start=1):
             self.db.create_player(tid, name=f"J{index:02d}", rating=rating)
 
+        # RGS-18: desde a cor E.4/E.5 (empate de preferências não vai mais ao
+        # maior rating) o histórico deste torneio muda, e na R6 o ÚNICO
+        # pareamento limpo da o PAB ao líder (4,5 pontos) — o holandês faria
+        # isso descendo o líder até o ultimo grupo; o motor reserva, por
+        # contrato, só da o bye a quem tem a menor pontuação. A regressão
+        # guardada aqui e a do DESEMPATE do bye: havendo pareamento limpo com o
+        # bye no grupo de menor pontuação, o motor tem de achá-lo.
+        evitaveis = 0
         for round_number in range(1, 8):
             histories = self.service._color_histories(tid)
+            avoidable = self._clean_pairing_with_lowest_bye_exists(tid, histories)
             rd = self.service.generate_next_round(tid)
             pairings = self.db.get_pairings_for_round(int(rd["id"]))
             violations = self._hard_color_violations(pairings, histories)
-            self.assertEqual([], violations, f"violacao evitavel na rodada {round_number}: {violations}")
+            if avoidable:
+                evitaveis += 1
+                self.assertEqual([], violations, f"violacao evitavel na rodada {round_number}: {violations}")
 
             for pairing in pairings:
                 if pairing.get("is_bye"):
@@ -1085,6 +1097,47 @@ class PairingRulesTest(CoreServiceTestCase):
                 ]
                 self.service.update_result(tid, int(pairing["id"]), result)
             self.service.close_round(tid, int(rd["id"]))
+        self.assertGreaterEqual(evitaveis, 5)
+
+    def _clean_pairing_with_lowest_bye_exists(
+        self, tid: int, histories: dict[int, list[str]]
+    ) -> bool:
+        """Existe pareamento sem violação dura de cor nem revanche, com o PAB
+        para alguém da menor pontuação (entre quem ainda pode recebê-lo)?"""
+        from src.services.pairing.constraints import is_color_valid_fide
+
+        points = {int(item["player_id"]): float(item["points"]) for item in self.service._standings(tid)}
+        played = self.service._played_pairs(tid)
+        byes = self.service._bye_player_ids(tid)
+        ids = sorted(points)
+
+        def pode(a: int, b: int) -> bool:
+            if frozenset((a, b)) in played:
+                return False
+            return (
+                is_color_valid_fide(a, "W", histories) and is_color_valid_fide(b, "B", histories)
+            ) or (
+                is_color_valid_fide(a, "B", histories) and is_color_valid_fide(b, "W", histories)
+            )
+
+        def fecha(resto: list[int]) -> bool:
+            if not resto:
+                return True
+            primeiro = resto[0]
+            return any(
+                pode(primeiro, outro) and fecha([x for x in resto[1:] if x != outro])
+                for outro in resto[1:]
+            )
+
+        if len(ids) % 2 == 0:
+            return fecha(ids)
+        candidatos = [pid for pid in ids if pid not in byes] or ids
+        menor = min(points[pid] for pid in candidatos)
+        return any(
+            fecha([pid for pid in ids if pid != bye])
+            for bye in candidatos
+            if points[bye] == menor
+        )
 
     @unittest.skipUnless(BBP_DISPONIVEL, BBP_MOTIVO)
     def test_bbp_dutch_2025_c5_fixture_matches_reference(self) -> None:
@@ -1110,10 +1163,10 @@ class PairingRulesTest(CoreServiceTestCase):
         self.assertNotEqual(summary["pairs"], self._bbp_expected_pairs("issue_7"))
 
     def test_swiss_global_swap_reduces_hard_color_violations_above_exhaustive_limit(self) -> None:
-        # Acima de 16 jogadores nao usamos otimo global completo; a salvaguarda
+        # Acima de 16 jogadores não usamos ótimo global completo; a salvaguarda
         # gulosa + trocas locais precisa cobrir casos grandes em que uma troca
-        # 2-a-2 ainda nao basta. Este cenario de 46 jogadores exigiu remalha de
-        # 4 mesas para eliminar a violacao restante no fundo.
+        # 2-a-2 ainda não basta. Este cenário de 46 jogadores exigiu remalha de
+        # 4 mesas para eliminar a violação restante no fundo.
         tid = self.db.create_tournament("Cores campo grande", rounds_count=7)
         rating_by_id = {
             self.db.create_player(tid, name=f"J{i + 1:02d}", rating=2400 - i * 10): 2400 - i * 10
@@ -1327,12 +1380,12 @@ class PairingRulesTest(CoreServiceTestCase):
                 msg=f"250 indevido para {method}",
             )
 
-    def test_baku_does_not_apply_bonus_or_emit_250(self) -> None:
+    def test_baku_emits_250_and_suffix(self) -> None:
+        """RGS-30: Baku (FIDE C.04.7) sai no 250 e no 192; ver test_rgs30_baku."""
         from src.services.federation_exporters import TRF25Exporter
-        from src.services.federation_exporters.trf25 import BAKU_NOT_IMPLEMENTED
         from src.services.pairing import accelerated_standings
 
-        # Motor: Baku não soma bônus (sem fórmula oficial).
+        # O bônus fixo não vale para Baku: o VP vem do plano da rodada.
         standings = {pid: {"points": 0.0} for pid in range(1, 5)}
         self.assertIs(accelerated_standings(standings, [1, 2, 3, 4], 2, "baku"), standings)
 
@@ -1342,12 +1395,10 @@ class PairingRulesTest(CoreServiceTestCase):
         output_path = Path(self.temp_dir.name) / "baku.trf"
         warnings = exporter.export(self.tournament_id, output_path)
         lines = output_path.read_text(encoding="utf-8").splitlines()
-        # Nenhum 250 e nenhum sufixo _BAKU no registro 192.
-        self.assertFalse([line for line in lines if line.startswith("250 ")])
+        self.assertTrue([line for line in lines if line.startswith("250 ")])
         type_line = next(line for line in lines if line.startswith("192 "))
-        self.assertNotIn("_BAKU", type_line)
-        # Aviso ao árbitro de que Baku não está implementado.
-        self.assertIn(BAKU_NOT_IMPLEMENTED, warnings)
+        self.assertTrue(type_line.rstrip().endswith("_BAKU"))
+        self.assertFalse([warning for warning in warnings if "Baku" in warning])
 
     def test_scoresheets_pdf_skips_bye_and_includes_player_data(self) -> None:
         self.db.create_player(

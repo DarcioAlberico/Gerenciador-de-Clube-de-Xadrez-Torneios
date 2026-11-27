@@ -49,8 +49,16 @@ PRIZE_TIE_SPLITS = {
 AUTO_KINDS = {"overall", "category"}
 MANUAL_KINDS = {"special", "board"}
 
-# Status que não concorrem quando o edital exclui desistentes.
-WITHDRAWN_STATUSES = {"withdrawn", "desistente", "absent", "ausente", "expelled"}
+# Status que não concorrem quando o edital exclui desistentes: só a saída
+# DEFINITIVA (desistência) e a expulsão (RGS-35). Avaliado no fim do torneio,
+# com o status que o jogador tem quando a premiação é calculada.
+WITHDRAWN_STATUSES = {"withdrawn", "desistente", "expelled", "expulso"}
+
+# Status que tiram o jogador do pareamento mas NÃO da premiação: "ausente" é
+# quem faltou (glossário, seção 7), não quem desistiu. Como o banco grava
+# `active = 0` para todo status diferente de "active", a bandeira sozinha não
+# separa os dois — por isso estes status decidem antes dela.
+COMPETING_OUT_STATUSES = {"absent", "ausente", "inactive"}
 
 
 def _norm_category(value: Any) -> str:
@@ -81,6 +89,8 @@ def is_withdrawn(row: Mapping[str, Any]) -> bool:
     status = str(row.get("player_status") or "").strip().casefold()
     if status in WITHDRAWN_STATUSES:
         return True
+    if status in COMPETING_OUT_STATUSES:
+        return False
     return not int(row.get("active", 1) or 0)
 
 

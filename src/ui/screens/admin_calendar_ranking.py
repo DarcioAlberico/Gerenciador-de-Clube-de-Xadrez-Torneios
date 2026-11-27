@@ -4,7 +4,7 @@ from ..support import *
 from ..components import Dialog, FormStack, WrapRow, actions_bar, danger_button, debounce
 
 
-# Sub-mixin de Admin: calendario, ranking interno e comunicacoes.
+# Sub-mixin de Admin: calendário, ranking interno e comunicações.
 class CalendarRankingMixin:
     def show_calendar(self) -> None:
         self._clear_content()
@@ -65,9 +65,9 @@ class CalendarRankingMixin:
         right_panel.grid_columnconfigure(0, weight=1)
         right_panel.grid_rowconfigure(1, weight=1)
 
-        # Faixa que quebra em quantas linhas couberem (continuacao da B-8): numa
+        # Faixa que quebra em quantas linhas couberem (continuação da B-8): numa
         # linha so, busca + 2 datas + status + Filtrar exigiam 1.368px de janela
-        # (medido, com a barra completa) para nao empurrar botao para fora.
+        # (medido, com a barra completa) para não empurrar botão para fora.
         controls = WrapRow(right_panel)
         controls.grid(row=0, column=0, sticky="ew", pady=(0, 8))
         search_entry = controls.add(
@@ -133,7 +133,7 @@ class CalendarRankingMixin:
                 values.append(label)
                 club_option_map[label] = int(club["id"])
             if not values:
-                values = ["1 - Clube padrao (Clube)"]
+                values = ["1 - Clube padrão (Clube)"]
                 club_option_map[values[0]] = 1
             club_option.configure(values=values)
             chosen = next(
@@ -162,6 +162,7 @@ class CalendarRankingMixin:
             tournament_option.set(chosen)
 
         def event_payload() -> dict[str, Any]:
+            self._refuse_invalid_dates(entries)
             return {
                 "club_id": club_option_map.get(club_option.get(), 1),
                 "tournament_id": tournament_option_map.get(tournament_option.get()),
@@ -316,7 +317,7 @@ class CalendarRankingMixin:
         club_option_map: dict[str, int | None] = {"Todos clubes": None}
         class_option_map: dict[str, int | None] = {"Todas turmas": None}
 
-        # Sete filtros numa linha rigida exigiam 1.416px de janela — era esta a
+        # Sete filtros numa linha rígida exigiam 1.416px de janela — era esta a
         # tela que definia o limiar da sidebar depois da B-8, e o limiar era
         # exatamente 1.416. Agora a faixa quebra (ver components/wrap_row.py).
         toolbar = WrapRow(panel)
@@ -520,7 +521,7 @@ class CalendarRankingMixin:
                     raise AppError("Selecione um membro.")
                 history = self.internal_rating_service.member_rating_history(member_id)
                 if not history:
-                    self._show_warning("Este membro ainda nao possui histórico de rating interno.")
+                    self._show_warning("Este membro ainda não possui histórico de rating interno.")
                     return
                 lines = []
                 for item in history:
@@ -552,18 +553,22 @@ class CalendarRankingMixin:
                 if not self.current_tournament_id:
                     raise AppError("Selecione um torneio antes de atualizar o rating interno.")
                 tournament_id = int(self.current_tournament_id)
+                if not self.free_mode_confirm_internal_rating(tournament_id):
+                    return
 
                 def show_result(result: dict[str, Any]) -> None:
                     self._show_info(
                         "Ratings internos atualizados: {updated}\n"
-                        "Ja aplicados anteriormente: {duplicates}\n"
+                        "Já aplicados anteriormente: {duplicates}\n"
                         "Sem performance suficiente: {skipped}\n"
                         "Convidados externos ignorados: {external}".format(**result)
                     )
                     load_ranking()
 
                 self._run_background(
-                    lambda: self.internal_rating_service.apply_tournament_ratings(tournament_id),
+                    lambda: self.internal_rating_service.apply_tournament_ratings(
+                        tournament_id, friendly_confirmed=True
+                    ),
                     show_result,
                     "Atualizando rating interno...",
                 )
@@ -600,7 +605,7 @@ class CalendarRankingMixin:
                         start_date=start_filter.get(),
                         end_date=end_filter.get(),
                     ),
-                    lambda _result: self._show_info(f"Relatorio exportado:\n{path}"),
+                    lambda _result: self._show_info(f"Relatório exportado:\n{path}"),
                     "Exportando ranking interno...",
                 )
             except Exception as exc:
@@ -630,8 +635,8 @@ class CalendarRankingMixin:
             except Exception as exc:
                 self._show_error(exc)
 
-        # As acoes ficam numa faixa propria, tambem quebravel: cinco botoes numa
-        # linha rigida sao os proximos a sair da janela depois dos filtros.
+        # As ações ficam numa faixa própria, também quebravel: cinco botões numa
+        # linha rígida são os próximos a sair da janela depois dos filtros.
         actions = WrapRow(panel)
         actions.grid(row=1, column=0, padx=12, pady=(0, 12), sticky="ew")
         for texto, comando, largura in (

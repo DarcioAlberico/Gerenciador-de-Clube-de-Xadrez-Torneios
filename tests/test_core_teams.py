@@ -159,7 +159,7 @@ class TeamTournamentsTest(CoreServiceTestCase):
 
         self.service.generate_next_round(tournament_id)
 
-        with self.assertRaisesRegex(AppError, "preservar o historico"):
+        with self.assertRaisesRegex(AppError, "preservar o histórico"):
             self.team_service.delete_team(team_ids[0])
 
         self.assertIsNotNone(self.db.get_team(team_ids[0]))
@@ -294,7 +294,7 @@ class TeamTournamentsTest(CoreServiceTestCase):
             }
         )
 
-        with self.assertRaisesRegex(AppError, "substituicoes"):
+        with self.assertRaisesRegex(AppError, "substituições"):
             self.tournament_service.save_profile(
                 tournament_id,
                 {
@@ -323,7 +323,7 @@ class TeamTournamentsTest(CoreServiceTestCase):
             }
         )
 
-        with self.assertRaisesRegex(AppError, "criterios diferentes"):
+        with self.assertRaisesRegex(AppError, "critérios diferentes"):
             self.tournament_service.save_profile(
                 tournament_id,
                 {
@@ -560,7 +560,7 @@ class TeamTournamentsTest(CoreServiceTestCase):
         team_player_ids = {int(item["player_id"]) for item in self.db.list_team_players(team_ids[0], active_only=True)}
         color = "white" if int(board["white_player_id"]) in team_player_ids else "black"
 
-        with self.assertRaisesRegex(AppError, "correcao formal"):
+        with self.assertRaisesRegex(AppError, "correção formal"):
             self.service.adjust_team_board_player(
                 tournament_id,
                 int(round_data["id"]),
@@ -632,7 +632,7 @@ class TeamTournamentsTest(CoreServiceTestCase):
         team_lines = [line for line in lines if line.startswith("013 ")]
 
         self.assertIn("082 2", content)
-        # 092 no vocabulario das federacoes (FED-03), e nao no texto proprietario.
+        # 092 no vocabulário das federações (FED-03), e não no texto proprietário.
         self.assertIn("092 Team: Swiss-System", content)
         self.assertEqual(len(player_lines), 4)
         self.assertEqual(len(team_lines), 2)
@@ -768,7 +768,7 @@ class TeamTournamentsTest(CoreServiceTestCase):
         a_board1, a_board2 = roster(team_a)
         b_board1, b_board2 = roster(team_b)
 
-        # Cores: tab.1 (impar) branco=A/preto=B; tab.2 (par) branco=B/preto=A.
+        # Cores: tab.1 (ímpar) branco=A/preto=B; tab.2 (par) branco=B/preto=A.
         # Equipe A escala invertida (tab.1 com o jogador do tab.2 e vice-versa);
         # equipe B mantém a ordem do roster.
         round_id = self.db.create_round_with_team_matches(
@@ -958,7 +958,7 @@ class TeamTournamentsTest(CoreServiceTestCase):
         exporter.export(tournament_id, output_path)
         lines = output_path.read_text(encoding="utf-8").splitlines()
 
-        # Bye solicitado nao e pairing-allocated: nenhum registro 320.
+        # Bye solicitado não é pairing-allocated: nenhum registro 320.
         self.assertEqual([line for line in lines if line.startswith("320 ")], [])
         # Sai como 240 (tipo Z).
         self.assertTrue(any(line.startswith("240 ") and line[4:5] == "Z" for line in lines))
@@ -978,10 +978,10 @@ class TeamTournamentsTest(CoreServiceTestCase):
         exporter.export(tournament_id, output_path)
         lines = output_path.read_text(encoding="utf-8").splitlines()
 
-        # Bye alocado pelo pareamento: ha um 320 (PAB) e nenhum 240 (nada solicitado).
+        # Bye alocado pelo pareamento: há um 320 (PAB) e nenhum 240 (nada solicitado).
         self.assertEqual(len([line for line in lines if line.startswith("320 ")]), 1)
         self.assertFalse(any(line.startswith("240 ") for line in lines))
-        # O 802 do bye alocado usa o codigo PAB.
+        # O 802 do bye alocado usa o código PAB.
         self.assertTrue(any(line.startswith("802 ") and "PAB" in line for line in lines))
 
     def test_fide_statistics_reject_team_tournaments(self) -> None:
@@ -1006,16 +1006,16 @@ class TeamTournamentsTest(CoreServiceTestCase):
                 {"team_standing_primary": primary, "team_standing_secondary": secondary},
             )
 
-        # Padrao: match points primario, game points secundario.
+        # Padrão: match points primário, game points secundário.
         self.assertEqual(code("match_points", "game_points"), "FIDE_TEAM_TYPEA_MP_GP")
         # Ordem invertida.
         self.assertEqual(code("game_points", "match_points"), "FIDE_TEAM_TYPEA_GP_MP")
-        # 'wins' e desempate, nao codigo de pontuacao: e ignorado.
+        # 'wins' e desempate, não código de pontuação: e ignorado.
         self.assertEqual(code("match_points", "wins"), "FIDE_TEAM_TYPEA_MP")
         self.assertEqual(code("wins", "game_points"), "FIDE_TEAM_TYPEA_GP")
-        # Criterios repetidos deduplicam.
+        # Critérios repetidos deduplicam.
         self.assertEqual(code("match_points", "match_points"), "FIDE_TEAM_TYPEA_MP")
-        # Sem MP/GP configurado, cai no padrao FIDE MP_GP.
+        # Sem MP/GP configurado, cai no padrão FIDE MP_GP.
         self.assertEqual(code("wins", "wins"), "FIDE_TEAM_TYPEA_MP_GP")
 
     def test_team_tournament_exports_reports_and_site(self) -> None:

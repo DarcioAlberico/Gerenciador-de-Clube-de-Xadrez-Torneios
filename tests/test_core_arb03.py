@@ -53,10 +53,10 @@ class CatalogoTest(unittest.TestCase):
 
     def test_o_rotulo_traz_o_artigo(self) -> None:
         self.assertEqual(
-            "Telefone celular / dispositivo eletronico (art. 11.3.2)",
+            "Telefone celular / dispositivo eletrônico (art. 11.3.2)",
             infraction_label("mobile_phone"),
         )
-        self.assertEqual("Outro (descrever nas observacoes)", infraction_label("other"))
+        self.assertEqual("Outro (descrever nas observações)", infraction_label("other"))
 
     def test_infracao_desconhecida_devolve_o_proprio_codigo(self) -> None:
         self.assertEqual("inventada", infraction_label("inventada"))
@@ -79,13 +79,13 @@ class CatalogoTest(unittest.TestCase):
         self.assertIn("Lance ilegal (art. 7.5)", linha)
         self.assertIn("R3", linha)
         self.assertIn("mesa 5", linha)
-        self.assertIn("Advertencia", linha)
+        self.assertIn("Advertência", linha)
 
     def test_partida_perdida_e_W_O_e_nao_decisao_do_arbitro(self) -> None:
-        """Quem perde por regulamento NAO JOGOU a partida aos olhos da FIDE.
+        """Quem perde por regulamento NÃO JOGOU a partida aos olhos da FIDE.
 
-        Por isso `1F-0F`, e nao o `1U-0U` da ARB-02: o adversario nao ganha uma
-        vitoria no tabuleiro nem a partida entra no rating.
+        Por isso `1F-0F`, e não o `1U-0U` da ARB-02: o adversário não ganha uma
+        vitória no tabuleiro nem a partida entra no rating.
         """
         self.assertEqual("0F-1F", forfeit_result(is_white=True))
         self.assertEqual("1F-0F", forfeit_result(is_white=False))
@@ -96,15 +96,15 @@ class ValidacaoTest(unittest.TestCase):
         self.assertEqual("", _erro())
 
     def test_infracao_e_decisao_precisam_existir(self) -> None:
-        self.assertIn("Infracao invalida", _erro(infraction="ferias"))
-        self.assertIn("Decisao invalida", _erro(decision="tapa"))
+        self.assertIn("Infração inválida", _erro(infraction="ferias"))
+        self.assertIn("Decisão inválida", _erro(decision="tapa"))
 
     def test_jogador_e_obrigatorio(self) -> None:
         self.assertIn("Informe o jogador", _erro(player_id=None))
 
     def test_outro_exige_descricao(self) -> None:
         """E ela que a ata cita no lugar do artigo."""
-        self.assertIn("exige descricao", _erro(infraction="other"))
+        self.assertIn("exige descrição", _erro(infraction="other"))
         self.assertEqual("", _erro(infraction="other", notes="conversa no salao"))
 
     def test_partida_perdida_exige_mesa(self) -> None:
@@ -236,7 +236,7 @@ class IncidenteNoServicoTest(CoreServiceTestCase):
 
         with self.assertRaises(AppError) as contexto:
             self.service.close_round(self.tournament_id, int(self.round_data["id"]))
-        self.assertIn("pendencia", str(contexto.exception).lower())
+        self.assertIn("pendência", str(contexto.exception).lower())
 
     def test_registrada_a_decisao_a_rodada_fecha(self) -> None:
         evento_id = self._registrar_queda_de_seta()
@@ -295,7 +295,7 @@ class IncidenteNoServicoTest(CoreServiceTestCase):
         outro = self.tournament_service.create_tournament(
             {"name": "Outro", "rounds_count": "3", "bye_points": "1"}
         )
-        with self.assertRaisesRegex(AppError, "Jogador nao encontrado"):
+        with self.assertRaisesRegex(AppError, "Jogador não encontrado"):
             self.service.register_incident(
                 outro,
                 player_id=self.player_ids[0],
@@ -333,7 +333,7 @@ class IncidenteNoServicoTest(CoreServiceTestCase):
 
     def test_o_rotulo_da_decisao_sai_por_extenso(self) -> None:
         self.assertEqual("Partida perdida", decision_label(DECISION_LOSS))
-        self.assertEqual("Deducao de pontos", decision_label(DECISION_DEDUCTION))
+        self.assertEqual("Dedução de pontos", decision_label(DECISION_DEDUCTION))
 
 
 if __name__ == "__main__":

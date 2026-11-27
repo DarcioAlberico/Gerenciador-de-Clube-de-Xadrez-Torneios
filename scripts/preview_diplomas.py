@@ -1,12 +1,12 @@
-"""Gera um PDF de amostra com os 3 presets de diploma (premiacao + participacao).
+"""Gera um PDF de amostra com os 3 presets de diploma (premiação + participação).
 
 Ferramenta de desenvolvimento: exercita o pacote ``src.services.certificates``
 de ponta a ponta no backend ReportLab, sem tocar no banco. Uso::
 
     python scripts/preview_diplomas.py            # gera e abre o PDF
-    python scripts/preview_diplomas.py --no-open  # so gera
+    python scripts/preview_diplomas.py --no-open  # só gera
 
-Saida: ``%TEMP%/amostras_diplomas.pdf`` (6 paginas).
+Saída: ``%TEMP%/amostras_diplomas.pdf`` (6 paginas).
 """
 from __future__ import annotations
 
@@ -30,8 +30,8 @@ _TORNEIO = "Torneio Aberto de Teresina 2026"
 _NAMES = [
     "Gabriel Alberico", "Marina Costa", "Heitor Lima", "Sofia Andrade", "Rafael Nunes",
     "Helena Dias", "Bernardo Sa", "Laura Pires", "Theo Macedo", "Alice Rocha",
-    "Davi Mendes", "Luiza Castro", "Miguel Aragao", "Valentina Reis", "Arthur Gomes",
-    "Cecilia Brito", "Noah Farias", "Isadora Melo", "Pedro Tavares", "Manuela Pinto",
+    "Davi Mendes", "Luiza Castro", "Miguel Aragão", "Valentina Reis", "Arthur Gomes",
+    "Cecília Brito", "Noah Farias", "Isadora Melo", "Pedro Tavares", "Manuela Pinto",
 ]
 _SAMPLE = {
     "tournament": _TORNEIO, "position_label": "1o", "position": "1", "points": "6,5",
@@ -52,7 +52,7 @@ def _content_for(model, idx: int) -> CertificateContent:
         name=name,
         body=body,
         footer="Teresina-PI - 12/06/2026",
-        signature_left="Direcao",
+        signature_left="Direção",
         signature_right="Arbitragem",
         source_title=_TORNEIO,
         verification_code=f"ALB-{1000 + idx:04X}",
@@ -80,12 +80,12 @@ def render_gallery(count: int = 20, open_after: bool = True) -> str:
 
 def _award(preset_name: str) -> CertificateContent:
     return CertificateContent(
-        title="Certificado de Premiacao",
+        title="Certificado de Premiação",
         intro=f"O {preset_name} certifica que",
         name="Gabriel Alberico",
         body=f"conquistou o 1o lugar no {_TORNEIO}, com 6,5 pontos em 7 rodadas.",
         footer="Teresina-PI - 12/06/2026",
-        signature_left="Direcao",
+        signature_left="Direção",
         signature_right="Arbitragem",
         source_title=_TORNEIO,
         verification_code="ALB-1A2B",
@@ -96,12 +96,12 @@ def _award(preset_name: str) -> CertificateContent:
 
 def _participation(preset_name: str) -> CertificateContent:
     return CertificateContent(
-        title="Certificado de Participacao",
+        title="Certificado de Participação",
         intro="Certificamos que",
         name="Marina Costa",
-        body=f"participou do {_TORNEIO}, classificando-se na 5a colocacao geral.",
+        body=f"participou do {_TORNEIO}, classificando-se na 5a colocação geral.",
         footer="Teresina-PI - 12/06/2026",
-        signature_left="Direcao",
+        signature_left="Direção",
         signature_right="Arbitragem",
         source_title=_TORNEIO,
         verification_code="ALB-9Z8Y",

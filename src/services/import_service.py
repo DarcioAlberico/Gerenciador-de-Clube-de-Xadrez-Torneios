@@ -23,7 +23,8 @@ from src.services.fide_norms import build_norm_report
 from src.services.fide_rating import build_fide_report_rows
 from src.services.list_layouts import STANDINGS_COLUMNS, resolve_column_specs, resolve_columns
 from src.services.prizes import PRIZE_KINDS, PRIZE_POLICIES, allocate_prizes
-from src.services.trf_import import build_trf_rounds, parse_trf
+from src.domain.dates import DataInvalida, parse_date, storage_text
+from src.services.trf_import import TrfDateError, build_trf_rounds, parse_trf
 
 if TYPE_CHECKING:
     from src.services.club_service import ClubService
@@ -42,18 +43,18 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-# Campos canonicos de inscricao usados pelo assistente de importacao com
-# mapeamento de colunas (REG-02) e pelo gerador de formulario padronizado
-# (REG-01). Os sinonimos espelham os aceitos por ``_online_registration_payload``;
-# a primeira chave de cada campo coincide com a chave canonica usada no payload,
-# de modo que mapear uma coluna para ``key`` a torna reconhecivel por ``_pick``.
+# Campos canônicos de inscrição usados pelo assistente de importação com
+# mapeamento de colunas (REG-02) e pelo gerador de formulário padronizado
+# (REG-01). Os sinônimos espelham os aceitos por ``_online_registration_payload``;
+# a primeira chave de cada campo coincide com a chave canônica usada no payload,
+# de modo que mapear uma coluna para ``key`` a torna reconhecível por ``_pick``.
 REGISTRATION_IMPORT_FIELDS: list[dict[str, Any]] = [
     {"key": "name", "label": "Nome completo", "required": True, "type": "text",
      "synonyms": ["name", "nome", "jogador", "nome completo", "nome completo do jogador",
                   "nome do jogador", "nome do atleta", "atleta", "participante", "full name"]},
     {"key": "surname", "label": "Sobrenome", "required": False, "type": "text",
      "synonyms": ["surname", "sobrenome", "last name"]},
-    {"key": "given_name", "label": "Nome proprio", "required": False, "type": "text",
+    {"key": "given_name", "label": "Nome próprio", "required": False, "type": "text",
      "synonyms": ["given_name", "nome proprio", "nome_proprio", "first name", "primeiro nome"]},
     {"key": "birth_date", "label": "Data de nascimento", "required": False, "type": "date",
      "synonyms": ["birth_date", "nascimento", "data nascimento", "data de nascimento",
@@ -80,13 +81,13 @@ REGISTRATION_IMPORT_FIELDS: list[dict[str, Any]] = [
      "synonyms": ["cbx_id", "cbx", "id cbx", "id_cbx", "cbx id"]},
     {"key": "lbx_id", "label": "ID LBX", "required": False, "type": "text",
      "synonyms": ["lbx_id", "lbx", "id lbx", "id_lbx", "lbx id"]},
-    {"key": "federation_id", "label": "ID federacao", "required": False, "type": "text",
+    {"key": "federation_id", "label": "ID federação", "required": False, "type": "text",
      "synonyms": ["federation_id", "id federacao", "id_federacao", "federacao"]},
-    {"key": "title", "label": "Titulo FIDE", "required": False, "type": "text",
+    {"key": "title", "label": "Título FIDE", "required": False, "type": "text",
      "synonyms": ["title", "titulo", "titulo fide"]},
 ]
 
-# Perguntas do formulario de inscricao padronizado (REG-01). Os titulos sao
+# Perguntas do formulário de inscrição padronizado (REG-01). Os títulos são
 # escolhidos para que o CSV de respostas seja reconhecido por
 # ``_online_registration_payload`` sem mapeamento manual.
 REGISTRATION_FORM_QUESTIONS: list[dict[str, Any]] = [
@@ -114,7 +115,7 @@ class ImportService:
     def preview_online_registrations(self, tournament_id: int, file_path: str | Path) -> dict[str, Any]:
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
-            raise AppError("Selecione um torneio valido.")
+            raise AppError("Selecione um torneio válido.")
 
         rows = self._online_registration_rows(tournament_id, file_path)
         summary = {
@@ -162,11 +163,11 @@ class ImportService:
             "player_ids": imported_player_ids,
         }
 
-    # --- REG-02: importacao com mapeamento de colunas ---------------------
+    # --- REG-02: importação com mapeamento de colunas ---------------------
 
     def inspect_source(self, source: str | Path, sample_size: int = 5) -> dict[str, Any]:
-        """Le um arquivo/URL tabular e devolve cabecalhos, amostra e palpite de
-        mapeamento por heuristica para o assistente de importacao."""
+        """Lê um arquivo/URL tabular e devolve cabeçalhos, amostra e palpite de
+        mapeamento por heurística para o assistente de importação."""
         tabular = self._read_tabular(source)
         headers = tabular["headers"]
         sample_rows = [dict(row) for _, row in tabular["rows"][: max(0, int(sample_size))]]
@@ -253,7 +254,7 @@ class ImportService:
     ) -> dict[str, Any]:
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
-            raise AppError("Selecione um torneio valido.")
+            raise AppError("Selecione um torneio válido.")
         name_header = mapping.get("name", "")
         if not name_header:
             raise AppError("Mapeie a coluna do nome do jogador antes de importar.")
@@ -283,7 +284,7 @@ class ImportService:
         )
         return result
 
-    # --- REG-02: perfis de mapeamento reutilizaveis -----------------------
+    # --- REG-02: perfis de mapeamento reutilizáveis -----------------------
 
     def list_mapping_profiles(self) -> dict[str, dict[str, str]]:
         raw = str(self.db.get_app_settings().get("import_mapping_profiles") or "").strip()
@@ -329,9 +330,9 @@ class ImportService:
     def import_trf(self, file_path: str | Path) -> dict[str, Any]:
         """Cria um novo torneio a partir de um arquivo TRF (FIDE/Swiss-Manager).
 
-        Importa cabecalho, arbitros, calendario, jogadores, rodadas e equipes
-        (FED-04). O que o arquivo nao tem — clube, categoria, inscricao — fica
-        vazio; o round-trip promete o que o TRF carrega, e nao mais do que isso.
+        Importa cabeçalho, árbitros, calendário, jogadores, rodadas e equipes
+        (FED-04). O que o arquivo não tem — clube, categoria, inscrição — fica
+        vazio; o round-trip promete o que o TRF carrega, e não mais do que isso.
         """
         path = Path(file_path)
         try:
@@ -339,73 +340,82 @@ class ImportService:
         except UnicodeDecodeError:
             content = path.read_text(encoding="latin-1")
 
-        parsed = parse_trf(content)
+        try:
+            parsed = parse_trf(content)
+        except TrfDateError as exc:
+            # Data impossível no arquivo (RGS-07): nada é criado, e a mensagem
+            # diz linha e colunas para o árbitro corrigir o TRF.
+            raise AppError(f"{exc} Corrija o arquivo e importe de novo.") from exc
         if not parsed["players"]:
-            raise AppError("Arquivo TRF sem jogadores reconheciveis (linhas 001).")
+            raise AppError("Arquivo TRF sem jogadores reconhecíveis (linhas 001).")
 
         name = parsed["name"] or f"Torneio importado ({path.stem})"
         rounds_count = parsed["rounds_count"] if parsed["rounds_count"] > 0 else 7
-        tournament_id = self.db.create_tournament(
-            name=name,
-            location=parsed["location"],
-            rounds_count=rounds_count,
-            time_control=parsed["time_control"],
-            start_date=parsed["start_date"],
-            end_date=parsed["end_date"],
-        )
-        # Federacao, arbitros e calendario vinham no arquivo e eram descartados
-        # (FED-04): o torneio importado nascia sem arbitro e sem datas, e o TRF
-        # que ele exportava depois ja nao era o mesmo arquivo.
-        ajustes = {
-            chave: valor
-            for chave, valor in (
-                ("federation", parsed["federation"]),
-                ("chief_arbiter", parsed.get("chief_arbiter", "")),
-                ("arbiters", "\n".join(parsed.get("deputy_arbiters") or [])),
+        # RGS-08: torneio, ajustes, agenda, jogadores, equipes e rodadas entram
+        # juntos ou nada entra. Antes, uma falha no meio deixava um torneio
+        # pela metade na lista (sem rodadas, ou com metade dos jogadores).
+        with self.db.transaction():
+            tournament_id = self.db.create_tournament(
+                name=name,
+                location=parsed["location"],
+                rounds_count=rounds_count,
+                time_control=parsed["time_control"],
+                start_date=parsed["start_date"],
+                end_date=parsed["end_date"],
             )
-            if valor
-        }
-        if ajustes:
-            settings = self.db.get_tournament_settings(tournament_id) or {}
-            settings.update(ajustes)
-            self.db.save_tournament_settings(tournament_id, settings)
+            # Federação, árbitros e calendário vinham no arquivo e eram descartados
+            # (FED-04): o torneio importado nascia sem árbitro e sem datas, e o TRF
+            # que ele exportava depois já não era o mesmo arquivo.
+            ajustes = {
+                chave: valor
+                for chave, valor in (
+                    ("federation", parsed["federation"]),
+                    ("chief_arbiter", parsed.get("chief_arbiter", "")),
+                    ("arbiters", "\n".join(parsed.get("deputy_arbiters") or [])),
+                )
+                if valor
+            }
+            if ajustes:
+                settings = self.db.get_tournament_settings(tournament_id) or {}
+                settings.update(ajustes)
+                self.db.save_tournament_settings(tournament_id, settings)
 
-        agenda = [
-            {"round_number": numero, "date": data, "time": ""}
-            for numero, data in enumerate(parsed.get("round_dates") or [], start=1)
-            if data
-        ]
-        if agenda:
-            self.db.save_round_schedule(tournament_id, agenda)
+            agenda = [
+                {"round_number": numero, "date": data, "time": ""}
+                for numero, data in enumerate(parsed.get("round_dates") or [], start=1)
+                if data
+            ]
+            if agenda:
+                self.db.save_round_schedule(tournament_id, agenda)
 
-        rank_to_id: dict[int, int] = {}
-        for player in parsed["players"]:
-            player_id = self.db.create_player(
-                tournament_id=tournament_id,
-                name=player["name"],
-                surname=player["surname"],
-                given_name=player["given_name"],
-                title=player["title"],
-                sex=player["sex"],
-                rating=player["rating"],
-                international_rating=player["rating"],
-                federation_id=player["federation_id"],
-                fide_id=player["fide_id"],
-                birth_date=player["birth_date"],
-            )
-            rank_to_id[int(player["start_rank"])] = player_id
+            rank_to_id: dict[int, int] = {}
+            for player in parsed["players"]:
+                player_id = self.db.create_player(
+                    tournament_id=tournament_id,
+                    name=player["name"],
+                    surname=player["surname"],
+                    given_name=player["given_name"],
+                    title=player["title"],
+                    sex=player["sex"],
+                    rating=player["rating"],
+                    international_rating=player["rating"],
+                    federation_id=player["federation_id"],
+                    fide_id=player["fide_id"],
+                    birth_date=player["birth_date"],
+                )
+                rank_to_id[int(player["start_rank"])] = player_id
 
-        equipes = self._create_imported_teams(tournament_id, parsed.get("teams") or [], rank_to_id)
-        rounds = build_trf_rounds(parsed["players"], rank_to_id)
-        for round_number, pairings in rounds:
-            round_id = self.db.create_round_with_pairings(
-                tournament_id,
-                round_number,
-                pairings,
-                pairing_engine_version="trf-import",
-                ruleset_version="trf-import",
-            )
-            self.db.close_round(round_id)
+            equipes = self._create_imported_teams(tournament_id, parsed.get("teams") or [], rank_to_id)
+            rounds = build_trf_rounds(parsed["players"], rank_to_id)
+            for round_number, pairings in rounds:
+                round_id = self.db.create_round_with_pairings(
+                    tournament_id,
+                    round_number,
+                    pairings,
+                    pairing_engine_version="trf-import",
+                    ruleset_version="trf-import",
+                )
+                self.db.close_round(round_id)
 
         logger.info(
             "TRF importado de %s: torneio %s com %s jogadores e %s rodadas",
@@ -429,11 +439,11 @@ class ImportService:
         teams: list[dict[str, Any]],
         rank_to_id: dict[int, int],
     ) -> int:
-        """Recria a secao de equipes do TRF (registros 013/310) — FED-04.
+        """Recria a seção de equipes do TRF (registros 013/310) — FED-04.
 
         O tabuleiro sai da ORDEM em que os start-ranks aparecem na linha, que e
         como o TRF declara a ordem de forca da equipe. Jogador que a linha cita e
-        o arquivo nao traz e ignorado: melhor uma equipe menor do que uma equipe
+        o arquivo não traz e ignorado: melhor uma equipe menor do que uma equipe
         com um jogador inventado.
         """
         criadas = 0
@@ -459,7 +469,7 @@ class ImportService:
             result = self._import_player_rows(tournament_id, rows, path)
             logger.info("%s jogadores importados de %s para o torneio %s", result["imported"], path, tournament_id)
             return result
-        raise AppError("Formato nao suportado. Use .csv, .xls ou .xlsx.")
+        raise AppError("Formato não suportado. Use .csv, .xls ou .xlsx.")
 
     def import_members(self, file_path: str | Path) -> dict[str, Any]:
         path = Path(file_path)
@@ -469,7 +479,7 @@ class ImportService:
         elif extension in {".xls", ".xlsx"}:
             rows = self._player_rows_from_spreadsheet(path)
         else:
-            raise AppError("Formato nao suportado. Use .csv, .xls ou .xlsx.")
+            raise AppError("Formato não suportado. Use .csv, .xls ou .xlsx.")
 
         result = self._import_member_rows(rows)
         logger.info("%s membros importados de %s", result["imported"], path)
@@ -528,7 +538,7 @@ class ImportService:
             rating = int(float(rating_text)) if rating_text else 0
         except ValueError:
             rating = 0
-            errors.append("rating invalido")
+            errors.append("rating inválido")
 
         club_id, club_error = self._resolve_club_id(
             self._pick(row, "club_id", "id_clube", "id escola", "id_escola"),
@@ -549,6 +559,11 @@ class ImportService:
             self._pick(row, "learning_level_id", "nivel_id", "id_nivel"),
             self._pick(row, "learning_level", "nivel", "nivel de aprendizagem"),
         )
+        member_birth_date, birth_error = self._pick_date(
+            row, "birth_date", "nascimento", "data nascimento", "data de nascimento", label="data de nascimento"
+        )
+        if birth_error:
+            errors.append(birth_error)
         member_type = self._normalize_member_type(self._pick(row, "member_type", "tipo", "vinculo"))
         status = self._normalize_member_status(self._pick(row, "status", "situacao"))
 
@@ -562,7 +577,7 @@ class ImportService:
             "phone": self._pick(row, "phone", "telefone", "celular", "whatsapp"),
             "email": self._pick(row, "email", "e-mail"),
             "document": self._pick(row, "document", "documento", "cpf", "rg"),
-            "birth_date": self._pick(row, "birth_date", "nascimento", "data nascimento", "data de nascimento"),
+            "birth_date": member_birth_date,
             "rating": rating,
             "category": self._pick(row, "category", "categoria"),
             "member_type": member_type,
@@ -586,10 +601,10 @@ class ImportService:
             try:
                 club_id = int(raw_id)
             except ValueError:
-                return 1, "id do clube/escola invalido"
+                return 1, "id do clube/escola inválido"
             if self.db.get_club(club_id):
                 return club_id, ""
-            return 1, "clube/escola nao encontrado"
+            return 1, "clube/escola não encontrado"
 
         if raw_name:
             normalized = self._normalize_text(raw_name)
@@ -610,12 +625,12 @@ class ImportService:
             try:
                 class_id = int(raw_id)
             except ValueError:
-                return None, "id da turma invalido"
+                return None, "id da turma inválido"
             class_data = self.db.get_class(class_id)
             if not class_data:
-                return None, "turma nao encontrada"
+                return None, "turma não encontrada"
             if int(class_data["club_id"]) != int(club_id):
-                return None, "turma nao pertence ao clube/escola informado"
+                return None, "turma não pertence ao clube/escola informado"
             return class_id, ""
 
         if raw_name:
@@ -710,6 +725,12 @@ class ImportService:
             if not name:
                 errors.append(f"Linha {line_number}: nome vazio.")
                 continue
+            birth_date, birth_error = self._pick_date(
+                row, "birth_date", "nascimento", "data_nascimento", label="data de nascimento"
+            )
+            if birth_error:
+                errors.append(f"Linha {line_number}: {birth_error}.")
+                continue
 
             national_rating = self._parse_optional_int(
                 self._pick(row, "national_rating", "rating_nacional", "elo_nacional", "cbx_rating")
@@ -722,7 +743,7 @@ class ImportService:
                 try:
                     rating = int(float(rating_text))
                 except ValueError:
-                    errors.append(f"Linha {line_number}: rating invalido.")
+                    errors.append(f"Linha {line_number}: rating inválido.")
                     continue
             else:
                 rating = max(national_rating, international_rating)
@@ -737,7 +758,7 @@ class ImportService:
                 fide_id=self._pick(row, "fide_id", "fide", "id_fide"),
                 cbx_id=self._pick(row, "cbx_id", "cbx", "id_cbx"),
                 lbx_id=self._pick(row, "lbx_id", "lbx", "id_lbx"),
-                birth_date=self._pick(row, "birth_date", "nascimento", "data_nascimento"),
+                birth_date=birth_date,
                 surname=self._pick(row, "surname", "sobrenome"),
                 given_name=self._pick(row, "given_name", "nome_proprio"),
                 title=self._pick(row, "title", "titulo"),
@@ -750,7 +771,7 @@ class ImportService:
         return {"imported": imported, "errors": errors}
 
     def _read_tabular(self, source: str | Path) -> dict[str, Any]:
-        """Le CSV/XLS/XLSX (arquivo ou URL CSV publicada) e devolve
+        """Lê CSV/XLS/XLSX (arquivo ou URL CSV publicada) e devolve
         ``{"headers": [...], "rows": [(linha, {coluna: valor})]}``."""
         source_text = str(source).strip()
         if self._is_url(source_text):
@@ -761,13 +782,13 @@ class ImportService:
             return self._tabular_from_csv_text(path.read_text(encoding="utf-8-sig"))
         if extension in {".xls", ".xlsx"}:
             return self._tabular_from_spreadsheet(path)
-        raise AppError("Formato nao suportado. Use .csv, .xls, .xlsx ou link CSV do Google Sheets.")
+        raise AppError("Formato não suportado. Use .csv, .xls, .xlsx ou link CSV do Google Sheets.")
 
     def _tabular_from_csv_text(self, content: str) -> dict[str, Any]:
         sample = content[:4096]
         reader = csv.DictReader(io.StringIO(content), dialect=self._csv_dialect(sample))
         if not reader.fieldnames:
-            raise AppError("CSV sem cabecalho.")
+            raise AppError("CSV sem cabeçalho.")
         headers = [str(name) for name in reader.fieldnames]
         rows = [(line_number, dict(row)) for line_number, row in enumerate(reader, start=2)]
         return {"headers": headers, "rows": rows}
@@ -779,22 +800,22 @@ class ImportService:
             with urlopen(request, timeout=20) as response:
                 content = response.read().decode("utf-8-sig")
         except Exception as exc:
-            raise AppError(f"Nao foi possivel baixar a planilha: {exc}") from exc
+            raise AppError(f"Não foi possível baixar a planilha: {exc}") from exc
         return self._tabular_from_csv_text(content)
 
     def _tabular_from_spreadsheet(self, path: Path) -> dict[str, Any]:
         try:
             import pandas as pd
         except ImportError as exc:
-            raise AppError("Importacao Excel indisponivel. Instale pandas, openpyxl e xlrd.") from exc
+            raise AppError("Importação Excel indisponível. Instale pandas, openpyxl e xlrd.") from exc
 
         try:
             dataframe = pd.read_excel(path, sheet_name=0, dtype=object)
         except Exception as exc:
-            raise AppError(f"Nao foi possivel ler a planilha: {exc}") from exc
+            raise AppError(f"Não foi possível ler a planilha: {exc}") from exc
 
         if dataframe.columns.empty:
-            raise AppError("Planilha sem cabecalho.")
+            raise AppError("Planilha sem cabeçalho.")
 
         headers = [str(column) for column in dataframe.columns]
         rows: list[tuple[int, dict[str, Any]]] = []
@@ -817,7 +838,7 @@ class ImportService:
             if pd.isna(value):
                 return ""
         except Exception:
-            pass
+            pass  # pandas ausente ou valor não escalar: a célula segue como veio
         return value
 
     def import_rating_list_csv(self, file_path: str | Path, rating_type: str = "fide") -> dict[str, Any]:
@@ -832,7 +853,7 @@ class ImportService:
             file.seek(0)
             reader = csv.DictReader(file, dialect=self._csv_dialect(sample))
             if not reader.fieldnames:
-                raise AppError("CSV sem cabecalho.")
+                raise AppError("CSV sem cabeçalho.")
                 
             all_members = self.db.list_members()
             fide_map = {str(m.get("fide_id")).strip(): m["id"] for m in all_members if m.get("fide_id")}
@@ -841,7 +862,7 @@ class ImportService:
             for line_number, row in enumerate(reader, start=2):
                 player_id_csv = self._pick(row, "fide_id", "fide", "id_fide", "idnumber", "id", "cbx_id", "cbx", "id_cbx")
                 if not player_id_csv:
-                    errors.append(f"Linha {line_number}: ID (FIDE/CBX) nao encontrado.")
+                    errors.append(f"Linha {line_number}: ID (FIDE/CBX) não encontrado.")
                     skipped += 1
                     continue
                     
@@ -855,7 +876,7 @@ class ImportService:
                 try:
                     rating = int(float(rating_text))
                 except ValueError:
-                    errors.append(f"Linha {line_number}: Rating invalido ({rating_text}).")
+                    errors.append(f"Linha {line_number}: Rating inválido ({rating_text}).")
                     skipped += 1
                     continue
                     
@@ -912,11 +933,11 @@ class ImportService:
                 if self._matches_existing_player(payload, existing_players):
                     status = "duplicate"
                     status_label = "Duplicado"
-                    message = "Ja existe jogador equivalente no torneio"
+                    message = "Já existe jogador equivalente no torneio"
                 elif duplicate_key in seen_keys:
                     status = "duplicate"
                     status_label = "Duplicado"
-                    message = "Inscricao repetida no proprio arquivo"
+                    message = "Inscrição repetida no próprio arquivo"
                 else:
                     seen_keys.add(duplicate_key)
 
@@ -949,7 +970,7 @@ class ImportService:
             return self._player_rows_from_csv(path)
         if extension in {".xls", ".xlsx"}:
             return self._player_rows_from_spreadsheet(path)
-        raise AppError("Formato nao suportado. Use .csv, .xls, .xlsx ou link CSV do Google Sheets.")
+        raise AppError("Formato não suportado. Use .csv, .xls, .xlsx ou link CSV do Google Sheets.")
 
     @staticmethod
     def _is_url(value: str) -> bool:
@@ -1020,9 +1041,13 @@ class ImportService:
             rating = int(float(rating_text)) if rating_text else max(national_rating, international_rating)
         except ValueError:
             rating = 0
-            errors.append("rating invalido")
+            errors.append("rating inválido")
 
-        birth_date = self._pick(row, "birth_date", "nascimento", "data nascimento", "data de nascimento")
+        birth_date, birth_error = self._pick_date(
+            row, "birth_date", "nascimento", "data nascimento", "data de nascimento", label="data de nascimento"
+        )
+        if birth_error:
+            errors.append(birth_error)
         sex = self._pick(row, "sex", "sexo", "genero", "genero do jogador", "gênero")
         payload = {
             "name": name,
@@ -1095,6 +1120,27 @@ class ImportService:
             if value is not None:
                 return str(value).strip()
         return ""
+
+    @classmethod
+    def _pick_date(cls, row: dict[str, Any], *keys: str, label: str = "data") -> tuple[str, str]:
+        """Data de planilha/CSV/Google Forms pela regra única (RGS-07).
+
+        Devolve ``(valor_gravavel, erro)``. O valor sai em ISO (ou o ano, que a
+        lista da FIDE publica); o erro cita a coluna, para o árbitro achar a
+        célula. Célula de data do Excel chega como ``2010-05-12 00:00:00`` e e
+        aceita: a hora e descartada.
+        """
+        normalized = {cls._normalize_key(key): (key, value) for key, value in row.items()}
+        for key in keys:
+            achado = normalized.get(cls._normalize_key(key))
+            if achado is None or achado[1] is None:
+                continue
+            coluna, valor = achado
+            resultado = parse_date(cls._clean_spreadsheet_cell(valor), permite_ano=True)
+            if isinstance(resultado, DataInvalida):
+                return "", f'{label} inválida na coluna "{coluna}": "{resultado.texto}" ({resultado.motivo})'
+            return storage_text(resultado), ""
+        return "", ""
 
     @staticmethod
     def _normalize_key(value: str) -> str:

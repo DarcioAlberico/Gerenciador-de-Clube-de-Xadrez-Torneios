@@ -136,19 +136,19 @@ class ClubSectionsMixin:
             ["Turmas ativas", summary.get("active_classes", 0)],
             ["Membros ativos", summary.get("active_members", 0)],
             ["Total de membros", summary.get("total_members", 0)],
-            ["Responsaveis cadastrados", len(guardians)],
+            ["Responsáveis cadastrados", len(guardians)],
             ["Menores sem responsável", len(minor_members_without_guardians)],
             ["Aulas/treinos cadastrados", len(sessions)],
-            ["Eventos no calendario", len(events)],
+            ["Eventos no calendário", len(events)],
             ["Planos financeiros", len(plans)],
-            ["Lancamentos financeiros", finance_summary["total_payments"]],
+            ["Lançamentos financeiros", finance_summary["total_payments"]],
             ["Recebido", finance_summary["paid_amount"]],
             ["Pendente", finance_summary["pending_amount"]],
             ["Atrasado", finance_summary["late_amount"]],
             ["Torneios cadastrados", summary.get("total_tournaments", 0)],
             ["Torneios em andamento", summary.get("running_tournaments", 0)],
             ["Membros com rating interno", len(member_ratings)],
-            ["Rating interno medio", average_rating],
+            ["Rating interno médio", average_rating],
         ]
         status_rows = self._count_member_field(members, "status")
         type_rows = self._count_member_field(members, "member_type")
@@ -213,11 +213,11 @@ class ClubSectionsMixin:
             ),
             (
                 "Turmas",
-                ["ID", "Clube/Escola", "Turma", "Professor", "Dia", "Horario", "Local", "Ativa", "Alunos ativos"],
+                ["ID", "Clube/Escola", "Turma", "Professor", "Dia", "Horário", "Local", "Ativa", "Alunos ativos"],
                 class_rows,
             ),
             (
-                "Responsaveis",
+                "Responsáveis",
                 ["ID", "Nome", "Telefone", "E-mail", "Documento", "Ativo", "Membros", "Membros ativos"],
                 guardian_rows,
             ),
@@ -233,7 +233,7 @@ class ClubSectionsMixin:
                     "Turma",
                     "Nível",
                     "Objetivo",
-                    "Conteudo",
+                    "Conteúdo",
                     "Tarefa",
                     "Instrutor",
                     "Status",
@@ -245,7 +245,7 @@ class ClubSectionsMixin:
             ),
             (
                 "Planos financeiros",
-                ["ID", "Nome", "Valor", "Ciclo", "Ativo", "Lancamentos"],
+                ["ID", "Nome", "Valor", "Ciclo", "Ativo", "Lançamentos"],
                 plan_rows,
             ),
             (
@@ -260,12 +260,12 @@ class ClubSectionsMixin:
                     "Pagamento",
                     "Valor",
                     "Status",
-                    "Metodo",
+                    "Método",
                 ],
                 payment_rows,
             ),
             (
-                "Calendario",
+                "Calendário",
                 [
                     "ID",
                     "Título",
@@ -511,7 +511,7 @@ class ClubSectionsMixin:
         summary_rows: list[list[Any]] = [
             ["Data inicial", start_date or "Sem filtro"],
             ["Data final", end_date or "Sem filtro"],
-            ["Lancamentos", summary["total_payments"]],
+            ["Lançamentos", summary["total_payments"]],
             ["Pagos", summary["paid"]],
             ["Pendentes", summary["pending"]],
             ["Atrasados", summary["late"]],
@@ -569,11 +569,11 @@ class ClubSectionsMixin:
             ("Resumo", ["Indicador", "Valor"], summary_rows),
             (
                 "Planos",
-                ["ID", "Nome", "Valor", "Ciclo", "Ativo", "Lancamentos", "Observações"],
+                ["ID", "Nome", "Valor", "Ciclo", "Ativo", "Lançamentos", "Observações"],
                 plan_rows,
             ),
             (
-                "Lancamentos",
+                "Lançamentos",
                 [
                     "ID",
                     "Membro",
@@ -586,7 +586,7 @@ class ClubSectionsMixin:
                     "Pagamento",
                     "Valor",
                     "Status",
-                    "Metodo",
+                    "Método",
                     "Observações",
                 ],
                 payment_rows,
@@ -613,7 +613,7 @@ class ClubSectionsMixin:
             ["Eventos encontrados", len(events)],
             ["Planejados", sum(1 for event in events if event["status"] == "planned")],
             ["Confirmados", sum(1 for event in events if event["status"] == "confirmed")],
-            ["Concluidos", sum(1 for event in events if event["status"] == "done")],
+            ["Concluídos", sum(1 for event in events if event["status"] == "done")],
             ["Cancelados", sum(1 for event in events if event["status"] == "canceled")],
             ["Gerado em", Database.now()],
         ]
@@ -739,7 +739,7 @@ class ClubSectionsMixin:
                     "Categoria rating",
                     "Tags premiação",
                     "Rating",
-                    "Variacao",
+                    "Variação",
                     "Partidas",
                     "Vitórias",
                     "Empates",
@@ -773,7 +773,7 @@ class ClubSectionsMixin:
             ["Período final", end_date or "Sem filtro"],
             ["Membros ativos", overview["summary"].get("active_members", 0)],
             ["Torneios cadastrados", overview["summary"].get("total_tournaments", 0)],
-            ["Proximos eventos", len(overview["upcoming_events"])],
+            ["Próximos eventos", len(overview["upcoming_events"])],
             ["Valor recebido", finance.get("paid_amount", 0.0)],
             ["Valor pendente", finance.get("pending_amount", 0.0)],
             ["Valor atrasado", finance.get("late_amount", 0.0)],
@@ -962,12 +962,12 @@ class ClubSectionsMixin:
         return [
             ("Aluno", ["Campo", "Valor"], member_rows),
             (
-                "Responsaveis",
+                "Responsáveis",
                 [
                     "Nome",
                     "Parentesco",
                     "Principal",
-                    "Emergencia",
+                    "Emergência",
                     "Telefone",
                     "E-mail",
                     "Documento",
@@ -1003,13 +1003,13 @@ class ClubSectionsMixin:
                     "Pagamento",
                     "Valor",
                     "Status",
-                    "Metodo",
+                    "Método",
                     "Observações",
                 ],
                 payment_rows,
             ),
             (
-                "Evolucao por torneio",
+                "Evolução por torneio",
                 [
                     "Torneio",
                     "Data",
@@ -1020,7 +1020,7 @@ class ClubSectionsMixin:
                     "Performance",
                     "Rating anterior",
                     "Rating novo",
-                    "Variacao",
+                    "Variação",
                     "Rodadas",
                     "Vitórias",
                     "Empates",
@@ -1037,7 +1037,7 @@ class ClubSectionsMixin:
                     "Torneio",
                     "Rating anterior",
                     "Rating novo",
-                    "Variacao",
+                    "Variação",
                     "Performance",
                     "Partidas",
                     "Pontos",
@@ -1052,7 +1052,7 @@ class ClubSectionsMixin:
                     "Status rodada",
                     "Mesa",
                     "Cor",
-                    "Adversario",
+                    "Adversário",
                     "Resultado",
                     "Desfecho",
                     "Pontos",
@@ -1068,7 +1068,7 @@ class ClubSectionsMixin:
     ) -> list[list[Any]]:
         totals: dict[str, int] = {}
         for member in members:
-            value = str(member.get(field) or "").strip() or "Sem informacao"
+            value = str(member.get(field) or "").strip() or "Sem informação"
             totals[value] = totals.get(value, 0) + 1
         return [[key, totals[key]] for key in sorted(totals, key=lambda item: item.casefold())]
 

@@ -284,7 +284,7 @@ def performance_components(
     return {
         "label": "Performance",
         "value": player_stat["performance"] if player_stat["performance"] != "" else None,
-        "formula": "Media de rating dos adversarios + dp da tabela FIDE (regra dos 400).",
+        "formula": "Média de rating dos adversários + dp da tabela FIDE (regra dos 400).",
         "games": rated_games,
         "score": score,
         "average_rating": average_rating,
@@ -772,14 +772,14 @@ def player_tiebreak_components(
         "buchholz": {
             "label": "Buchholz",
             "value": player_stat["buchholz"],
-            "formula": "Soma dos pontos finais dos adversarios enfrentados.",
+            "formula": "Soma dos pontos finais dos adversários enfrentados.",
             "opponents": opponent_rows,
             "total": player_stat["buchholz"],
         },
         "buchholz_median": {
             "label": "Buchholz mediano",
             "value": player_stat["buchholz_median"],
-            "formula": "Soma dos pontos dos adversarios com corte do menor e maior valor quando ha 3 ou mais jogos.",
+            "formula": "Soma dos pontos dos adversários com corte do menor e maior valor quando há 3 ou mais jogos.",
             "used_scores": [round(value, 2) for value in median_used],
             "cut_low": cut_low,
             "cut_high": cut_high,
@@ -788,19 +788,19 @@ def player_tiebreak_components(
         "sonneborn_berger": {
             "label": "Sonneborn-Berger",
             "value": player_stat["sonneborn_berger"],
-            "formula": "Pontos do adversario multiplicados pelo resultado obtido contra ele.",
+            "formula": "Pontos do adversário multiplicados pelo resultado obtido contra ele.",
             "opponents": sb_rows,
             "total": player_stat["sonneborn_berger"],
         },
         "direct_encounter": {
             "label": "Confronto direto",
             "value": direct_score,
-            "formula": "Pontos marcados contra adversarios que terminaram empatados em pontos.",
+            "formula": "Pontos marcados contra adversários que terminaram empatados em pontos.",
             "games": tied_opponents,
             "total": direct_score,
         },
         "wins": {
-            "label": "Vitorias",
+            "label": "Vitórias",
             "value": int(player_stat["wins"]),
             "formula": "Quantidade de partidas vencidas no tabuleiro.",
             "games": [game for game in player_stat["games"] if float(game.get("earned") or 0.0) == 1.0],

@@ -1,9 +1,9 @@
-"""Executa o JaVaFo do Swiss-Manager e registra a saida para auditoria.
+"""Executa o JaVaFo do Swiss-Manager e registra a saída para auditoria.
 
-Esta ferramenta nao tenta inferir a linha de comando correta do JaVaFo. Use
-``--javafo-args`` para passar os argumentos aceitos pela instalacao local.
+Esta ferramenta não tenta inferir a linha de comando correta do JaVaFo. Use
+``--javafo-args`` para passar os argumentos aceitos pela instalação local.
 Quando nenhum argumento extra e informado, o caminho TRF e repassado como
-argumento unico ao JAR.
+argumento único ao JAR.
 """
 
 from __future__ import annotations
@@ -20,13 +20,13 @@ DEFAULT_JAVAFO = Path(r"C:\Program Files (x86)\SwissManagerUniCode\javafo.jar")
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Audita uma chamada local ao JaVaFo.")
     parser.add_argument("--trf", type=Path, help="Arquivo TRF de entrada.")
-    parser.add_argument("--java", default="java", help="Executavel Java.")
+    parser.add_argument("--java", default="java", help="Executável Java.")
     parser.add_argument("--javafo", type=Path, default=DEFAULT_JAVAFO, help="Caminho do javafo.jar.")
     parser.add_argument("--output", type=Path, help="Arquivo JSON para salvar a auditoria.")
     parser.add_argument(
         "--javafo-args",
         nargs=argparse.REMAINDER,
-        help="Argumentos passados literalmente apos 'java -jar javafo.jar'.",
+        help="Argumentos passados literalmente após 'java -jar javafo.jar'.",
     )
     return parser.parse_args()
 
@@ -34,10 +34,10 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     if not args.javafo.exists():
-        print(f"JaVaFo nao encontrado: {args.javafo}")
+        print(f"JaVaFo não encontrado: {args.javafo}")
         return 2
     if args.trf is not None and not args.trf.exists():
-        print(f"TRF nao encontrado: {args.trf}")
+        print(f"TRF não encontrado: {args.trf}")
         return 2
 
     javafo_args = list(args.javafo_args or [])

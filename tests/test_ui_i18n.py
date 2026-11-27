@@ -30,7 +30,7 @@ FONTES = sorted((RAIZ / "src").rglob("*.py"))
 def _chaves_usadas() -> dict[str, list[str]]:
     """Toda chamada ``t("chave")`` em ``src/`` → arquivos onde aparece.
 
-    Só literais: ``t(variavel)`` é invisível para esta varredura, e é por isso
+    Só literais: ``t(variável)`` é invisível para esta varredura, e é por isso
     que o módulo registra erro em tempo de execução — as duas redes cobrem
     buracos diferentes.
     """

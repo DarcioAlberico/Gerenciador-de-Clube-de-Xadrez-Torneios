@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Sequence
 
+from src.domain.dates import DataInvalida, ResultadoData, parse_trf_date, parse_trf_round_date, storage_text
 from src.services.results_registry import code_from_trf_letter
 from src.services.trf_layout import (
     BIRTH as _BIRTH,
@@ -23,6 +24,8 @@ from src.services.trf_layout import (
     FIDE_ID as _FIDE_ID,
     NAME as _NAME,
     RATING as _RATING,
+    ROUND_CELL_WIDTH as _ROUND_CELL_WIDTH,
+    ROUND_CELLS_START as _ROUND_CELLS_START,
     SEX as _SEX,
     START_RANK as _START_RANK,
     TITLE as _TITLE,
@@ -30,20 +33,38 @@ from src.services.trf_layout import (
     field as _slice,
 )
 
-__all__ = ["BYE_RESULTS", "build_trf_rounds", "parse_trf"]
+__all__ = ["BYE_RESULTS", "TrfDateError", "build_trf_rounds", "parse_trf"]
 
 
-def _trf_date_to_iso(value: str) -> str:
-    raw = str(value or "").strip()
-    if not raw or raw.startswith("0000"):
-        return ""
-    normalized = raw.replace(".", "/").replace("\\", "/").replace("-", "/")
-    parts = normalized.split("/")
-    if len(parts) == 3 and len(parts[0]) == 4 and parts[0].isdigit():
-        year, month, day = parts
-        if month.isdigit() and day.isdigit():
-            return f"{year}-{int(month):02d}-{int(day):02d}"
-    return ""
+class TrfDateError(ValueError):
+    """Data que o arquivo traz e o calendário não tem (RGS-07).
+
+    `2026.02.30` virava `2026-02-30` no banco. Agora a importação para e diz
+    onde está o erro, em linha e colunas (1-based, como num editor de texto).
+    """
+
+    def __init__(self, linha: int, coluna_inicio: int, coluna_fim: int, texto: str, motivo: str) -> None:
+        self.linha = linha
+        self.colunas = (coluna_inicio, coluna_fim)
+        super().__init__(
+            f"TRF linha {linha}, colunas {coluna_inicio}-{coluna_fim}: "
+            f"data inválida \"{texto}\" ({motivo})"
+        )
+
+
+def _trf_date(resultado: ResultadoData, linha: int, inicio: int, fim: int) -> str:
+    """Texto gravável, ou `TrfDateError` com o lugar exato no arquivo."""
+    if isinstance(resultado, DataInvalida):
+        raise TrfDateError(linha, inicio, fim, resultado.texto, resultado.motivo)
+    return storage_text(resultado)
+
+
+def _header_date(line: str, numero: int) -> str:
+    """Data dos registros 042/052: o valor começa na coluna 5."""
+    bruto = line[4:]
+    valor = bruto.strip()
+    inicio = 5 + (len(bruto) - len(bruto.lstrip()))
+    return _trf_date(parse_trf_date(valor), numero, inicio, max(inicio, inicio + len(valor) - 1))
 
 
 def _split_name(raw_name: str) -> tuple[str, str, str]:
@@ -68,18 +89,15 @@ def _parse_round_cells(line: str) -> list[dict[str, str]]:
     return cells
 
 
-def _parse_round_dates(line: str) -> list[str]:
-    """Datas do registro 132 (`YY/MM/DD`), na geometria das células de rodada."""
+def _parse_round_dates(line: str, numero: int) -> list[str]:
+    """Datas do registro 132 (`YY/MM/DD`, como manda o TRF16), na geometria das
+    células de rodada."""
     datas: list[str] = []
-    for bloco in _cell_blocks(line):
-        crua = bloco.strip()
-        if not crua:
-            datas.append("")
-            continue
-        partes = crua.split("/")
-        if len(partes) == 3 and len(partes[0]) == 2:
-            crua = f"20{partes[0]}/{partes[1]}/{partes[2]}"
-        datas.append(_trf_date_to_iso(crua))
+    for indice, bloco in enumerate(_cell_blocks(line)):
+        inicio = _ROUND_CELLS_START + indice * _ROUND_CELL_WIDTH + 1
+        datas.append(
+            _trf_date(parse_trf_round_date(bloco), numero, inicio, inicio + _ROUND_CELL_WIDTH - 1)
+        )
     return datas
 
 
@@ -87,8 +105,8 @@ def _parse_team_line(line: str, code: str) -> dict[str, Any] | None:
     """Equipe do registro 013 (legado) ou 310 (TRF25): nome + start-ranks.
 
     O 013 traz o nome em largura fixa e os start-ranks de 4 em 4 a partir da
-    coluna 37; o 310 tem o nome deslocado (o registro comeca com o TPN). Sem
-    nome nao ha equipe — e a linha e ignorada em vez de virar "Equipe vazia".
+    coluna 37; o 310 tem o nome deslocado (o registro começa com o TPN). Sem
+    nome não há equipe — e a linha e ignorada em vez de virar "Equipe vazia".
     """
     inicio_nome, inicio_ranks = (4, 36) if code == "013" else (8, 40)
     nome = line[inicio_nome:inicio_ranks].strip()
@@ -110,7 +128,7 @@ def parse_trf(content: str) -> dict[str, Any]:
     round_dates: list[str] = []
     teams: list[dict[str, Any]] = []
 
-    for raw_line in content.splitlines():
+    for numero, raw_line in enumerate(content.splitlines(), start=1):
         line = raw_line.rstrip("\r\n")
         if len(line) < 3:
             continue
@@ -123,9 +141,9 @@ def parse_trf(content: str) -> dict[str, Any]:
         elif code == "032":
             header["federation"] = rest
         elif code == "042":
-            header["start_date"] = _trf_date_to_iso(rest)
+            header["start_date"] = _header_date(line, numero)
         elif code == "052":
-            header["end_date"] = _trf_date_to_iso(rest)
+            header["end_date"] = _header_date(line, numero)
         elif code == "102":
             header["chief_arbiter"] = rest
         elif code == "112":
@@ -133,7 +151,7 @@ def parse_trf(content: str) -> dict[str, Any]:
         elif code == "122":
             header["time_control"] = rest
         elif code == "132":
-            round_dates = _parse_round_dates(line)
+            round_dates = _parse_round_dates(line, numero)
         elif code in ("013", "310"):
             equipe = _parse_team_line(line, code)
             if equipe:
@@ -160,7 +178,14 @@ def parse_trf(content: str) -> dict[str, Any]:
                     "rating": rating,
                     "federation_id": _slice(line, _FEDERATION),
                     "fide_id": _slice(line, _FIDE_ID),
-                    "birth_date": _trf_date_to_iso(_slice(line, _BIRTH)),
+                    # Nascimento aceita só o ano (`1985`, `1985/00/00`): é o
+                    # que a lista da FIDE publica e o que o TRF permite.
+                    "birth_date": _trf_date(
+                        parse_trf_date(_slice(line, _BIRTH), permite_ano=True),
+                        numero,
+                        _BIRTH[0] + 1,
+                        _BIRTH[1],
+                    ),
                     "rounds": rounds,
                 }
             )
@@ -176,8 +201,8 @@ def parse_trf(content: str) -> dict[str, Any]:
         "time_control": header.get("time_control", ""),
         "rounds_count": max(rounds_count, len(round_dates)),
         "players": players,
-        # Tudo abaixo era LIDO e jogado fora (FED-04): o arquivo trazia arbitro,
-        # calendario e equipes, e a importacao criava um torneio sem nada disso.
+        # Tudo abaixo era LIDO e jogado fora (FED-04): o arquivo trazia árbitro,
+        # calendário e equipes, e a importação criava um torneio sem nada disso.
         "chief_arbiter": header.get("chief_arbiter", ""),
         "deputy_arbiters": deputies,
         "round_dates": round_dates,

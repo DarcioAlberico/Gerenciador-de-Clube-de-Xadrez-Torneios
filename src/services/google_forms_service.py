@@ -1,9 +1,9 @@
-"""Criacao ao vivo de formularios de inscricao no Google Forms (REG-01).
+"""Criação ao vivo de formulários de inscrição no Google Forms (REG-01).
 
-As dependencias Google (``google-api-python-client`` e ``google-auth-oauthlib``)
-e a credencial OAuth do arbitro sao opcionais: quando faltam, o gerador de
-formulario cai no script Apps Script (``ExportService.export_registration_form``).
-Por isso todos os imports da Google ficam dentro dos metodos (lazy), e o modulo
+As dependências Google (``google-api-python-client`` e ``google-auth-oauthlib``)
+e a credencial OAuth do árbitro são opcionais: quando faltam, o gerador de
+formulário cai no script Apps Script (``ExportService.export_registration_form``).
+Por isso todos os imports da Google ficam dentro dos métodos (lazy), e o módulo
 importa sem essas bibliotecas instaladas.
 """
 
@@ -23,17 +23,17 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Escopo minimo para criar e editar o corpo do formulario.
+# Escopo mínimo para criar e editar o corpo do formulário.
 FORMS_SCOPES = ["https://www.googleapis.com/auth/forms.body"]
 
-FORM_DESCRIPTION = "Inscricao gerada pelo Albericus. Preencha os dados do jogador."
+FORM_DESCRIPTION = "Inscrição gerada pelo Albericus. Preencha os dados do jogador."
 
 
 class GoogleFormsService:
     def __init__(self, db: Database) -> None:
         self.db = db
 
-    # --- localizacao de credencial/token ---------------------------------
+    # --- localização de credencial/token ---------------------------------
 
     def _config_dir(self) -> Path:
         path = app_data_dir() / "config"
@@ -41,10 +41,10 @@ class GoogleFormsService:
         return path
 
     def client_secret_path(self) -> Path:
-        """Resolve a credencial OAuth por ordem de precedencia:
-        1) caminho explicito em app_settings; 2) credencial do proprio usuario
-        em config/; 3) credencial embarcada na distribuicao (assets/). Se nada
-        existir, devolve o caminho padrao do usuario (para mensagens de erro)."""
+        """Resolve a credencial OAuth por ordem de precedência:
+        1) caminho explicito em app_settings; 2) credencial do próprio usuário
+        em config/; 3) credencial embarcada na distribuição (assets/). Se nada
+        existir, devolve o caminho padrão do usuário (para mensagens de erro)."""
         configured = str(
             self.db.get_app_settings().get("google_oauth_client_secret_path") or ""
         ).strip()
@@ -60,10 +60,10 @@ class GoogleFormsService:
 
     @staticmethod
     def _bundled_client_secret_path() -> Path:
-        """Credencial OAuth opcional embarcada na distribuicao (em ``assets/``),
-        usada quando o usuario nao tem uma credencial propria. Permite o app
+        """Credencial OAuth opcional embarcada na distribuição (em ``assets/``),
+        usada quando o usuário não tem uma credencial própria. Permite o app
         verificado oferecer 'Entrar com o Google' a toda a comunidade sem
-        configuracao por usuario. Resolve tanto no executavel PyInstaller quanto
+        configuração por usuário. Resolve tanto no executável PyInstaller quanto
         em desenvolvimento."""
         if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
             return Path(sys._MEIPASS) / "assets" / "google_client_secret.json"
@@ -95,12 +95,12 @@ class GoogleFormsService:
             )
         if not self.client_secret_path().exists():
             return (
-                "Credencial OAuth nao encontrada em "
+                "Credencial OAuth não encontrada em "
                 f"{self.client_secret_path()}. Veja docs/GUIA_GOOGLE_FORMS.md."
             )
         return ""
 
-    # --- criacao ----------------------------------------------------------
+    # --- criação ----------------------------------------------------------
 
     def create_registration_form(
         self, title: str, questions: list[dict[str, Any]] | None = None
@@ -170,9 +170,9 @@ class GoogleFormsService:
 
     @staticmethod
     def build_form_requests(questions: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """Monta os requests do ``batchUpdate`` (descricao + perguntas).
+        """Monta os requests do ``batchUpdate`` (descrição + perguntas).
 
-        Funcao pura: nao depende das bibliotecas Google, o que permite testar o
+        Função pura: não depende das bibliotecas Google, o que permite testar o
         payload sem credencial nem rede.
         """
         requests: list[dict[str, Any]] = [

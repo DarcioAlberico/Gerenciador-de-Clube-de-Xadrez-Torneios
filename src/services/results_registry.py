@@ -68,7 +68,7 @@ _CODES: tuple[ResultCode, ...] = (
     ResultCode("1U-0U", "Brancas vencem (decisão do árbitro)", 1.0, 0.0, True, False, "W", "L"),
     ResultCode("0U-1U", "Pretas vencem (decisão do árbitro)", 0.0, 1.0, True, False, "L", "W"),
     ResultCode("1/2U-1/2U", "Empate (decisão do árbitro)", 0.5, 0.5, True, False, "D", "D"),
-    # W.O./forfait: a dupla foi PAREADA mas NAO jogou. Pela FIDE C.04.2 (regra
+    # W.O./forfait: a dupla foi PAREADA mas NÃO jogou. Pela FIDE C.04.2 (regra
     # 3.5, efetiva 01/02/2026) "two paired participants, who did not play their
     # game or match, may be paired together in a future round" — logo um W.O.
     # não conta como "já se enfrentaram" para a regra de não-repetição (e o

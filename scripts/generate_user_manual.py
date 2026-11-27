@@ -94,34 +94,34 @@ MENU_ENTRIES: tuple[MenuEntry, ...] = (
     MenuEntry("Clube", "Dashboard Visual", "Ctrl+1", "Dashboard Visual"),
     MenuEntry("Clube", "Perfil do Clube", "", "Perfil do Clube"),
     MenuEntry("Clube", "Membros", "", "Membros"),
-    MenuEntry("Clube", "Niveis", "", "Niveis de Aprendizagem"),
-    MenuEntry("Clube", "Responsaveis", "", "Responsaveis"),
-    MenuEntry("Treinamento", "Aulas", "", "Aulas e Presencas"),
-    MenuEntry("Treinamento", "Exercicios", "", "Exercicios e Listas"),
-    MenuEntry("Gestao", "Arbitros", "", "Arbitros"),
-    MenuEntry("Gestao", "Inventario", "", "Inventario"),
-    MenuEntry("Gestao", "Financeiro", "", "Financeiro"),
-    MenuEntry("Gestao", "Calendario", "", "Calendario"),
-    MenuEntry("Gestao", "Ranking Interno", "", "Ranking Interno"),
+    MenuEntry("Clube", "Níveis", "", "Níveis de Aprendizagem"),
+    MenuEntry("Clube", "Responsáveis", "", "Responsáveis"),
+    MenuEntry("Treinamento", "Aulas", "", "Aulas e Presenças"),
+    MenuEntry("Treinamento", "Exercícios", "", "Exercícios e Listas"),
+    MenuEntry("Gestão", "Árbitros", "", "Árbitros"),
+    MenuEntry("Gestão", "Inventário", "", "Inventário"),
+    MenuEntry("Gestão", "Financeiro", "", "Financeiro"),
+    MenuEntry("Gestão", "Calendário", "", "Calendário"),
+    MenuEntry("Gestão", "Ranking Interno", "", "Ranking Interno"),
     MenuEntry("Torneio", "Torneios", "Ctrl+2", "Torneios"),
     MenuEntry("Torneio", "Central do Torneio", "Ctrl+3", "Central do Torneio"),
-    MenuEntry("Torneio", "Painel do Arbitro", "", "Painel do Arbitro"),
-    MenuEntry("Torneio", "Config. Torneio", "", "Configuracao do Torneio"),
+    MenuEntry("Torneio", "Painel do Árbitro", "", "Painel do Árbitro"),
+    MenuEntry("Torneio", "Config. Torneio", "", "Configuração do Torneio"),
     MenuEntry("Torneio", "Jogadores", "", "Jogadores"),
     MenuEntry("Torneio", "Equipes", "", "Equipes"),
     MenuEntry("Torneio", "Rodadas", "Ctrl+4", "Rodadas e Resultados"),
-    MenuEntry("Torneio", "Classificacao", "Ctrl+5", "Classificacao"),
+    MenuEntry("Torneio", "Classificação", "Ctrl+5", "Classificação"),
     MenuEntry("Torneio", "Diplomas", "", "Diplomas"),
     MenuEntry("Ferramentas", "Exportar", "", "Exportar"),
-    MenuEntry("Ferramentas", "Relatorios Administrativos", "", "Relatorios Administrativos"),
+    MenuEntry("Ferramentas", "Relatórios Administrativos", "", "Relatórios Administrativos"),
     MenuEntry("Ferramentas", "DRE Financeiro", "", "DRE Financeiro"),
-    MenuEntry("Ferramentas", "Comunicacao", "", "Comunicacao"),
-    MenuEntry("Ferramentas", "Integracoes Operacionais", "", "Integracoes Operacionais"),
-    MenuEntry("Configuracoes", "Config. App", "Ctrl+,", "Configuracoes do Aplicativo"),
-    MenuEntry("Configuracoes", "Auditoria Completa", "", "Auditoria Completa"),
-    MenuEntry("Ajuda", "Buscar acao...", "Ctrl+K", "Palette de Comandos"),
+    MenuEntry("Ferramentas", "Comunicação", "", "Comunicação"),
+    MenuEntry("Ferramentas", "Integrações Operacionais", "", "Integrações Operacionais"),
+    MenuEntry("Configurações", "Config. App", "Ctrl+,", "Configurações do Aplicativo"),
+    MenuEntry("Configurações", "Auditoria Completa", "", "Auditoria Completa"),
+    MenuEntry("Ajuda", "Buscar ação...", "Ctrl+K", "Palette de Comandos"),
     MenuEntry("Ajuda", "Apoie o Projeto", "", "Janela de apoio/PIX"),
-    MenuEntry("Ctrl+K", "Biblioteca Pedagogica", "", "Biblioteca Pedagogica"),
+    MenuEntry("Ctrl+K", "Biblioteca Pedagógica", "", "Biblioteca Pedagógica"),
     MenuEntry("Global", "Recarregar tela", "F5", "Reexecuta a tela atual"),
 )
 
@@ -134,13 +134,13 @@ SCREENS: tuple[ScreenSpec, ...] = (
         title="Tela de Login",
         overview="Primeira tela exibida na abertura do Albericus quando o controle de acesso esta ativo.",
         functions=(
-            "Informa usuario e senha do operador.",
-            "Bloqueia a navegacao ate uma autenticacao valida.",
+            "Informa usuário e senha do operador.",
+            "Bloqueia a navegação até uma autenticação valida.",
             "Permite entrar pela tecla Enter depois de preencher a senha.",
-            "Exibe aviso de campos obrigatorios ou credenciais invalidas.",
+            "Exibe aviso de campos obrigatórios ou credenciais inválidas.",
         ),
-        workflow=("Digite o usuario.", "Digite a senha.", "Clique em Entrar ou pressione Enter."),
-        notes=("Operadores e permissoes sao administrados em Configuracoes do Aplicativo > Seguranca e dados.",),
+        workflow=("Digite o usuário.", "Digite a senha.", "Clique em Entrar ou pressione Enter."),
+        notes=("Operadores e permissões são administrados em Configurações do Aplicativo > Segurança e dados.",),
         capture_kind="login",
     ),
     ScreenSpec(
@@ -148,14 +148,14 @@ SCREENS: tuple[ScreenSpec, ...] = (
         menu="Clube",
         action="Dashboard Visual",
         title="Dashboard Visual",
-        overview="Painel grafico de abertura para acompanhar situacao do clube, membros, caixa e agenda.",
+        overview="Painel gráfico de abertura para acompanhar situação do clube, membros, caixa e agenda.",
         functions=(
-            "Mostra grafico de status dos membros.",
-            "Mostra grafico financeiro com recebido, pendente e atrasado.",
+            "Mostra gráfico de status dos membros.",
+            "Mostra gráfico financeiro com recebido, pendente e atrasado.",
             "Exibe mural de avisos ativos.",
-            "Lista proximos eventos cadastrados no calendario.",
+            "Lista próximos eventos cadastrados no calendário.",
         ),
-        workflow=("Use como tela inicial de acompanhamento.", "Abra os modulos de detalhe quando algum indicador exigir acao."),
+        workflow=("Use como tela inicial de acompanhamento.", "Abra os módulos de detalhe quando algum indicador exigir ação."),
         method_name="show_visual_dashboard",
     ),
     ScreenSpec(
@@ -163,10 +163,10 @@ SCREENS: tuple[ScreenSpec, ...] = (
         menu="Clube",
         action="Perfil do Clube",
         title="Perfil do Clube, Escola ou Projeto",
-        overview="Cadastro das unidades que organizam membros, turmas, aulas, torneios e relatorios.",
+        overview="Cadastro das unidades que organizam membros, turmas, aulas, torneios e relatórios.",
         functions=(
             "Cria e edita clubes, escolas, projetos e parceiros.",
-            "Mantem dados de contato, endereco, cidade e observacoes.",
+            "Mantém dados de contato, endereço, cidade e observações.",
             "Cadastra turmas vinculadas a uma unidade.",
             "Carrega indicadores operacionais da unidade selecionada.",
         ),
@@ -179,152 +179,152 @@ SCREENS: tuple[ScreenSpec, ...] = (
         menu="Clube",
         action="Membros",
         title="Membros",
-        overview="Cadastro central de alunos, socios, visitantes e convidados.",
+        overview="Cadastro central de alunos, sócios, visitantes e convidados.",
         functions=(
             "Registra nome, sobrenome, rating, categoria, documentos, contatos e nascimento.",
-            "Associa o membro a clube, turma e nivel pedagogico.",
+            "Associa o membro a clube, turma e nível pedagógico.",
             "Filtra por texto, clube, turma, tipo, status e categoria.",
-            "Mostra historico esportivo, financeiro, presencas e variacao de rating do membro selecionado.",
+            "Mostra histórico esportivo, financeiro, presenças e variação de rating do membro selecionado.",
         ),
-        workflow=("Cadastre membros ativos.", "Associe turma e nivel quando aplicavel.", "Use o historico para conferir pendencias ou participacoes."),
+        workflow=("Cadastre membros ativos.", "Associe turma e nível quando aplicável.", "Use o histórico para conferir pendências ou participações."),
         notes=("Membros ativos podem ser inscritos automaticamente em torneios de clube ou turma.",),
         method_name="show_members",
     ),
     ScreenSpec(
         slug="niveis",
         menu="Clube",
-        action="Niveis",
-        title="Niveis de Aprendizagem",
-        overview="Estrutura pedagogica usada para organizar alunos, aulas, exercicios e listas de treino.",
+        action="Níveis",
+        title="Níveis de Aprendizagem",
+        overview="Estrutura pedagógica usada para organizar alunos, aulas, exercícios e listas de treino.",
         functions=(
-            "Cria niveis como Iniciante, Intermediario e Avancado.",
-            "Define descricao e ordem de exibicao.",
-            "Ativa ou inativa niveis sem apagar historico.",
-            "Mostra quantos membros estao vinculados a cada nivel.",
+            "Cria níveis como Iniciante, Intermediário e Avançado.",
+            "Define descrição e ordem de exibição.",
+            "Ativa ou inativa níveis sem apagar histórico.",
+            "Mostra quantos membros estão vinculados a cada nível.",
         ),
-        workflow=("Crie os niveis do metodo de ensino.", "Aplique o nivel em membros e exercicios.", "Mantenha a ordem para leitura rapida nos filtros."),
+        workflow=("Crie os níveis do método de ensino.", "Aplique o nível em membros e exercícios.", "Mantenha a ordem para leitura rápida nos filtros."),
         method_name="show_learning_levels",
     ),
     ScreenSpec(
         slug="responsaveis",
         menu="Clube",
-        action="Responsaveis",
-        title="Responsaveis",
-        overview="Controle de contatos de pais, responsaveis legais e contatos de emergencia.",
+        action="Responsáveis",
+        title="Responsáveis",
+        overview="Controle de contatos de pais, responsáveis legais e contatos de emergência.",
         functions=(
-            "Cadastra responsavel com telefone, e-mail, documento, endereco e observacoes.",
-            "Vincula responsavel a um ou mais membros.",
-            "Marca contato principal e contato de emergencia.",
-            "Lista menores sem responsavel para correcao cadastral.",
+            "Cadastra responsável com telefone, e-mail, documento, endereço e observações.",
+            "Vincula responsável a um ou mais membros.",
+            "Marca contato principal e contato de emergência.",
+            "Lista menores sem responsável para correção cadastral.",
         ),
-        workflow=("Cadastre o responsavel.", "Selecione o aluno.", "Informe parentesco e marque contato principal/emergencia quando necessario."),
+        workflow=("Cadastre o responsável.", "Selecione o aluno.", "Informe parentesco e marque contato principal/emergência quando necessário."),
         method_name="show_guardians",
     ),
     ScreenSpec(
         slug="aulas",
         menu="Treinamento",
         action="Aulas",
-        title="Aulas e Presencas",
-        overview="Agenda aulas, treinos e chamadas vinculadas ao clube, turma e lista de exercicios.",
+        title="Aulas e Presenças",
+        overview="Agenda aulas, treinos e chamadas vinculadas ao clube, turma e lista de exercícios.",
         functions=(
-            "Registra titulo, tipo, data, horario, instrutor, local, objetivo e conteudo.",
-            "Vincula aula a clube, turma, nivel e lista de treino.",
+            "Registra título, tipo, data, horário, instrutor, local, objetivo e conteúdo.",
+            "Vincula aula a clube, turma, nível e lista de treino.",
             "Carrega chamada dos membros da turma.",
-            "Salva presencas como presente, ausente ou justificada.",
+            "Salva presenças como presente, ausente ou justificada.",
         ),
-        workflow=("Cadastre a aula.", "Selecione a sessao criada.", "Marque a chamada e salve.", "Use os dados em relatorios de presenca."),
+        workflow=("Cadastre a aula.", "Selecione a sessão criada.", "Marque a chamada e salve.", "Use os dados em relatórios de presença."),
         notes=("Datas usam formato AAAA-MM-DD.",),
         method_name="show_training",
     ),
     ScreenSpec(
         slug="exercicios",
         menu="Treinamento",
-        action="Exercicios",
-        title="Exercicios e Listas",
-        overview="Biblioteca tatica operacional para aulas, listas de treino e acompanhamento pedagogico.",
+        action="Exercícios",
+        title="Exercícios e Listas",
+        overview="Biblioteca tática operacional para aulas, listas de treino e acompanhamento pedagógico.",
         functions=(
-            "Cadastra exercicio com tema, FEN, PGN, solucao, objetivo, dificuldade e tags.",
-            "Filtra exercicios por busca, dificuldade e status.",
-            "Cria listas de treino por clube, turma, nivel e data alvo.",
-            "Adiciona ou remove exercicios da lista selecionada.",
+            "Cadastra exercício com tema, FEN, PGN, solução, objetivo, dificuldade e tags.",
+            "Filtra exercícios por busca, dificuldade e status.",
+            "Cria listas de treino por clube, turma, nível e data alvo.",
+            "Adiciona ou remove exercícios da lista selecionada.",
         ),
-        workflow=("Cadastre exercicios reutilizaveis.", "Crie uma lista para a turma.", "Adicione exercicios selecionados.", "Vincule a lista a uma aula."),
+        workflow=("Cadastre exercícios reutilizáveis.", "Crie uma lista para a turma.", "Adicione exercícios selecionados.", "Vincule a lista a uma aula."),
         method_name="show_exercises",
     ),
     ScreenSpec(
         slug="arbitros",
-        menu="Gestao",
-        action="Arbitros",
-        title="Arbitros",
-        overview="Cadastro da equipe de arbitragem, usado em torneios e relatorios oficiais.",
+        menu="Gestão",
+        action="Árbitros",
+        title="Árbitros",
+        overview="Cadastro da equipe de arbitragem, usado em torneios e relatórios oficiais.",
         functions=(
-            "Registra nome, categoria, ID de federacao, FIDE ID, CBX ID, telefone e e-mail.",
-            "Marca arbitro como ativo ou inativo.",
-            "Lista todos os arbitros para selecao e edicao.",
-            "Permite manter observacoes administrativas.",
+            "Registra nome, categoria, ID de federação, FIDE ID, CBX ID, telefone e e-mail.",
+            "Marca árbitro como ativo ou inativo.",
+            "Lista todos os árbitros para seleção e edição.",
+            "Permite manter observações administrativas.",
         ),
-        workflow=("Cadastre os arbitros uma vez.", "Mantenha IDs oficiais atualizados.", "Associe arbitros ao torneio nas configuracoes do torneio quando necessario."),
+        workflow=("Cadastre os árbitros uma vez.", "Mantenha IDs oficiais atualizados.", "Associe árbitros ao torneio nas configurações do torneio quando necessário."),
         method_name="show_referees",
     ),
     ScreenSpec(
         slug="inventario",
-        menu="Gestao",
-        action="Inventario",
-        title="Inventario",
-        overview="Controle de material fisico do clube: relogios, pecas, tabuleiros, livros e itens diversos.",
+        menu="Gestão",
+        action="Inventário",
+        title="Inventário",
+        overview="Controle de material físico do clube: relógios, pecas, tabuleiros, livros e itens diversos.",
         functions=(
-            "Cadastra item, codigo, tipo, quantidade, estado, local de armazenamento e valor.",
-            "Registra emprestimos por membro, quantidade, data, vencimento e devolucao.",
-            "Registra manutencoes com status, custo, fornecedor e observacoes.",
-            "Resume itens disponiveis, emprestados, atrasados e em manutencao.",
+            "Cadastra item, código, tipo, quantidade, estado, local de armazenamento e valor.",
+            "Registra empréstimos por membro, quantidade, data, vencimento e devolução.",
+            "Registra manutenções com status, custo, fornecedor e observações.",
+            "Resume itens disponíveis, emprestados, atrasados e em manutenção.",
         ),
-        workflow=("Cadastre o estoque.", "Registre emprestimos quando o material sair.", "Feche devolucoes e manutencoes para manter saldo correto."),
+        workflow=("Cadastre o estoque.", "Registre empréstimos quando o material sair.", "Feche devoluções e manutenções para manter saldo correto."),
         method_name="show_inventory",
     ),
     ScreenSpec(
         slug="financeiro",
-        menu="Gestao",
+        menu="Gestão",
         action="Financeiro",
         title="Financeiro",
-        overview="Controle de planos, mensalidades, pagamentos, lancamentos e patrocinadores.",
+        overview="Controle de planos, mensalidades, pagamentos, lançamentos e patrocinadores.",
         functions=(
-            "Cria planos de cobranca com valor, ciclo e status.",
-            "Lanca pagamentos por membro, plano, referencia, vencimento e metodo.",
+            "Cria planos de cobrança com valor, ciclo e status.",
+            "Lança pagamentos por membro, plano, referência, vencimento e método.",
             "Classifica pagamentos como pago, pendente ou atrasado.",
             "Mostra resumo de recebido, pendente, atrasado e fluxo financeiro.",
         ),
-        workflow=("Crie os planos.", "Lance mensalidades ou pagamentos avulsos.", "Use filtros para cobrar pendencias.", "Gere DRE em Ferramentas quando precisar consolidar."),
+        workflow=("Crie os planos.", "Lance mensalidades ou pagamentos avulsos.", "Use filtros para cobrar pendências.", "Gere DRE em Ferramentas quando precisar consolidar."),
         method_name="show_finance",
     ),
     ScreenSpec(
         slug="calendario",
-        menu="Gestao",
-        action="Calendario",
-        title="Calendario",
+        menu="Gestão",
+        action="Calendário",
+        title="Calendário",
         overview="Agenda de eventos do clube, com possibilidade de vincular torneios.",
         functions=(
-            "Registra titulo, tipo, data, horario, local, status, clube e torneio vinculado.",
-            "Filtra eventos por texto, periodo e status.",
-            "Permite acompanhar eventos planejados, confirmados, concluidos ou cancelados.",
-            "Alimenta o dashboard visual e relatorios administrativos.",
+            "Registra título, tipo, data, horário, local, status, clube e torneio vinculado.",
+            "Filtra eventos por texto, período e status.",
+            "Permite acompanhar eventos planejados, confirmados, concluídos ou cancelados.",
+            "Alimenta o dashboard visual e relatórios administrativos.",
         ),
-        workflow=("Cadastre eventos futuros.", "Vincule torneios quando houver.", "Atualize status conforme a execucao."),
+        workflow=("Cadastre eventos futuros.", "Vincule torneios quando houver.", "Atualize status conforme a execução."),
         method_name="show_calendar",
     ),
     ScreenSpec(
         slug="ranking_interno",
-        menu="Gestao",
+        menu="Gestão",
         action="Ranking Interno",
         title="Ranking Interno",
         overview="Rating interno dos membros, calculado a partir dos resultados registrados.",
         functions=(
-            "Mostra rating, variacao, partidas, aproveitamento, resultado acumulado e ultima performance.",
+            "Mostra rating, variação, partidas, aproveitamento, resultado acumulado e última performance.",
             "Filtra por categoria, status e busca textual.",
             "Aplica resultados do torneio atual ao rating interno.",
             "Exporta a tabela de ranking.",
         ),
-        workflow=("Feche rodadas do torneio.", "Revise a classificacao.", "Aplique o torneio atual ao ranking interno.", "Exporte a tabela para divulgacao."),
-        notes=("Convidados externos nao entram como membros no ranking interno.",),
+        workflow=("Feche rodadas do torneio.", "Revise a classificação.", "Aplique o torneio atual ao ranking interno.", "Exporte a tabela para divulgação."),
+        notes=("Convidados externos não entram como membros no ranking interno.",),
         method_name="show_internal_ranking",
     ),
     ScreenSpec(
@@ -340,7 +340,7 @@ SCREENS: tuple[ScreenSpec, ...] = (
             "Seleciona o torneio ativo para as demais telas.",
         ),
         workflow=("Preencha nome, local, datas, rodadas, ritmo e bye.", "Escolha escopo e formato.", "Crie ou importe.", "Selecione o torneio antes de usar jogadores e rodadas."),
-        notes=("Sem torneio selecionado, telas como Jogadores, Rodadas, Classificacao, Exportar e Diplomas ficam bloqueadas.",),
+        notes=("Sem torneio selecionado, telas como Jogadores, Rodadas, Classificação, Exportar e Diplomas ficam bloqueadas.",),
         method_name="show_tournaments",
     ),
     ScreenSpec(
@@ -348,87 +348,87 @@ SCREENS: tuple[ScreenSpec, ...] = (
         menu="Torneio",
         action="Central do Torneio",
         title="Central do Torneio",
-        overview="Resumo do torneio selecionado e porta de entrada para as abas de operacao.",
+        overview="Resumo do torneio selecionado e porta de entrada para as abas de operação.",
         functions=(
-            "Mostra formato, status, local, periodo, rodadas geradas, jogadores e perfil.",
-            "Exibe navegacao interna: Central, Arbitro, Config., Jogadores, Rodadas, Classificacao, Exportar e Diplomas.",
+            "Mostra formato, status, local, período, rodadas geradas, jogadores e perfil.",
+            "Exibe navegação interna: Central, Árbitro, Config., Jogadores, Rodadas, Classificação, Exportar e Diplomas.",
             "Mostra Equipes quando o torneio esta no formato por equipes.",
             "Permite voltar para a lista de torneios.",
         ),
-        workflow=("Selecione o torneio.", "Revise o resumo.", "Use a navegacao da propria tela para operar o evento."),
+        workflow=("Selecione o torneio.", "Revise o resumo.", "Use a navegação da própria tela para operar o evento."),
         method_name="show_tournament_dashboard",
     ),
     ScreenSpec(
         slug="painel_arbitro",
         menu="Torneio",
-        action="Painel do Arbitro",
-        title="Painel do Arbitro",
-        overview="Painel operacional para acompanhar pendencias, rodadas, mesas, alertas e acoes criticas da arbitragem.",
+        action="Painel do Árbitro",
+        title="Painel do Árbitro",
+        overview="Painel operacional para acompanhar pendências, rodadas, mesas, alertas e ações criticas da arbitragem.",
         functions=(
-            "Mostra metricas de rodadas, resultados pendentes, jogadores ativos e pendencias.",
+            "Mostra métricas de rodadas, resultados pendentes, jogadores ativos e pendências.",
             "Lista mesas pendentes com busca por mesa ou jogador.",
-            "Oferece atalhos para Central de pendencias, Ajustes de pontos, Proibicoes e Byes solicitados.",
-            "Permite abrir lancamento de resultados e fechar rodada quando permitido.",
+            "Oferece atalhos para Central de pendências, Ajustes de pontos, Proibições e Byes solicitados.",
+            "Permite abrir lançamento de resultados e fechar rodada quando permitido.",
         ),
-        workflow=("Abra durante a rodada.", "Use a busca para localizar mesa.", "Resolva pendencias antes do fechamento.", "Atualize a tela periodicamente ou use auto-refresh."),
+        workflow=("Abra durante a rodada.", "Use a busca para localizar mesa.", "Resolva pendências antes do fechamento.", "Atualize a tela periodicamente ou use auto-refresh."),
         method_name="show_arbitration_panel",
     ),
     ScreenSpec(
         slug="pendencias_arbitragem",
-        menu="Painel do Arbitro",
-        action="Central de Pendencias",
-        title="Central de Pendencias da Arbitragem",
-        overview="Lista alertas tecnicos que podem exigir acao do arbitro antes de gerar ou fechar rodadas.",
+        menu="Painel do Árbitro",
+        action="Central de Pendências",
+        title="Central de Pendências da Arbitragem",
+        overview="Lista alertas técnicos que podem exigir ação do árbitro antes de gerar ou fechar rodadas.",
         functions=(
-            "Agrupa pendencias bloqueantes, avisos, QR e conflitos.",
-            "Filtra por tipo de pendencia e busca textual.",
-            "Mostra detalhes tecnicos por duplo clique ou botao Detalhes.",
-            "Permite aprovar/rejeitar QR e marcar ciencia de um alerta.",
+            "Agrupa pendências bloqueantes, avisos, QR e conflitos.",
+            "Filtra por tipo de pendência e busca textual.",
+            "Mostra detalhes técnicos por duplo clique ou botão Detalhes.",
+            "Permite aprovar/rejeitar QR e marcar ciência de um alerta.",
         ),
-        workflow=("Filtre pelas pendencias bloqueantes.", "Abra detalhes.", "Aplique correcao no modulo indicado.", "Marque ciencia apenas quando a ocorrencia for aceitavel."),
+        workflow=("Filtre pelas pendências bloqueantes.", "Abra detalhes.", "Aplique correção no modulo indicado.", "Marque ciência apenas quando a ocorrência for aceitável."),
         method_name="show_arbitration_issues",
     ),
     ScreenSpec(
         slug="ajustes_pontos",
-        menu="Painel do Arbitro",
+        menu="Painel do Árbitro",
         action="Ajustes de pontos (TRF25)",
         title="Ajustes de Pontos",
-        overview="Registra bonificacoes ou penalidades manuais que devem entrar nos calculos e exportacoes.",
+        overview="Registra bonificações ou penalidades manuais que devem entrar nos cálculos e exportações.",
         functions=(
             "Seleciona jogador ou equipe conforme o formato do torneio.",
             "Define rodada, tipo AAT, pontos de match, pontos de jogo e justificativa.",
-            "Lista ajustes ja cadastrados.",
-            "Remove ajuste selecionado quando necessario.",
+            "Lista ajustes já cadastrados.",
+            "Remove ajuste selecionado quando necessário.",
         ),
-        workflow=("Escolha o participante.", "Informe rodada e pontos.", "Descreva a justificativa.", "Revise classificacao e exportacao depois do ajuste."),
+        workflow=("Escolha o participante.", "Informe rodada e pontos.", "Descreva a justificativa.", "Revise classificação e exportação depois do ajuste."),
         method_name="show_point_adjustments",
     ),
     ScreenSpec(
         slug="proibicoes",
-        menu="Painel do Arbitro",
-        action="Proibicoes (TRF25)",
-        title="Proibicoes de Emparceiramento",
+        menu="Painel do Árbitro",
+        action="Proibições (TRF25)",
+        title="Proibições de Emparceiramento",
         overview="Impede que determinados jogadores ou equipes sejam pareados em uma janela de rodadas.",
         functions=(
             "Seleciona dois participantes.",
-            "Define primeira e ultima rodada de validade.",
-            "Registra motivo da proibicao.",
-            "Remove proibicoes quando deixarem de valer.",
+            "Define primeira e última rodada de validade.",
+            "Registra motivo da proibição.",
+            "Remove proibições quando deixarem de valer.",
         ),
-        workflow=("Cadastre a proibicao antes de gerar a rodada afetada.", "Use ultima rodada vazia/zero para manter aberta.", "Confira a pre-visualizacao da rodada depois."),
+        workflow=("Cadastre a proibição antes de gerar a rodada afetada.", "Use última rodada vazia/zero para manter aberta.", "Confira a pré-visualização da rodada depois."),
         method_name="show_prohibited_pairings",
     ),
     ScreenSpec(
         slug="byes_solicitados",
-        menu="Painel do Arbitro",
+        menu="Painel do Árbitro",
         action="Byes solicitados (TRF25)",
         title="Byes Solicitados",
-        overview="Registra pedidos de bye para que o motor de emparceiramento trate ausencias autorizadas.",
+        overview="Registra pedidos de bye para que o motor de emparceiramento trate ausências autorizadas.",
         functions=(
             "Seleciona jogador, rodada e tipo de bye.",
-            "Aceita tipos F, H e Z conforme configuracao operacional.",
-            "Mantem justificativa textual.",
-            "Remove solicitacoes incorretas.",
+            "Aceita tipos F, H e Z conforme configuração operacional.",
+            "Mantém justificativa textual.",
+            "Remove solicitações incorretas.",
         ),
         workflow=("Registre o bye antes de gerar a rodada.", "Confirme se o jogador permanece com status adequado.", "Gere a rodada e revise a mesa de bye."),
         method_name="show_requested_byes",
@@ -437,15 +437,15 @@ SCREENS: tuple[ScreenSpec, ...] = (
         slug="config_torneio",
         menu="Torneio",
         action="Config. Torneio",
-        title="Configuracao do Torneio",
-        overview="Dados oficiais, agenda, regras, flags, perfis, criterios e parametros normativos do torneio.",
+        title="Configuração do Torneio",
+        overview="Dados oficiais, agenda, regras, flags, perfis, critérios e parâmetros normativos do torneio.",
         functions=(
             "Edita dados gerais: nome, escopo, local, datas, rodadas, ritmo e bye.",
-            "Mantem dados oficiais: FIDE Event-ID, organizador, pagina, diretores, arbitros, federacao, categorias e premios.",
-            "Configura sistema de emparceiramento, aceleracao, criterios de desempate e perfil do torneio.",
-            "Controla flags como inscricao publica, ocultar classificacao, desativar bye e mudancas perigosas.",
+            "Mantém dados oficiais: FIDE Event-ID, organizador, página, diretores, árbitros, federação, categorias e prêmios.",
+            "Configura sistema de emparceiramento, aceleração, critérios de desempate e perfil do torneio.",
+            "Controla flags como inscrição publica, ocultar classificação, desativar bye e mudanças perigosas.",
         ),
-        workflow=("Revise dados oficiais antes da primeira rodada.", "Defina agenda de rodadas.", "Ajuste regras e criterios.", "Evite alterar parametros sensiveis depois de rodadas fechadas."),
+        workflow=("Revise dados oficiais antes da primeira rodada.", "Defina agenda de rodadas.", "Ajuste regras e critérios.", "Evite alterar parâmetros sensíveis depois de rodadas fechadas."),
         method_name="show_tournament_settings",
     ),
     ScreenSpec(
@@ -453,15 +453,15 @@ SCREENS: tuple[ScreenSpec, ...] = (
         menu="Torneio",
         action="Jogadores",
         title="Jogadores",
-        overview="Inscricao e manutencao dos participantes do torneio selecionado.",
+        overview="Inscrição e manutenção dos participantes do torneio selecionado.",
         functions=(
             "Adiciona jogador manualmente com nome, rating, categoria, clube e IDs oficiais.",
             "Inscreve membros ativos do clube/turma quando o escopo permite.",
-            "Importa CSV, TRF/Chess-Results e dados de formulario quando configurado.",
+            "Importa CSV, TRF/Chess-Results e dados de formulário quando configurado.",
             "Atualiza dados oficiais por FIDE/CBX/LBX e controla status do jogador.",
         ),
-        workflow=("Inscreva os participantes.", "Atualize dados oficiais.", "Revise status ativo, ausente, desistente ou nao emparceirado.", "So gere rodada quando a lista estiver correta."),
-        notes=("Apenas jogadores ativos entram normalmente nas proximas rodadas.",),
+        workflow=("Inscreva os participantes.", "Atualize dados oficiais.", "Revise status ativo, ausente, desistente ou não emparceirado.", "Só gere rodada quando a lista estiver correta."),
+        notes=("Apenas jogadores ativos entram normalmente nas próximas rodadas.",),
         method_name="show_players",
     ),
     ScreenSpec(
@@ -471,10 +471,10 @@ SCREENS: tuple[ScreenSpec, ...] = (
         title="Equipes",
         overview="Cadastro de equipes, escalação de jogadores e tabuleiros para torneios por equipes.",
         functions=(
-            "Cria equipe com nome, clube/cidade, capitao, observacoes e status.",
-            "Seleciona jogador inscrito e atribui tabuleiro e funcao.",
+            "Cria equipe com nome, clube/cidade, capitão, observações e status.",
+            "Seleciona jogador inscrito e atribui tabuleiro e função.",
             "Lista equipes e jogadores escalados.",
-            "Bloqueia exclusao quando a equipe ja apareceu em rodadas, preservando historico.",
+            "Bloqueia exclusão quando a equipe já apareceu em rodadas, preservando histórico.",
         ),
         workflow=("Crie o torneio no formato Equipes.", "Inscreva jogadores.", "Crie equipes.", "Associe jogadores a tabuleiros antes de gerar a rodada."),
         notes=("Em torneio individual, esta tela informa que o formato precisa ser alterado para Equipes.",),
@@ -486,30 +486,30 @@ SCREENS: tuple[ScreenSpec, ...] = (
         menu="Torneio",
         action="Rodadas",
         title="Rodadas e Resultados",
-        overview="Gera emparceiramentos, lanca resultados, exporta listas de mesas e fecha rodadas.",
+        overview="Gera emparceiramentos, lança resultados, exporta listas de mesas e fecha rodadas.",
         functions=(
-            "Gera proxima rodada e pre-visualiza antes de gravar.",
-            "Lanca resultado da mesa selecionada.",
+            "Gera próxima rodada e pré-visualiza antes de gravar.",
+            "Lança resultado da mesa selecionada.",
             "Troca cores ou jogador antes do fechamento quando permitido.",
-            "Exporta/imprime rodada, sumulas, cartoes de mesa e QR de resultado.",
+            "Exporta/imprime rodada, súmulas, cartões de mesa e QR de resultado.",
         ),
-        workflow=("Gere a rodada.", "Imprima ou publique as mesas.", "Lance todos os resultados.", "Feche a rodada somente depois de conferir pendencias."),
-        notes=("Rodada fechada fica protegida; alteracoes posteriores exigem permissao/configuracao especifica.",),
+        workflow=("Gere a rodada.", "Imprima ou publique as mesas.", "Lance todos os resultados.", "Feche a rodada somente depois de conferir pendências."),
+        notes=("Rodada fechada fica protegida; alterações posteriores exigem permissão/configuração especifica.",),
         method_name="show_pairings",
     ),
     ScreenSpec(
         slug="classificacao",
         menu="Torneio",
-        action="Classificacao",
-        title="Classificacao",
-        overview="Tabela de pontuacao e desempates do torneio selecionado.",
+        action="Classificação",
+        title="Classificação",
+        overview="Tabela de pontuação e desempates do torneio selecionado.",
         functions=(
-            "Recalcula a classificacao a qualquer momento.",
+            "Recalcula a classificação a qualquer momento.",
             "Filtra por categoria.",
-            "Mostra pontos, Buchholz, Buchholz mediano, Sonneborn-Berger, vitorias, performance, rating e clube.",
+            "Mostra pontos, Buchholz, Buchholz mediano, Sonneborn-Berger, vitórias, performance, rating e clube.",
             "Permite abrir detalhes de desempate e atualizar ranking interno.",
         ),
-        workflow=("Recalcule apos salvar/fechar rodadas.", "Filtre categorias para premiacao.", "Use os detalhes para explicar desempates.", "Exporte pelo modulo Exportar."),
+        workflow=("Recalcule após salvar/fechar rodadas.", "Filtre categorias para premiação.", "Use os detalhes para explicar desempates.", "Exporte pelo modulo Exportar."),
         method_name="show_standings",
     ),
     ScreenSpec(
@@ -520,11 +520,11 @@ SCREENS: tuple[ScreenSpec, ...] = (
         overview="Gera certificados e diplomas em PDF para participantes e premiados.",
         functions=(
             "Seleciona ou cria modelo de diploma.",
-            "Configura tipo, orientacao, logos, fundo, cores, fontes, textos e assinaturas.",
-            "Escolhe destinatarios: todos, Top N geral, Top N por categoria ou selecionados.",
-            "Gera PDF e registra emissoes com codigo de verificacao.",
+            "Configura tipo, orientação, logos, fundo, cores, fontes, textos e assinaturas.",
+            "Escolhe destinatários: todos, Top N geral, Top N por categoria ou selecionados.",
+            "Gera PDF e registra emissões com código de verificação.",
         ),
-        workflow=("Revise a classificacao.", "Escolha modelo e destinatarios.", "Confira a contagem/preview.", "Gere o PDF final."),
+        workflow=("Revise a classificação.", "Escolha modelo e destinatários.", "Confira a contagem/preview.", "Gere o PDF final."),
         method_name="show_certificates",
     ),
     ScreenSpec(
@@ -532,29 +532,29 @@ SCREENS: tuple[ScreenSpec, ...] = (
         menu="Ferramentas",
         action="Exportar",
         title="Exportar",
-        overview="Gera arquivos do torneio e publicacoes externas.",
+        overview="Gera arquivos do torneio e publicações externas.",
         functions=(
-            "Exporta completo, classificacao, rodada especifica, todas as rodadas, jogadores e site HTML.",
+            "Exporta completo, classificação, rodada especifica, todas as rodadas, jogadores e site HTML.",
             "Gera CSV, XLSX e PDF conforme o tipo escolhido.",
             "Valida TRF FIDE antes de enviar a federações ou Chess-Results.",
-            "Gera lote de arquivos e pacote web quando necessario.",
+            "Gera lote de arquivos e pacote web quando necessário.",
         ),
-        workflow=("Escolha o tipo de exportacao.", "Escolha formato e rodada quando aplicavel.", "Valide TRF quando for arquivo oficial.", "Salve na pasta de exportacao."),
+        workflow=("Escolha o tipo de exportação.", "Escolha formato e rodada quando aplicável.", "Valide TRF quando for arquivo oficial.", "Salve na pasta de exportação."),
         method_name="show_export",
     ),
     ScreenSpec(
         slug="relatorios_admin",
         menu="Ferramentas",
-        action="Relatorios Administrativos",
-        title="Relatorios Administrativos",
-        overview="Relatorios gerenciais do clube, membros, aulas, eventos, financeiro e ranking.",
+        action="Relatórios Administrativos",
+        title="Relatórios Administrativos",
+        overview="Relatórios gerenciais do clube, membros, aulas, eventos, financeiro e ranking.",
         functions=(
-            "Gera relatorio geral do clube.",
-            "Gera relatorio individual de membro.",
-            "Gera relatorios por periodo: torneios, presencas, financeiro e eventos.",
+            "Gera relatório geral do clube.",
+            "Gera relatório individual de membro.",
+            "Gera relatórios por período: torneios, presenças, financeiro e eventos.",
             "Gera pacote administrativo consolidado.",
         ),
-        workflow=("Escolha o tipo de relatorio.", "Informe periodo ou membro quando exigido.", "Escolha CSV, XLSX ou PDF.", "Clique em Gerar relatorio."),
+        workflow=("Escolha o tipo de relatório.", "Informe período ou membro quando exigido.", "Escolha CSV, XLSX ou PDF.", "Clique em Gerar relatório."),
         method_name="show_administrative_reports",
     ),
     ScreenSpec(
@@ -562,11 +562,11 @@ SCREENS: tuple[ScreenSpec, ...] = (
         menu="Ferramentas",
         action="DRE Financeiro",
         title="DRE Financeiro",
-        overview="Demonstrativo financeiro por periodo, com receitas, despesas e resultado liquido.",
+        overview="Demonstrativo financeiro por período, com receitas, despesas e resultado liquido.",
         functions=(
             "Calcula receitas por categoria.",
             "Calcula despesas por categoria.",
-            "Mostra resultado liquido do periodo.",
+            "Mostra resultado liquido do período.",
             "Gera PDF do DRE.",
         ),
         workflow=("Informe data inicial e final.", "Clique em Calcular.", "Revise categorias.", "Gere PDF do DRE quando precisar prestar contas."),
@@ -575,14 +575,14 @@ SCREENS: tuple[ScreenSpec, ...] = (
     ScreenSpec(
         slug="comunicacao",
         menu="Ferramentas",
-        action="Comunicacao",
-        title="Comunicacao",
-        overview="Envio de comunicados por e-mail, disparo em massa, WhatsApp e configuracao SMTP.",
+        action="Comunicação",
+        title="Comunicação",
+        overview="Envio de comunicados por e-mail, disparo em massa, WhatsApp e configuração SMTP.",
         functions=(
-            "Envia e-mail individual por destinatario, assunto e mensagem.",
+            "Envia e-mail individual por destinatário, assunto e mensagem.",
             "Faz disparo em massa para todos ativos, por turma ou por tipo de membro.",
             "Agenda e cancela mensagens pendentes.",
-            "Abre mensagem no WhatsApp e salva configuracao SMTP.",
+            "Abre mensagem no WhatsApp e salva configuração SMTP.",
         ),
         workflow=("Configure SMTP.", "Escolha e-mail individual ou disparo em massa.", "Defina publico e mensagem.", "Envie agora ou informe data/hora para agendar."),
         tabs=("E-mail", "Disparo em massa", "WhatsApp", "Config. SMTP"),
@@ -591,77 +591,77 @@ SCREENS: tuple[ScreenSpec, ...] = (
     ScreenSpec(
         slug="integracoes",
         menu="Ferramentas",
-        action="Integracoes Operacionais",
-        title="Integracoes Operacionais",
-        overview="Monitoramento de sincronizacao, dispositivos, eventos de relogio/ausencia e publicacao de album por FTP.",
+        action="Integrações Operacionais",
+        title="Integrações Operacionais",
+        overview="Monitoramento de sincronização, dispositivos, eventos de relógio/ausência e publicação de álbum por FTP.",
         functions=(
-            "Configura URL de sincronizacao e chaves de habilitacao.",
-            "Lista fila de eventos pendentes e detalhes tecnicos.",
+            "Configura URL de sincronização e chaves de habilitação.",
+            "Lista fila de eventos pendentes e detalhes técnicos.",
             "Autoriza ou revoga dispositivos.",
-            "Registra eventos manuais de relogio/ausencia e configura FTP para album de fotos.",
+            "Registra eventos manuais de relógio/ausência e configura FTP para álbum de fotos.",
         ),
-        workflow=("Configure servidor e flags.", "Autorize dispositivos se houver operacao distribuida.", "Monitore pendencias.", "Use eventos de relogio para auditoria operacional."),
-        tabs=("Sincronizacao", "Dispositivos", "Relogio/Ausencia", "Album/FTP"),
+        workflow=("Configure servidor e flags.", "Autorize dispositivos se houver operação distribuída.", "Monitore pendências.", "Use eventos de relógio para auditoria operacional."),
+        tabs=("Sincronização", "Dispositivos", "Relogio/Ausencia", "Album/FTP"),
         method_name="show_integrations",
     ),
     ScreenSpec(
         slug="biblioteca",
         menu="Ctrl+K",
-        action="Biblioteca Pedagogica",
-        title="Biblioteca Pedagogica",
-        overview="Acervo pedagogico para exercicios, textos, apostilas, importacao PGN e historico de envio.",
+        action="Biblioteca Pedagógica",
+        title="Biblioteca Pedagógica",
+        overview="Acervo pedagógico para exercícios, textos, apostilas, importação PGN e histórico de envio.",
         functions=(
-            "Cadastra exercicios e textos com FEN/PGN, tema, nivel, solucao, tags e autor.",
+            "Cadastra exercícios e textos com FEN/PGN, tema, nível, solução, tags e autor.",
             "Cria apostilas e exporta PDF do aluno ou professor.",
-            "Extrai exercicios de PGN marcado com lances fortes.",
-            "Registra envio manual para turmas e alerta repeticoes recentes.",
+            "Extrai exercícios de PGN marcado com lances fortes.",
+            "Registra envio manual para turmas e alerta repetições recentes.",
         ),
-        workflow=("Cadastre itens no acervo.", "Monte apostilas.", "Exporte para aluno/professor.", "Registre envios para controlar repeticao."),
-        tabs=("Acervo", "Apostilas", "Importador PGN", "Historico de Envio"),
+        workflow=("Cadastre itens no acervo.", "Monte apostilas.", "Exporte para aluno/professor.", "Registre envios para controlar repetição."),
+        tabs=("Acervo", "Apostilas", "Importador PGN", "Histórico de Envio"),
         method_name="show_library",
     ),
     ScreenSpec(
         slug="config_app",
-        menu="Configuracoes",
+        menu="Configurações",
         action="Config. App",
-        title="Configuracoes do Aplicativo",
-        overview="Preferencias locais, pastas, backup, seguranca, usuarios e bases oficiais.",
+        title="Configurações do Aplicativo",
+        overview="Preferências locais, pastas, backup, segurança, usuários e bases oficiais.",
         functions=(
-            "Ajusta aparencia, cor de destaque e escala da interface.",
-            "Define pastas de exportacao, backups e nuvem.",
-            "Gerencia usuarios do sistema e permissoes por perfil.",
+            "Ajusta aparência, cor de destaque e escala da interface.",
+            "Define pastas de exportação, backups e nuvem.",
+            "Gerencia usuários do sistema e permissões por perfil.",
             "Baixa lista FIDE, importa lista CBX e cria/restaura backups.",
         ),
-        workflow=("Configure pastas antes de operar torneios.", "Crie backup antes de mudancas importantes.", "Revise retencao.", "Use restauracao apenas com backup conferido."),
-        tabs=("Aparencia", "Pastas e backup", "Seguranca e dados"),
+        workflow=("Configure pastas antes de operar torneios.", "Crie backup antes de mudanças importantes.", "Revise retenção.", "Use restauração apenas com backup conferido."),
+        tabs=("Aparência", "Pastas e backup", "Segurança e dados"),
         method_name="show_app_settings",
     ),
     ScreenSpec(
         slug="auditoria",
-        menu="Configuracoes",
+        menu="Configurações",
         action="Auditoria Completa",
         title="Auditoria Completa",
-        overview="Consulta de logs tecnicos e administrativos do sistema.",
+        overview="Consulta de logs técnicos e administrativos do sistema.",
         functions=(
-            "Filtra por data inicial, data final, operador, acao e entidade.",
-            "Lista data, operador, perfil, acao, entidade e descricao.",
+            "Filtra por data inicial, data final, operador, ação e entidade.",
+            "Lista data, operador, perfil, ação, entidade e descrição.",
             "Abre metadados JSON por duplo clique.",
-            "Ajuda a investigar backups, restauracoes, logins, permissoes e operacoes sensiveis.",
+            "Ajuda a investigar backups, restaurações, logins, permissões e operações sensíveis.",
         ),
-        workflow=("Defina filtros.", "Clique em Buscar.", "Abra metadados quando precisar de detalhe tecnico.", "Use como trilha de auditoria e suporte."),
+        workflow=("Defina filtros.", "Clique em Buscar.", "Abra metadados quando precisar de detalhe técnico.", "Use como trilha de auditoria e suporte."),
         method_name="show_audit_logs",
     ),
     ScreenSpec(
         slug="palette",
         menu="Ajuda",
-        action="Buscar acao...",
+        action="Buscar ação...",
         title="Palette de Comandos",
-        overview="Busca rapida de telas e comandos por teclado.",
+        overview="Busca rápida de telas e comandos por teclado.",
         functions=(
             "Abre com Ctrl+K.",
-            "Filtra acoes por nome e palavras-chave.",
-            "Executa a acao selecionada com Enter.",
-            "Inclui atalhos que nao aparecem no menu principal, como Biblioteca Pedagogica.",
+            "Filtra ações por nome e palavras-chave.",
+            "Executa a ação selecionada com Enter.",
+            "Inclui atalhos que não aparecem no menu principal, como Biblioteca Pedagógica.",
         ),
         workflow=("Pressione Ctrl+K.", "Digite parte do nome da tela.", "Use setas para escolher.", "Pressione Enter."),
         method_name="_show_command_palette",
@@ -718,7 +718,7 @@ def seed_demo_database(db: Database, temp_dir: Path) -> dict[str, int]:
         {
             "name": "Clube Modelo Albericus",
             "kind": "club",
-            "city": "Sao Paulo",
+            "city": "São Paulo",
             "address": "Rua das Torres, 64",
             "phone": "(11) 99999-0000",
             "email": "contato@clubemodelo.com",
@@ -732,7 +732,7 @@ def seed_demo_database(db: Database, temp_dir: Path) -> dict[str, int]:
             "club_id": club_id,
             "name": "Turma Sub-18",
             "teacher": "Prof. Marcos",
-            "weekday": "Sabado",
+            "weekday": "Sábado",
             "time": "09:00",
             "location": "Sala 2",
             "active": 1,
@@ -752,9 +752,9 @@ def seed_demo_database(db: Database, temp_dir: Path) -> dict[str, int]:
         )
 
     level_ids = [
-        ensure_level("Iniciante", "Fundamentos e mates basicos.", 1),
-        ensure_level("Intermediario", "Tatica, finais e estrategia.", 2),
-        ensure_level("Avancado", "Preparacao competitiva.", 3),
+        ensure_level("Iniciante", "Fundamentos e mates básicos.", 1),
+        ensure_level("Intermediário", "Tática, finais e estratégia.", 2),
+        ensure_level("Avançado", "Preparação competitiva.", 3),
     ]
 
     members = [
@@ -785,7 +785,7 @@ def seed_demo_database(db: Database, temp_dir: Path) -> dict[str, int]:
                     "document": "",
                     "guardian_name": "",
                     "guardian_phone": "",
-                    "notes": "Cadastro de demonstracao.",
+                    "notes": "Cadastro de demonstração.",
                 }
             )
         )
@@ -797,7 +797,7 @@ def seed_demo_database(db: Database, temp_dir: Path) -> dict[str, int]:
             "email": "maria@example.com",
             "document": "000.000.000-00",
             "address": "Rua das Torres, 64",
-            "notes": "Responsavel pela Ana.",
+            "notes": "Responsável pela Ana.",
             "active": 1,
         }
     )
@@ -805,7 +805,7 @@ def seed_demo_database(db: Database, temp_dir: Path) -> dict[str, int]:
         {
             "guardian_id": guardian_id,
             "member_id": member_ids[0],
-            "relationship": "Mae",
+            "relationship": "Mãe",
             "primary_contact": 1,
             "emergency_contact": 1,
             "notes": "Contato principal.",
@@ -817,13 +817,13 @@ def seed_demo_database(db: Database, temp_dir: Path) -> dict[str, int]:
             "club_id": club_id,
             "learning_level_id": level_ids[1],
             "title": "Mate em duas - coluna aberta",
-            "theme": "Tatica",
+            "theme": "Tática",
             "difficulty": "basic",
             "source": "Apostila interna",
             "fen": "6k1/5ppp/8/8/8/8/5PPP/6K1 w - - 0 1",
             "pgn": "",
             "solution": "Ativar a torre e explorar a retaguarda.",
-            "objective": "Reconhecer padroes de mate.",
+            "objective": "Reconhecer padrões de mate.",
             "tags": "mate, torre, iniciante",
             "active": 1,
             "notes": "Exemplo do manual.",
@@ -834,8 +834,8 @@ def seed_demo_database(db: Database, temp_dir: Path) -> dict[str, int]:
             "club_id": club_id,
             "class_id": class_id,
             "learning_level_id": level_ids[1],
-            "name": "Lista de Taticas - Maio",
-            "description": "Exercicios curtos para treino de calculo.",
+            "name": "Lista de Táticas - Maio",
+            "description": "Exercícios curtos para treino de cálculo.",
             "target_date": "2026-05-16",
             "status": "ready",
         }
@@ -868,9 +868,9 @@ def seed_demo_database(db: Database, temp_dir: Path) -> dict[str, int]:
             "instructor": "Prof. Marcos",
             "location": "Sala 2",
             "objective": "Finais de torre.",
-            "content": "Tecnicas basicas e exemplos praticos.",
+            "content": "Técnicas básicas e exemplos práticos.",
             "status": "planned",
-            "notes": "Aula de demonstracao.",
+            "notes": "Aula de demonstração.",
         }
     )
     training_service.record_attendance(
@@ -884,7 +884,7 @@ def seed_demo_database(db: Database, temp_dir: Path) -> dict[str, int]:
     )
 
     plan_id = finance_service.save_plan(
-        {"name": "Mensalidade aluno", "amount": "120", "billing_cycle": "monthly", "active": 1, "notes": "Plano padrao."}
+        {"name": "Mensalidade aluno", "amount": "120", "billing_cycle": "monthly", "active": 1, "notes": "Plano padrão."}
     )
     finance_service.save_payment(
         {
@@ -917,8 +917,8 @@ def seed_demo_database(db: Database, temp_dir: Path) -> dict[str, int]:
         {
             "transaction_date": "2026-05-18",
             "transaction_type": "income",
-            "category": "Inscricoes",
-            "description": "Inscricoes do Aberto Primavera",
+            "category": "Inscrições",
+            "description": "Inscrições do Aberto Primavera",
             "amount": "420",
             "payment_method": "Pix",
             "notes": "",
@@ -928,10 +928,10 @@ def seed_demo_database(db: Database, temp_dir: Path) -> dict[str, int]:
         {
             "transaction_date": "2026-05-18",
             "transaction_type": "expense",
-            "category": "Premiacao",
-            "description": "Medalhas e trofeus",
+            "category": "Premiação",
+            "description": "Medalhas e troféus",
             "amount": "180",
-            "payment_method": "Cartao",
+            "payment_method": "Cartão",
             "notes": "",
         }
     )
@@ -940,15 +940,15 @@ def seed_demo_database(db: Database, temp_dir: Path) -> dict[str, int]:
         {
             "club_id": club_id,
             "code": "REL-001",
-            "name": "Relogio digital DGT",
+            "name": "Relógio digital DGT",
             "item_type": "clocks",
             "quantity_total": "8",
             "condition_status": "good",
-            "storage_location": "Armario 1",
+            "storage_location": "Armário 1",
             "acquisition_date": "2026-04-20",
             "acquisition_value": "350",
             "active": 1,
-            "notes": "Usado em torneios rapidos.",
+            "notes": "Usado em torneios rápidos.",
         }
     )
     inventory_service.save_loan(
@@ -959,7 +959,7 @@ def seed_demo_database(db: Database, temp_dir: Path) -> dict[str, int]:
             "loan_date": "2026-05-12",
             "due_date": "2026-05-20",
             "status": "open",
-            "notes": "Emprestimo para treino.",
+            "notes": "Empréstimo para treino.",
         }
     )
     inventory_service.save_maintenance(
@@ -967,9 +967,9 @@ def seed_demo_database(db: Database, temp_dir: Path) -> dict[str, int]:
             "item_id": item_id,
             "opened_date": "2026-05-15",
             "status": "in_progress",
-            "description": "Botao de inicio frouxo.",
+            "description": "Botão de início frouxo.",
             "cost": "35",
-            "vendor": "Assistencia local",
+            "vendor": "Assistência local",
             "notes": "",
         }
     )
@@ -1008,13 +1008,13 @@ def seed_demo_database(db: Database, temp_dir: Path) -> dict[str, int]:
             "website": "https://exemplo.local",
             "contact_email": "arbitragem@example.com",
             "director": "Diretoria do clube",
-            "chief_arbiter": "Arbitro Principal",
+            "chief_arbiter": "Árbitro Principal",
             "arbiters": "Equipe de apoio",
             "federation": "BRA",
             "state": "SP",
             "categories": "Absoluto, Sub-18, Feminino",
             "cutoff_date": "2026-05-18",
-            "comments": "Torneio de demonstracao do manual.",
+            "comments": "Torneio de demonstração do manual.",
             "prizes": "Medalhas por categoria.",
             "initial_order": "rating",
             "tournament_type": "test",
@@ -1054,14 +1054,14 @@ def seed_demo_database(db: Database, temp_dir: Path) -> dict[str, int]:
 
     referee_id = referee_service.create_referee(
         {
-            "name": "Arbitro Principal",
+            "name": "Árbitro Principal",
             "category": "AN",
             "federation_id": "SP-001",
             "fide_id": "3456789",
             "cbx_id": "998877",
             "phone": "(11) 97777-0000",
             "email": "arbitro@example.com",
-            "notes": "Arbitro chefe do torneio demo.",
+            "notes": "Árbitro chefe do torneio demo.",
             "active": 1,
         }
     )
@@ -1096,7 +1096,7 @@ def seed_demo_database(db: Database, temp_dir: Path) -> dict[str, int]:
             int(players[1]["id"]),
             first_round=3,
             last_round=5,
-            reason="Mesmo clube/criterio pedagogico.",
+            reason="Mesmo clube/critério pedagógico.",
         )
         db.add_requested_bye(individual_tournament_id, int(players[-1]["id"]), 3, "H", reason="Compromisso escolar.")
 
@@ -1120,7 +1120,7 @@ def seed_demo_database(db: Database, temp_dir: Path) -> dict[str, int]:
             "event_date": "2026-05-18",
             "start_time": "11:00",
             "end_time": "13:00",
-            "location": "Salao principal",
+            "location": "Salão principal",
             "status": "confirmed",
             "notes": "Evento vinculado ao torneio.",
         }
@@ -1128,8 +1128,8 @@ def seed_demo_database(db: Database, temp_dir: Path) -> dict[str, int]:
     communication_service.save_announcement(
         {
             "club_id": club_id,
-            "title": "Inscricoes abertas",
-            "content": "Inscricoes do Aberto Primavera seguem abertas ate sexta-feira.",
+            "title": "Inscrições abertas",
+            "content": "Inscrições do Aberto Primavera seguem abertas até sexta-feira.",
             "category": "torneio",
             "start_date": "2026-05-10",
             "end_date": "2026-05-18",
@@ -1139,33 +1139,33 @@ def seed_demo_database(db: Database, temp_dir: Path) -> dict[str, int]:
 
     library_item_id = library_service.save_item(
         {
-            "title": "Tema tatico: pino absoluto",
+            "title": "Tema tático: pino absoluto",
             "item_type": "exercise",
             "phase": "middlegame",
             "level": "intermediate",
             "fen_pgn": "6k1/5ppp/8/8/8/8/5PPP/6K1 w - - 0 1",
             "theme": "Pino",
-            "solution": "Criar pressao na coluna aberta.",
-            "tags": "pino,tatica",
+            "solution": "Criar pressão na coluna aberta.",
+            "tags": "pino,tática",
             "author": "Acervo Albericus",
             "cover_image": "",
         }
     )
     library_service.save_collection(
-        {"name": "Apostila Maio", "description": "Taticas intermediarias", "items": [library_item_id]}
+        {"name": "Apostila Maio", "description": "Táticas intermediarias", "items": [library_item_id]}
     )
 
     template_count = len(certificate_service.list_templates(active_only=True))
     if template_count == 0:
         certificate_service.create_template(
             {
-                "name": "Participacao padrao",
+                "name": "Participação padrão",
                 "certificate_type": "participation",
                 "orientation": "landscape",
-                "title_template": "Certificado de Participacao",
+                "title_template": "Certificado de Participação",
                 "body_template": "{player_name} participou do {tournament_name}.",
                 "footer_template": "Albericus",
-                "signature_left": "Organizacao",
+                "signature_left": "Organização",
                 "signature_right": "Arbitragem",
                 "primary_color": "#1E3A8A",
                 "accent_color": "#93C5FD",
@@ -1194,7 +1194,7 @@ def seed_demo_database(db: Database, temp_dir: Path) -> dict[str, int]:
         db.create_player(team_tournament_id, name=f"Jogador {i}", rating=1800 - i * 25, club="Equipe Azul", category="Absoluto")
         for i in range(1, 9)
     ]
-    team_a = team_service.create_team(team_tournament_id, {"name": "Equipe Azul", "club": "Sao Paulo", "captain": "Bruno", "active": 1, "notes": ""})
+    team_a = team_service.create_team(team_tournament_id, {"name": "Equipe Azul", "club": "São Paulo", "captain": "Bruno", "active": 1, "notes": ""})
     team_b = team_service.create_team(team_tournament_id, {"name": "Equipe Vermelha", "club": "Santos", "captain": "Elisa", "active": 1, "notes": ""})
     for board, player_id in enumerate(team_player_ids[:4], start=1):
         team_service.add_player(team_a, player_id, board_number=board, role="starter")
@@ -1280,7 +1280,7 @@ def capture_screenshots(db: Database, demo_ids: dict[str, int]) -> dict[str, Pat
             except Exception as exc:
                 print(f"Captura ignorada para {screen.slug}: {exc}")
     except (TclError, OSError) as exc:
-        print(f"Captura de telas ignorada: ambiente grafico indisponivel ({exc})")
+        print(f"Captura de telas ignorada: ambiente gráfico indisponível ({exc})")
     finally:
         if app is not None:
             try:
@@ -1333,36 +1333,36 @@ def build_markdown(screenshots: dict[str, Path]) -> None:
         "",
         f"Gerado em {today}.",
         "",
-        "Este manual documenta os menus, telas, funcoes principais, fluxos recomendados e cuidados operacionais do Albericus.",
+        "Este manual documenta os menus, telas, funções principais, fluxos recomendados e cuidados operacionais do Albericus.",
         "",
         "## Sumario",
         "",
         "- [Fluxo recomendado](#fluxo-recomendado)",
         "- [Mapa dos menus](#mapa-dos-menus)",
-        "- [Telas e funcoes](#telas-e-funcoes)",
+        "- [Telas e funções](#telas-e-funções)",
         "- [Regras importantes](#regras-importantes)",
         "- [Problemas comuns](#problemas-comuns)",
         "",
         "## Fluxo recomendado",
         "",
         "1. Cadastre o clube, escola ou projeto em **Clube > Perfil do Clube**.",
-        "2. Cadastre turmas, niveis, membros e responsaveis.",
-        "3. Configure pastas e backups em **Configuracoes > Config. App**.",
+        "2. Cadastre turmas, níveis, membros e responsáveis.",
+        "3. Configure pastas e backups em **Configurações > Config. App**.",
         "4. Crie ou importe um torneio em **Torneio > Torneios**.",
         "5. Revise **Config. Torneio** antes da primeira rodada.",
         "6. Inscreva jogadores e atualize dados oficiais.",
-        "7. Gere rodadas, lance resultados, acompanhe o **Painel do Arbitro** e feche cada rodada.",
-        "8. Confira a classificacao, exporte arquivos e gere diplomas/relatorios.",
+        "7. Gere rodadas, lance resultados, acompanhe o **Painel do Árbitro** e feche cada rodada.",
+        "8. Confira a classificação, exporte arquivos e gere diplomas/relatórios.",
         "",
         "## Mapa dos menus",
         "",
-        "| Menu | Acao | Atalho | Abre/Executa |",
+        "| Menu | Ação | Atalho | Abre/Executa |",
         "|---|---|---|---|",
     ]
     for item in MENU_ENTRIES:
         lines.append(f"| {item.menu} | {item.action} | {item.shortcut or '-'} | {item.destination} |")
 
-    lines.extend(["", "## Telas e funcoes", ""])
+    lines.extend(["", "## Telas e funções", ""])
     for screen in SCREENS:
         lines.append(f"### {screen.title}")
         lines.append("")
@@ -1376,10 +1376,10 @@ def build_markdown(screenshots: dict[str, Path]) -> None:
             lines.append(f"![{screen.title}]({relative})")
             lines.append("")
         if screen.tabs:
-            lines.append("**Abas ou areas internas:**")
+            lines.append("**Abas ou áreas internas:**")
             lines.extend(f"- {item}" for item in screen.tabs)
             lines.append("")
-        lines.append("**Principais funcoes:**")
+        lines.append("**Principais funções:**")
         lines.extend(f"- {item}" for item in screen.functions)
         lines.append("")
         if screen.workflow:
@@ -1396,21 +1396,21 @@ def build_markdown(screenshots: dict[str, Path]) -> None:
             "## Regras importantes",
             "",
             "- Fechar rodada exige resultados completos em todas as mesas validas.",
-            "- Rodada fechada preserva historico; alteracoes posteriores exigem permissao e configuracao adequada.",
-            "- Jogador ausente, desistente ou nao emparceirado permanece no historico, mas nao deve entrar normalmente em novas rodadas.",
-            "- Antes de exportar TRF ou relatorio oficial, revise IDs, federacao, nascimento, rating, arbitro chefe, ritmo e datas.",
+            "- Rodada fechada preserva histórico; alterações posteriores exigem permissão e configuração adequada.",
+            "- Jogador ausente, desistente ou não emparceirado permanece no histórico, mas não deve entrar normalmente em novas rodadas.",
+            "- Antes de exportar TRF ou relatório oficial, revise IDs, federação, nascimento, rating, árbitro chefe, ritmo e datas.",
             "- Backups devem ser feitos antes de fechar rodadas criticas, restaurar dados ou importar listas grandes.",
             "- Para torneios por equipes, cadastre equipes e escalações antes de gerar rodadas.",
             "",
             "## Problemas comuns",
             "",
-            "| Situacao | O que verificar |",
+            "| Situação | O que verificar |",
             "|---|---|",
-            "| Nao consigo gerar rodada | Verifique se ha jogadores ativos suficientes e se a rodada anterior foi fechada ou excluida. |",
+            "| Não consigo gerar rodada | Verifique se há jogadores ativos suficientes e se a rodada anterior foi fechada ou excluída. |",
             "| A tela de torneio parece vazia | Selecione um torneio em **Torneio > Torneios**. |",
-            "| Classificacao nao atualiza | Recalcule a classificacao e confira se resultados foram salvos. |",
-            "| Exportacao falha | Verifique permissao da pasta e se o arquivo destino nao esta aberto em outro programa. |",
-            "| Login ou permissao bloqueia uma acao | Revise usuarios/perfis em **Configuracoes > Config. App**. |",
+            "| Classificação não atualiza | Recalcule a classificação e confira se resultados foram salvos. |",
+            "| Exportação falha | Verifique permissão da pasta e se o arquivo destino não esta aberto em outro programa. |",
+            "| Login ou permissão bloqueia uma ação | Revise usuários/perfis em **Configurações > Config. App**. |",
             "| Preciso voltar dados | Use **Criar backup agora** antes e restaure apenas backups conferidos. |",
             "",
         ]
@@ -1434,15 +1434,15 @@ def build_pdf(screenshots: dict[str, Path]) -> None:
     today = date.today().strftime("%d/%m/%Y")
 
     story.append(Paragraph("Manual completo do Albericus", styles["CoverTitle"]))
-    story.append(Paragraph("Menus, telas, funcoes, fluxos e screenshots", styles["CoverSubtitle"]))
+    story.append(Paragraph("Menus, telas, funções, fluxos e screenshots", styles["CoverSubtitle"]))
     story.append(Spacer(1, 0.35 * cm))
     story.append(Paragraph(f"Gerado em {today}", styles["MutedCenter"]))
     story.append(Spacer(1, 0.8 * cm))
     story.append(
         Paragraph(
             safe(
-                "Este manual documenta a interface atual do Albericus com uma base de demonstracao. "
-                "Use como referencia operacional para clube, treinamento, torneios, arbitragem, relatorios e configuracoes."
+                "Este manual documenta a interface atual do Albericus com uma base de demonstração. "
+                "Use como referência operacional para clube, treinamento, torneios, arbitragem, relatórios e configurações."
             ),
             styles["Body"],
         )
@@ -1452,12 +1452,12 @@ def build_pdf(screenshots: dict[str, Path]) -> None:
     story.append(
         number_list(
             [
-                "Cadastre clube, turmas, niveis, membros e responsaveis.",
-                "Configure pastas, backups e usuarios.",
+                "Cadastre clube, turmas, níveis, membros e responsáveis.",
+                "Configure pastas, backups e usuários.",
                 "Crie ou importe o torneio e selecione-o.",
-                "Revise configuracoes oficiais e regras.",
+                "Revise configurações oficiais e regras.",
                 "Inscreva jogadores, gere rodadas, lance resultados e feche rodadas.",
-                "Confira classificacao, exporte arquivos, gere relatorios e diplomas.",
+                "Confira classificação, exporte arquivos, gere relatórios e diplomas.",
             ],
             styles,
         )
@@ -1465,7 +1465,7 @@ def build_pdf(screenshots: dict[str, Path]) -> None:
     story.append(PageBreak())
 
     story.append(Paragraph("Mapa dos menus", styles["Heading1"]))
-    menu_data = [["Menu", "Acao", "Atalho", "Abre/Executa"]]
+    menu_data = [["Menu", "Ação", "Atalho", "Abre/Executa"]]
     menu_data.extend([[item.menu, item.action, item.shortcut or "-", item.destination] for item in MENU_ENTRIES])
     menu_table = Table(menu_data, colWidths=[3.0 * cm, 5.0 * cm, 2.3 * cm, 6.3 * cm], repeatRows=1)
     menu_table.setStyle(common_table_style())
@@ -1477,9 +1477,9 @@ def build_pdf(screenshots: dict[str, Path]) -> None:
         story.append(Paragraph(safe(f"Caminho: {screen.menu} > {screen.action}"), styles["Small"]))
         story.append(Paragraph(safe(screen.overview), styles["Body"]))
         if screen.tabs:
-            story.append(Paragraph("Abas ou areas internas", styles["Heading2"]))
+            story.append(Paragraph("Abas ou áreas internas", styles["Heading2"]))
             story.append(bullet_list(list(screen.tabs), styles))
-        story.append(Paragraph("Principais funcoes", styles["Heading2"]))
+        story.append(Paragraph("Principais funções", styles["Heading2"]))
         story.append(bullet_list(list(screen.functions), styles))
         if screen.workflow:
             story.append(Paragraph("Fluxo recomendado", styles["Heading2"]))
@@ -1495,24 +1495,24 @@ def build_pdf(screenshots: dict[str, Path]) -> None:
         bullet_list(
             [
                 "Fechar rodada exige resultados completos em todas as mesas validas.",
-                "Rodada fechada preserva historico; alteracoes posteriores exigem permissao e configuracao adequada.",
-                "Jogadores ausentes, desistentes ou nao emparceirados continuam no historico, mas nao devem entrar normalmente em novas rodadas.",
-                "Revise IDs oficiais, federacao, nascimento, rating, arbitro, ritmo e datas antes de exportacoes oficiais.",
+                "Rodada fechada preserva histórico; alterações posteriores exigem permissão e configuração adequada.",
+                "Jogadores ausentes, desistentes ou não emparceirados continuam no histórico, mas não devem entrar normalmente em novas rodadas.",
+                "Revise IDs oficiais, federação, nascimento, rating, árbitro, ritmo e datas antes de exportações oficiais.",
                 "Crie backups antes de fechar rodadas criticas, restaurar dados ou importar bases grandes.",
-                "Em torneios por equipes, cadastre equipes e escalacoes antes de gerar rodadas.",
+                "Em torneios por equipes, cadastre equipes e escalações antes de gerar rodadas.",
             ],
             styles,
         )
     )
     story.append(Paragraph("Problemas comuns", styles["Heading1"]))
     problem_data = [
-        ["Situacao", "O que verificar"],
-        ["Nao consigo gerar rodada", "Jogadores ativos suficientes e rodada anterior fechada ou excluida."],
+        ["Situação", "O que verificar"],
+        ["Não consigo gerar rodada", "Jogadores ativos suficientes e rodada anterior fechada ou excluída."],
         ["Tela de torneio vazia", "Selecione um torneio em Torneio > Torneios."],
-        ["Classificacao nao atualiza", "Recalcule e confira resultados salvos."],
-        ["Exportacao falha", "Permissao da pasta e arquivo destino aberto em outro programa."],
-        ["Acao bloqueada por permissao", "Usuarios e perfis em Configuracoes > Config. App."],
-        ["Preciso voltar dados", "Restaurar apenas backup conferido, criando copia de seguranca antes."],
+        ["Classificação não atualiza", "Recalcule e confira resultados salvos."],
+        ["Exportação falha", "Permissão da pasta e arquivo destino aberto em outro programa."],
+        ["Ação bloqueada por permissão", "Usuários e perfis em Configurações > Config. App."],
+        ["Preciso voltar dados", "Restaurar apenas backup conferido, criando copia de segurança antes."],
     ]
     problem_table = Table(problem_data, colWidths=[5.0 * cm, 11.3 * cm], repeatRows=1)
     problem_table.setStyle(common_table_style())
@@ -1625,7 +1625,7 @@ def screenshot_block(
 ) -> Any:
     path = screenshots.get(slug)
     if not path or not path.exists():
-        return Paragraph("Screenshot nao disponivel nesta geracao.", styles["Small"])
+        return Paragraph("Screenshot não disponível nesta geração.", styles["Small"])
     max_width = 17.0 * cm
     max_height = 10.2 * cm
     with PILImage.open(path) as image:
@@ -1664,7 +1664,7 @@ def draw_footer(canvas: Any, doc: Any) -> None:
     canvas.setFont("Helvetica", 8)
     canvas.setFillColor(colors.HexColor("#64748B"))
     canvas.drawString(1.4 * cm, 0.7 * cm, "Albericus - Manual completo")
-    canvas.drawRightString(A4[0] - 1.4 * cm, 0.7 * cm, f"Pagina {doc.page}")
+    canvas.drawRightString(A4[0] - 1.4 * cm, 0.7 * cm, f"Página {doc.page}")
     canvas.restoreState()
 
 

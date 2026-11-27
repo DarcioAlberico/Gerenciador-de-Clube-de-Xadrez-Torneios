@@ -5,6 +5,46 @@ from datetime import datetime
 
 from src.core.database import DEFAULT_LEARNING_LEVELS, DEFAULT_CERTIFICATE_TEMPLATES
 from src.core.categories import competition_category_payload
+from src.core.database_tournament_core import draw_initial_color
+
+
+def _executar_script(connection: sqlite3.Connection, script: str) -> None:
+    """Roda um script SQL instrução por instrução, dentro da transação aberta (RGS-29).
+
+    `executescript` faz COMMIT implícito antes de começar: dentro de uma
+    migração, ele gravaria pela metade a versão em curso. Aqui o script e
+    cortado nos `;` e só vira instrução quando o próprio SQLite diz que ela
+    é completa (`complete_statement`), o que respeita `;` dentro de texto
+    e o corpo `BEGIN ... END;` de gatilho.
+    """
+    instrucao = ""
+    for trecho in script.split(";"):
+        instrucao += trecho + ";"
+        if sqlite3.complete_statement(instrucao):
+            connection.execute(instrucao)
+            instrucao = ""
+    # Sobra sem instrução (espaço, comentário, o `;` acrescentado no fim).
+    resto = instrucao[:-1].strip()
+    if resto and not all(linha.strip().startswith("--") for linha in resto.splitlines() if linha.strip()):
+        raise sqlite3.ProgrammingError(f"Instrução SQL incompleta no script de migração: {resto[:80]!r}")
+
+
+
+def _ja_semeado(connection: sqlite3.Connection, tabela: str, nome: str) -> bool:
+    """O padrão `nome` já é no banco, com ou sem acento (v59).
+
+    A semente antiga gravou "Basico"; a nova escreve "Básico". Num banco que
+    sobe de versão antiga, as sementes da v4/v5/v8 rodam ANTES da v59 — sem
+    esta checagem o padrão entraria duas vezes, uma de cada grafia.
+    """
+    from src.services.text_ascii import to_ascii
+
+    return (
+        connection.execute(
+            f"SELECT 1 FROM {tabela} WHERE name IN (?, ?) LIMIT 1", (nome, to_ascii(nome))
+        ).fetchone()
+        is not None
+    )
 
 class LegacyMigrations:
     def __init__(self, db) -> None:
@@ -67,22 +107,11 @@ class LegacyMigrations:
             53: self._migrate_to_v53,
             54: self._migrate_to_v54,
             55: self._migrate_to_v55,
+            56: self._migrate_to_v56,
+            57: self._migrate_to_v57,
+            58: self._migrate_to_v58,
+            59: self._migrate_to_v59,
         }
-
-    def _run_schema_migrations(self, connection: sqlite3.Connection) -> None:
-        current_version = self.db._schema_user_version(connection)
-        self._ensure_supported_schema_version(connection)
-
-        migrations = self._schema_migrations()
-        for target_version in range(current_version + 1, self.db.SCHEMA_VERSION + 1):
-            migration = migrations.get(target_version)
-            if migration is None:
-                raise RuntimeError(f"Migracao de banco ausente para a versao {target_version}.")
-            migration(connection)
-            connection.execute(f"PRAGMA user_version = {target_version}")
-
-        if current_version == self.db.SCHEMA_VERSION:
-            self._ensure_current_schema(connection)
 
     def _ensure_current_schema(self, connection: sqlite3.Connection) -> None:
         if self.db.SCHEMA_VERSION >= 1:
@@ -195,6 +224,14 @@ class LegacyMigrations:
             self._migrate_to_v54(connection)
         if self.db.SCHEMA_VERSION >= 55:
             self._migrate_to_v55(connection)
+        if self.db.SCHEMA_VERSION >= 56:
+            self._migrate_to_v56(connection)
+        if self.db.SCHEMA_VERSION >= 57:
+            self._migrate_to_v57(connection)
+        if self.db.SCHEMA_VERSION >= 58:
+            self._migrate_to_v58(connection)
+        if self.db.SCHEMA_VERSION >= 59:
+            self._migrate_to_v59(connection)
 
     def _migrate_to_v1(self, connection: sqlite3.Connection) -> None:
         now = self.db.now()
@@ -315,7 +352,7 @@ class LegacyMigrations:
         self._ensure_security_schema(connection)
 
     def _ensure_security_schema(self, connection: sqlite3.Connection) -> None:
-        connection.executescript(
+        _executar_script(connection, 
             """
             CREATE TABLE IF NOT EXISTS audit_log (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -338,7 +375,7 @@ class LegacyMigrations:
         )
 
     def _ensure_inventory_schema(self, connection: sqlite3.Connection) -> None:
-        connection.executescript(
+        _executar_script(connection, 
             """
             CREATE TABLE IF NOT EXISTS inventory_items (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -403,7 +440,7 @@ class LegacyMigrations:
         )
 
     def _ensure_exercise_library_schema(self, connection: sqlite3.Connection) -> None:
-        connection.executescript(
+        _executar_script(connection, 
             """
             CREATE TABLE IF NOT EXISTS exercise_library (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -480,7 +517,7 @@ class LegacyMigrations:
         training_columns = self.db._table_columns(connection, "training_sessions")
         if "training_list_id" not in training_columns:
             connection.execute("ALTER TABLE training_sessions ADD COLUMN training_list_id INTEGER")
-        connection.executescript(
+        _executar_script(connection, 
             """
             CREATE INDEX IF NOT EXISTS idx_exercise_library_filters
                 ON exercise_library(active, club_id, learning_level_id, theme, difficulty);
@@ -537,7 +574,7 @@ class LegacyMigrations:
             try:
                 connection.execute(f"ALTER TABLE members ADD COLUMN {col} {col_type}")
             except sqlite3.OperationalError:
-                pass
+                pass  # coluna já existe: a migração e idempotente
 
     def _migrate_to_v15(self, connection: sqlite3.Connection) -> None:
         connection.execute(
@@ -558,7 +595,7 @@ class LegacyMigrations:
         )
 
     def _migrate_to_v16(self, connection: sqlite3.Connection) -> None:
-        connection.executescript(
+        _executar_script(connection, 
             """
             CREATE TABLE IF NOT EXISTS calendar_events (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -605,7 +642,7 @@ class LegacyMigrations:
         )
 
     def _migrate_to_v17(self, connection: sqlite3.Connection) -> None:
-        connection.executescript(
+        _executar_script(connection, 
             """
             CREATE TABLE IF NOT EXISTS announcements (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -631,7 +668,7 @@ class LegacyMigrations:
         )
 
     def _migrate_to_v18(self, connection: sqlite3.Connection) -> None:
-        connection.executescript(
+        _executar_script(connection, 
             """
             CREATE TABLE IF NOT EXISTS library_items (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -657,7 +694,7 @@ class LegacyMigrations:
 
     def _migrate_to_v19(self, connection: sqlite3.Connection) -> None:
         """Adiciona tabelas para Coleções/Apostilas e Histórico da Biblioteca."""
-        connection.executescript("""
+        _executar_script(connection, """
             CREATE TABLE IF NOT EXISTS library_collections (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
@@ -694,7 +731,7 @@ class LegacyMigrations:
 
     def _migrate_to_v20(self, connection: sqlite3.Connection) -> None:
         """Adiciona tabela para Patrocínios e Doações."""
-        connection.executescript("""
+        _executar_script(connection, """
             CREATE TABLE IF NOT EXISTS sponsors (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
@@ -882,6 +919,8 @@ class LegacyMigrations:
             (now, now),
         )
         for template in DEFAULT_CERTIFICATE_TEMPLATES:
+            if _ja_semeado(connection, "certificate_templates", template["name"]):
+                continue
             connection.execute(
                 """
                 INSERT OR IGNORE INTO certificate_templates (
@@ -1013,6 +1052,8 @@ class LegacyMigrations:
             """
         )
         for index, (name, description) in enumerate(DEFAULT_LEARNING_LEVELS, start=1):
+            if _ja_semeado(connection, "learning_levels", name):
+                continue
             connection.execute(
                 """
                 INSERT OR IGNORE INTO learning_levels (
@@ -1052,7 +1093,7 @@ class LegacyMigrations:
             if column not in settings_columns:
                 connection.execute(f"ALTER TABLE tournament_settings ADD COLUMN {column} {definition}")
 
-        connection.executescript(
+        _executar_script(connection, 
             """
             CREATE TABLE IF NOT EXISTS teams (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1324,14 +1365,14 @@ class LegacyMigrations:
                 "ALTER TABLE tournament_settings ADD COLUMN acceleration_method TEXT NOT NULL DEFAULT 'none'"
             )
         if "tiebreak_engine" not in settings_columns:
-            # Torneios JA existentes mantem o motor proprio (classificacao
-            # historica preservada); torneios novos recebem 'gacrux' via
+            # Torneios JÁ existentes mantém o motor próprio (classificação
+            # histórica preservada); torneios novos recebem 'gacrux' via
             # _ensure_tournament_settings/default_tiebreak_engine().
             connection.execute(
                 "ALTER TABLE tournament_settings ADD COLUMN tiebreak_engine TEXT NOT NULL DEFAULT 'albericus'"
             )
 
-        connection.executescript(
+        _executar_script(connection, 
             """
             CREATE TABLE IF NOT EXISTS audit_events (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1395,7 +1436,7 @@ class LegacyMigrations:
         )
 
     def _ensure_public_result_submission_schema(self, connection: sqlite3.Connection) -> None:
-        connection.executescript(
+        _executar_script(connection, 
             """
             CREATE TABLE IF NOT EXISTS public_tokens (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1457,7 +1498,7 @@ class LegacyMigrations:
             if column not in settings_columns:
                 connection.execute(f"ALTER TABLE tournament_settings ADD COLUMN {column} {definition}")
 
-        connection.executescript(
+        _executar_script(connection, 
             """
             CREATE TABLE IF NOT EXISTS team_lineups (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1523,7 +1564,7 @@ class LegacyMigrations:
         )
 
     def _ensure_sync_schema(self, connection: sqlite3.Connection) -> None:
-        connection.executescript(
+        _executar_script(connection, 
             """
             CREATE TABLE IF NOT EXISTS devices (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1571,7 +1612,7 @@ class LegacyMigrations:
         )
 
     def _ensure_clock_events_schema(self, connection: sqlite3.Connection) -> None:
-        connection.executescript(
+        _executar_script(connection, 
             """
             CREATE TABLE IF NOT EXISTS clock_events (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1605,7 +1646,7 @@ class LegacyMigrations:
         )
 
     def _ensure_tiebreak_components_schema(self, connection: sqlite3.Connection) -> None:
-        connection.executescript(
+        _executar_script(connection, 
             """
             CREATE TABLE IF NOT EXISTS tiebreak_components (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1639,7 +1680,7 @@ class LegacyMigrations:
             )
 
     def _migrate_to_v31(self, connection: sqlite3.Connection) -> None:
-        connection.executescript(
+        _executar_script(connection, 
             """
             CREATE TABLE IF NOT EXISTS scheduled_messages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1662,9 +1703,9 @@ class LegacyMigrations:
         )
 
     def _migrate_to_v32(self, connection: sqlite3.Connection) -> None:
-        """LBX (Liga Brasileira de Xadrez) como fonte de rating oficial: numero
-        de registro proprio da LBX (ID_No) nos jogadores e arbitros, ao lado de
-        fide_id/cbx_id. Aditivo e idempotente — bancos antigos so ganham a coluna
+        """LBX (Liga Brasileira de Xadrez) como fonte de rating oficial: número
+        de registro próprio da LBX (ID_No) nos jogadores e árbitros, ao lado de
+        fide_id/cbx_id. Aditivo e idempotente — bancos antigos só ganham a coluna
         que falta."""
         for table in ("players", "referees"):
             columns = self.db._table_columns(connection, table)
@@ -1696,11 +1737,11 @@ class LegacyMigrations:
                 )
 
     def _migrate_to_v35(self, connection: sqlite3.Connection) -> None:
-        """Sequencia de desempates configuravel por torneio (individual e equipes).
+        """Sequência de desempates configurável por torneio (individual e equipes).
 
-        Coluna vazia preserva a ordem historica (pontos, Buchholz, Buchholz
-        mediano, Sonneborn-Berger, vitorias), entao bancos antigos nao mudam de
-        classificacao.
+        Coluna vazia preserva a ordem histórica (pontos, Buchholz, Buchholz
+        mediano, Sonneborn-Berger, vitórias), então bancos antigos não mudam de
+        classificação.
         """
         columns = self.db._table_columns(connection, "tournament_settings")
         for column in ("tiebreak_sequence", "team_tiebreak_sequence"):
@@ -1710,15 +1751,15 @@ class LegacyMigrations:
                 )
 
     def _migrate_to_v36(self, connection: sqlite3.Connection) -> None:
-        """Relatorio de variacao de rating FIDE (Fase B) + fator K por jogador.
+        """Relatório de variação de rating FIDE (Fase B) + fator K por jogador.
 
         Apenas adiciona a coluna opcional players.k_factor e cria a tabela de
-        relatorios; nao altera dados existentes nem classificacoes.
+        relatórios; não altera dados existentes nem classificações.
         """
         player_columns = self.db._table_columns(connection, "players")
         if "k_factor" not in player_columns:
             connection.execute("ALTER TABLE players ADD COLUMN k_factor INTEGER")
-        connection.executescript(
+        _executar_script(connection, 
             """
             CREATE TABLE IF NOT EXISTS fide_rating_reports (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1745,10 +1786,10 @@ class LegacyMigrations:
         )
 
     def _migrate_to_v37(self, connection: sqlite3.Connection) -> None:
-        """Distribuicao de premios (Fase C): tabela de premios + politica/imposto.
+        """Distribuição de prêmios (Fase C): tabela de prêmios + politica/imposto.
 
-        Apenas adiciona colunas/ tabela novas; nao altera classificacoes nem
-        premios ja calculados (nao havia premios estruturados antes).
+        Apenas adiciona colunas/ tabela novas; não altera classificações nem
+        prêmios já calculados (não havia prêmios estruturados antes).
         """
         settings_columns = self.db._table_columns(connection, "tournament_settings")
         if "prize_policy" not in settings_columns:
@@ -1759,7 +1800,7 @@ class LegacyMigrations:
             connection.execute(
                 "ALTER TABLE tournament_settings ADD COLUMN prize_tax_percent REAL NOT NULL DEFAULT 0.0"
             )
-        connection.executescript(
+        _executar_script(connection, 
             """
             CREATE TABLE IF NOT EXISTS tournament_prizes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1780,11 +1821,11 @@ class LegacyMigrations:
         )
 
     def _migrate_to_v38(self, connection: sqlite3.Connection) -> None:
-        """Layout configuravel de listas (Fase F): tabela report_layouts.
+        """Layout configurável de listas (Fase F): tabela report_layouts.
 
-        Tabela nova e opcional; sem ela, as listas usam as colunas padrao.
+        Tabela nova e opcional; sem ela, as listas usam as colunas padrão.
         """
-        connection.executescript(
+        _executar_script(connection, 
             """
             CREATE TABLE IF NOT EXISTS report_layouts (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1823,9 +1864,9 @@ class LegacyMigrations:
     def _migrate_to_v42(self, connection: sqlite3.Connection) -> None:
         """Marca dedicada do Modo Livre: tournament_settings.free_mode.
 
-        Antes o Modo Livre era inferido do perfil 'free', que e o default de
-        qualquer torneio -- entao todo evento comum/legado disparava as
-        ferramentas do Modo Livre. A marca passa a ser gravada so pelo fluxo
+        Antes o Modo Livre era inferido do perfil 'free', que é o default de
+        qualquer torneio -- então todo evento comum/legado disparava as
+        ferramentas do Modo Livre. A marca passa a ser gravada só pelo fluxo
         'Torneio | Modo Livre'; torneios existentes nascem com 0 (Modo Oficial).
         """
         self._ensure_free_mode_schema(connection)
@@ -1842,8 +1883,8 @@ class LegacyMigrations:
 
         Adiciona preset visual, modo (gerado/imagem), paleta, toggles de selo e
         marca d'água, tipo/peça/imagem/opacidade da marca d'água, medalha por
-        colocacao e layout de campos. Modelos existentes herdam o preset
-        'classic' e os padroes -- nenhum perde o que tinha.
+        colocação e layout de campos. Modelos existentes herdam o preset
+        'classic' e os padrões -- nenhum perde o que tinha.
         """
         self._ensure_certificate_style_schema(connection)
 
@@ -1902,9 +1943,9 @@ class LegacyMigrations:
         """Modo estrito do motor de desempate: tournament_settings.tiebreak_strict.
 
         TBK-02. Nasce DESLIGADO, inclusive nos torneios existentes: ligado, uma
-        falha do Gacrux passa a barrar a classificacao em vez de degradar para o
-        motor proprio, e essa e uma decisao do arbitro do torneio — nao um padrao
-        que uma migracao deva impor a bases que ja rodavam sem ele.
+        falha do Gacrux passa a barrar a classificação em vez de degradar para o
+        motor próprio, e essa e uma decisão do árbitro do torneio — não um padrão
+        que uma migração deva impor a bases que já rodavam sem ele.
         """
         columns = self.db._table_columns(connection, "tournament_settings")
         if "tiebreak_strict" not in columns:
@@ -1913,16 +1954,16 @@ class LegacyMigrations:
             )
 
     def _migrate_to_v46(self, connection: sqlite3.Connection) -> None:
-        """Correcao em rodada fechada: desbloqueio pontual + retratos superados.
+        """Correção em rodada fechada: desbloqueio pontual + retratos superados.
 
         ARB-01. Duas tabelas novas, nenhuma coluna alterada:
 
-        - `correction_unlocks`: permissao POR RODADA, com justificativa e
-          expiracao, no lugar de deixar `allow_dangerous_changes` ligado no
-          torneio inteiro. O interruptor global continua funcionando — nao se
-          tira um caminho que torneios em andamento ja usam.
+        - `correction_unlocks`: permissão POR RODADA, com justificativa e
+          expiração, no lugar de deixar `allow_dangerous_changes` ligado no
+          torneio inteiro. O interruptor global continua funcionando — não se
+          tira um caminho que torneios em andamento já usam.
         - `standings_snapshot_history`: o `standings_snapshots` faz upsert por
-          (torneio, rodada), entao reconciliar depois de uma correcao apagaria a
+          (torneio, rodada), então reconciliar depois de uma correção apagaria a
           prova documental. O retrato antigo vem para ca antes de ser reescrito.
         """
         connection.execute(
@@ -1968,15 +2009,15 @@ class LegacyMigrations:
             """
         )
     def _migrate_to_v47(self, connection: sqlite3.Connection) -> None:
-        """Mesa adiada (ARB-02): a pendencia esperada deixa de parecer esquecimento.
+        """Mesa adiada (ARB-02): a pendência esperada deixa de parecer esquecimento.
 
         Duas colunas em `pairings`, nenhuma tabela nova. `postponed` marca a mesa
-        que o arbitro adiou; `postponed_note` guarda o combinado ("sabado 14h",
+        que o árbitro adiou; `postponed_note` guarda o combinado ("sabado 14h",
         "aguardando decisao de apelacao"). Antes disso, uma partida adiada e uma
-        partida que ninguem lancou eram a MESMA linha em branco no painel — e a
+        partida que ninguém lançou eram a MESMA linha em branco no painel — e a
         rodada travava nas duas do mesmo jeito, sem dizer qual era qual.
 
-        Bases antigas ganham as colunas com o padrao "nao adiada", que e o que
+        Bases antigas ganham as colunas com o padrão "nao adiada", que é o que
         elas sempre foram.
         """
         columns = self.db._table_columns(connection, "pairings")
@@ -1989,16 +2030,16 @@ class LegacyMigrations:
                 "ALTER TABLE pairings ADD COLUMN postponed_note TEXT NOT NULL DEFAULT ''"
             )
     def _migrate_to_v48(self, connection: sqlite3.Connection) -> None:
-        """Politica de bye solicitado (ARB-04): limite e ultima rodada.
+        """Política de bye solicitado (ARB-04): limite e última rodada.
 
-        Duas colunas em `tournament_settings`, ambas com padrao `0` = SEM LIMITE,
-        que e exatamente o que os torneios existentes sempre tiveram. Quem quiser
+        Duas colunas em `tournament_settings`, ambas com padrão `0` = SEM LIMITE,
+        que é exatamente o que os torneios existentes sempre tiveram. Quem quiser
         o regulamento ("no maximo 2 byes, e nenhum na ultima rodada") configura.
 
-        Nao mexe em `disable_bye`: aquela flag e do bye ALOCADO (o PAB de quem
-        sobra num numero impar), e um bye solicitado e o jogador avisando que
-        faltaria. Juntar as duas quebraria o torneio que exige numero par de
-        presentes mas aceita ausencia avisada.
+        Não mexe em `disable_bye`: aquela flag e do bye ALOCADO (o PAB de quem
+        sobra num número ímpar), e um bye solicitado e o jogador avisando que
+        faltaria. Juntar as duas quebraria o torneio que exige número par de
+        presentes mas aceita ausência avisada.
         """
         columns = self.db._table_columns(connection, "tournament_settings")
         if "max_requested_byes" not in columns:
@@ -2012,17 +2053,17 @@ class LegacyMigrations:
                 "ADD COLUMN last_requested_bye_round INTEGER NOT NULL DEFAULT 0"
             )
     def _migrate_to_v49(self, connection: sqlite3.Connection) -> None:
-        """Historico de participacao por rodada (ARB-05).
+        """Histórico de participação por rodada (ARB-05).
 
         `players.player_status` guarda o estado de AGORA e apaga o anterior:
-        `withdrawn` e `absent` davam no mesmo (`active = 0`) e nao sobrava rastro
+        `withdrawn` e `absent` davam no mesmo (`active = 0`) e não sobrava rastro
         de "saiu na rodada 3, voltou na 5" — nem para a ata, nem para explicar
         por que um jogador some do pareamento no meio do evento.
 
-        A tabela e append-only e o campo do jogador CONTINUA existindo: ele e o
-        estado corrente, que o pareamento ja le. Torneio antigo comeca sem
-        historico, e e o que ele de fato tem — inventar eventos retroativos seria
-        escrever uma ata que ninguem assinou.
+        A tabela e append-only e o campo do jogador CONTINUA existindo: ele é o
+        estado corrente, que o pareamento já lê. Torneio antigo começa sem
+        histórico, e e o que ele de fato tem — inventar eventos retroativos seria
+        escrever uma ata que ninguém assinou.
         """
         connection.execute(
             """
@@ -2047,16 +2088,16 @@ class LegacyMigrations:
     def _migrate_to_v50(self, connection: sqlite3.Connection) -> None:
         """Registro disciplinar de incidentes (ARB-03).
 
-        Nao existia modulo nenhum: celular (11.3.2), lance ilegal (7.5), atraso
+        Não existia módulo nenhum: celular (11.3.2), lance ilegal (7.5), atraso
         (6.7) e conduta (12.x) eram anotados no PAPEL, na tabela do manual
-        operacional. `point_adjustments` existia, mas sem catalogo de infracoes e
-        sem vinculo com o jogador reincidente — uma deducao era um numero com
+        operacional. `point_adjustments` existia, mas sem catálogo de infrações e
+        sem vínculo com o jogador reincidente — uma dedução era um número com
         texto livre ao lado.
 
-        Os vinculos (`adjustment_id`, `clock_event_id`, `pairing_id`) sao
-        OPCIONAIS de proposito: advertencia nao mexe em ponto nem em mesa, e
-        exigir os tres transformaria o registro de uma conversa em burocracia
-        que ninguem preenche no meio da rodada.
+        Os vínculos (`adjustment_id`, `clock_event_id`, `pairing_id`) são
+        OPCIONAIS de propósito: advertência não mexe em ponto nem em mesa, e
+        exigir os três transformaria o registro de uma conversa em burocracia
+        que ninguém preenche no meio da rodada.
         """
         connection.execute(
             """
@@ -2085,17 +2126,17 @@ class LegacyMigrations:
         )
 
     def _migrate_to_v51(self, connection: sqlite3.Connection) -> None:
-        """Calendario de rodizio persistido e returno (PAR-01).
+        """Calendário de rodízio persistido e returno (PAR-01).
 
-        O todos-contra-todos recalculava o circulo a cada rodada a partir da
+        O todos-contra-todos recalculava o círculo a cada rodada a partir da
         lista de ATIVOS ordenada por rating: desativar um jogador — ou corrigir
         um rating — no meio do evento embaralhava os confrontos futuros de todos
-        os OUTROS, e ninguem via. Os numeros de rodizio passam a ser atribuidos
+        os OUTROS, e ninguém via. Os números de rodízio passam a ser atribuídos
         uma vez e guardados; a tabela de Berger sai deles.
 
-        Torneio antigo em andamento comeca sem numeros: eles sao atribuidos na
-        proxima geracao de rodada, pela ordem inicial. Isso mantem o calendario
-        DAQUI PARA A FRENTE estavel, que e o que da para prometer — o que ja foi
+        Torneio antigo em andamento começa sem números: eles são atribuídos na
+        próxima geração de rodada, pela ordem inicial. Isso mantém o calendário
+        DAQUI PARA A FRENTE estável, que é o que da para prometer — o que já foi
         jogado ficou como ficou.
         """
         connection.execute(
@@ -2119,21 +2160,21 @@ class LegacyMigrations:
             )
 
     def _migrate_to_v52(self, connection: sqlite3.Connection) -> None:
-        """Mata-mata com avanco registrado e escala do Scheveningen (PAR-03).
+        """Mata-mata com avanço registrado e escala do Scheveningen (PAR-03).
 
         No mata-mata, empate/dupla ausencia/mesa em branco promoviam o melhor
-        numero inicial EM SILENCIO — nao havia onde registrar que houve um blitz
-        de desempate, um armagedom ou uma decisao arbitral. A tabela nova e o
-        lugar disso, e a chave passa a explicar cada avanco.
+        número inicial EM SILÊNCIO — não havia onde registrar que houve um blitz
+        de desempate, um armagedom ou uma decisão arbitral. A tabela nova e o
+        lugar disso, e a chave passa a explicar cada avanço.
 
         No Scheveningen, a escala era recalculada a cada rodada a partir da lista
-        de ativos: uma desistencia deslocava os confrontos que ainda faltavam. O
-        numero dentro do grupo passa a morar no jogador, ao lado do grupo que ja
-        morava la.
+        de ativos: uma desistência deslocava os confrontos que ainda faltavam. O
+        número dentro do grupo passa a morar no jogador, ao lado do grupo que já
+        morava lá.
 
-        Torneio antigo comeca sem escala (numero 0) e sem avanco registrado, que
-        e o que ele de fato tem: a escala e montada na proxima geracao de rodada,
-        e nenhum avanco passado e inventado.
+        Torneio antigo começa sem escala (número 0) e sem avanço registrado, que
+        é o que ele de fato tem: a escala e montada na próxima geração de rodada,
+        e nenhum avanço passado e inventado.
         """
         connection.execute(
             """
@@ -2163,22 +2204,22 @@ class LegacyMigrations:
             )
 
     def _migrate_to_v53(self, connection: sqlite3.Connection) -> None:
-        """Rating por ritmo, partidas ja ratadas e regulamento editavel (FED-07).
+        """Rating por ritmo, partidas já ratadas e regulamento editável (FED-07).
 
         O jogador do torneio tinha UM rating, enquanto o snapshot da lista
-        oficial ja guardava standard, rapido e blitz: um torneio de rapidas
-        calculava a variacao contra a lista de standard e ninguem via.
+        oficial já guardava standard, rápido e blitz: um torneio de rápidas
+        calculava a variação contra a lista de standard e ninguém via.
 
-        `games_played` e o numero que faltava para a regra do jogador novo
-        (K = 40 ate 30 partidas) disparar alguma vez. Comeca em `0`, que aqui
-        significa DESCONHECIDO — nao estreante: tratar o plantel inteiro como
-        estreante daria K = 40 a todo mundo, que e pior do que nao aplicar.
+        `games_played` e o número que faltava para a regra do jogador novo
+        (K = 40 até 30 partidas) disparar alguma vez. Começa em `0`, que aqui
+        significa DESCONHECIDO — não estreante: tratar o plantel inteiro como
+        estreante daria K = 40 a todo mundo, que é pior do que não aplicar.
 
         No torneio, `rating_speed` guarda o ritmo declarado (vazio = deduzir do
         campo de ritmo de jogo) e `rating_regulation` guarda, em JSON por base,
-        os ajustes do regulamento — e assim o regulamento da CBX, que nao esta
-        publicado em lugar que o programa consiga ler, e preenchido pelo arbitro
-        em vez de inventado pelo codigo.
+        os ajustes do regulamento — e assim o regulamento da CBX, que não esta
+        publicado em lugar que o programa consiga ler, e preenchido pelo árbitro
+        em vez de inventado pelo código.
         """
         player_columns = self.db._table_columns(connection, "players")
         for column in ("rapid_rating", "blitz_rating", "games_played"):
@@ -2195,18 +2236,18 @@ class LegacyMigrations:
                 )
 
     def _migrate_to_v54(self, connection: sqlite3.Connection) -> None:
-        """Categorias configuraveis por torneio (ORG-01).
+        """Categorias configuráveis por torneio (ORG-01).
 
-        As faixas eram constantes no codigo — Sub-08 a Sub-20, S50+/S65+ e
+        As faixas eram constantes no código — Sub-08 a Sub-20, S50+/S65+ e
         cortes de 1400/1800/2200. Um edital com Sub-07/09/11/13, Veterano 60+ ou
-        cortes de 1600/2000 nao tinha onde caber, e "Feminino" era tag de premio
-        e nao categoria, entao nao existia classificacao feminina.
+        cortes de 1600/2000 não tinha onde caber, e "Feminino" era tag de prêmio
+        e não categoria, então não existia classificação feminina.
 
-        Torneio antigo comeca SEM linha nenhuma, e isso e proposital: o motor
+        Torneio antigo começa SEM linha nenhuma, e isso é proposital: o motor
         trata "nenhuma categoria cadastrada" como "use o conjunto padrao", que
         reproduz exatamente as faixas de antes. Semear as treze linhas em cada
-        torneio existente encheria o banco de dado que ninguem pediu e faria a
-        tela de configuracao parecer que o arbitro escolheu aquilo.
+        torneio existente encheria o banco de dado que ninguém pediu e faria a
+        tela de configuração parecer que o árbitro escolheu aquilo.
         """
         connection.execute(
             """
@@ -2240,19 +2281,19 @@ class LegacyMigrations:
             )
 
     def _migrate_to_v55(self, connection: sqlite3.Connection) -> None:
-        """Premiacao por edital e agenda estruturada (ORG-02 e ORG-03).
+        """Premiação por edital e agenda estruturada (ORG-02 e ORG-03).
 
-        No premio: `cumulative` e a politica POR PREMIO — quase todo edital soma
-        o premio Feminino ao geral, e ate aqui a politica era so do torneio
+        No prêmio: `cumulative` e a política POR PRÊMIO — quase todo edital soma
+        o prêmio Feminino ao geral, e até aqui a política era só do torneio
         inteiro. `currency` estava previsto na spec E4 e nunca existiu.
 
         No torneio: `prize_tie_split` escolhe como o bolo e repartido entre
-        EMPATADOS. Atencao ao `hort` antigo — ele vivia em `prize_policy` e
-        combinava geral com categoria, o que **nao e** o Sistema Hort. O Hort de
-        verdade reparte entre empatados (50% do premio da propria posicao no
+        EMPATADOS. Atenção ao `hort` antigo — ele vivia em `prize_policy` e
+        combinava geral com categoria, o que **não e** o Sistema Hort. O Hort de
+        verdade reparte entre empatados (50% do prêmio da própria posição no
         desempate + 50% do bolo por igual), e e para ca que ele veio. Torneio
         que estava em `prize_policy = 'hort'` passa a `best_only` com
-        `prize_tie_split = 'hort'`: e a leitura mais fiel da intencao de quem
+        `prize_tie_split = 'hort'`: e a leitura mais fiel da intenção de quem
         escolheu "Sistema Hort" — e agora ele de fato o e.
 
         Na agenda: local, ritmo e dia de descanso por rodada. Dia de descanso e
@@ -2294,12 +2335,252 @@ class LegacyMigrations:
                 "ADD COLUMN late_tolerance_minutes INTEGER NOT NULL DEFAULT 0"
             )
 
-        # O "hort" antigo nao era o Sistema Hort; mudar de lugar preserva a
-        # intencao de quem o escolheu. A checagem da coluna nao e paranoia: o
-        # `_ensure_current_schema` roda esta funcao sobre bases sinteticas de
-        # versoes antigas, onde `prize_policy` (v37) ainda nao existe.
+        # O "hort" antigo não era o Sistema Hort; mudar de lugar preserva a
+        # intenção de quem o escolheu. A checagem da coluna não é paranoia: o
+        # `_ensure_current_schema` roda esta função sobre bases sintéticas de
+        # versões antigas, onde `prize_policy` (v37) ainda não existe.
         if "prize_policy" in self.db._table_columns(connection, "tournament_settings"):
             connection.execute(
                 "UPDATE tournament_settings SET prize_tie_split = 'hort', prize_policy = 'best_only' "
                 "WHERE prize_policy = 'hort'"
             )
+
+    def _migrate_to_v56(self, connection: sqlite3.Connection) -> None:
+        """Correção atômica e retrato só com dados até a rodada (RGS-10).
+
+        Nos retratos: `reconcile_pending` e a marca que a correção grava na
+        mesma transação do resultado; o trabalhador em segundo plano regrava o
+        retrato e baixa a marca. `reconcile_reason` guarda o motivo que vai
+        para o histórico e `reconcile_generation` sobe a cada marca, para o
+        trabalhador não baixar uma pendência que chegou enquanto ele calculava.
+
+        No jogador: `entry_round`, a primeira rodada que ele podia jogar. O
+        banco antigo não sabe disso; a melhor leitura e "a seguinte a última
+        rodada criada ANTES da inscrição". O relógio tem resolução de segundos,
+        e por isso a comparação e estrita: inscrição no mesmo segundo da
+        rodada conta como anterior a ela — na duvida o jogador entra no
+        retrato, que era o comportamento de antes.
+        """
+        snapshot_columns = self.db._table_columns(connection, "standings_snapshots")
+        for column, definition in (
+            ("reconcile_pending", "INTEGER NOT NULL DEFAULT 0"),
+            ("reconcile_reason", "TEXT NOT NULL DEFAULT ''"),
+            ("reconcile_generation", "INTEGER NOT NULL DEFAULT 0"),
+        ):
+            if column not in snapshot_columns:
+                connection.execute(
+                    f"ALTER TABLE standings_snapshots ADD COLUMN {column} {definition}"
+                )
+
+        player_columns = self.db._table_columns(connection, "players")
+        if "entry_round" not in player_columns:
+            connection.execute(
+                "ALTER TABLE players ADD COLUMN entry_round INTEGER NOT NULL DEFAULT 0"
+            )
+            # Base sintética antiga sem as datas: fica 0 (desconhecida = entra).
+            if "created_at" not in player_columns or "created_at" not in self.db._table_columns(
+                connection, "rounds"
+            ):
+                return
+            connection.execute(
+                """
+                UPDATE players
+                SET entry_round = 1 + (
+                    SELECT COALESCE(MAX(r.number), 0)
+                    FROM rounds r
+                    WHERE r.tournament_id = players.tournament_id
+                      AND r.created_at < players.created_at
+                )
+                """
+            )
+
+    def _migrate_to_v57(self, connection: sqlite3.Connection) -> None:
+        """Cor inicial gravada no torneio (RGS-14).
+
+        Torneio sem rodada recebe o sorteio agora — e o que aconteceria se ele
+        nascesse hoje. Torneio que já tem rodada fica com a coluna vazia: a cor
+        já aconteceu na R1 e e lida dela (`pairing/initial_color.py`); sortear
+        aqui poderia contradizer o que é no tabuleiro.
+        """
+        settings_columns = self.db._table_columns(connection, "tournament_settings")
+        if "initial_color" not in settings_columns:
+            connection.execute(
+                "ALTER TABLE tournament_settings ADD COLUMN initial_color TEXT NOT NULL DEFAULT ''"
+            )
+        sem_cor = connection.execute(
+            """
+            SELECT s.tournament_id
+            FROM tournament_settings s
+            WHERE COALESCE(s.initial_color, '') = ''
+              AND NOT EXISTS (SELECT 1 FROM rounds r WHERE r.tournament_id = s.tournament_id)
+            """
+        ).fetchall()
+        for linha in sem_cor:
+            connection.execute(
+                "UPDATE tournament_settings SET initial_color = ? WHERE tournament_id = ?",
+                (draw_initial_color(), int(linha[0])),
+            )
+
+    def _migrate_to_v58(self, connection: sqlite3.Connection) -> None:
+        """TPN gravado da equipe e rodada de entrada (EQ-01, E6; RGS-30).
+
+        `pairing_number` (TPN) e `seed_rating` são atribuídos na geração da R1
+        e não mudam mais. Torneio em andamento: o TPN sai da ORDEM DA R1 JÁ
+        GERADA (`tpn_from_first_round`), sem recalcular — o rating de hoje pode
+        não ser o daquela rodada. A semente usada fica vazia (não se sabe qual
+        era); quem precisa dela cai na conta de sempre (`team_seed`).
+
+        `entry_round` da equipe: a mesma leitura do jogador na v56 — a
+        seguinte a última rodada criada ANTES da inscrição.
+        """
+        team_columns = self.db._table_columns(connection, "teams")
+        for column, definition in (
+            ("pairing_number", "INTEGER"),
+            ("seed_rating", "INTEGER"),
+        ):
+            if column not in team_columns:
+                connection.execute(f"ALTER TABLE teams ADD COLUMN {column} {definition}")
+        if "entry_round" not in team_columns:
+            connection.execute(
+                "ALTER TABLE teams ADD COLUMN entry_round INTEGER NOT NULL DEFAULT 0"
+            )
+            if "created_at" in team_columns:
+                connection.execute(
+                    """
+                    UPDATE teams
+                    SET entry_round = 1 + (
+                        SELECT COALESCE(MAX(r.number), 0)
+                        FROM rounds r
+                        WHERE r.tournament_id = teams.tournament_id
+                          AND r.created_at < teams.created_at
+                    )
+                    """
+                )
+        self._fill_team_pairing_numbers_from_r1(connection)
+
+    def _fill_team_pairing_numbers_from_r1(self, connection: sqlite3.Connection) -> None:
+        """TPN de quem ja jogou a R1, lido dela. So mexe em torneio SEM nenhum TPN."""
+        from src.services.pairing.team_swiss import tpn_from_first_round
+
+        if not self.db._table_columns(connection, "team_matches"):
+            return
+        # Base sintética antiga pode não ter a coluna do método: e o Suíço.
+        metodo = (
+            "COALESCE(s.team_pairing_method, 'swiss')"
+            if "team_pairing_method" in self.db._table_columns(connection, "tournament_settings")
+            else "'swiss'"
+        )
+        rodadas = connection.execute(
+            f"""
+            SELECT r.id, r.tournament_id,
+                   {metodo} AS method
+            FROM rounds r
+            LEFT JOIN tournament_settings s ON s.tournament_id = r.tournament_id
+            WHERE r.number = 1
+              AND EXISTS (SELECT 1 FROM team_matches tm WHERE tm.round_id = r.id)
+              AND NOT EXISTS (
+                  SELECT 1 FROM teams t
+                  WHERE t.tournament_id = r.tournament_id AND t.pairing_number IS NOT NULL
+              )
+            """
+        ).fetchall()
+        for round_id, tournament_id, method in rodadas:
+            matches = [
+                {
+                    "match_number": row[0],
+                    "white_team_id": row[1],
+                    "black_team_id": row[2],
+                    "is_bye": row[3],
+                    "result": row[4],
+                }
+                for row in connection.execute(
+                    """
+                    SELECT match_number, white_team_id, black_team_id, is_bye, result
+                    FROM team_matches WHERE round_id = ?
+                    """,
+                    (int(round_id),),
+                ).fetchall()
+            ]
+            for team_id, number in tpn_from_first_round(matches, str(method)).items():
+                connection.execute(
+                    "UPDATE teams SET pairing_number = ? WHERE id = ? AND tournament_id = ?",
+                    (int(number), int(team_id), int(tournament_id)),
+                )
+
+    def _migrate_to_v59(self, connection: sqlite3.Connection) -> None:
+        """Textos semeados com acento: níveis e modelos de certificado.
+
+        As sementes (`DEFAULT_LEARNING_LEVELS`, `DEFAULT_CERTIFICATE_TEMPLATES`
+        e a assinatura da galeria) eram gravadas sem acento e chegam a tela e
+        ao certificado impresso. O padrão antigo não fica guardado em lugar
+        nenhum: ele é o novo dobrado para ASCII (`to_ascii`). Cada campo só e
+        trocado se o valor gravado e EXATAMENTE esse padrão antigo; o que o
+        usuário editou fica como esta. Repetir não muda nada.
+
+        Referencias: nível e modelo são ligados por id (membro, turma, aula,
+        emissão), e o nome só aparece copiado em `certificate_issuances.
+        template_name` — que acompanha o modelo quando ainda é o nome antigo.
+        Caminho de imagem de fundo não muda.
+        """
+        from src.services.certificates.gallery import build_gallery, model_to_template
+
+        niveis = [{"name": nome, "description": descricao} for nome, descricao in DEFAULT_LEARNING_LEVELS]
+        modelos = [*DEFAULT_CERTIFICATE_TEMPLATES, *(model_to_template(m) for m in build_gallery(50))]
+        for padrao in niveis:
+            self._acentuar_semeado(connection, "learning_levels", padrao)
+        for padrao in modelos:
+            self._acentuar_semeado(connection, "certificate_templates", padrao)
+
+    def _acentuar_semeado(
+        self, connection: sqlite3.Connection, tabela: str, padrao: dict[str, Any]
+    ) -> None:
+        """Troca, na linha semeada de `padrao`, cada texto que ainda e o antigo."""
+        from src.services.text_ascii import to_ascii
+
+        colunas = self.db._table_columns(connection, tabela)
+        campos = [
+            campo
+            for campo, valor in padrao.items()
+            if campo in colunas and isinstance(valor, str) and to_ascii(valor) != valor
+        ]
+        nome = str(padrao["name"])
+        if not campos:
+            return
+        linhas = connection.execute(
+            f"SELECT id, {', '.join(campos)} FROM {tabela} WHERE name IN (?, ?)",
+            (nome, to_ascii(nome)),
+        ).fetchall()
+        # Nome acentuado já tomado (o usuário criou "Básico" à mão ao lado do
+        # "Basico" semeado): o semeado fica com o nome antigo — trocar violaria
+        # o UNIQUE, e apagar um dos dois não é decisão de migração.
+        nome_ja_tomado = "name" in campos and any(
+            tuple(linha)[1 + campos.index("name")] == nome for linha in linhas
+        )
+        for linha in linhas:
+            linha_id = int(linha[0])
+            atual = dict(zip(campos, tuple(linha)[1:]))
+            novos = {
+                campo: str(padrao[campo])
+                for campo in campos
+                if atual[campo] == to_ascii(str(padrao[campo]))
+            }
+            if "name" in novos and nome_ja_tomado:
+                del novos["name"]
+            if not novos:
+                continue
+            atribuicoes = ", ".join(f"{campo} = ?" for campo in novos)
+            connection.execute(
+                f"UPDATE {tabela} SET {atribuicoes} WHERE id = ?", (*novos.values(), linha_id)
+            )
+            if (
+                tabela == "certificate_templates"
+                and "name" in novos
+                and "template_name" in self.db._table_columns(connection, "certificate_issuances")
+            ):
+                connection.execute(
+                    """
+                    UPDATE certificate_issuances SET template_name = ?
+                    WHERE template_id = ? AND template_name = ?
+                    """,
+                    (nome, linha_id, atual["name"]),
+                )

@@ -58,7 +58,7 @@ class Debounced:
             try:
                 self._cancel(self._pending)
             except Exception:
-                pass
+                pass  # o callback já rodou ou o widget morreu; nada a cancelar
             self._pending = None
 
     @property

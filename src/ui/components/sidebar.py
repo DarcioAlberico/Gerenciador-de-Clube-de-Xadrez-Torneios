@@ -23,6 +23,7 @@ A barra não decide navegação: chama ``navigator.go(chave)`` e deixa o
 """
 from __future__ import annotations
 
+import logging
 from typing import Any, Callable
 
 import customtkinter as ctk
@@ -40,6 +41,8 @@ from ..theme import (
     THEME_TEXT_SUB,
 )
 from .tooltip import Tooltip
+
+logger = logging.getLogger(__name__)
 
 MODE_FULL = "full"
 MODE_RAIL = "rail"
@@ -117,7 +120,7 @@ class Sidebar:
             command=lambda key=destino.key: self._navigate(key),
         )
         botao.grid(row=linha, column=0, sticky="ew", padx=SPACE_XS, pady=1)
-        # No modo rail so sobra o icone: o tooltip e quem diz o que o item e.
+        # No modo rail só sobra o ícone: o tooltip e quem diz o que o item e.
         Tooltip(botao, destino.label)
         return botao
 
@@ -136,7 +139,7 @@ class Sidebar:
             try:
                 self.frame.grid_remove()
             except Exception:
-                pass
+                pass  # sidebar já destruída (encerramento)
             return
 
         compacto = mode == MODE_RAIL
@@ -149,7 +152,7 @@ class Sidebar:
             try:
                 rotulo.grid_remove() if compacto else rotulo.grid()
             except Exception:
-                pass
+                logger.debug("Rotulo da sidebar nao ajustado ao modo compacto", exc_info=True)
         for metodo, botao in self._items.items():
             try:
                 botao.configure(
@@ -157,7 +160,7 @@ class Sidebar:
                     anchor="center" if compacto else "w",
                 )
             except Exception:
-                pass
+                logger.debug("Botao da sidebar nao ajustado ao modo compacto", exc_info=True)
 
     # -- interação --------------------------------------------------------
 
@@ -180,7 +183,7 @@ class Sidebar:
                     text_color=THEME_ON_ACCENT if ativo else THEME_TEXT_MAIN,
                 )
             except Exception:
-                pass  # janela em destruicao
+                pass  # janela em destruição
 
     @property
     def active(self) -> str | None:

@@ -33,6 +33,9 @@ class Pendency:
     destination: str
     severity: str = INFO
     action_label: str = "Abrir"
+    # Texto de relatório que a tela oferece ler antes de ir ao destino (vazio:
+    # só o deep link). Usado pelas "Datas a revisar" (RGS-06).
+    report: str = ""
 
 
 @dataclass(frozen=True)
@@ -52,6 +55,27 @@ class HomeSnapshot:
     defaulters: int = 0
     upcoming_events: tuple[tuple[str, str], ...] = field(default_factory=tuple)
     open_announcements: int = 0
+    # Tabela de cada data gravada que a regra única recusa (RGS-06), e o texto
+    # do relatório. Preenchidos por `src.services.date_review`.
+    dates_to_review: tuple[str, ...] = field(default_factory=tuple)
+    dates_review_report: str = ""
+
+
+# Onde se corrige a data de cada tabela do relatório "Datas a revisar".
+_DESTINO_DA_TABELA = {
+    "players": "players",
+    "tournaments": "tournament_settings",
+    "tournament_settings": "tournament_settings",
+    "tournament_categories": "tournament_settings",
+    "round_schedule": "tournament_settings",
+    "members": "members",
+    "member_class_enrollments": "members",
+    "payments": "finance",
+    "club_events": "calendar",
+    "inventory_items": "inventory",
+    "inventory_loans": "inventory",
+    "inventory_maintenance": "inventory",
+}
 
 
 def _plural(quantidade: int, singular: str, plural: str) -> str:
@@ -71,7 +95,7 @@ def build_pendencies(snapshot: HomeSnapshot) -> list[Pendency]:
             Pendency(
                 "sem_torneio",
                 "Nenhum torneio selecionado",
-                "Abra ou crie um torneio para comecar a trabalhar.",
+                "Abra ou crie um torneio para começar a trabalhar.",
                 "tournaments",
                 ATTENTION,
                 action_label="Ver torneios",
@@ -82,8 +106,8 @@ def build_pendencies(snapshot: HomeSnapshot) -> list[Pendency]:
             itens.append(
                 Pendency(
                     "bloqueios",
-                    f"{snapshot.blocking_issues} pendencia(s) de arbitragem bloqueante(s)",
-                    f"A rodada atual de '{snapshot.tournament_name}' nao fecha antes de resolver.",
+                    f"{snapshot.blocking_issues} pendência(s) de arbitragem bloqueante(s)",
+                    f"A rodada atual de '{snapshot.tournament_name}' não fecha antes de resolver.",
                     "arbitration_panel",
                     URGENT,
                     action_label="Resolver",
@@ -93,8 +117,8 @@ def build_pendencies(snapshot: HomeSnapshot) -> list[Pendency]:
             itens.append(
                 Pendency(
                     "qr",
-                    f"{snapshot.qr_pending} resultado(s) por QR aguardando aprovacao",
-                    "Enviados pelas mesas; precisam de conferencia do arbitro.",
+                    f"{snapshot.qr_pending} resultado(s) por QR aguardando aprovação",
+                    "Enviados pelas mesas; precisam de conferência do árbitro.",
                     "arbitration_panel",
                     URGENT,
                     action_label="Conferir",
@@ -105,18 +129,18 @@ def build_pendencies(snapshot: HomeSnapshot) -> list[Pendency]:
             itens.append(
                 Pendency(
                     "resultados",
-                    f"{snapshot.pending_results} {rotulo} a lancar",
+                    f"{snapshot.pending_results} {rotulo} a lançar",
                     f"Rodada aberta de '{snapshot.tournament_name}'.",
                     "pairings",
                     URGENT,
-                    action_label="Lancar",
+                    action_label="Lançar",
                 )
             )
         if snapshot.generated_rounds == 0:
             detalhe = (
                 f"'{snapshot.tournament_name}' tem {snapshot.players_count} jogador(es) inscrito(s)."
                 if snapshot.players_count
-                else f"'{snapshot.tournament_name}' ainda nao tem jogadores inscritos."
+                else f"'{snapshot.tournament_name}' ainda não tem jogadores inscritos."
             )
             itens.append(
                 Pendency(
@@ -132,7 +156,7 @@ def build_pendencies(snapshot: HomeSnapshot) -> list[Pendency]:
             itens.append(
                 Pendency(
                     "torneio_concluido",
-                    "Torneio concluido",
+                    "Torneio concluído",
                     f"Todas as {snapshot.rounds_count} rodadas de '{snapshot.tournament_name}' fecharam.",
                     "certificates",
                     INFO,
@@ -146,7 +170,7 @@ def build_pendencies(snapshot: HomeSnapshot) -> list[Pendency]:
             Pendency(
                 "financeiro",
                 f"{snapshot.defaulters} {rotulo} em atraso",
-                "Cobrancas vencidas e ainda em aberto.",
+                "Cobranças vencidas e ainda em aberto.",
                 "finance",
                 ATTENTION,
                 action_label="Ver financeiro",
@@ -158,9 +182,24 @@ def build_pendencies(snapshot: HomeSnapshot) -> list[Pendency]:
         restantes = len(snapshot.upcoming_events) - 1
         detalhe = f"{data} — {titulo}"
         if restantes > 0:
-            detalhe += f" (+{restantes} no calendario)"
+            detalhe += f" (+{restantes} no calendário)"
         itens.append(
-            Pendency("eventos", "Proximo evento", detalhe, "calendar", INFO, action_label="Calendario")
+            Pendency("eventos", "Próximo evento", detalhe, "calendar", INFO, action_label="Calendário")
+        )
+
+    if snapshot.dates_to_review:
+        total = len(snapshot.dates_to_review)
+        itens.append(
+            Pendency(
+                "datas_a_revisar",
+                f"{total} {_plural(total, 'data a revisar', 'datas a revisar')}",
+                "Valores gravados que o programa não consegue ler. Nada foi apagado: "
+                "veja o relatório e corrija no cadastro.",
+                _DESTINO_DA_TABELA.get(snapshot.dates_to_review[0], "home"),
+                ATTENTION,
+                action_label="Abrir cadastro",
+                report=snapshot.dates_review_report,
+            )
         )
 
     itens.sort(key=lambda item: _ORDEM.get(item.severity, len(_ORDEM)))

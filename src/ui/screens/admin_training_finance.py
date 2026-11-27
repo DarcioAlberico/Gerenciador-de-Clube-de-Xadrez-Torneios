@@ -9,7 +9,7 @@ class TrainingFinanceMixin:
     def show_training(self) -> None:
         self._clear_content()
         self._page_title(
-            "Aulas e presencas",
+            "Aulas e presenças",
             "Cadastre aulas, treinos e chamadas por turma ou clube.",
         )
 
@@ -60,14 +60,14 @@ class TrainingFinanceMixin:
         class_option = ctk.CTkOptionMenu(form, values=["Sem turma"], width=260)
         class_option.grid(row=option_row + 7, column=0, padx=16, pady=(2, 0), sticky="ew")
 
-        ctk.CTkLabel(form, text="Nível pedagogico").grid(
+        ctk.CTkLabel(form, text="Nível pedagógico").grid(
             row=option_row + 8,
             column=0,
             padx=16,
             pady=(8, 0),
             sticky="w",
         )
-        level_option = ctk.CTkOptionMenu(form, values=["Sem nivel"], width=260)
+        level_option = ctk.CTkOptionMenu(form, values=["Sem nível"], width=260)
         level_option.grid(row=option_row + 9, column=0, padx=16, pady=(2, 0), sticky="ew")
 
         ctk.CTkLabel(form, text="Lista de treino").grid(
@@ -83,7 +83,7 @@ class TrainingFinanceMixin:
         selected_session_id: dict[str, int | None] = {"value": None}
         club_option_map: dict[str, int] = {}
         class_option_map: dict[str, int | None] = {"Sem turma": None}
-        level_option_map: dict[str, int | None] = {"Sem nivel": None}
+        level_option_map: dict[str, int | None] = {"Sem nível": None}
         training_list_option_map: dict[str, int | None] = {"Sem lista": None}
         attendance_member_map: dict[str, int] = {}
 
@@ -93,7 +93,7 @@ class TrainingFinanceMixin:
         right_panel.grid_rowconfigure(1, weight=2)
         right_panel.grid_rowconfigure(3, weight=2)
 
-        # Faixa que quebra em quantas linhas couberem (continuacao da B-8).
+        # Faixa que quebra em quantas linhas couberem (continuação da B-8).
         controls = WrapRow(right_panel)
         controls.grid(row=0, column=0, sticky="ew", pady=(0, 8))
         search_entry = controls.add(
@@ -194,7 +194,7 @@ class TrainingFinanceMixin:
                 "name": "Membro",
                 "class": "Turma",
                 "category": "Categoria",
-                "status": "Presenca",
+                "status": "Presença",
                 "notes": "Obs.",
             },
             {"id": 55, "name": 240, "class": 150, "category": 100, "status": 110, "notes": 220},
@@ -228,7 +228,7 @@ class TrainingFinanceMixin:
                 values.append(label)
                 club_option_map[label] = int(club["id"])
             if not values:
-                values = ["1 - Clube padrao (Clube)"]
+                values = ["1 - Clube padrão (Clube)"]
                 club_option_map[values[0]] = 1
             club_option.configure(values=values)
             chosen = next(
@@ -240,8 +240,8 @@ class TrainingFinanceMixin:
 
         def load_level_options(selected_id: int | None = None) -> None:
             level_option_map.clear()
-            level_option_map["Sem nivel"] = None
-            values = ["Sem nivel"]
+            level_option_map["Sem nível"] = None
+            values = ["Sem nível"]
             for level in self.db.list_learning_levels(active_only=True):
                 label = f"{level['id']} - {level['name']}"
                 values.append(label)
@@ -249,7 +249,7 @@ class TrainingFinanceMixin:
             level_option.configure(values=values)
             chosen = next(
                 (label for label, level_id in level_option_map.items() if level_id == selected_id),
-                "Sem nivel",
+                "Sem nível",
             )
             level_option.set(chosen)
 
@@ -286,6 +286,7 @@ class TrainingFinanceMixin:
             load_training_list_options()
 
         def session_payload() -> dict[str, Any]:
+            self._refuse_invalid_dates(entries)
             payload = {key: entry.get() for key, entry in entries.items()}
             payload["session_type"] = TRAINING_TYPE_VALUES[type_option.get()]
             payload["status"] = TRAINING_STATUS_VALUES[status_option.get()]
@@ -324,7 +325,7 @@ class TrainingFinanceMixin:
                         member["name"],
                         member.get("active_class_name") or "",
                         member["category"],
-                        ATTENDANCE_STATUSES.get(status, "Nao marcado"),
+                        ATTENDANCE_STATUSES.get(status, "Não marcado"),
                         member.get("attendance_notes") or "",
                     ),
                 )
@@ -424,7 +425,7 @@ class TrainingFinanceMixin:
                     raise AppError("Selecione uma aula e um membro.")
                 member_id = attendance_member_map.get(selected[0])
                 if not member_id:
-                    raise AppError("Selecione um membro valido.")
+                    raise AppError("Selecione um membro válido.")
                 self.training_service.record_attendance(
                     session_id,
                     [
@@ -452,7 +453,7 @@ class TrainingFinanceMixin:
                     for member_id in attendance_member_map.values()
                 ]
                 if not rows:
-                    raise AppError("Nao ha membros para chamada.")
+                    raise AppError("Não há membros para chamada.")
                 self.training_service.record_attendance(session_id, rows)
                 load_attendance(session_id)
                 load_sessions()
@@ -629,7 +630,7 @@ class TrainingFinanceMixin:
             ctk.CTkLabel(card, text=label, text_color=THEME_TEXT_SUB).pack(anchor="w", padx=12, pady=(0, 10))
             summary_labels[key] = value_label
 
-        # Faixa que quebra em quantas linhas couberem (continuacao da B-8).
+        # Faixa que quebra em quantas linhas couberem (continuação da B-8).
         controls = WrapRow(right_panel)
         controls.grid(row=1, column=0, sticky="ew", pady=(0, 8))
         search_entry = controls.add(
@@ -759,6 +760,7 @@ class TrainingFinanceMixin:
             }
 
         def payment_payload() -> dict[str, Any]:
+            self._refuse_invalid_dates(payment_entries)
             return {
                 "member_id": member_option_map.get(member_option.get()),
                 "plan_id": plan_option_map.get(payment_plan_option.get()),
@@ -792,7 +794,7 @@ class TrainingFinanceMixin:
                         plan["name"],
                         plan["amount"],
                         BILLING_CYCLES.get(plan["billing_cycle"], plan["billing_cycle"]),
-                        "Sim" if plan.get("active") else "Nao",
+                        "Sim" if plan.get("active") else "Não",
                         plan["payments_count"],
                     ),
                 )
@@ -921,8 +923,9 @@ class TrainingFinanceMixin:
         def mark_selected_paid() -> None:
             try:
                 if not selected_payment_id["value"]:
-                    raise AppError("Selecione um lancamento.")
+                    raise AppError("Selecione um lançamento.")
                 payment_id = selected_payment_id["value"]
+                self._refuse_invalid_dates(payment_entries["payment_date"])
                 self.finance_service.mark_payment_paid(
                     payment_id,
                     payment_entries["payment_date"].get(),
@@ -939,11 +942,12 @@ class TrainingFinanceMixin:
                 if not plan_id:
                     raise AppError("Selecione um plano para gerar mensalidades.")
                 reference_period = payment_entries["reference_period"].get().strip()
+                self._refuse_invalid_dates(payment_entries["due_date"])
                 due_date = payment_entries["due_date"].get().strip()
                 if not self._confirm_action(
                     "Gerar mensalidades",
-                    "Gerar mensalidades para todos os socios/alunos ativos? "
-                    "Lançamentos ja existentes na mesma referencia serao pulados.",
+                    "Gerar mensalidades para todos os sócios/alunos ativos? "
+                    "Lançamentos já existentes na mesma referência serão pulados.",
                 ):
                     return
                 result = self.finance_service.generate_recurring_payments(
@@ -958,7 +962,7 @@ class TrainingFinanceMixin:
                 self._show_info(
                     "Mensalidades geradas:\n"
                     f"Plano: {result['plan_name']}\n"
-                    f"Referencia: {result['reference_period']}\n"
+                    f"Referência: {result['reference_period']}\n"
                     f"Criadas: {result['created']}\n"
                     f"Puladas: {result['skipped']}"
                 )
@@ -968,7 +972,7 @@ class TrainingFinanceMixin:
         def export_receipt() -> None:
             try:
                 if not selected_payment_id["value"]:
-                    raise AppError("Selecione um lancamento.")
+                    raise AppError("Selecione um lançamento.")
                 payment_id = selected_payment_id["value"]
                 file_path = filedialog.asksaveasfilename(
                     title="Exportar recibo",
@@ -1021,8 +1025,8 @@ class TrainingFinanceMixin:
 
         payment_button_row = status_row + 2
         payment_buttons = [
-            ("Novo lancamento", clear_payment_form),
-            ("Salvar lancamento", save_payment),
+            ("Novo lançamento", clear_payment_form),
+            ("Salvar lançamento", save_payment),
             ("Marcar pago", mark_selected_paid),
             ("Gerar mensalidades", generate_recurring_payments),
             ("Exportar recibo", export_receipt),

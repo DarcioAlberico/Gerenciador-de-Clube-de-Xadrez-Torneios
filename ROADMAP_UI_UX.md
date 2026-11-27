@@ -54,7 +54,7 @@ IDs estáveis (referenciados pelas tarefas). Prioridade: **P0** destrava evoluç
 | P2-5 | Danger button sem destaque/separação em formulários | telas com Excluir | Médio |
 | P2-6 | Login 420×400 apertado (sem split/branding) | [app.py:56](src/ui/app.py:56) | Baixo |
 | P2-7 | 4 temas JSON órfãos em `assets/themes/` | validado | Baixo |
-| P2-8 | Labels visíveis sem acento ("Configuracoes", "Aparencia") | telas/menu | Médio |
+| P2-8 | Labels visíveis sem acento ("Configurações", "Aparência") | telas/menu | Médio |
 | P2-9 | Persistência de layout de colunas por usuário/sessão | `widths={...}` fixos | Baixo |
 | P2-10 | Modal de doação aninhado no `_build_menu` | [app.py:414](src/ui/app.py:414) | Baixo |
 | P2-11 | Contraste WCAG AA não auditado (dark/presets quentes) | tokens | Médio |
@@ -84,7 +84,7 @@ entrada. Detalhes e estado-alvo em [ESPEC_UI_UX.md §2.3 e §4.6](ESPEC_UI_UX.md
 | P3-12 | Três padrões de formulário (grid com aritmética manual de linhas, `_settings_stack`, `pack`); formulários de 14–25 campos sem nenhuma seção; larguras de painel divergentes (272/280/292) | [tournaments/view.py:111](src/ui/screens/tournaments/view.py:111) | Médio |
 | P3-13 | Ordem de Tab = ordem de criação (0 `takefocus` no app); `Return` não submete formulários; foco de botão invisível — ESPEC §6 descumprida | grep validado | Médio |
 | P3-14 | `tk.Menu` com 31 itens hardcoded paralelo ao registro (rótulos divergem da sidebar); sidebar **some** abaixo de 1.040px em vez de virar rail — notebook 1366px perde a navegação | [app.py:413-486](src/ui/app.py:413), [shell.py:396](src/ui/shell.py:396) | Médio |
-| P3-15 | Regressão de acentuação: ~26 rótulos visíveis sem acento, a começar pela tela Início ("Inicio", "acao", "pendencia") — F3.5 corrigiu 93 e não deixou lint | [screens/home.py:56](src/ui/screens/home.py:56) | Médio |
+| P3-15 | Regressão de acentuação: ~26 rótulos visíveis sem acento, a começar pela tela Início ("Início", "ação", "pendência") — F3.5 corrigiu 93 e não deixou lint | [screens/home.py:56](src/ui/screens/home.py:56) | Médio |
 | P3-16 | Defeitos pontuais visíveis nos screenshots: botões com texto cortado no Painel do árbitro ("justes de pontos (TRF25"), "None" literal em coluna de tabela, valor de data corrompido na Config. do torneio ("2026-05-182026-06-07") | `docs/manual_screenshots/` | Médio |
 
 ---
@@ -365,7 +365,7 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 > uma caixa de 420×400 sem espaço para nada. Agora são duas faixas: marca à
 > esquerda (logo, nome, propósito) e formulário à direita, com um botão
 > **"Primeiro acesso?"** que explica onde se cadastra um operador — **sem
-> revelar credencial**, porque senha na tela de login é convite a nunca trocá-la
+> revelar credencial**, porque senha na tela de login é convite a nunca trocá-lá
 > (há teste guardando isso). A versão saiu do título cravado e ganhou fonte
 > única em [`src/core/version.py`](src/core/version.py); o rodapé mostra
 > `v1.0 · banco v43`, e a versão do schema encurta muito o diagnóstico de um
@@ -459,7 +459,7 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 > — nas **5.070 combinações** que o modo avançado permite montar. O preset
 > **Alto Contraste** entrou como tema curado e é o único cobrado em **AAA
 > (7:1)** nas superfícies (pior par: 12,77:1); para isso, `apply_bg_preset`
-> passou a aceitar override de cor de texto, e a devolvê-la ao sair — senão o
+> passou a aceitar override de cor de texto, e a devolvê-lá ao sair — senão o
 > preto puro grudaria no tema seguinte. 21 testes, nenhum abre janela.
 
 > **Status (2026-07-26): B-7 CONCLUÍDA.** A F3.5 tinha deixado isto de fora
@@ -930,7 +930,7 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 
 > **Status (2026-07-29): F5.5 CONCLUÍDA.** Nasce
 > [`components/tree.py`](src/ui/components/tree.py) com a `ThemedTreeview`, e o
-> `_make_tree` passa a instanciá-la — **nenhum dos ~57 call-sites mudou**, que
+> `_make_tree` passa a instanciá-lá — **nenhum dos ~57 call-sites mudou**, que
 > era o aceite. Tudo acontece por dentro de `insert`/`delete`:
 >
 > - **zebra**: os tokens `THEME_TREE_ODD/EVEN` existiam desde a B-2 e nunca
@@ -1016,7 +1016,7 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 > Migrações explícitas para `_show_report`, onde o conteúdo *é* a entrega: link
 > e servidor QR, backup criado e restaurado, narrativa "Por que esta posição?" e
 > detalhe de tabuleiros da tabela cruzada. E **10 validações que apareciam em
-> verde de sucesso** ("Selecione um jogador...", "Membro nao possui email.")
+> verde de sucesso** ("Selecione um jogador...", "Membro não possui email.")
 > viraram `_show_warning` — dizer "sucesso" para quem errou é o tipo de detalhe
 > que corrói a confiança na interface inteira.
 >
@@ -1242,7 +1242,7 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 > sobrava o menu nativo — que ninguém procura depois de ter uma barra. Não
 > existe largura em que "some" seja melhor que "encolhe": o rail custa 52px e
 > não tem rótulo para espremer. O modo `hidden` continua existindo para quem
-> quiser escondê-la de propósito; o que mudou é que a **largura** não a esconde
+> quiser escondê-lá de propósito; o que mudou é que a **largura** não a esconde
 > mais sozinha. O smoke de layout ganhou a faixa de 800px pedidos (960 reais) —
 > as 23 telas foram verificadas com o rail ligado, e nenhuma empurra controle
 > para fora.
@@ -1251,7 +1251,7 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 > acentuação ([`check_ui_accents.py`](scripts/check_ui_accents.py)) não usa
 > dicionário: a regra é a **auto-consistência**. O app é quem diz como se
 > escreve cada palavra — se "Classificação" aparece no catálogo e
-> "Classificacao" aparece numa tela, a segunda está errada. Isso vale sem
+> "Classificação" aparece numa tela, a segunda está errada. Isso vale sem
 > manter lista de palavras portuguesas, sem dependência nova, e **melhora
 > sozinho** a cada texto novo escrito direito.
 >
@@ -1260,24 +1260,24 @@ A camada `src/ui/components/` é a fundação para as telas migradas.
 >   A primeira versão do lint "corrigiu" `{codigo}` para `{código}` e quebrou a
 >   chamada — o texto entre chaves sai do corpus.
 > - **`nav.*.keywords` não se lê, digita-se**: é o que o usuário escreve no
->   command palette, e "classificacao" ali é o comportamento correto.
+>   command palette, e "classificação" ali é o comportamento correto.
 >
 > Mais os **homógrafos**, onde as duas grafias existem em português ("esta
-> mesa" × "está pronto", "eu publico" × "público alvo"): lista curta, cada
+> mesa" × "está pronto", "eu público" × "público alvo"): lista curta, cada
 > entrada com o par anotado. Nesses o lint se cala e a revisão decide — dois
-> casos de "esta oculta"/"esta fechada" foram corrigidos à mão.
+> casos de "esta oculta"/"está fechada" foram corrigidos à mão.
 >
 > **O corpus foi onde estava o buraco.** A primeira versão só lia argumento
 > **nomeado** (`text=`), e por isso passou batido pela tela de Configurações do
-> app inteira: `_page_title("Configurações do aplicativo", "Ajuste preferencias
+> app inteira: `_page_title("Configurações do aplicativo", "Ajuste preferências
 > locais...")` não tem nenhum `text=`. Cabeçalho de tabela, idem — ele chega
-> como **dicionário** no terceiro posicional do `_make_tree`, e "Acao" é dos
+> como **dicionário** no terceiro posicional do `_make_tree`, e "Ação" é dos
 > textos mais lidos da tela. Com os posicionais das factories de UI e os
 > dicionários de cabeçalho, o corpus foi de 977 para **1.526 textos**.
 >
 > Resultado: **90 ocorrências** corrigidas em 19 arquivos e no catálogo, mais
 > **20 palavras** que a auto-consistência não podia ver — o app nunca as tinha
-> escrito certo em lugar nenhum ("horario", "solucao", "posicao"). Essas foram
+> escrito certo em lugar nenhum ("horário", "solução", "posição"). Essas foram
 > à mão, e a partir de agora o lint protege cada uma: a forma acentuada entrou
 > no corpus. O gate passa a rodar o lint no CI e no `check_quality.ps1`.
 >

@@ -386,7 +386,7 @@ class QrPortalTest(CoreServiceTestCase):
             )
         closed_text = "\n".join(page.extract_text() or "" for page in PdfReader(closed_path).pages)
         qr_urls.assert_called_once_with(self.tournament_id, [])
-        self.assertIn("QR indisponivel para esta mesa", closed_text)
+        self.assertIn("QR indisponível para esta mesa", closed_text)
 
 if __name__ == "__main__":
     unittest.main()

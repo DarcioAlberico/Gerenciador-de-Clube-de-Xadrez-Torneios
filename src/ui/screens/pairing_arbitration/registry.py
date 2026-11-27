@@ -18,6 +18,7 @@ from typing import Any
 import customtkinter as ctk
 
 from ...components import WrapRow, danger_button, primary_button, secondary_button
+from ...components.search_combo import SearchCombo
 from ...i18n import t
 from ...support import THEME_TEXT_SUB
 from .page import Field, RegistryPage
@@ -84,12 +85,24 @@ class RegistryView:
         )
 
     def _build_field(self, form: ctk.CTkFrame, campo: Field) -> Any:
+        if campo.kind == Field.SEARCH:
+            return SearchCombo(
+                form,
+                list(campo.values),
+                initial=campo.initial,
+                on_enter=self._add,
+                width=FIELD_WIDTH,
+            )
         if campo.kind == Field.OPTION:
             seletor = ctk.CTkOptionMenu(form, values=list(campo.values), width=FIELD_WIDTH)
             if campo.initial:
                 seletor.set(campo.initial)
             return seletor
-        return ctk.CTkEntry(form, width=FIELD_WIDTH, placeholder_text=campo.placeholder)
+        entrada = ctk.CTkEntry(form, width=FIELD_WIDTH, placeholder_text=campo.placeholder)
+        # Enter no motivo grava (F5.10/RGS-23): a sequência do bye é escolher
+        # o jogador, o tipo, escrever o motivo e confirmar — sem mouse.
+        entrada.bind("<Return>", self._add_from_key)
+        return entrada
 
     def _build_table(self, body: ctk.CTkFrame) -> None:
         host = self.host
@@ -157,7 +170,16 @@ class RegistryView:
             tree.insert("", "end", iid=iid, values=valores)
 
     def _values(self) -> dict[str, str]:
-        return {chave: str(widget.get() or "") for chave, widget in self.widgets.items()}
+        """Valores do formulário; o seletor com busca entrega a opção resolvida."""
+        valores: dict[str, str] = {}
+        for chave, widget in self.widgets.items():
+            resolver = getattr(widget, "resolved", None)
+            valores[chave] = str((resolver() if callable(resolver) else widget.get()) or "")
+        return valores
+
+    def _add_from_key(self, _event: Any = None) -> str:
+        self._add()
+        return "break"
 
     def _add(self) -> None:
         try:

@@ -330,7 +330,7 @@ def _parse_tiebreak_sequence(
             continue
         seen.add(code)
         # Normaliza na porta de entrada (TBK-04): o que estiver salvo no banco
-        # passa a chegar completo e validado a quem calcula, e um parametro que
+        # passa a chegar completo e validado a quem calcula, e um parâmetro que
         # o critério perdeu numa versão nova some aqui, sem quebrar a sequência.
         result.append({"code": code, "params": normalize_criterion_params(code, params, registry)})
     return result

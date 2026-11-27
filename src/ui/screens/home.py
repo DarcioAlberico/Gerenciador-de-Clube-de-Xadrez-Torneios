@@ -10,9 +10,11 @@ em branco — ela degrada para o que conseguiu apurar.
 """
 from __future__ import annotations
 
-from ..components import EmptyState, primary_button
+from src.domain.dates import Data, parse_date
+from src.services.date_review import dates_to_review, format_report
+
+from ..components import EmptyState, primary_button, secondary_button
 from ..home import ATTENTION, URGENT, HomeSnapshot, Pendency, build_pendencies
-from datetime import datetime
 
 import customtkinter as ctk
 
@@ -37,10 +39,10 @@ _COR_SEVERIDADE = {
 def _data_br(valor: object) -> str:
     """ISO do banco -> dd/mm/aaaa, como o resto do app mostra data."""
     texto = str(valor or "").strip()
-    try:
-        return datetime.strptime(texto[:10], "%Y-%m-%d").strftime("%d/%m/%Y")
-    except ValueError:
-        return texto
+    lido = parse_date(texto)
+    if isinstance(lido, Data):
+        return lido.valor.strftime("%d/%m/%Y")
+    return texto
 
 
 class HomePagesMixin:
@@ -51,9 +53,9 @@ class HomePagesMixin:
         try:
             operador = str((self.security_service._current_user or {}).get("username") or "")
         except Exception:
-            pass
+            logger.debug("Operador atual indisponivel no titulo do Inicio", exc_info=True)
         self._page_title(
-            "Inicio" + (f" — {operador}" if operador else ""),
+            "Início" + (f" — {operador}" if operador else ""),
             "O que precisa da sua ação agora.",
         )
 
@@ -72,7 +74,7 @@ class HomePagesMixin:
             EmptyState(
                 painel,
                 title="Tudo em dia",
-                description="Nenhuma pendencia encontrada no clube nem no torneio atual.",
+                description="Nenhuma pendência encontrada no clube nem no torneio atual.",
                 cta_text="Ver torneios",
                 cta_command=lambda: self.navigator.go("tournaments"),
             ).grid(row=0, column=0, sticky="nsew", padx=SPACE_LG, pady=SPACE_XL)
@@ -118,13 +120,21 @@ class HomePagesMixin:
             tip="Abre a tela onde essa pendência se resolve.",
         )
         acao.grid(row=0, column=1, rowspan=2, padx=(SPACE_LG, 0))
+        if pendencia.report:
+            relatorio = secondary_button(
+                cartao,
+                "Ver relatório",
+                lambda titulo=pendencia.title, texto=pendencia.report: self._show_report(titulo, texto),
+                tip="Lista cada valor, onde está e por que não foi aceito.",
+            )
+            relatorio.grid(row=0, column=2, rowspan=2, padx=(SPACE_SM, 0))
         return cartao
 
     # -- leitura do estado (I/O) ------------------------------------------
 
     def _home_snapshot(self) -> HomeSnapshot:
-        """Le o estado atual. Cada fonte em seu try: uma falha isolada vira
-        ausencia daquele dado, nao uma tela inicial vazia."""
+        """Lê o estado atual. Cada fonte em seu try: uma falha isolada vira
+        ausência daquele dado, não uma tela inicial vazia."""
         dados: dict[str, object] = {}
 
         tournament_id = getattr(self, "current_tournament_id", None)
@@ -160,5 +170,14 @@ class HomePagesMixin:
             )
         except Exception:
             logger.exception("Falha ao apurar a visao do clube na tela inicial")
+
+        try:
+            # RGS-06: o que a regra única de data recusa fica no banco como
+            # esta, e aparece aqui até alguém corrigir.
+            revisar = dates_to_review(self.db)
+            dados["dates_to_review"] = tuple(item.table for item in revisar)
+            dados["dates_review_report"] = format_report(revisar)
+        except Exception:
+            logger.exception("Falha ao apurar as datas a revisar na tela inicial")
 
         return HomeSnapshot(**dados)  # type: ignore[arg-type]

@@ -24,8 +24,8 @@ from src.services.pairing import (
 from tests.support.core_service_base import CoreServiceTestCase
 
 _RESULT_POINTS = {"1-0": (1.0, 0.0), "0-1": (0.0, 1.0), "1/2-1/2": (0.5, 0.5)}
-# Os pontos DE VERDADE (inclusive W.O. e decisao do arbitro), para o historico
-# de flutuacao saber quem pontuou sem jogar.
+# Os pontos DE VERDADE (inclusive W.O. e decisão do árbitro), para o histórico
+# de flutuação saber quem pontuou sem jogar.
 _RESULT_POINTS_COMPLETO = RESULT_POINTS
 
 
@@ -123,7 +123,7 @@ class RoundRobinPorEquipesTest(unittest.TestCase):
     def test_rodada_alem_do_calendario_e_recusada_com_recado(self) -> None:
         with self.assertRaises(AppError) as erro:
             round_robin_team_matches(_equipes(4), _rosters(4, 2), _seeds(4), 2, {}, 4)
-        self.assertIn("maximo de rodadas", str(erro.exception))
+        self.assertIn("máximo de rodadas", str(erro.exception))
 
     def test_confronto_traz_os_tabuleiros_montados(self) -> None:
         rodada = round_robin_team_matches(_equipes(4), _rosters(4, 3), _seeds(4), 3, {}, 1)
@@ -244,7 +244,10 @@ class RoundRobinPorEquipesNoServicoTest(CoreServiceTestCase):
         )
         with self.assertRaises(AppError) as erro:
             self.service.generate_next_round(self.team_tournament_id)
-        self.assertIn("calendario e fixo", str(erro.exception))
+        self.assertIn("calendário é fixo", str(erro.exception))
+
+
+MOTIVO = "Cores trocadas a pedido do árbitro"
 
 
 class TrocaDeCoresTest(CoreServiceTestCase):
@@ -261,19 +264,20 @@ class TrocaDeCoresTest(CoreServiceTestCase):
         preta_antes = int(self.pairing["black_player_id"])
 
         self.service.swap_pairing_colors(
-            self.tournament_id, self.round_id, int(self.pairing["id"])
+            self.tournament_id, self.round_id, int(self.pairing["id"]), reason=MOTIVO
         )
 
         depois = self.db.get_pairing(int(self.pairing["id"]))
         self.assertEqual(preta_antes, int(depois["white_player_id"]))
         self.assertEqual(branca_antes, int(depois["black_player_id"]))
 
+        # RGS-16: a troca de cor é ajuste manual — mesmo evento da troca de jogador.
         eventos = self.db.list_audit_events(
-            self.tournament_id, action="pairing_colors_swapped", limit=5
+            self.tournament_id, action="pairing_manual_adjustment", limit=5
         )
         self.assertEqual(1, len(eventos))
-        self.assertEqual(str(branca_antes), _campo(eventos[0]["before_json"], "white_player_id"))
-        self.assertEqual(str(preta_antes), _campo(eventos[0]["after_json"], "white_player_id"))
+        self.assertEqual(MOTIVO, eventos[0]["reason"])
+        self.assertEqual(str(preta_antes), _campo(_campo_json(eventos[0]["after_json"], "change"), "white_player_id"))
 
     def test_rodada_fechada_recusa_a_troca(self) -> None:
         for pairing in self.db.get_pairings_for_round(self.round_id):
@@ -282,7 +286,7 @@ class TrocaDeCoresTest(CoreServiceTestCase):
 
         with self.assertRaises(AppError) as erro:
             self.service.swap_pairing_colors(
-                self.tournament_id, self.round_id, int(self.pairing["id"])
+                self.tournament_id, self.round_id, int(self.pairing["id"]), reason=MOTIVO
             )
         self.assertIn("fechada", str(erro.exception))
 
@@ -291,14 +295,14 @@ class TrocaDeCoresTest(CoreServiceTestCase):
         self.service.update_result(self.tournament_id, int(self.pairing["id"]), "1-0")
         with self.assertRaises(AppError) as erro:
             self.service.swap_pairing_colors(
-                self.tournament_id, self.round_id, int(self.pairing["id"])
+                self.tournament_id, self.round_id, int(self.pairing["id"]), reason=MOTIVO
             )
         self.assertIn("Limpe o resultado", str(erro.exception))
 
     def test_mesa_de_outro_torneio_e_recusada(self) -> None:
         outro = self.db.create_tournament("Outro", rounds_count=3)
         with self.assertRaises(AppError):
-            self.service.swap_pairing_colors(outro, self.round_id, int(self.pairing["id"]))
+            self.service.swap_pairing_colors(outro, self.round_id, int(self.pairing["id"]), reason=MOTIVO)
 
 
 class TrocaDeCoresPorEquipesTest(CoreServiceTestCase):
@@ -347,7 +351,7 @@ class FechamentoPorEquipesTest(CoreServiceTestCase):
             self.service.close_round(tournament_id, round_id)
         self.assertIn("tabuleiros", str(erro.exception))
 
-        # Completado o que faltava, o fechamento sai com os DOIS sumarios.
+        # Completado o que faltava, o fechamento sai com os DOIS sumários.
         self.service.update_result(tournament_id, int(primeiro_boards[0]["id"]), "1-0")
         self.service.close_round(tournament_id, round_id)
 
@@ -370,7 +374,7 @@ class TopscorersTest(unittest.TestCase):
         self.assertEqual({1}, topscorer_ids(classificacao, round_number=5, rounds_total=5))
 
     def test_limiar_e_MAIS_de_metade_do_disputado(self) -> None:
-        # Rodada 5: cada um disputou 4 partidas, entao o limite e 2.0.
+        # Rodada 5: cada um disputou 4 partidas, então o limite e 2.0.
         classificacao = self._standings({1: 2.5, 2: 2.0, 3: 1.5})
         self.assertEqual({1}, topscorer_ids(classificacao, round_number=5, rounds_total=5))
 
@@ -434,7 +438,7 @@ class HistoricoDeFlutuacaoTest(unittest.TestCase):
 
     def test_wo_nao_flutua_por_pontuacao(self) -> None:
         """Quem venceu por W.O. pontuou sem jogar: conta como DOWNFLOAT; o outro
-        lado nao flutua (e o ramo `dutch` do `compute_flt` do Gacrux)."""
+        lado não flutua (e o ramo `dutch` do `compute_flt` do Gacrux)."""
         historico = self._historico(self._mesas((1, 2, "1F-0F", 0)))
         self.assertEqual(["down"], historico[1])
         self.assertEqual([], historico[2])
@@ -500,6 +504,12 @@ class FlutuacaoPorEquipesTest(unittest.TestCase):
             **argumentos,
         )
         self.assertGreater(com_historico, base)
+
+
+def _campo_json(payload_json: str, chave: str) -> str:
+    import json
+
+    return json.dumps(json.loads(payload_json or "{}").get(chave, {}))
 
 
 def _campo(payload_json: str, chave: str) -> str:

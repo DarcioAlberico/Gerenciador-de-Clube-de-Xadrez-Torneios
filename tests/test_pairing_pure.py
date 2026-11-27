@@ -17,8 +17,9 @@ from src.services.pairing import (
     played_pairs,
     swiss_pairings,
     team_bye_summary,
+    team_lineup,
     team_match_summary,
-    team_starter_roster,
+    team_seed,
 )
 
 
@@ -30,9 +31,9 @@ def _players(count: int) -> list[dict[str, object]]:
 
 
 class TestWalkoverNaoContaComoConfronto(unittest.TestCase):
-    """FIDE C.04.2 (3.4/3.5): uma partida por W.O./forfait foi PAREADA mas nao
-    jogada, entao nao conta nem para a regra de nao-repeticao nem para a
-    sequencia de cores. Regressao do impasse em que o Gacrux repareava/recolorava
+    """FIDE C.04.2 (3.4/3.5): uma partida por W.O./forfait foi PAREADA mas não
+    jogada, então não conta nem para a regra de não-repeticao nem para a
+    sequência de cores. Regressão do impasse em que o Gacrux repareava/recolorava
     duplas de W.O. (correto) e a arbitragem do Albericus bloqueava (errado)."""
 
     def test_played_pairs_exclui_walkover(self):
@@ -52,7 +53,7 @@ class TestWalkoverNaoContaComoConfronto(unittest.TestCase):
             {"is_bye": 0, "white_player_id": 1, "black_player_id": 4, "result": "1-0"},
         ]
         histories = color_histories(pairings)
-        self.assertEqual(histories[1], ["W", "W"])  # a branca do W.O. nao entra na sequencia
+        self.assertEqual(histories[1], ["W", "W"])  # a branca do W.O. não entra na sequência
         self.assertEqual(histories[2], ["B"])
         self.assertEqual(histories[3], [])           # so teve W.O. -> nenhuma cor registrada
         self.assertEqual(histories[4], ["B"])
@@ -129,17 +130,16 @@ class TestTeamStarterRoster(unittest.TestCase):
             self._assignment(2, 11, 1700),
             self._assignment(3, 12, 1600, role="reserve"),  # ignorado
         ]
-        starters, seed = team_starter_roster("Equipe A", assignments, boards_count=2)
-        self.assertEqual(starters, {1: 10, 2: 11})
-        self.assertEqual(seed, 1600)
+        self.assertEqual(team_lineup(assignments, boards_count=2), {1: 10, 2: 11})
+        self.assertEqual(team_seed(assignments, boards_count=2), 1600)
 
-    def test_inactive_starter_is_ignored_and_raises_when_board_missing(self):
+    def test_inactive_starter_leaves_an_empty_board_instead_of_raising(self):
+        # EQ-02: antes levantava AppError e derrubava a rodada do torneio inteiro.
         assignments = [
             self._assignment(1, 10, 1500),
             self._assignment(2, 11, 1700, status="absent"),
         ]
-        with self.assertRaises(AppError):
-            team_starter_roster("Equipe A", assignments, boards_count=2)
+        self.assertEqual(team_lineup(assignments, boards_count=2), {1: 10, 2: None})
 
 
 class TestPlanPairingPlayerSwap(unittest.TestCase):
@@ -262,10 +262,10 @@ class TestPairingDiagnostics(unittest.TestCase):
         self.assertEqual("decision", repeated[0]["severity"])
 
     def test_hard_color_repairable_by_swap_is_avoidable_but_never_blocks(self):
-        # FIDE C.04.3: receber a mesma cor 3x seguidas / saldo +-3 e' criterio de
+        # FIDE C.04.3: receber a mesma cor 3x seguidas / saldo +-3 e' critério de
         # QUALIDADE (C11), nunca absoluto -> alerta (attention), jamais bloqueia
-        # (decision). Aqui as cores estao apenas trocadas (J1/J3 deviam jogar de
-        # pretas, J2/J4 de brancas): a violacao some so invertendo cada
+        # (decision). Aqui as cores estão apenas trocadas (J1/J3 deviam jogar de
+        # pretas, J2/J4 de brancas): a violação some só invertendo cada
         # tabuleiro, sem mexer no pareamento -> avoidable=True.
         diagnostics = pairing_diagnostics(
             [
@@ -284,11 +284,11 @@ class TestPairingDiagnostics(unittest.TestCase):
         self.assertTrue(all(item["severity"] == "attention" for item in hard_colors))
 
     def test_hard_color_forced_by_pairing_is_inevitable_and_never_blocks(self):
-        # Regressao do stress #547 (ultima rodada): o topscorer isolado faz
-        # downfloat e seu unico adversario inedito tambem tem preferencia absoluta
-        # de pretas. O motor FIDE (Gacrux) pareia o confronto legalmente (C3 so
-        # restringe NAO-topscorers) e da a 3a branca a um deles (C11, qualidade).
-        # Inverter as cores apenas transferiria a violacao -> inevitavel:
+        # Regressão do stress #547 (última rodada): o topscorer isolado faz
+        # downfloat e seu único adversário inedito também tem preferência absoluta
+        # de pretas. O motor FIDE (Gacrux) pareia o confronto legalmente (C3 só
+        # restringe NÃO-topscorers) e da a 3a branca a um deles (C11, qualidade).
+        # Inverter as cores apenas transferiria a violação -> inevitável:
         # avoidable=False e, sobretudo, nunca bloqueia o fechamento.
         diagnostics = pairing_diagnostics(
             [{"board_number": 1, "white_player_id": 1, "black_player_id": 2, "is_bye": 0}],
@@ -395,8 +395,8 @@ class TestColorPreference(unittest.TestCase):
 
 class TestPerformanceRating(unittest.TestCase):
     def test_unrated_opponents_excluded_from_score_and_average(self):
-        # Empate contra ranqueado (1600) + vitoria contra nao-ranqueado.
-        # A vitoria contra o sem-rating nao pode entrar no score nem na media:
+        # Empate contra ranqueado (1600) + vitória contra não-ranqueado.
+        # A vitória contra o sem-rating não pode entrar no score nem na media:
         # performance = media(1600) + 0 (50% sobre 1 jogo ranqueado) = 1600.
         player_stat = {"earned_against": [(1, 0.5), (2, 1.0)]}
         stats = {1: {"rating": 1600}, 2: {"rating": 0}}
@@ -408,7 +408,7 @@ class TestPerformanceRating(unittest.TestCase):
         self.assertEqual(performance_rating(player_stat, stats), "")
 
     def test_fifty_percent_returns_average_rating(self):
-        # Vitoria sobre 1600 e derrota para 1800: 50% -> media (1700).
+        # Vitória sobre 1600 e derrota para 1800: 50% -> media (1700).
         player_stat = {"earned_against": [(1, 1.0), (2, 0.0)]}
         stats = {1: {"rating": 1600}, 2: {"rating": 1800}}
         self.assertEqual(performance_rating(player_stat, stats), 1700)

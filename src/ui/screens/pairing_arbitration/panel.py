@@ -134,8 +134,8 @@ class ArbitrationPanelView:
             text_color=THEME_TEXT_SUB,
         ).grid(row=1, column=5, padx=(8, 0), pady=(12, 0), sticky="e")
 
-        # Tolerancia de atraso (ORG-03): quem declara ausencia e o arbitro de
-        # sala, e o numero vivia so no edital.
+        # Tolerância de atraso (ORG-03): quem declara ausência e o árbitro de
+        # sala, e o número vivia só no edital.
         tolerancia = int(metrics.get("late_tolerance_minutes") or 0)
         ctk.CTkLabel(
             cards,
@@ -262,6 +262,12 @@ class ArbitrationPanelView:
                     (t("arbitration.action.adjustments.short"), t("arbitration.action.adjustments"), host.show_point_adjustments),
                     (t("arbitration.action.prohibitions.short"), t("arbitration.action.prohibitions"), host.show_prohibited_pairings),
                     (t("arbitration.action.byes.short"), t("arbitration.action.byes"), host.show_requested_byes),
+                    # RGS-24: o mesmo assistente do botão da tela de Rodadas.
+                    (
+                        t("arbitration.action.late_entry"),
+                        t("arbitration.action.late_entry.tip"),
+                        lambda: host.open_late_entry_dialog(refresh=host.show_arbitration_panel),
+                    ),
                 ],
             ),
             (
@@ -295,10 +301,10 @@ class ArbitrationPanelView:
         host = self.host
         controles = ctk.CTkFrame(painel, fg_color="transparent")
         controles.grid(row=linha, column=0, columnspan=colunas, padx=14, pady=(4, 12), sticky="ew")
-        # Empilhar continua sendo a decisao da B-8; o que muda na F5.4 e QUEM
+        # Empilhar continua sendo a decisão da B-8; o que muda na F5.4 e QUEM
         # empilha: a mesma FormStack das outras telas, com os dois seletores
-        # ganhando a anatomia de campo (rotulo acima, altura de 36px) em vez do
-        # par rotulo-a-esquerda / bloco-de-cor-a-direita que so existia aqui.
+        # ganhando a anatomia de campo (rótulo acima, altura de 36px) em vez do
+        # par rótulo-a-esquerda / bloco-de-cor-a-direita que só existia aqui.
         pilha = FormStack(controles, padx=0)
 
         auto = ctk.CTkCheckBox(

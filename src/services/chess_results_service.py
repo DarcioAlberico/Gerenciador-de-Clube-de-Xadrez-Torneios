@@ -41,7 +41,7 @@ class ChessResultsService:
         """Gera o TRF16 na pasta indicada e devolve passos + URL da ponte."""
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
-            raise AppError("Selecione um torneio valido.")
+            raise AppError("Selecione um torneio válido.")
         directory = Path(dest_dir)
         directory.mkdir(parents=True, exist_ok=True)
         trf_path = directory / f"{self._safe_name(tournament.get('name', ''))}_chess_results_trf16.trf"
@@ -58,7 +58,7 @@ class ChessResultsService:
     def import_entries(self, tournament_id: int, file_path: str | Path) -> dict[str, Any]:
         """Importa inscrições/lista publicada do Chess-Results (CSV) como jogadores."""
         if not self.db.get_tournament(tournament_id):
-            raise AppError("Selecione um torneio valido.")
+            raise AppError("Selecione um torneio válido.")
         path = Path(file_path)
         try:
             content = path.read_text(encoding="utf-8-sig")
@@ -89,7 +89,7 @@ class ChessResultsService:
 
     def set_published_url(self, tournament_id: int, url: str) -> str:
         if not self.db.get_tournament(tournament_id):
-            raise AppError("Selecione um torneio valido.")
+            raise AppError("Selecione um torneio válido.")
         normalized = normalize_results_url(url)
         if url.strip() and not normalized:
             raise AppError("Informe uma URL valida do Chess-Results (chess-results.com/...).")

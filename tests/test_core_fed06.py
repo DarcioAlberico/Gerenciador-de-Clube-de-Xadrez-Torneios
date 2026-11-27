@@ -388,11 +388,11 @@ class CertificadoIT3Test(CoreServiceTestCase):
         self.assertIn("Silva, Joao", texto)
         self.assertIn("2900001", texto)  # FIDE ID do candidato
         self.assertIn("998877", texto)  # Event-ID do torneio
-        self.assertIn("Ana Souza", texto)  # arbitro principal
-        # A tabela de partidas leva os adversarios e o rating usado pela norma.
+        self.assertIn("Ana Souza", texto)  # árbitro principal
+        # A tabela de partidas leva os adversários e o rating usado pela norma.
         self.assertIn("Sobrenome1", texto)
         self.assertIn("Sobrenome9", texto)
-        self.assertIn("exclusiva da FIDE", texto)  # aviso de apoio, nao homologacao
+        self.assertIn("exclusiva da FIDE", texto)  # aviso de apoio, não homologação
 
     def test_export_sem_norma_avisa_em_vez_de_gerar_papel_vazio(self) -> None:
         vazio = self.db.create_tournament("Sem norma", rounds_count=3)

@@ -55,7 +55,7 @@ class Destination:
 
 # Ordem = ordem de exibição no palette (e, mais adiante, na sidebar da F3.1).
 DESTINATIONS: tuple[Destination, ...] = (
-    # Inicio — pendencias acionaveis; e a tela que abre depois do login (F3.2).
+    # Início — pendências acionáveis; e a tela que abre depois do login (F3.2).
     Destination("home", "show_home", "dashboard", "club"),
     # Clube
     Destination("visual_dashboard", "show_visual_dashboard", "dashboard", "club"),

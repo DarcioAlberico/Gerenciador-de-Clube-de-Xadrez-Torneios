@@ -133,7 +133,7 @@ class LoginTest(unittest.TestCase):
     def test_enter_no_usuario_pula_para_a_senha(self) -> None:
         self.app.username_entry.focus_force()
         self.app.username_entry.event_generate("<Return>", when="now")
-        # O foco recai no Entry interno do CTkEntry, entao a comparacao e pelo
+        # O foco recai no Entry interno do CTkEntry, então a comparação e pelo
         # caminho Tk: o widget focado tem de estar DENTRO do campo de senha.
         self.assertTrue(
             str(self.app.focus_lastfor()).startswith(str(self.app.password_entry)),
@@ -149,8 +149,8 @@ class LoginTest(unittest.TestCase):
         texto = " ".join(str(arg) for arg in dialogo.call_args.args).lower()
         self.assertIn("responsável pelo clube", texto)
         self.assertIn("gerenciar usuários", texto, "tem de dizer ONDE se cadastra um operador")
-        # Nao pode entregar credencial: senha na tela de login e convite a nunca
-        # troca-la. ("administrador" e permitido; "admin/admin" nao.)
+        # Não pode entregar credencial: senha na tela de login e convite a nunca
+        # trocá-la. ("administrador" e permitido; "admin/admin" não.)
         for vazamento in ("admin/admin", "admin / admin", "senha padrão", "senha padrao"):
             self.assertNotIn(vazamento, texto, f"nao pode revelar credencial ({vazamento})")
 

@@ -79,7 +79,7 @@ class RestyleTest(unittest.TestCase):
             self.painel.destroy()
         except TclError:  # pragma: no cover
             pass
-        # devolve o tema ao padrao: os tokens sao globais do processo
+        # devolve o tema ao padrão: os tokens são globais do processo
         apply_accent_preset("blue")
         apply_bg_preset("slate")
         apply_frame_bg_preset("slate")

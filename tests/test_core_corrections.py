@@ -7,6 +7,7 @@ retratos de classificação reconciliados sem apagar o que foi publicado.
 
 from __future__ import annotations
 
+import json
 import unittest
 
 from src.services.constants import AppError
@@ -279,7 +280,10 @@ class CorrecaoNoServicoTest(CoreServiceTestCase):
             self.tournament_id, action="result_correction_cascade", limit=5
         )
         self.assertEqual(1, len(eventos))
-        self.assertIn("reparear", eventos[0]["reason"])
+        # RGS-20: o motivo da cascata e o do árbitro (o mesmo da correção); o
+        # recado do que fazer mora no `after` e chega ao painel como detalhe.
+        self.assertEqual("Sumula trocada pelo arbitro", eventos[0]["reason"])
+        self.assertIn("reparear", json.loads(eventos[0]["after_json"])["message"])
 
     def test_alerta_de_cascata_aparece_no_painel_sem_travar_a_rodada(self) -> None:
         self._desbloquear()
@@ -289,8 +293,11 @@ class CorrecaoNoServicoTest(CoreServiceTestCase):
         pendencias = [item for item in issues["issues"] if item["source"] == "correction"]
         self.assertEqual(1, len(pendencias))
         self.assertEqual("cascade", pendencias[0]["kind"])
+        # O painel mostra o que fazer (reparear) e o porquê da correção.
+        self.assertIn("reparear", pendencias[0]["detail"])
+        self.assertIn("Sumula trocada", pendencias[0]["detail"])
         self.assertEqual(1, issues["metrics"]["correction_alerts"])
-        # `attention`: quem decide se repareia e o arbitro; travar nao ajudaria.
+        # `attention`: quem decide se repareia e o árbitro; travar não ajudaria.
         self.assertEqual("attention", pendencias[0]["severity"])
 
     def test_corrigir_a_ultima_rodada_nao_gera_cascata(self) -> None:
@@ -320,6 +327,8 @@ class CorrecaoNoServicoTest(CoreServiceTestCase):
 
         self._desbloquear()
         self._corrigir("Sumula trocada pelo arbitro")
+        # RGS-10: a correção só marca; quem regrava e o trabalhador.
+        self.service.reconcile_pending_snapshots()
 
         superados = self.db.list_superseded_standings_snapshots(self.tournament_id)
         self.assertEqual([1, 2], [int(item["round_number"]) for item in superados])
@@ -338,6 +347,8 @@ class CorrecaoNoServicoTest(CoreServiceTestCase):
     def test_reconciliacao_deixa_evento_com_os_dois_hashes(self) -> None:
         self._desbloquear()
         self._corrigir("Sumula trocada pelo arbitro")
+        # RGS-10: a correção só marca; quem regrava e o trabalhador.
+        self.service.reconcile_pending_snapshots()
 
         eventos = self.db.list_audit_events(
             self.tournament_id, action="standings_snapshot_reconciled", limit=10
@@ -354,6 +365,8 @@ class CorrecaoNoServicoTest(CoreServiceTestCase):
 
         self._desbloquear()
         self._corrigir("Sumula trocada pelo arbitro")
+        # RGS-10: a correção só marca; quem regrava e o trabalhador.
+        self.service.reconcile_pending_snapshots()
 
         por_rodada = {
             int(item["round_number"]): json.loads(item["standings_json"])
@@ -445,6 +458,8 @@ class CorrecaoPorEquipesTest(CoreServiceTestCase):
         self.service.update_result(
             self.team_tournament_id, int(self.board["id"]), "0-1", "Sumula trocada no tabuleiro 1"
         )
+        # RGS-10: a correção só marca; quem regrava e o trabalhador.
+        self.service.reconcile_pending_snapshots()
 
         eventos = self.db.list_audit_events(
             self.team_tournament_id, action="team_result_corrected", limit=5

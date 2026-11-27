@@ -15,10 +15,12 @@ from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any, Mapping, TYPE_CHECKING
 
+from src.domain.dates import is_iso_date
 from src.core.database import BASE_DIR, DEFAULT_CERTIFICATE_TEMPLATES, Database
 from src.services.constants import *
 from src.services.export_service import ImportService
 from src.services.fide_list import parse_rating_list as parse_fide_rating_list
+from src.services import friendly_mode
 from src.services.fide_norms import build_norm_report
 from src.services.fide_rating import build_fide_report_rows
 from src.services.foreign_rating_lists import map_row, normalize_federation_code, seed_federations
@@ -59,7 +61,7 @@ class OfficialRatingService:
     ) -> dict[str, Any]:
         source = source.strip().upper()
         if source not in self.SOURCES:
-            raise AppError("Fonte invalida. Use FIDE, CBX ou LBX.")
+            raise AppError("Fonte inválida. Use FIDE, CBX ou LBX.")
 
         path = Path(file_path)
         errors: list[str] = []
@@ -70,7 +72,7 @@ class OfficialRatingService:
             file.seek(0)
             reader = csv.DictReader(file, dialect=ImportService._csv_dialect(sample))
             if not reader.fieldnames:
-                raise AppError("CSV sem cabecalho.")
+                raise AppError("CSV sem cabeçalho.")
 
             for line_number, row in enumerate(reader, start=2):
                 payload = self._official_payload(row, source)
@@ -140,13 +142,13 @@ class OfficialRatingService:
             with urllib.request.urlopen(request, timeout=30) as response:
                 content = response.read().decode("utf-8-sig", errors="replace")
         except (OSError, urllib.error.URLError) as exc:
-            raise AppError(f"Nao foi possivel baixar a lista LBX: {exc}") from exc
+            raise AppError(f"Não foi possível baixar a lista LBX: {exc}") from exc
 
         errors: list[str] = []
         payloads: list[dict[str, Any]] = []
         reader = csv.DictReader(io.StringIO(content), dialect=ImportService._csv_dialect(content[:4096]))
         if not reader.fieldnames:
-            raise AppError("Lista LBX sem cabecalho.")
+            raise AppError("Lista LBX sem cabeçalho.")
         for line_number, row in enumerate(reader, start=2):
             payload = self._official_payload(row, "LBX")
             if not payload["name"] or not payload["external_id"]:
@@ -159,7 +161,7 @@ class OfficialRatingService:
         import xml.etree.ElementTree as ET
         source = source.strip().upper()
         if source not in self.SOURCES:
-            raise AppError("Fonte invalida. Use FIDE, CBX ou LBX.")
+            raise AppError("Fonte inválida. Use FIDE, CBX ou LBX.")
             
         path = Path(file_path)
         errors: list[str] = []
@@ -169,7 +171,7 @@ class OfficialRatingService:
             tree = ET.parse(path)
             root = tree.getroot()
         except ET.ParseError:
-            raise AppError("Arquivo XML invalido.")
+            raise AppError("Arquivo XML inválido.")
 
         for index, node in enumerate(root):
             row = {child.tag.lower(): child.text or "" for child in node}
@@ -204,7 +206,7 @@ class OfficialRatingService:
     def import_official_excel(self, file_path: str | Path, source: str, list_date: str = "") -> dict[str, Any]:
         source = source.strip().upper()
         if source not in self.SOURCES:
-            raise AppError("Fonte invalida. Use FIDE, CBX ou LBX.")
+            raise AppError("Fonte inválida. Use FIDE, CBX ou LBX.")
             
         path = Path(file_path)
         errors: list[str] = []
@@ -279,7 +281,7 @@ class OfficialRatingService:
                     
         except Exception as e:
             logger.error("Erro ao ler Excel: %s", e)
-            raise AppError(f"Arquivo Excel invalido ou corrompido: {e}")
+            raise AppError(f"Arquivo Excel inválido ou corrompido: {e}")
 
         if payloads:
             snapshot_id = self.db.create_official_rating_snapshot_with_players(
@@ -305,8 +307,8 @@ class OfficialRatingService:
         """Baixa e importa a lista oficial da FIDE (FED-05).
 
         A leitura do arquivo mora em `services/fide_list.py` (pura, testavel com
-        fixture); aqui fica so o que e I/O: baixar, abrir o ZIP e gravar. Falha de
-        rede vira mensagem, e nao `URLError` cru subindo ate a tela.
+        fixture); aqui fica só o que é I/O: baixar, abrir o ZIP e gravar. Falha de
+        rede vira mensagem, e não `URLError` cru subindo até a tela.
         """
         import urllib.error
         import urllib.request
@@ -324,13 +326,13 @@ class OfficialRatingService:
             raise AppError(
                 f"A FIDE respondeu {exc.code} ao pedido da lista de rating. "
                 "Tente de novo mais tarde ou baixe o arquivo do site e use a "
-                "importacao por arquivo."
+                "importação por arquivo."
             ) from exc
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             raise AppError(
-                "Nao foi possivel baixar a lista da FIDE (sem conexao, DNS ou "
+                "Não foi possível baixar a lista da FIDE (sem conexão, DNS ou "
                 "tempo esgotado). Verifique a internet ou baixe o arquivo do site "
-                "e use a importacao por arquivo."
+                "e use a importação por arquivo."
             ) from exc
 
         try:
@@ -343,8 +345,8 @@ class OfficialRatingService:
                     payloads, errors = parse_fide_rating_list(lines)
         except zipfile.BadZipFile as exc:
             raise AppError(
-                "O download da FIDE nao veio como ZIP valido (a resposta pode ter "
-                "sido uma pagina de erro). Tente de novo mais tarde."
+                "O download da FIDE não veio como ZIP válido (a resposta pode ter "
+                "sido uma página de erro). Tente de novo mais tarde."
             ) from exc
 
         snapshot_id = None
@@ -392,7 +394,7 @@ class OfficialRatingService:
         """Adiciona/atualiza uma federação estrangeira no registro do usuário."""
         normalized = normalize_federation_code(code)
         if not normalized:
-            raise AppError("Codigo de federacao invalido (use 2 a 4 letras, ex.: POR).")
+            raise AppError("Código de federação inválido (use 2 a 4 letras, ex.: POR).")
         registry = self.list_foreign_federations()
         registry[normalized] = {"name": (name or normalized).strip(), "url": (url or "").strip(), "notes": (notes or "").strip()}
         # Persiste só o que não é semente pura, mas guardar tudo é inofensivo e simples.
@@ -409,7 +411,7 @@ class OfficialRatingService:
         """Importa uma lista de rating de federação estrangeira (CSV/XLS/XLSX)."""
         fed = normalize_federation_code(federation)
         if not fed:
-            raise AppError("Selecione uma federacao estrangeira valida (ex.: POR, ESP, ARG).")
+            raise AppError("Selecione uma federação estrangeira válida (ex.: POR, ESP, ARG).")
         path = Path(file_path)
         rows = self._tabular_rows(path)
         payloads, errors = self._map_foreign_rows(rows, fed, mapping)
@@ -429,17 +431,17 @@ class OfficialRatingService:
         """Baixa e importa a lista da federação quando há URL (CSV/texto) no registro."""
         fed = normalize_federation_code(federation)
         if not fed:
-            raise AppError("Selecione uma federacao estrangeira valida.")
+            raise AppError("Selecione uma federação estrangeira válida.")
         info = self.list_foreign_federations().get(fed) or {}
         url = str(info.get("url") or "").strip()
         if not url:
-            raise AppError(f"A federacao {fed} nao tem URL de lista cadastrada. Importe por arquivo.")
+            raise AppError(f"A federação {fed} não tem URL de lista cadastrada. Importe por arquivo.")
         request = urllib.request.Request(url, headers={"User-Agent": "Albericus Chess Club Manager"})
         try:
             with urllib.request.urlopen(request, timeout=30) as response:
                 content = response.read().decode("utf-8-sig", errors="replace")
         except (OSError, urllib.error.URLError) as exc:
-            raise AppError(f"Nao foi possivel baixar a lista {fed}: {exc}") from exc
+            raise AppError(f"Não foi possível baixar a lista {fed}: {exc}") from exc
         reader = csv.DictReader(io.StringIO(content), dialect=ImportService._csv_dialect(content[:4096]))
         rows = [dict(row) for row in reader] if reader.fieldnames else []
         payloads, errors = self._map_foreign_rows(rows, fed, mapping)
@@ -482,7 +484,7 @@ class OfficialRatingService:
                 handle.seek(0)
                 reader = csv.DictReader(handle, dialect=ImportService._csv_dialect(sample))
                 if not reader.fieldnames:
-                    raise AppError("CSV sem cabecalho.")
+                    raise AppError("CSV sem cabeçalho.")
                 return [dict(row) for row in reader]
         if suffix == ".xlsx":
             import openpyxl
@@ -509,12 +511,12 @@ class OfficialRatingService:
                 {headers[col]: sheet.cell_value(r, col) for col in range(sheet.ncols)}
                 for r in range(1, sheet.nrows)
             ]
-        raise AppError("Formato nao suportado. Use .csv, .xls ou .xlsx.")
+        raise AppError("Formato não suportado. Use .csv, .xls ou .xlsx.")
 
     def preview_tournament_player_updates(self, tournament_id: int) -> dict[str, Any]:
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
-            raise AppError("Selecione um torneio valido.")
+            raise AppError("Selecione um torneio válido.")
         settings = self.db.get_tournament_settings(tournament_id) or {}
 
         rows = []
@@ -546,7 +548,7 @@ class OfficialRatingService:
                     "player_id": int(player["id"]),
                     "name": player["name"],
                     "status": "changed" if changed_fields else "unchanged",
-                    "status_label": "Alterar" if changed_fields else "Sem mudanca",
+                    "status_label": "Alterar" if changed_fields else "Sem mudança",
                     "changed_fields": changed_fields,
                     "changes_label": ", ".join(self._comparison_field_label(field) for field in changed_fields),
                     "before": before,
@@ -635,8 +637,8 @@ class OfficialRatingService:
             "birth_date": official.get("birth_date") or player.get("birth_date", ""),
             "national_rating": national_rating,
             "international_rating": international_rating,
-            # Ratings por ritmo (FED-07): o snapshot da lista oficial ja
-            # guardava os tres e so o standard chegava ao jogador do torneio.
+            # Ratings por ritmo (FED-07): o snapshot da lista oficial já
+            # guardava os três e só o standard chegava ao jogador do torneio.
             "rapid_rating": int(official.get("rapid_rating") or 0)
             or int(player.get("rapid_rating") or 0),
             "blitz_rating": int(official.get("blitz_rating") or 0)
@@ -701,9 +703,9 @@ class OfficialRatingService:
     def _official_payload(row: dict[str, Any], source: str) -> dict[str, Any]:
         pick = ImportService._pick
         parse_optional_int = ImportService._parse_optional_int
-        # "fide_no"/"id_no"/"rtg_nat"/"rtg_int"/"clubname"/"birthday" sao os
-        # cabecalhos do formato Swiss-Manager usado pela lista da LBX (Liga
-        # Brasileira de Xadrez); os demais cobrem CSV/Excel proprios e a FIDE.
+        # "fide_no"/"id_no"/"rtg_nat"/"rtg_int"/"clubname"/"birthday" são os
+        # cabeçalhos do formato Swiss-Manager usado pela lista da LBX (Liga
+        # Brasileira de Xadrez); os demais cobrem CSV/Excel próprios e a FIDE.
         fide_id = pick(row, "fide_id", "fide", "id_fide", "fideid", "fide_no")
         cbx_id = pick(row, "cbx_id", "cbx", "id_cbx", "cbxid")
         lbx_id = pick(row, "lbx_id", "lbx", "id_lbx", "id_no", "idno")
@@ -714,7 +716,7 @@ class OfficialRatingService:
             lbx_id = lbx_id or pick(row, "id", "codigo", "code")
             external_id = lbx_id
             # A lista Swiss-Manager da LBX usa Fide_No para transportar o ID LBX.
-            # Ele nao e um FIDE ID e nao pode contaminar exportacoes TRF.
+            # Ele não é um FIDE ID e não pode contaminar exportações TRF.
             fide_id = ""
         else:  # CBX
             external_id = cbx_id
@@ -739,16 +741,16 @@ class OfficialRatingService:
             standard_rating = standard_rating or international_rating
         elif source == "LBX":
             national_rating = national_rating or generic_rating
-            # Sem FIDE real, o Rtg_Int da lista LBX apenas espelha o Rtg_Nat — nao
-            # e um ELO internacional, entao nao o propagamos como rating FIDE.
+            # Sem FIDE real, o Rtg_Int da lista LBX apenas espelha o Rtg_Nat — não
+            # e um ELO internacional, então não o propagamos como rating FIDE.
             if not fide_id:
                 international_rating = 0
         else:  # CBX
             national_rating = national_rating or generic_rating
 
         return {
-            # external_id ja carrega o ID_No da LBX; a busca por lbx_id usa
-            # (source='LBX' AND external_id), entao nao ha coluna lbx_id aqui.
+            # external_id já carrega o ID_No da LBX; a busca por lbx_id usa
+            # (source='LBX' AND external_id), então não há coluna lbx_id aqui.
             "external_id": external_id,
             "fide_id": fide_id,
             "cbx_id": cbx_id,
@@ -774,8 +776,8 @@ class OfficialRatingService:
         national: int,
         international: int,
     ) -> int:
-        # Importacao oficial: nas ordens sem regra especifica ("rating"/"manual")
-        # adota o melhor rating disponivel como rating de trabalho.
+        # Importação oficial: nas ordens sem regra específica ("rating"/"manual")
+        # adota o melhor rating disponível como rating de trabalho.
         return select_rating_for_order(
             initial_order,
             rating=current,
@@ -784,81 +786,79 @@ class OfficialRatingService:
             default=max(national, international, current),
         )
 
+def _performance_and_games(standing: Mapping[str, Any]) -> tuple[int | None, int]:
+    """Performance e partidas da linha; ``None`` quando não dá para calcular rating."""
+    performance = standing.get("performance")
+    games = len(standing.get("earned_against") or [])
+    if not isinstance(performance, int) or games <= 0:
+        return None, games
+    return performance, games
+
+
 class InternalRatingService:
     HISTORY_REASON = "tournament_performance"
 
     def __init__(self, db: Database) -> None:
         self.db = db
 
-    def apply_tournament_ratings(self, tournament_id: int) -> dict[str, Any]:
+    def apply_tournament_ratings(
+        self, tournament_id: int, *, friendly_confirmed: bool = False
+    ) -> dict[str, Any]:
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
-            raise AppError("Selecione um torneio valido.")
+            raise AppError("Selecione um torneio válido.")
+        # D2 (ESPEC_REVISAO_MODO_AMISTOSO): o amistoso só conta com o "sim" do usuário.
+        pergunta = friendly_mode.internal_rating_question(
+            self.db.get_tournament_settings(int(tournament_id))
+        )
+        if pergunta and not friendly_confirmed:
+            raise AppError(pergunta, suggestion="Responda à pergunta da tela antes de atualizar.")
 
         pairing_service = __import__('src.services.pairing_service', fromlist=['PairingService']).PairingService(self.db)
-        updated = 0
-        duplicates = 0
-        skipped = 0
-        external = 0
-        no_member = 0
-
+        contagem = {"updated": 0, "duplicates": 0, "skipped": 0, "external": 0, "no_member": 0}
         for standing in pairing_service.standings(tournament_id):
-            player = self.db.get_player(int(standing["player_id"]))
-            if not player:
-                skipped += 1
-                continue
-            member_id = int(player.get("member_id") or 0)
-            if not member_id:
-                external += 1
-                continue
-
-            performance = standing.get("performance")
-            games = len(standing.get("earned_against") or [])
-            if not isinstance(performance, int) or games <= 0:
-                skipped += 1
-                continue
-
-            member = self.db.get_member(member_id)
-            if not member:
-                no_member += 1
-                continue
-
-            old_rating = int(member.get("rating") or 0)
-            new_rating = self._next_rating(old_rating, int(performance), games)
-            recorded = self.db.record_internal_rating_update(
-                member_id=member_id,
-                tournament_id=tournament_id,
-                player_id=int(player["id"]),
-                old_rating=old_rating,
-                new_rating=new_rating,
-                performance=int(performance),
-                points=float(standing.get("points") or 0.0),
-                games=games,
-                reason=self.HISTORY_REASON,
-            )
-            if recorded:
-                updated += 1
-            else:
-                duplicates += 1
+            contagem[self._rate_standing(tournament_id, standing)] += 1
 
         logger.info(
             "Rating interno aplicado no torneio %s: %s atualizados, %s ja aplicados",
             tournament_id,
-            updated,
-            duplicates,
+            contagem["updated"],
+            contagem["duplicates"],
         )
-        return {
-            "updated": updated,
-            "duplicates": duplicates,
-            "skipped": skipped,
-            "external": external,
-            "no_member": no_member,
-        }
+        return contagem
+
+    def _rate_standing(self, tournament_id: int, standing: Mapping[str, Any]) -> str:
+        """Aplica o rating de UMA linha da classificação; devolve a chave da contagem."""
+        player = self.db.get_player(int(standing["player_id"]))
+        if not player:
+            return "skipped"
+        member_id = int(player.get("member_id") or 0)
+        if not member_id:
+            return "external"
+        performance, games = _performance_and_games(standing)
+        if performance is None:
+            return "skipped"
+        member = self.db.get_member(member_id)
+        if not member:
+            return "no_member"
+        old_rating = int(member.get("rating") or 0)
+        recorded = self.db.record_internal_rating_update(
+            member_id=member_id,
+            tournament_id=tournament_id,
+            player_id=int(player["id"]),
+            old_rating=old_rating,
+            new_rating=self._next_rating(old_rating, int(performance), games),
+            performance=int(performance),
+            points=float(standing.get("points") or 0.0),
+            games=games,
+            reason=self.HISTORY_REASON,
+        )
+        return "updated" if recorded else "duplicates"
 
     def member_rating_history(self, member_id: int) -> list[dict[str, Any]]:
         member = self.db.get_member(member_id)
         if not member:
-            raise AppError("Membro nao encontrado.")
+            raise AppError("Membro não encontrado.")
         return self.db.list_member_rating_history(member_id)
 
     def ranking(
@@ -872,10 +872,10 @@ class InternalRatingService:
     ) -> list[dict[str, Any]]:
         start_date = start_date.strip()
         end_date = end_date.strip()
-        self._validate_optional_date(start_date, "Data inicial da temporada invalida.")
-        self._validate_optional_date(end_date, "Data final da temporada invalida.")
+        self._validate_optional_date(start_date, "Data inicial da temporada inválida.")
+        self._validate_optional_date(end_date, "Data final da temporada inválida.")
         if start_date and end_date and start_date > end_date:
-            raise AppError("Data final da temporada nao pode ser anterior a data inicial.")
+            raise AppError("Data final da temporada não pode ser anterior a data inicial.")
 
         member_service = __import__('src.services.member_service', fromlist=['MemberService']).MemberService(self.db)
         rows = []
@@ -984,7 +984,7 @@ class InternalRatingService:
                 if outcome == "Bye":
                     byes += 1
                     continue
-                if outcome == "Vitoria":
+                if outcome == "Vitória":
                     wins += 1
                     games += 1
                 elif outcome == "Empate":
@@ -1010,10 +1010,8 @@ class InternalRatingService:
     def _validate_optional_date(value: str, message: str) -> None:
         if not value:
             return
-        try:
-            date.fromisoformat(value)
-        except ValueError as exc:
-            raise AppError(message) from exc
+        if not is_iso_date(value):
+            raise AppError(message)
 
     @staticmethod
     def _date_in_period(value: str, start_date: str, end_date: str) -> bool:
@@ -1052,10 +1050,10 @@ class InternalRatingService:
 
 
 class FideRatingService:
-    """Relatorio de variacao de rating FIDE (Fase B / spec E3).
+    """Relatório de variação de rating FIDE (Fase B / spec E3).
 
-    Estimativa de apoio ao arbitro (Ro, K, We, ΔElo, Rc, Rp). A homologacao
-    oficial continua sendo da federacao — este relatorio nao substitui o
+    Estimativa de apoio ao árbitro (Ro, K, We, ΔElo, Rc, Rp). A homologação
+    oficial continua sendo da federação — este relatório não substitui o
     processamento da lista pela FIDE/CBX.
     """
 
@@ -1067,9 +1065,9 @@ class FideRatingService:
     def compute_report(self, tournament_id: int, rating_type: str = "fide") -> dict[str, Any]:
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
-            raise AppError("Selecione um torneio valido.")
+            raise AppError("Selecione um torneio válido.")
         if rating_type not in self.RATING_TYPES:
-            raise AppError("Tipo de rating invalido para o relatorio FIDE.")
+            raise AppError("Tipo de rating inválido para o relatório FIDE.")
         players = self.db.list_players(tournament_id, active_only=False)
         closed_pairings = self.db.get_pairings_for_tournament(tournament_id, closed_only=True)
         rows = build_fide_report_rows(
@@ -1128,9 +1126,9 @@ class NormAssistantService:
     def evaluate_tournament(self, tournament_id: int, rating_type: str = "fide") -> dict[str, Any]:
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
-            raise AppError("Selecione um torneio valido.")
+            raise AppError("Selecione um torneio válido.")
         if tournament.get("competition_type") == "team":
-            raise AppError("Normas FIDE disponiveis apenas para torneios individuais.")
+            raise AppError("Normas FIDE disponíveis apenas para torneios individuais.")
         settings = self.db.get_tournament_settings(tournament_id) or {}
         players = self.db.list_players(tournament_id, active_only=False)
         closed_pairings = self.db.get_pairings_for_tournament(tournament_id, closed_only=True)

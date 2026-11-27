@@ -300,7 +300,7 @@ class TestEncodeTimeControl(unittest.TestCase):
 class TestRecordNationalRating(unittest.TestCase):
     def test_column_geometry_with_national_id(self):
         line = record_national_rating("bra", 1, 1928, national_id="55501")
-        self.assertEqual(cols(line, 1, 3), "BRA")     # federacao (maiuscula)
+        self.assertEqual(cols(line, 1, 3), "BRA")     # federação (maiúscula)
         self.assertEqual(cols(line, 5, 8).strip(), "1")    # start-rank
         self.assertEqual(cols(line, 49, 52), "1928")   # rating nacional
         self.assertEqual(cols(line, 58, 68).strip(), "55501")  # nº nacional
@@ -318,8 +318,8 @@ class TestRecord172(unittest.TestCase):
     def test_column_geometry(self):
         line = record_172("bra", "FIDE")
         self.assertEqual(cols(line, 1, 3), "172")
-        self.assertEqual(cols(line, 5, 7), "BRA")            # federacao (maiuscula)
-        self.assertEqual(cols(line, 9, 13).strip(), "FIDE")  # metodo
+        self.assertEqual(cols(line, 5, 7), "BRA")            # federação (maiúscula)
+        self.assertEqual(cols(line, 9, 13).strip(), "FIDE")  # método
         self.assertTrue(line.endswith("\r\n"))
 
     def test_defaults_to_fide(self):

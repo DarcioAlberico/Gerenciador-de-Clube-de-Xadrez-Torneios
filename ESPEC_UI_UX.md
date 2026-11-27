@@ -24,7 +24,7 @@ acúmulo (~19,7 mil linhas em 28 arquivos) e hoje paga em três frentes:
    misturam view + lógica + estado, e um mecanismo de tema que reescreve `sys.modules`
    e destrói a UI inteira a cada troca.
 2. **Consistência** — desvios mensuráveis do próprio design system (cores e fontes
-   hardcoded, diálogos nativos do SO).
+   hardcoded, diálogos nativos do SÓ).
 3. **Navegação e feedback** — navegação 100% por menu nativo, ausência de tooltips,
    estados vazios/carregando fracos e confirmações destrutivas sem desfazer.
 
@@ -58,7 +58,7 @@ Números medidos no código em 2026-06-25 (corrigem estimativas das análises de
 | Bases da `AlbericusApp` | 14 mixins + `ctk.CTk` | [app.py:29](src/ui/app.py:29) |
 | `from ..support import *` | **22 arquivos** | exceções corretas: `library.py`, `dashboard.py` |
 | Padrão `{"value": None}` p/ estado | **22 ocorrências / 12 arquivos** | _workaround_ de escopo léxico |
-| `messagebox.*` nativos | 26 / 8 arquivos | diálogos do SO fora do tema |
+| `messagebox.*` nativos | 26 / 8 arquivos | diálogos do SÓ fora do tema |
 | Cores hex hardcoded em telas | 58 (45 em `pairing_results_ui.py`) | ignoram o accent do usuário |
 | `CTkFont(size=...)` solto | 23 | contorna tokens `SIZE_*` |
 | `_run_background` (helper async) | **existe e usado 50×/12 arquivos** | bom — só faltam 4 _call-sites_ |
@@ -91,7 +91,7 @@ O diagnóstico foi confirmado rodando o app sobre uma cópia descartável do ban
   aparece **vazio com eixos de -0.04 a 0.04** quando não há dados (empty state
   quebrado), e os painéis mostram "Nenhum aviso"/"Nenhum evento". Confirma P1-8, P1-9.
 - **Configurações do app** — a galeria de temas curados (ponto forte) renderiza bem,
-  mas o título "Configuracoes", as abas "Aparencia"/"Seguranca" e a coluna "Descricao"
+  mas o título "Configurações", as abas "Aparência"/"Segurança" e a coluna "Descrição"
   aparecem **sem acento** ao usuário. Confirma P2-8.
 
 ### 2.3 Revalidação (2026-07-29) — a fundação existe, a adoção não chegou
@@ -359,7 +359,7 @@ na coluna principal (fim da barra horizontal permanente), `EmptyState` embutido 
   inesperado:** modal com código + caminho do log. **Implementado (F2.2):** a única
   `_show_error` vive em `ErrorCatchingMixin`
   ([support.py:511](src/ui/support.py:511)) — e não em `app.py`, como esta seção
-  previa: o mixin atende as ~25 telas, enquanto a cópia de `app.py` só servia a
+  prévia: o mixin atende as ~25 telas, enquanto a cópia de `app.py` só servia a
   janela principal. A classificação saiu para a função pura
   [`_classify_error`](src/ui/support.py:442) (aceita `str` ou exceção). Quando há
   modal com _grab_ aberto, o feedback vira alerta bloqueante em vez de toast —
@@ -398,8 +398,8 @@ Toda listagem/painel implementa os três estados: **vazio** (EmptyState + CTA),
   alto contraste.
 - **Foco/teclado:** ordem de tabulação previsível (não dependente da ordem de criação);
   Enter/Esc consistentes em modais; foco visível.
-- **Polish PT-BR:** corrigir labels **visíveis** sem acento ("Configuracoes",
-  "Aparencia", "Seguranca") — barato, alto efeito de qualidade percebida.
+- **Polish PT-BR:** corrigir labels **visíveis** sem acento ("Configurações",
+  "Aparência", "Segurança") — barato, alto efeito de qualidade percebida.
 - **i18n (preparação):** extrair strings para `i18n/pt_BR.json` mantendo só PT-BR ativo.
   Exportações FIDE em EN virão; preparar o terreno evita refactor doloroso. **Não**
   implementar EN agora.

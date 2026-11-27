@@ -21,6 +21,7 @@ sobre o mesmo painel mostram um véu só, e é o fim da última que o retira —
 """
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import customtkinter as ctk
@@ -32,6 +33,8 @@ from ..theme import (
     THEME_TEXT_MAIN,
     font_subsection,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class ProgressOverlay:
@@ -77,7 +80,7 @@ class ProgressOverlay:
             self._frame.lift()  # type: ignore[union-attr]
             self._bar.start()  # type: ignore[union-attr]
         except Exception:
-            pass
+            logger.debug("Overlay de progresso nao exibido", exc_info=True)
 
     def stop(self) -> None:
         if self._active == 0:
@@ -101,14 +104,14 @@ class ProgressOverlay:
             if self._frame is not None:
                 self._frame.place_forget()
         except Exception:
-            pass
+            pass  # overlay já destruído junto com a tela; nada a esconder
 
     def _set_message(self, message: str) -> None:
         if self._label is not None and message:
             try:
                 self._label.configure(text=message)
             except Exception:
-                pass
+                pass  # rótulo já destruído junto com a tela
 
     def _build(self) -> None:
         if self._frame is not None and self._frame.winfo_exists():

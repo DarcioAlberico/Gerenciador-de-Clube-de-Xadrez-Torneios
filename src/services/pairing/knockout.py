@@ -28,11 +28,11 @@ from src.services.constants import RESULT_POINTS
 # ata do que aconteceu lá.
 ADVANCEMENT_CRITERIA: dict[str, str] = {
     "mini_match": "Mini-match de desempate",
-    "rapid": "Partidas rapidas",
+    "rapid": "Partidas rápidas",
     "blitz": "Blitz",
     "armageddon": "Armagedom",
-    "regulation": "Criterio do regulamento (melhor colocado, sorteio previsto)",
-    "arbiter": "Decisao do arbitro",
+    "regulation": "Critério do regulamento (melhor colocado, sorteio previsto)",
+    "arbiter": "Decisão do árbitro",
 }
 
 # Origens automáticas — não são escolha de ninguém, saem da própria mesa.
@@ -40,7 +40,7 @@ SOURCE_BOARD = "board"
 SOURCE_BYE = "bye"
 
 BOARD_LABEL = "Resultado no tabuleiro"
-BYE_LABEL = "Bye (sem adversario na fase)"
+BYE_LABEL = "Bye (sem adversário na fase)"
 
 # Motivo é obrigatório quando o critério não descreve sozinho o que houve.
 CRITERIA_NEEDING_NOTES = frozenset({"regulation", "arbiter"})
@@ -85,7 +85,7 @@ def criterion_label(criterion: str) -> str:
         return BOARD_LABEL
     if codigo == SOURCE_BYE:
         return BYE_LABEL
-    return ADVANCEMENT_CRITERIA.get(codigo, codigo or "Sem criterio")
+    return ADVANCEMENT_CRITERIA.get(codigo, codigo or "Sem critério")
 
 
 def decision_error(
@@ -98,35 +98,35 @@ def decision_error(
 ) -> str:
     """``""`` quando a decisão pode ser registrada."""
     if pairing is None:
-        return "Mesa nao encontrada para o torneio selecionado."
+        return "Mesa não encontrada para o torneio selecionado."
     if str(criterion or "").strip() not in ADVANCEMENT_CRITERIA:
         return (
-            "Criterio de avanco invalido. Use: "
+            "Critério de avanço inválido. Use: "
             + ", ".join(sorted(ADVANCEMENT_CRITERIA))
             + "."
         )
     if pairing.get("is_bye"):
-        return "Mesa de bye nao tem desempate: o jogador ja avanca sozinho."
+        return "Mesa de bye não tem desempate: o jogador já avança sozinho."
     participantes = {
         int(pairing.get("white_player_id") or 0),
         int(pairing.get("black_player_id") or 0),
     }
     if int(player_id) not in participantes:
-        return "O jogador escolhido nao esta nesta mesa."
+        return "O jogador escolhido não está nesta mesa."
     if board_winner(pairing) is not None:
         return (
             "Esta mesa foi decidida no tabuleiro. Corrija o resultado se ele "
-            "estiver errado — um avanco registrado nao substitui o placar."
+            "estiver errado — um avanço registrado não substitui o placar."
         )
     if not round_closed:
         return (
-            "Feche a rodada antes de registrar o avanco: enquanto ela esta aberta "
+            "Feche a rodada antes de registrar o avanço: enquanto ela está aberta "
             "o resultado ainda pode mudar."
         )
     if str(criterion).strip() in CRITERIA_NEEDING_NOTES and len(clean_notes(notes)) < MIN_NOTES_LENGTH:
         return (
-            "Descreva o que decidiu o avanco (o criterio do regulamento aplicado, "
-            "ou a decisao do arbitro). Sem isso a chave nao explica nada."
+            "Descreva o que decidiu o avanço (o critério do regulamento aplicado, "
+            "ou a decisão do árbitro). Sem isso a chave não explica nada."
         )
     return ""
 
@@ -150,9 +150,9 @@ def pending_decision_message(boards: Sequence[int]) -> str:
     mesas = ", ".join(str(board) for board in boards)
     return (
         f"Mata-mata: a(s) mesa(s) {mesas} terminaram sem vencedor no tabuleiro. "
-        "Registre quem avanca e por que criterio (mini-match, rapidas, blitz, "
-        "armagedom, regulamento ou decisao do arbitro) antes de gerar a proxima "
-        "fase. Antes, o melhor colocado passava em silencio."
+        "Registre quem avança e por que critério (mini-match, rápidas, blitz, "
+        "armagedom, regulamento ou decisão do árbitro) antes de gerar a próxima "
+        "fase. Antes, o melhor colocado passava em silêncio."
     )
 
 

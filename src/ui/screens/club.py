@@ -97,7 +97,7 @@ class ClubPagesMixin(ClubMembersMixin):
 
         add_dashboard_column(
             0,
-            "Proximos eventos",
+            "Próximos eventos",
             [
                 f"{event['event_date'] or 'Sem data'} - {event['title']}"
                 for event in upcoming_events
@@ -230,7 +230,7 @@ class ClubPagesMixin(ClubMembersMixin):
                         club["id"],
                         club["name"],
                         CLUB_KIND_LABELS.get(club.get("kind", "club"), club.get("kind", "")),
-                        "Sim" if club.get("active") else "Nao",
+                        "Sim" if club.get("active") else "Não",
                         club["members_count"],
                         club["active_classes_count"],
                         club["city"],
@@ -252,7 +252,7 @@ class ClubPagesMixin(ClubMembersMixin):
                         item["weekday"],
                         item["time"],
                         item["active_members_count"],
-                        "Sim" if item["active"] else "Nao",
+                        "Sim" if item["active"] else "Não",
                     ),
                 )
 
@@ -450,7 +450,7 @@ class ClubPagesMixin(ClubMembersMixin):
                         level["name"],
                         level.get("description") or "",
                         level.get("members_count", 0),
-                        "Sim" if level.get("active") else "Nao",
+                        "Sim" if level.get("active") else "Não",
                     ),
                 )
 
@@ -497,7 +497,7 @@ class ClubPagesMixin(ClubMembersMixin):
             try:
                 level = selected_level()
                 if not level:
-                    raise AppError("Selecione um nivel.")
+                    raise AppError("Selecione um nível.")
                 self.learning_level_service.toggle_level_active(int(level["id"]))
                 clear_form()
                 load_levels()
@@ -505,8 +505,8 @@ class ClubPagesMixin(ClubMembersMixin):
                 self._show_error(exc)
 
         buttons = [
-            ("Novo nivel", clear_form),
-            ("Salvar nivel", save_level),
+            ("Novo nível", clear_form),
+            ("Salvar nível", save_level),
             ("Ativar/Inativar", toggle_level),
         ]
         self._grid_form_buttons(form, buttons, 7)
@@ -598,7 +598,7 @@ class ClubPagesMixin(ClubMembersMixin):
         relationship_entry = ctk.CTkEntry(link_panel, width=180)
         relationship_entry.grid(row=1, column=1, padx=8, pady=(0, 10), sticky="ew")
 
-        ctk.CTkLabel(link_panel, text="Obs. vinculo").grid(row=0, column=2, padx=8, pady=(10, 2), sticky="w")
+        ctk.CTkLabel(link_panel, text="Obs. vínculo").grid(row=0, column=2, padx=8, pady=(10, 2), sticky="w")
         link_notes_entry = ctk.CTkEntry(link_panel, width=170)
         link_notes_entry.grid(row=1, column=2, padx=8, pady=(0, 10), sticky="ew")
 
@@ -720,7 +720,7 @@ class ClubPagesMixin(ClubMembersMixin):
                         guardian["phone"],
                         guardian["email"],
                         guardian["members_count"],
-                        "Sim" if guardian.get("active") else "Nao",
+                        "Sim" if guardian.get("active") else "Não",
                     ),
                 )
 
@@ -737,8 +737,8 @@ class ClubPagesMixin(ClubMembersMixin):
                         item["member_id"],
                         item["member_name"],
                         item["relationship"],
-                        "Sim" if item.get("primary_contact") else "Nao",
-                        "Sim" if item.get("emergency_contact") else "Nao",
+                        "Sim" if item.get("primary_contact") else "Não",
+                        "Sim" if item.get("emergency_contact") else "Não",
                         item.get("member_phone") or "",
                         item.get("club_name") or "",
                         item.get("active_class_name") or "",
@@ -804,7 +804,7 @@ class ClubPagesMixin(ClubMembersMixin):
             try:
                 guardian_id = selected_guardian_id["value"]
                 if not guardian_id:
-                    raise AppError("Selecione um responsavel.")
+                    raise AppError("Selecione um responsável.")
                 self.guardian_service.update_guardian(guardian_id, guardian_payload())
                 load_guardians()
                 select_guardian_in_tree(guardian_id)
@@ -815,7 +815,7 @@ class ClubPagesMixin(ClubMembersMixin):
             try:
                 guardian = selected_guardian()
                 if not guardian:
-                    raise AppError("Selecione um responsavel.")
+                    raise AppError("Selecione um responsável.")
                 self.guardian_service.toggle_guardian_active(int(guardian["id"]))
                 clear_form()
                 load_guardians()
@@ -826,7 +826,7 @@ class ClubPagesMixin(ClubMembersMixin):
             try:
                 guardian_id = selected_guardian_id["value"]
                 if not guardian_id:
-                    raise AppError("Selecione um responsavel.")
+                    raise AppError("Selecione um responsável.")
                 member_id = member_option_map.get(member_option.get())
                 if not member_id:
                     raise AppError("Selecione um membro.")
@@ -855,10 +855,10 @@ class ClubPagesMixin(ClubMembersMixin):
                 guardian_id = selected_guardian_id["value"]
                 selected = linked_tree.selection()
                 if not guardian_id or not selected:
-                    raise AppError("Selecione um vinculo.")
+                    raise AppError("Selecione um vínculo.")
                 member_id = guardian_member_map.get(selected[0])
                 if not member_id:
-                    raise AppError("Selecione um vinculo valido.")
+                    raise AppError("Selecione um vínculo válido.")
                 self.guardian_service.unlink_guardian_from_member(member_id, guardian_id)
                 load_linked_members(guardian_id)
                 load_guardians()
@@ -872,7 +872,7 @@ class ClubPagesMixin(ClubMembersMixin):
             ("Atualizar", update_guardian),
             ("Ativar/Inativar", toggle_guardian),
             ("Vincular membro", link_guardian),
-            ("Remover vinculo", unlink_guardian),
+            ("Remover vínculo", unlink_guardian),
         ]
         self._grid_form_buttons(form, buttons, len(fields) * 2 + 1)
 

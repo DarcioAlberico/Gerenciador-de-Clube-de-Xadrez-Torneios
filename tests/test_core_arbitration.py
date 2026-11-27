@@ -85,7 +85,7 @@ class ArbitrationPhasesTest(CoreServiceTestCase):
         settings["allow_dangerous_changes"] = 1
         self.db.save_tournament_settings(self.tournament_id, settings)
         # ARB-01: corrigir rodada fechada passou a exigir motivo. O interruptor
-        # global continua servindo de permissao, mas o registro nao e opcional.
+        # global continua servindo de permissão, mas o registro não é opcional.
         self.service.update_result(
             self.tournament_id, int(pairing["id"]), "0-1", "Sumula trocada pelo arbitro"
         )
@@ -154,7 +154,7 @@ class ArbitrationPhasesTest(CoreServiceTestCase):
         dashboard = self.service.arbitration_dashboard(self.tournament_id)
         self.assertFalse(dashboard["metrics"]["ready_to_close"])
         self.assertEqual(1, dashboard["metrics"]["blocking_issues"])
-        with self.assertRaisesRegex(AppError, "pendencias de arbitragem bloqueantes"):
+        with self.assertRaisesRegex(AppError, "pendências de arbitragem bloqueantes"):
             self.service.close_round(self.tournament_id, int(round_data["id"]))
 
         self.qr_result_service.reject_submission(int(submission["id"]), reviewer="Arbitro", reason="Resultado lancado no desktop.")
@@ -162,13 +162,13 @@ class ArbitrationPhasesTest(CoreServiceTestCase):
         self.assertEqual("closed", self.db.get_round(int(round_data["id"]))["status"])
 
     def test_phase2_round_close_allows_attention_only_clock_issue(self) -> None:
-        """Alerta que NAO exige decisao continua deixando a rodada fechar.
+        """Alerta que NÃO exige decisão continua deixando a rodada fechar.
 
         Este teste exigia o mesmo de uma QUEDA DE SETA, e a ARB-03 mudou isso de
-        proposito: seta caida e ausencia sao os dois eventos que a FIDE nao deixa
-        passar sem o arbitro decidir (quem ganha? houve reclamacao? perdeu por
+        propósito: seta caída e ausência são os dois eventos que a FIDE não deixa
+        passar sem o árbitro decidir (quem ganha? houve reclamação? perdeu por
         6.7?), e a rodada fechava com a pergunta em aberto. O aviso de tempo
-        critico segue sendo aviso — e e ele que este teste guarda agora.
+        crítico segue sendo aviso — e e ele que este teste guarda agora.
         """
         self._create_players(2)
         round_data = self.service.generate_next_round(self.tournament_id)
@@ -191,10 +191,10 @@ class ArbitrationPhasesTest(CoreServiceTestCase):
         self.assertEqual("closed", self.db.get_round(int(round_data["id"]))["status"])
 
     def test_phase2_flag_fall_blocks_until_decision_is_registered(self) -> None:
-        """ARB-03: a seta caiu, e alguem precisa dizer o que houve.
+        """ARB-03: a seta caiu, e alguém precisa dizer o que houve.
 
-        O par do teste acima: a mudanca de comportamento fica explicita nos dois
-        lados, e nao escondida na ausencia de um teste.
+        O par do teste acima: a mudança de comportamento fica explicita nos dois
+        lados, e não escondida na ausência de um teste.
         """
         from src.services.pairing.incidents import DECISION_WARNING
 
@@ -212,7 +212,7 @@ class ArbitrationPhasesTest(CoreServiceTestCase):
 
         dashboard = self.service.arbitration_dashboard(self.tournament_id)
         self.assertFalse(dashboard["metrics"]["ready_to_close"])
-        with self.assertRaisesRegex(AppError, "pendencias de arbitragem bloqueantes"):
+        with self.assertRaisesRegex(AppError, "pendências de arbitragem bloqueantes"):
             self.service.close_round(self.tournament_id, int(round_data["id"]))
 
         evento = next(
@@ -292,7 +292,7 @@ class ArbitrationPhasesTest(CoreServiceTestCase):
         self.assertIn("0-1", corrections[0]["after_json"])
         self.assertTrue(corrections[0]["before_hash"])
         self.assertTrue(corrections[0]["after_hash"])
-        # ARB-01: o motivo do arbitro, e nao mais a constante do codigo.
+        # ARB-01: o motivo do árbitro, e não mais a constante do código.
         self.assertEqual("Sumula trocada pelo arbitro", corrections[0]["reason"])
 
     def test_phase8_audit_events_enqueue_sync_outbox_and_network_failure_keeps_pending(self) -> None:
@@ -324,7 +324,7 @@ class ArbitrationPhasesTest(CoreServiceTestCase):
         revoked = next(item for item in self.sync_service.list_devices() if item["device_id"] == "device-board-1")
         self.assertEqual("Mesa 1", device["name"])
         self.assertEqual("revoked", revoked["status"])
-        with self.assertRaisesRegex(AppError, "nao encontrado"):
+        with self.assertRaisesRegex(AppError, "não encontrado"):
             self.sync_service.revoke_device("missing-device")
 
     def test_phase8_sync_pending_validates_target_url_limit_and_timeout(self) -> None:
@@ -429,7 +429,7 @@ class ArbitrationPhasesTest(CoreServiceTestCase):
         rejected = self.db.list_audit_events(self.tournament_id, action="sync_remote_rejected")
         self.assertEqual("rejected", response["status"])
         self.assertEqual("", unchanged["result"])
-        self.assertTrue(any("Payload remoto invalido" in item["reason"] for item in rejected))
+        self.assertTrue(any("Payload remoto inválido" in item["reason"] for item in rejected))
 
     def test_phase8_remote_result_conflict_does_not_change_closed_round(self) -> None:
         self._create_players(2)
@@ -512,7 +512,7 @@ class ArbitrationPhasesTest(CoreServiceTestCase):
         self.assertEqual("rejected", response["status"])
         self.assertEqual("1-0", unchanged["result"])
         self.assertTrue(rejected)
-        self.assertIn("Resultado remoto invalido", rejected[0]["reason"])
+        self.assertIn("Resultado remoto inválido", rejected[0]["reason"])
 
     def test_phase8_remote_result_conflict_does_not_override_open_desktop_result(self) -> None:
         self._create_players(2)
@@ -751,7 +751,7 @@ class ArbitrationPhasesTest(CoreServiceTestCase):
 
         with self.assertRaisesRegex(AppError, "Canal"):
             self.clock_integration_service.queue_notification("telegram", "arbitro@example.com", "Rodada publicada")
-        with self.assertRaisesRegex(AppError, "destinatario"):
+        with self.assertRaisesRegex(AppError, "destinatário"):
             self.clock_integration_service.queue_notification("email", "", "Rodada publicada")
         with self.assertRaisesRegex(AppError, "mensagem"):
             self.clock_integration_service.queue_notification("email", "arbitro@example.com", " ")
@@ -769,7 +769,7 @@ class ArbitrationPhasesTest(CoreServiceTestCase):
         self.export_service.export_tournament_audit(self.tournament_id, output_path)
         content = output_path.read_text(encoding="utf-8")
 
-        self.assertIn("Data/hora;Acao;Entidade", content)
+        self.assertIn("Data/hora;Ação;Entidade", content)
         self.assertIn("round_generated", content)
         self.assertIn("round_closed", content)
 

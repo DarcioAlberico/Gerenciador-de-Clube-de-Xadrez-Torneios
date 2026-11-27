@@ -186,7 +186,8 @@ class ReportRenderersMixin:
             document.drawRightString(
                 page_width - margin,
                 page_height - 28 * mm,
-                f"Tolerancia de atraso: {tolerancia} min" if tolerancia else "Tolerancia: zero (perde a hora marcada)",
+                tournament.get("late_tolerance_line")
+                or (f"Tolerância de atraso: {tolerancia} min" if tolerancia else "Tolerância: zero (perde a hora marcada)"),
             )
             if scoresheet.get("context"):
                 document.drawString(margin, page_height - 28 * mm, fitted_text(scoresheet["context"], content_width, font_size=9))
@@ -549,7 +550,7 @@ class ReportRenderersMixin:
                 document.drawCentredString(center_x, bottom + 27 * mm, "QR para enviar resultado")
             elif include_qr:
                 document.setFont("Helvetica", 7)
-                document.drawCentredString(center_x, bottom + 30 * mm, "QR indisponivel para esta mesa")
+                document.drawCentredString(center_x, bottom + 30 * mm, "QR indisponível para esta mesa")
 
         if boards:
             document.showPage()
@@ -705,7 +706,7 @@ class ReportRenderersMixin:
 </head>
 <body>
   <h1>{html.escape(title)}</h1>
-  <p>Celulas: posição do adversario, lado (B = brancas; P = pretas), resultado e pontuação.</p>
+  <p>Células: posição do adversário, lado (B = brancas; P = pretas), resultado e pontuação.</p>
   <table>
     <thead><tr>{header_html}</tr></thead>
     <tbody>{rows_html}</tbody>

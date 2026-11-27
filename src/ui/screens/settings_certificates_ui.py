@@ -3,18 +3,18 @@ from __future__ import annotations
 from ..support import *
 
 
-# Cores PADRAO do modelo de diploma: sao DADO do template (vao para o banco e
-# para o PDF), nao cor da interface — por isso nao seguem o tema.
+# Cores PADRÃO do modelo de diploma: são DADO do template (vão para o banco e
+# para o PDF), não cor da interface — por isso não seguem o tema.
 DIPLOMA_COR_PRIMARIA_PADRAO = "#1E3A8A"
 DIPLOMA_COR_DESTAQUE_PADRAO = "#93C5FD"
 
 
 class SettingsCertificatesMixin:
     def _build_certificate_style_controls(self, parent: Any) -> tuple[Any, Any, Any]:
-        """Cria o frame de controles de estilo/marca d'agua dos diplomas.
+        """Cria o frame de controles de estilo/marca d'água dos diplomas.
 
         Devolve (frame, style_payload, load_style): o frame para posicionar, uma
-        funcao que le os controles num dict de payload, e outra que carrega um
+        função que lê os controles num dict de payload, e outra que carrega um
         modelo nos controles. Isola os mapas estilo/paleta/peca da tela.
         """
         from src.services.certificates.palettes import PALETTES
@@ -22,7 +22,7 @@ class SettingsCertificatesMixin:
 
         style_by_label = {preset.name: preset.key for preset in STYLE_PRESETS.values()}
         label_by_style = {key: label for label, key in style_by_label.items()}
-        palette_by_label = {"Automatica (cores acima)": ""}
+        palette_by_label = {"Automática (cores acima)": ""}
         for palette in PALETTES.values():
             palette_by_label[palette.name] = palette.key
         label_by_palette = {key: label for label, key in palette_by_label.items()}
@@ -44,28 +44,28 @@ class SettingsCertificatesMixin:
         ctk.CTkLabel(frame, text="Paleta de cores").grid(row=2, column=0, padx=10, pady=(2, 4), sticky="w")
         palette_option = ctk.CTkOptionMenu(frame, values=list(palette_by_label), width=250)
         palette_option.grid(row=3, column=0, padx=10, pady=(0, 6), sticky="ew")
-        ctk.CTkLabel(frame, text="Marca d'agua").grid(row=4, column=0, padx=10, pady=(2, 4), sticky="w")
+        ctk.CTkLabel(frame, text="Marca d'água").grid(row=4, column=0, padx=10, pady=(2, 4), sticky="w")
         watermark_kind_option = ctk.CTkOptionMenu(frame, values=list(wm_by_label), width=250)
         watermark_kind_option.grid(row=5, column=0, padx=10, pady=(0, 6), sticky="ew")
         watermark_piece_option = ctk.CTkOptionMenu(frame, values=list(piece_by_label), width=250)
         watermark_piece_option.grid(row=6, column=0, padx=10, pady=(0, 6), sticky="ew")
-        watermark_image_entry = ctk.CTkEntry(frame, width=250, placeholder_text="Imagem da marca d'agua (opcional)")
+        watermark_image_entry = ctk.CTkEntry(frame, width=250, placeholder_text="Imagem da marca d'água (opcional)")
         watermark_image_entry.grid(row=7, column=0, padx=10, pady=(0, 6), sticky="ew")
 
         def choose_watermark() -> None:
             file_path = filedialog.askopenfilename(
-                title="Escolher imagem da marca d'agua", initialdir=str(BASE_DIR),
+                title="Escolher imagem da marca d'água", initialdir=str(BASE_DIR),
                 filetypes=[("Imagens", "*.png *.jpg *.jpeg"), ("Todos os arquivos", "*.*")],
             )
             if file_path:
                 watermark_image_entry.delete(0, "end")
                 watermark_image_entry.insert(0, file_path)
 
-        ctk.CTkButton(frame, text="Escolher imagem da marca d'agua", command=choose_watermark).grid(
+        ctk.CTkButton(frame, text="Escolher imagem da marca d'água", command=choose_watermark).grid(
             row=8, column=0, padx=10, pady=(0, 8), sticky="ew")
         seal_switch = ctk.CTkSwitch(frame, text="Selo / medalha")
         seal_switch.grid(row=9, column=0, padx=10, pady=(0, 4), sticky="w")
-        watermark_switch = ctk.CTkSwitch(frame, text="Marca d'agua ligada")
+        watermark_switch = ctk.CTkSwitch(frame, text="Marca d'água ligada")
         watermark_switch.grid(row=10, column=0, padx=10, pady=(0, 4), sticky="w")
         medal_switch = ctk.CTkSwitch(frame, text="Medalha por colocação")
         medal_switch.grid(row=11, column=0, padx=10, pady=(0, 8), sticky="w")
@@ -90,7 +90,7 @@ class SettingsCertificatesMixin:
 
         def load_style(template: dict[str, Any]) -> None:
             style_option.set(label_by_style.get(str(template.get("style_preset") or "classic"), "Clássico"))
-            palette_option.set(label_by_palette.get(str(template.get("palette_key") or ""), "Automatica (cores acima)"))
+            palette_option.set(label_by_palette.get(str(template.get("palette_key") or ""), "Automática (cores acima)"))
             watermark_kind_option.set(label_by_wm.get(str(template.get("watermark_kind") or ""), "Padrão do estilo"))
             watermark_piece_option.set(label_by_piece.get(str(template.get("watermark_piece") or "rook"), "Cavalo"))
             watermark_image_entry.delete(0, "end")
@@ -276,7 +276,7 @@ class SettingsCertificatesMixin:
         body_font_entry = ctk.CTkEntry(form_panel, width=80)
         body_font_entry.grid(row=22, column=0, padx=16, pady=(0, 10), sticky="w")
 
-        ctk.CTkLabel(form_panel, text="Fonte do rodape").grid(row=23, column=0, padx=16, pady=(2, 4), sticky="w")
+        ctk.CTkLabel(form_panel, text="Fonte do rodapé").grid(row=23, column=0, padx=16, pady=(2, 4), sticky="w")
         footer_font_entry = ctk.CTkEntry(form_panel, width=80)
         footer_font_entry.grid(row=24, column=0, padx=16, pady=(0, 10), sticky="w")
 
@@ -288,7 +288,7 @@ class SettingsCertificatesMixin:
         body_textbox = ctk.CTkTextbox(form_panel, width=290, height=110)
         body_textbox.grid(row=28, column=0, padx=16, pady=(0, 10), sticky="ew")
 
-        ctk.CTkLabel(form_panel, text="Rodape").grid(row=29, column=0, padx=16, pady=(2, 4), sticky="w")
+        ctk.CTkLabel(form_panel, text="Rodapé").grid(row=29, column=0, padx=16, pady=(2, 4), sticky="w")
         footer_entry = ctk.CTkEntry(form_panel, width=290)
         footer_entry.grid(row=30, column=0, padx=16, pady=(0, 10), sticky="ew")
 
@@ -357,7 +357,7 @@ class SettingsCertificatesMixin:
 
         ctk.CTkLabel(
             table_panel,
-            text="Histórico recente de emissoes",
+            text="Histórico recente de emissões",
             text_color=THEME_TEXT_SUB,
         ).grid(row=2, column=0, padx=16, pady=(0, 8), sticky="w")
 
@@ -369,7 +369,7 @@ class SettingsCertificatesMixin:
             history_holder,
             ["issued_at", "recipient", "context", "code", "status"],
             {
-                "issued_at": "Emissao",
+                "issued_at": "Emissão",
                 "recipient": "Destinatário",
                 "context": "Contexto",
                 "code": "Código",
@@ -441,7 +441,7 @@ class SettingsCertificatesMixin:
         def load_template_fields(template: dict[str, Any]) -> None:
             selected_template_id["value"] = int(template["id"])
             set_entry(template_name_entry, template.get("name", ""))
-            type_option.set(type_labels.get(template.get("certificate_type"), "Participacao"))
+            type_option.set(type_labels.get(template.get("certificate_type"), "Participação"))
             orientation_option.set(orientation_labels.get(template.get("orientation"), "Paisagem"))
             set_entry(title_entry, template.get("title_template", ""))
             set_textbox(body_textbox, template.get("body_template", ""))
@@ -572,7 +572,7 @@ class SettingsCertificatesMixin:
             headings = {
                 "tournament": ("Pos", "Nome", "Categoria", "Pts", "Status"),
                 "members": ("#", "Nome", "Turma", "Rating", "Status"),
-                "training": ("#", "Nome", "Turma", "Presenca", "Status"),
+                "training": ("#", "Nome", "Turma", "Presença", "Status"),
                 "event": ("#", "Nome", "Clube", "Categoria", "Status"),
                 "ranking": ("Pos", "Nome", "Categoria", "Rating", "Jogos"),
             }[context_key()]
@@ -589,7 +589,7 @@ class SettingsCertificatesMixin:
             recipient_row_map[item_id] = recipient_id
 
         def issuance_status_label(item: dict[str, Any]) -> str:
-            return "Revogado" if item.get("revoked") else "Valido"
+            return "Revogado" if item.get("revoked") else "Válido"
 
         def issuance_context_label(item: dict[str, Any]) -> str:
             return history_context_labels.get(str(item.get("context_type") or ""), str(item.get("context_type") or ""))
@@ -632,12 +632,12 @@ class SettingsCertificatesMixin:
                     issuance = selected_history_issuance()
                     code = str(issuance.get("verification_code") or "") if issuance else ""
                 if not code:
-                    raise AppError("Informe ou selecione um codigo de verificacao.")
+                    raise AppError("Informe ou selecione um código de verificação.")
                 issuance = self.certificate_service.verify_issuance(code)
                 status = issuance_status_label(issuance)
                 self._show_info(
                     "Diploma encontrado:\n"
-                    f"Codigo: {issuance['verification_code']}\n"
+                    f"Código: {issuance['verification_code']}\n"
                     f"Status: {status}\n"
                     f"Destinatário: {issuance['recipient_name']}\n"
                     f"Contexto: {issuance_context_label(issuance)}\n"
@@ -782,7 +782,7 @@ class SettingsCertificatesMixin:
                 }
             player_ids = selected_recipient_ids()
             if not player_ids:
-                raise AppError("Selecione ao menos um destinatario na lista.")
+                raise AppError("Selecione ao menos um destinatário na lista.")
             return {
                 "certificate_type": certificate_type,
                 "category": "",
@@ -795,7 +795,7 @@ class SettingsCertificatesMixin:
             recipient_mode = recipient_option.get()
             selected_ids = selected_recipient_ids() if recipient_mode == "Selecionados na lista" else None
             if recipient_mode == "Selecionados na lista" and not selected_ids:
-                raise AppError("Selecione ao menos um destinatario na lista.")
+                raise AppError("Selecione ao menos um destinatário na lista.")
             current_context = context_key()
             if current_context == "members":
                 return {"member_ids": selected_ids, "class_id": None}
@@ -813,7 +813,7 @@ class SettingsCertificatesMixin:
                     "category": "" if selected_ids else selected_category(),
                     "top_n": 0 if recipient_mode == "Todos" or selected_ids else top_entry.get().strip(),
                 }
-            raise AppError("Contexto de diploma invalido.")
+            raise AppError("Contexto de diploma inválido.")
 
         def current_recipients() -> list[dict[str, Any]]:
             current_context = context_key()
@@ -833,7 +833,7 @@ class SettingsCertificatesMixin:
                 return self.certificate_service.event_recipients(event_id, **payload)
             if current_context == "ranking":
                 return self.certificate_service.ranking_recipients(**payload)
-            raise AppError("Contexto de diploma invalido.")
+            raise AppError("Contexto de diploma inválido.")
 
         def update_count(_value: str | None = None) -> None:
             try:
@@ -1004,7 +1004,7 @@ class SettingsCertificatesMixin:
                             template_data=template_payload,
                             **export_kwargs,
                         )
-                    raise AppError("Contexto de diploma invalido.")
+                    raise AppError("Contexto de diploma inválido.")
 
                 def export_done(result: dict[str, Any]) -> None:
                     refresh_history()
@@ -1012,7 +1012,7 @@ class SettingsCertificatesMixin:
                     code_preview = ", ".join(str(code) for code in codes[:3])
                     if len(codes) > 3:
                         code_preview = f"{code_preview}..."
-                    suffix = f"\nCodigos: {code_preview}" if code_preview else ""
+                    suffix = f"\nCódigos: {code_preview}" if code_preview else ""
                     self._show_info(
                         f"{result['exported']} diploma(s) exportados:\n{result['path']}{suffix}"
                     )

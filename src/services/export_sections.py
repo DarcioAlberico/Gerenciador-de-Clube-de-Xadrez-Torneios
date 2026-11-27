@@ -15,6 +15,7 @@ from src.services.pairing.incidents import (
     infraction_label as incident_infraction_label,
 )
 from src.services.pairing.point_adjustments import format_signed
+from src.services.pairing.constraints import seeding_order
 from src.services.prizes import PRIZE_KINDS, PRIZE_POLICIES, PRIZE_TIE_SPLITS, allocate_prizes
 from src.services.export_federation import FederationReportsMixin
 
@@ -73,11 +74,11 @@ class ReportSectionsMixin:
             rows.extend(
                 [
                     ["Tabuleiros por equipe", settings.get("team_boards_count", "")],
-                    ["Pontos por vitoria da equipe", settings.get("team_match_win_points", "")],
+                    ["Pontos por vitória da equipe", settings.get("team_match_win_points", "")],
                     ["Pontos por empate da equipe", settings.get("team_match_draw_points", "")],
                     ["Pontos por derrota da equipe", settings.get("team_match_loss_points", "")],
                     [
-                        "Metodo por equipes",
+                        "Método por equipes",
                         TEAM_PAIRING_METHODS.get(
                             settings.get("team_pairing_method", "swiss"),
                             settings.get("team_pairing_method", ""),
@@ -91,7 +92,7 @@ class ReportSectionsMixin:
                         ),
                     ],
                     [
-                        "Critério secundario por equipes",
+                        "Critério secundário por equipes",
                         TEAM_STANDING_CRITERIA.get(
                             settings.get("team_standing_secondary", "game_points"),
                             settings.get("team_standing_secondary", ""),
@@ -160,8 +161,8 @@ class ReportSectionsMixin:
 
     def _initial_player_list_section(self, tournament_id: int) -> tuple[str, list[str], list[list[Any]]]:
         tournament = self.db.get_tournament(tournament_id)
-        ordered_players = self._initial_ranked_players(
-            self.db.list_players(tournament_id, active_only=False)
+        ordered_players = self.initial_ranked_players(
+            tournament_id, self.db.list_players(tournament_id, active_only=False)
         )
         rows = [
             [
@@ -245,9 +246,9 @@ class ReportSectionsMixin:
         if not tournament:
             raise AppError("Selecione um torneio válido.")
         if rating_type not in self.FIDE_RATING_TYPE_LABELS:
-            raise AppError("Tipo de rating invalido para o relatório FIDE.")
+            raise AppError("Tipo de rating inválido para o relatório FIDE.")
         if tournament.get("competition_type") == "team":
-            raise AppError("Relatório de variacao de rating disponível apenas para torneios individuais.")
+            raise AppError("Relatório de variação de rating disponível apenas para torneios individuais.")
 
         settings = self.db.get_tournament_settings(tournament_id) or {}
         players = self.db.list_players(tournament_id, active_only=False)
@@ -282,13 +283,13 @@ class ReportSectionsMixin:
         notice_rows = [
             ["Estimativa de apoio ao árbitro (We, fator K, Rc, Rp)."],
             [f"Não substitui a homologação oficial da {base_label}."],
-            [f"So conta partidas jogadas contra adversarios com rating na base {base_label}."],
-            ["Diferencas de rating acima de 400 sao tratadas como 400 (regra dos 400)."],
+            [f"Só conta partidas jogadas contra adversários com rating na base {base_label}."],
+            ["Diferenças de rating acima de 400 são tratadas como 400 (regra dos 400)."],
             [f"Regulamento aplicado: {regulation.label} ({regulation.source})."],
         ]
         if not regulation.confirmed:
             notice_rows.append(
-                ["ATENCAO: valores deste regulamento NAO foram conferidos no texto vigente."]
+                ["ATENÇÃO: valores deste regulamento NÃO foram conferidos no texto vigente."]
             )
         if fallback:
             notice_rows.append(
@@ -305,7 +306,7 @@ class ReportSectionsMixin:
                 ]
             )
         if below_blitz_minimum(tournament.get("time_control")):
-            notice_rows.append(["Ritmo abaixo do minimo que a FIDE rata (3 minutos)."])
+            notice_rows.append(["Ritmo abaixo do mínimo que a FIDE rata (3 minutos)."])
         summary_rows = [
             ["Torneio", tournament["name"]],
             ["Base de rating", base_label],
@@ -315,7 +316,7 @@ class ReportSectionsMixin:
             ["Jogadores no relatório", len(rows)],
             ["Com rating", len(rated)],
             ["Sem rating (somente performance)", len(rows) - len(rated)],
-            ["Variacao total (ΔElo)", round(sum(deltas), 2)],
+            ["Variação total (ΔElo)", round(sum(deltas), 2)],
             ["Maior ganho", round(max(deltas), 2) if deltas else 0.0],
             ["Maior perda", round(min(deltas), 2) if deltas else 0.0],
         ]
@@ -336,9 +337,9 @@ class ReportSectionsMixin:
             ]
             for row in rows
         ]
-        # Estreantes: quem ainda nao tem rating na base ganha a estimativa de
-        # rating INICIAL (B.02 8.2), que o relatorio antigo simplesmente nao
-        # calculava — sobrava so a performance, que nao e a mesma conta.
+        # Estreantes: quem ainda não tem rating na base ganha a estimativa de
+        # rating INICIAL (B.02 8.2), que o relatório antigo simplesmente não
+        # calculava — sobrava só a performance, que não é a mesma conta.
         initial_rows = [
             [
                 row["name"],
@@ -356,7 +357,7 @@ class ReportSectionsMixin:
             ("Aviso", ["Observação"], notice_rows),
             ("Resumo do relatório de rating", ["Campo", "Valor"], summary_rows),
             (
-                f"Variacao de rating {base_label}",
+                f"Variação de rating {base_label}",
                 [
                     "Jogador",
                     "Ro",
@@ -415,7 +416,7 @@ class ReportSectionsMixin:
             ["Premiados", result["winners"]],
             ["Total bruto", self._format_currency(result["total_gross"])],
             ["Total imposto", self._format_currency(result["total_tax"])],
-            ["Total líquido distribuido", self._format_currency(result["total_net"])],
+            ["Total líquido distribuído", self._format_currency(result["total_net"])],
         ]
         winner_rows = [
             [
@@ -525,9 +526,9 @@ class ReportSectionsMixin:
                 byes += 1
                 continue
             result = pairing.get("result")
-            # Pelos PONTOS, e nao pelo codigo: desde a ARB-02 uma vitoria das
-            # brancas pode ser `1-0` ou `1U-0U` (decisao do arbitro), e as duas
-            # sao vitoria das brancas numa distribuicao de resultados.
+            # Pelos PONTOS, e não pelo código: desde a ARB-02 uma vitória das
+            # brancas pode ser `1-0` ou `1U-0U` (decisão do árbitro), e as duas
+            # são vitória das brancas numa distribuição de resultados.
             if result in WALKOVER_RESULTS:
                 walkovers += 1
             elif result in RESULT_POINTS:
@@ -620,7 +621,7 @@ class ReportSectionsMixin:
             ),
             (
                 "Resultados rodada a rodada",
-                ["Pos", "Jogador", "Rodada", "Cor", "Adversario", "Resultado", "Pts acum."],
+                ["Pos", "Jogador", "Rodada", "Cor", "Adversário", "Resultado", "Pts acum."],
                 game_rows,
             ),
         ]
@@ -638,10 +639,10 @@ class ReportSectionsMixin:
 
         notice_rows = [
             ["Estimativa de apoio ao árbitro: indica se o jogador atingiu indicadores"],
-            ["compativeis com uma norma. NAO concede norma nem título (exclusivo da FIDE)."],
-            ["Indicadores conforme o FIDE Handbook B.01, secao 1.4 (edicao de 2024)."],
-            ["So conta partida jogada no tabuleiro; sem rating conta como 1400."],
-            ["A federacao do candidato NAO entra na contagem de federacoes (1.4.3)."],
+            ["compatíveis com uma norma. NÃO concede norma nem título (exclusivo da FIDE)."],
+            ["Indicadores conforme o FIDE Handbook B.01, seção 1.4 (edição de 2024)."],
+            ["Só conta partida jogada no tabuleiro; sem rating conta como 1400."],
+            ["A federação do candidato NÃO entra na contagem de federações (1.4.3)."],
         ]
         summary_rows = [
             [
@@ -719,7 +720,7 @@ class ReportSectionsMixin:
 
         notice_rows = [
             ["Documento de apoio para a norma de árbitro (IA/FA)."],
-            ["Não e o formulário oficial da FIDE; use os dados abaixo para preenche-lo."],
+            ["Não é o formulário oficial da FIDE; use os dados abaixo para preenchê-lo."],
         ]
         tournament_rows = [
             ["Torneio", tournament["name"]],
@@ -818,7 +819,7 @@ class ReportSectionsMixin:
             (f"Boletim da rodada {number}", ["Campo", "Valor"], header_rows),
         ]
         sections.append(self._pairings_section(round_id))
-        # Classificacao apos a rodada (top 10) reaproveita o layout da classificacao.
+        # Classificação após a rodada (top 10) reaproveita o layout da classificação.
         title, headers, rows = self._standings_section(int(tournament["id"]))
         sections.append((f"Classificação após a rodada {number} (top 10)", headers, rows[:10]))
         if tournament.get("competition_type") != "team":
@@ -904,7 +905,7 @@ class ReportSectionsMixin:
             from reportlab.lib.pagesizes import A4
             from reportlab.pdfgen import canvas
         except ImportError as exc:
-            raise AppError("Instale reportlab para gerar o poster do podio (pip install reportlab).") from exc
+            raise AppError("Instale reportlab para gerar o pôster do pódio (pip install reportlab).") from exc
 
         tournament = data["tournament"]
         width, height = A4
@@ -916,7 +917,7 @@ class ReportSectionsMixin:
         document.setFont("Helvetica-Bold", 24)
         document.drawCentredString(center, height - 90, str(tournament.get("name") or "Torneio"))
         document.setFont("Helvetica", 14)
-        document.drawCentredString(center, height - 116, "Premiação - Podio")
+        document.drawCentredString(center, height - 116, "Premiação - Pódio")
         subtitle = " - ".join(
             part for part in [str(tournament.get("location") or ""), str(tournament.get("start_date") or "")] if part
         )
@@ -940,7 +941,7 @@ class ReportSectionsMixin:
         if data["categories"]:
             y -= 20
             document.setFont("Helvetica-Bold", 14)
-            document.drawCentredString(center, y, "Campeoes por categoria")
+            document.drawCentredString(center, y, "Campeões por categoria")
             y -= 24
             document.setFont("Helvetica", 12)
             for champion in data["categories"]:
@@ -1022,15 +1023,15 @@ class ReportSectionsMixin:
             sections.append(incidents)
         if tournament.get("competition_type") != "team":
             sections.append(self._category_winners_section(tournament_id))
-        # Premiacao e taxas sao opcionais: AppError quando nao se aplicam.
+        # Premiação e taxas são opcionais: AppError quando não se aplicam.
         try:
             sections.extend(self._prize_sections(tournament_id))
         except AppError:
-            pass
+            logger.debug("Secao de premiacao omitida do relatorio", exc_info=True)
         try:
             sections.extend(self._rating_fee_sections(tournament_id))
         except AppError:
-            pass
+            logger.debug("Secao de taxas de rating omitida do relatorio", exc_info=True)
         sections.append(
             ("Árbitros e assinaturas", ["Nome", "Função", "FIDE ID", "Categoria", "Assinatura"], arbiter_rows)
         )
@@ -1039,11 +1040,11 @@ class ReportSectionsMixin:
     def _incidents_section(
         self, tournament_id: int
     ) -> tuple[str, list[str], list[list[Any]]] | None:
-        """Anexo disciplinar da ata (ARB-03). ``None`` quando nao houve incidente.
+        """Anexo disciplinar da ata (ARB-03). ``None`` quando não houve incidente.
 
-        A reincidencia sai marcada porque e ela que o catalogo existe para
-        produzir: no papel, a segunda advertencia do mesmo artigo ao mesmo
-        jogador nao era encontravel por ninguem.
+        A reincidência sai marcada porque é ela que o catálogo existe para
+        produzir: no papel, a segunda advertência do mesmo artigo ao mesmo
+        jogador não era encontravel por ninguém.
         """
         incidentes = self.pairing_service.incidents(tournament_id)
         if not incidentes:
@@ -1079,13 +1080,13 @@ class ReportSectionsMixin:
     def _participation_section(
         self, tournament_id: int
     ) -> tuple[str, list[str], list[list[Any]]] | None:
-        """Desistencias, ausencias e reentradas, por rodada (ARB-05).
+        """Desistências, ausências e reentradas, por rodada (ARB-05).
 
-        O TRF nao tem codigo para separar "desistiu" de "faltou" — as duas viram
-        `0000 - Z` (nao pareado, zero ponto), e isso esta certo: o que a FIDE
-        distingue e `Z` de `-` (pareado e nao compareceu, que exige mesa). A
-        diferenca entre desistencia e ausencia e do REGULAMENTO, e por isso ela
-        mora aqui, no documento que o arbitro assina.
+        O TRF não tem código para separar "desistiu" de "faltou" — as duas viram
+        `0000 - Z` (não pareado, zero ponto), e isso é certo: o que a FIDE
+        distingue e `Z` de `-` (pareado e não compareceu, que exige mesa). A
+        diferença entre desistência e ausência e do REGULAMENTO, e por isso ela
+        mora aqui, no documento que o árbitro assina.
         """
         resumo = self.pairing_service.participation_summary(tournament_id)
         if not resumo:
@@ -1192,23 +1193,22 @@ class ReportSectionsMixin:
     def _format_currency(value: Any) -> str:
         return f"R$ {float(value or 0):.2f}".replace(".", ",")
 
-    @staticmethod
-    def _initial_ranked_players(players: list[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
-        return sorted(
-            players,
-            key=lambda player: (
-                -FederationReportsMixin._trf_rating(player),
-                player_pairing_name(player).casefold(),
-                int(player.get("id") or 0),
-            ),
-        )
+    def initial_ranked_players(
+        self, tournament_id: int, players: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """Lista inicial na ordem inicial do torneio: a `seeding_key` (RGS-13).
+
+        É o mesmo número do TRF e, portanto, do Gacrux. Antes ordenava pelo
+        primeiro rating não nulo e pelo nome — sem título e sem `initial_order`.
+        """
+        return seeding_order(players, self.db.get_tournament_settings(tournament_id) or {})
 
     def _teams_section(self, tournament_id: int) -> tuple[str, list[str], list[list[Any]]]:
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
             raise AppError("Selecione um torneio válido.")
         if tournament.get("competition_type") != "team":
-            raise AppError("Este relatório esta disponível apenas para torneios por equipes.")
+            raise AppError("Este relatório está disponível apenas para torneios por equipes.")
         rows = [
             [
                 team["id"],
@@ -1233,7 +1233,7 @@ class ReportSectionsMixin:
         if not tournament:
             raise AppError("Selecione um torneio válido.")
         if tournament.get("competition_type") != "team":
-            raise AppError("Este relatório esta disponível apenas para torneios por equipes.")
+            raise AppError("Este relatório está disponível apenas para torneios por equipes.")
 
         rows = []
         for team in self.db.list_teams(tournament_id, active_only=False):

@@ -85,7 +85,7 @@ class MembersAdminTest(CoreServiceTestCase):
         self.assertEqual(player["category"], "Sub-16")
         self.assertEqual(player["age_category"], "Sub-16")
         self.assertEqual(player["rating_category"], "Sub-1800")
-        self.assertEqual(player["prize_tags"], "Socio do Clube")
+        self.assertEqual(player["prize_tags"], "Sócio do Clube")
 
     def test_learning_levels_can_be_assigned_to_members(self) -> None:
         default_levels = self.db.list_learning_levels(active_only=True)
@@ -129,7 +129,7 @@ class MembersAdminTest(CoreServiceTestCase):
         )
         self.assertIsNone(self.db.get_member(member_id)["learning_level_id"])
 
-        with self.assertRaisesRegex(AppError, "Nivel de aprendizagem"):
+        with self.assertRaisesRegex(AppError, "Nível de aprendizagem"):
             self.member_service.update_member(
                 member_id,
                 {
@@ -784,7 +784,7 @@ class MembersAdminTest(CoreServiceTestCase):
         assert updated is not None
         self.assertEqual(updated["objective"], "Aplicar garfos em partidas de treino.")
         self.assertEqual(updated["homework"], "Anotar dois exemplos encontrados em casa.")
-        with self.assertRaisesRegex(AppError, "Nivel pedagogico"):
+        with self.assertRaisesRegex(AppError, "Nível pedagógico"):
             self.training_service.save_session(
                 {
                     "club_id": club_id,
@@ -969,7 +969,7 @@ class MembersAdminTest(CoreServiceTestCase):
         self.assertEqual(summary["borrowed_quantity"], 1)
         self.assertEqual(summary["open_loans"], 1)
 
-        with self.assertRaisesRegex(AppError, "Quantidade indisponivel"):
+        with self.assertRaisesRegex(AppError, "Quantidade indisponível"):
             self.inventory_service.save_loan(
                 {
                     "item_id": item_id,
@@ -978,7 +978,7 @@ class MembersAdminTest(CoreServiceTestCase):
                     "status": "open",
                 }
             )
-        with self.assertRaisesRegex(AppError, "emprestimos em aberto"):
+        with self.assertRaisesRegex(AppError, "empréstimos em aberto"):
             self.inventory_service.toggle_item_active(item_id)
 
         self.inventory_service.return_loan(loan_id, return_date="2026-05-18")
@@ -1287,9 +1287,9 @@ class MembersAdminTest(CoreServiceTestCase):
         self.assertEqual(history[0]["points"], 1.0)
         self.assertEqual(history[0]["wins"], 1)
         self.assertEqual(history[0]["rounds_played"], 1)
-        self.assertEqual(history[0]["last_result"], "Vitoria")
+        self.assertEqual(history[0]["last_result"], "Vitória")
         self.assertEqual(results[0]["opponent"], "Oponente")
-        self.assertEqual(results[0]["outcome"], "Vitoria")
+        self.assertEqual(results[0]["outcome"], "Vitória")
         self.assertEqual(results[0]["points"], 1.0)
         self.assertNotEqual(self.service.standings(self.tournament_id)[0]["performance"], "")
 
@@ -1489,12 +1489,12 @@ class MembersAdminTest(CoreServiceTestCase):
         self.assertIn("Aluno Rating", content)
         self.assertIn("Maria Responsavel", content)
         self.assertIn("Mae", content)
-        self.assertIn("Evolucao por torneio", content)
+        self.assertIn("Evolução por torneio", content)
         self.assertIn("Rating interno", content)
         self.assertIn("Resultados", content)
         self.assertIn("Torneio teste", content)
         self.assertIn("2300", content)
-        self.assertIn("Vitoria", content)
+        self.assertIn("Vitória", content)
 
     def test_app_settings_and_backup_restore_roundtrip(self) -> None:
         export_dir = Path(self.temp_dir.name) / "exports"
@@ -1565,7 +1565,7 @@ class MembersAdminTest(CoreServiceTestCase):
         missing = Path(self.temp_dir.name) / "nao_existe"
         self.db.save_app_settings({"cloud_sync_dir": str(missing)})
 
-        # Falha de nuvem nao pode derrubar o backup local.
+        # Falha de nuvem não pode derrubar o backup local.
         backup_path = self.db.backup("nuvem_invalida")
 
         self.assertTrue(backup_path.exists())
@@ -1644,7 +1644,7 @@ class MembersAdminTest(CoreServiceTestCase):
             mailer, "Aviso", "Corpo do aviso", active_only=True, member_type="aluno"
         )
 
-        # So Ana (aluno com e-mail). Beto e socio; Carla nao tem e-mail.
+        # Só Ana (aluno com e-mail). Beto e sócio; Carla não tem e-mail.
         self.assertEqual(summary["sent_count"], 1)
         self.assertEqual(summary["recipients_total"], 1)
         self.assertEqual(summary["skipped_no_email"], 1)

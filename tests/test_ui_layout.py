@@ -76,8 +76,8 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.messages: list[str] = []
         self.app._show_info = self.messages.append
         self.app._show_toast = lambda msg, *a, **kw: self.messages.append(msg)
-        # Relatorio (F5.7) e modal bloqueante: sem captura, o smoke ficaria
-        # parado no wait_window. O corpo entra na mesma lista — o conteudo
+        # Relatório (F5.7) e modal bloqueante: sem captura, o smoke ficaria
+        # parado no wait_window. O corpo entra na mesma lista — o conteúdo
         # continua sendo a entrega, so mudou o canal.
         self.app._show_report = lambda title, body, **kw: self.messages.append(body)
         self.app._show_error = self._raise_ui_error
@@ -95,18 +95,18 @@ class UiLayoutSmokeTest(unittest.TestCase):
         if hasattr(self, "app"):
             self._cancel_pending_callbacks()
             self.app.destroy()
-            # customtkinter nao desregistra a janela dos seus trackers globais em
-            # destroy(); sem isto cada AlbericusApp vaza e a suite acumula ate
+            # customtkinter não desregistra a janela dos seus trackers globais em
+            # destroy(); sem isto cada AlbericusApp vaza e a suite acumula até
             # estourar o tempo. Ver tests/support/ctk_cleanup.py.
             release_dead_ctk_windows()
         self.temp_dir.cleanup()
 
     def test_barra_do_torneio_quebra_linha_em_janela_estreita(self) -> None:
-        """B-8: os 8 itens numa linha so custam ~950px e era o UNICO widget que
+        """B-8: os 8 itens numa linha só custam ~950px e era o ÚNICO widget que
         saía da janela em todas as telas de torneio — sempre o ultimo ("Diplomas").
 
         Quebrar custa ~38px de altura, que sobra; insistir numa linha custa um
-        botao inacessivel, que nao tem substituto visivel.
+        botão inacessível, que não tem substituto visível.
         """
         self.app.geometry("1600x900+0+0")
         self.app.update()
@@ -126,9 +126,9 @@ class UiLayoutSmokeTest(unittest.TestCase):
     def test_sidebar_sobrevive_a_janela_media(self) -> None:
         """A barra some 400px depois do que sumia antes da B-8.
 
-        Em 1.260px reais a sidebar ja ficou **escondida** (limiar do rail era
+        Em 1.260px reais a sidebar já ficou **escondida** (limiar do rail era
         1.440) e depois virou rail (1.260); agora e a barra **completa**. Em
-        1.040px, onde antes nao havia barra nenhuma, ainda ha o rail.
+        1.040px, onde antes não havia barra nenhuma, ainda há o rail.
         """
         for pedida, minimo in (("1050x700+0+0", "full"), ("867x700+0+0", "rail")):
             with self.subTest(size=pedida):
@@ -145,10 +145,10 @@ class UiLayoutSmokeTest(unittest.TestCase):
     def test_tela_aberta_por_chamada_direta_fica_registrada(self) -> None:
         """A B-6 quase levou a sidebar junto: tela migrada delega o
         `_clear_content` para o `build()` de uma view, e o registro anotava
-        "build" em vez de `show_*`. Efeito visivel: abrir Jogadores pelo botao
+        "build" em vez de `show_*`. Efeito visível: abrir Jogadores pelo botão
         da tela de Torneios deixava a barra destacando **Torneios**, e o F5
-        recarregava a tela errada. Cobre as duas telas ja migradas e uma
-        legada, porque a correcao vale para os dois formatos.
+        recarregava a tela errada. Cobre as duas telas já migradas e uma
+        legada, porque a correção vale para os dois formatos.
         """
         for pagina in ("show_tournaments", "show_players", "show_club"):
             with self.subTest(page=pagina):
@@ -157,8 +157,8 @@ class UiLayoutSmokeTest(unittest.TestCase):
                 self.assertEqual(pagina, self.app.navigator.current)
 
     def test_faixa_de_filtros_quebra_linha_em_janela_estreita(self) -> None:
-        """Continuacao da B-8: os sete filtros do Ranking interno numa linha
-        rigida exigiam 1.416px de janela — era esta tela que definia o limiar da
+        """Continuação da B-8: os sete filtros do Ranking interno numa linha
+        rígida exigiam 1.416px de janela — era esta tela que definia o limiar da
         sidebar. Em janela larga eles continuam numa linha; em janela estreita a
         faixa quebra, em vez de empurrar filtro para fora.
         """
@@ -213,15 +213,15 @@ class UiLayoutSmokeTest(unittest.TestCase):
         return linhas
 
     def test_faixa_so_sabe_onde_comeca_depois_de_aparecer(self) -> None:
-        """B-8: o rodape dos cadastros TRF25 nasce a **direita** de um formulario
-        de ~420px, e a faixa mede o espaco a partir de onde ela comeca.
+        """B-8: o rodapé dos cadastros TRF25 nasce a **direita** de um formulário
+        de ~420px, e a faixa mede o espaço a partir de onde ela começa.
 
-        Antes, a unica remedicao vinha de um `after_idle` que as vezes rodava
-        com a faixa ainda **nao mapeada** — deslocamento zero, conta concluindo
-        "cabe a largura inteira do content" e o ultimo botao fora da janela. O
-        layout antigo escondia isso porque o `pack` *encolhia* o ultimo botao
-        (168px desenhados como 115), ou seja, truncava o rotulo em vez de
-        transbordar: nao dava erro, e nao cabia.
+        Antes, a única remedição vinha de um `after_idle` que as vezes rodava
+        com a faixa ainda **não mapeada** — deslocamento zero, conta concluindo
+        "cabe a largura inteira do content" e o ultimo botão fora da janela. O
+        layout antigo escondia isso porque o `pack` *encolhia* o ultimo botão
+        (168px desenhados como 115), ou seja, truncava o rótulo em vez de
+        transbordar: não dava erro, e não cabia.
         """
         self.app.geometry("1600x900+0+0")
         self.app.update()
@@ -248,9 +248,9 @@ class UiLayoutSmokeTest(unittest.TestCase):
 
     def test_faixa_de_filtros_nao_acumula_ouvinte_no_content(self) -> None:
         """A faixa que quebra linha mede o `content`, e o `content` sobrevive a
-        troca de tela desde a F1.2 — entao o ouvinte precisa morrer junto com a
+        troca de tela desde a F1.2 — então o ouvinte precisa morrer junto com a
         faixa. Sem isso, cada visita a uma tela densa deixaria mais um ouvinte
-        falando com widget destruido, e o custo cresceria com o uso do dia.
+        falando com widget destruído, e o custo cresceria com o uso do dia.
         """
         self.app.show_calendar()
         self.app.update()
@@ -266,11 +266,11 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.assertEqual(depois_da_primeira, self._content_configure_handlers())
 
     def test_main_pages_keep_controls_inside_window_at_supported_sizes(self) -> None:
-        # As tres ultimas larguras sao o que a sidebar impoe: 1000 pedidos =
+        # As três últimas larguras são o que a sidebar impõe: 1000 pedidos =
         # 1.200px reais, onde a barra COMPLETA aparece; 867 = 1.040px, onde ela
-        # ja era rail; e 800 = 960px reais, onde ela **sumia** antes da F5.11 e
+        # já era rail; e 800 = 960px reais, onde ela **sumia** antes da F5.11 e
         # agora continua como rail. Se uma tela deixar de caber ali, o limiar
-        # envelheceu — e este teste avisa antes do usuario.
+        # envelheceu — e este teste avisa antes do usuário.
         for width, height in [(1360, 720), (1180, 640), (1050, 700), (1000, 700), (867, 700), (800, 700)]:
             with self.subTest(size=f"{width}x{height}"):
                 self.app.geometry(f"{width}x{height}+0+0")
@@ -283,10 +283,10 @@ class UiLayoutSmokeTest(unittest.TestCase):
                         self.assertEqual([], offenders)
 
     def test_menu_nativo_e_sidebar_mostram_os_mesmos_destinos(self) -> None:
-        """Aceite da F5.11 (P3-14): o menu era 31 itens escritos a mao em
-        paralelo ao registro, e os rotulos ja tinham divergido da sidebar.
+        """Aceite da F5.11 (P3-14): o menu era 31 itens escritos à mão em
+        paralelo ao registro, e os rótulos já tinham divergido da sidebar.
         Agora os dois saem de `DESTINATIONS` — este teste e o que impede a
-        divergencia de voltar."""
+        divergência de voltar."""
         from src.ui.navigation import DESTINATIONS
 
         menubar = self.app.nametowidget(self.app.cget("menu"))
@@ -304,13 +304,13 @@ class UiLayoutSmokeTest(unittest.TestCase):
         faltando = rotulos_registro - rotulos_menu
         self.assertEqual(set(), faltando, f"destinos ausentes do menu: {sorted(faltando)}")
 
-        # E os rotulos da sidebar sao exatamente os mesmos objetos de texto.
+        # E os rótulos da sidebar são exatamente os mesmos objetos de texto.
         rotulos_sidebar = set(self.app.sidebar._labels.values())
         self.assertEqual(rotulos_registro, rotulos_sidebar)
 
     def test_sidebar_vira_rail_e_nao_some_em_janela_estreita(self) -> None:
         """P3-14: abaixo de 1.040px reais a barra sumia e sobrava o menu nativo
-        — que ninguem procura depois de ter uma barra. O rail e o piso."""
+        — que ninguém procura depois de ter uma barra. O rail e o piso."""
         self.app.geometry("800x700+0+0")
         self.app.update()
         self.assertEqual("rail", self.app.sidebar.mode)
@@ -344,7 +344,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
                     break
             self.app.update()
             self.assertFalse(dialog.winfo_exists())
-            # Cancelar nao cria torneio nem mexe no torneio oficial em curso.
+            # Cancelar não cria torneio nem mexe no torneio oficial em curso.
             self.assertEqual(self.app.current_tournament_id, before_tournament)
             self.assertEqual(len(self.db.list_tournaments()), before_count)
         finally:
@@ -367,12 +367,12 @@ class UiLayoutSmokeTest(unittest.TestCase):
                 dialog.destroy()
                 self.app.update()
 
-        # marcar no caminho "Cancelar" tambem tem de valer
+        # marcar no caminho "Cancelar" também tem de valer
         self.assertEqual("1", self.db.get_app_settings().get("free_mode_notice_hidden"))
 
-        # e a partir dai o menu vai direto para a criacao (que ainda pede o nome)
+        # e a partir daí o menu vai direto para a criação (que ainda pede o nome)
         pedidos: list[str] = []
-        self.app._ask_string = lambda *a, **kw: pedidos.append("nome") or None
+        self.app._ask_friendly_tournament = lambda: pedidos.append("nome") or None
         self.assertIsNone(self.app.show_free_tournament_mode())
         self.app.update()
         self.assertEqual(["nome"], pedidos, "deveria ir direto ao prompt de nome")
@@ -397,7 +397,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
                 self.app.update()
 
     def test_free_tournament_mode_iniciar_marca_modo_livre(self) -> None:
-        self.app._ask_string = lambda *args, **kwargs: "Festival Escolar"
+        self.app._ask_friendly_tournament = lambda: {"name": "Festival Escolar", "rounds_count": "5", "class_id": None}
         before_ids = {tournament["id"] for tournament in self.db.list_tournaments()}
         dialog = self.app.show_free_tournament_mode()
         self.app.update()
@@ -419,7 +419,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
         tournament_id = novos[0]["id"]
         self.assertEqual(self.app.current_tournament_id, tournament_id)
         # O torneio criado pelo Modo Livre recebe a marca dedicada free_mode,
-        # que e o que habilita o modo (o perfil segue no default e nao decide).
+        # que é o que habilita o modo (o perfil segue no default e não decide).
         settings = self.db.get_tournament_settings(tournament_id)
         self.assertEqual((settings or {}).get("free_mode"), 1)
         self.assertTrue(self.app._is_free_mode(tournament_id))
@@ -436,21 +436,49 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.assertTrue(self.app._is_free_mode(self.tournament_id))  # marcado no setUp
         self._set_free_mode(self.tournament_id, False)
         self.assertFalse(self.app._is_free_mode(self.tournament_id))
-        # o perfil 'free' (default de todo torneio) nao reativa o Modo Livre
+        # o perfil 'free' (default de todo torneio) não reativa o Modo Livre
         self._set_tournament_profile(self.tournament_id, "free")
         self.assertFalse(self.app._is_free_mode(self.tournament_id))
 
     def test_free_mode_repair_round_limpa_e_regera(self) -> None:
+        # MA-03: a tela pede a prévia e chama o serviço atômico; sem nada a
+        # apagar, so confirma (motivo vazio).
         self.assertTrue(self.app._is_free_mode(self.tournament_id))
         self.app.current_round_id = 777
-        chamadas = {"delete": [], "generate": []}
-        self.app.pairing_service.delete_generated_round = lambda rid: chamadas["delete"].append(rid)
-        self.app.pairing_service.generate_next_round = lambda tid: chamadas["generate"].append(tid)
+        chamadas: list[tuple] = []
+        self.app.pairing_service.repair_open_round_preview = lambda tid, rid: {
+            "results": 0,
+            "qr_submissions": 0,
+        }
+        self.app.pairing_service.repair_open_round = (
+            lambda tid, rid, motivo, reserve_engine=False: chamadas.append((tid, rid, motivo))
+        )
         self.app._load_round_options = lambda: None
         with mock.patch("src.ui.components.dialogs.confirm_dialog", return_value=True):
             self.app.free_mode_repair_round()
-        self.assertEqual(chamadas["delete"], [777])
-        self.assertEqual(chamadas["generate"], [self.tournament_id])
+        self.assertEqual(chamadas, [(self.tournament_id, 777, "")])
+
+    def test_free_mode_repair_round_com_resultado_pede_motivo(self) -> None:
+        self.app.current_round_id = 777
+        chamadas: list[tuple] = []
+        self.app.pairing_service.repair_open_round_preview = lambda tid, rid: {
+            "results": 2,
+            "qr_submissions": 1,
+        }
+        self.app.pairing_service.repair_open_round = (
+            lambda tid, rid, motivo, reserve_engine=False: chamadas.append((tid, rid, motivo))
+        )
+        self.app._load_round_options = lambda: None
+        mensagens: list[str] = []
+
+        def motivo(_parent, _titulo, mensagem, **_kw):
+            mensagens.append(mensagem)
+            return "Metade da turma faltou"
+
+        with mock.patch("src.ui.components.dialogs.reason_dialog", side_effect=motivo):
+            self.app.free_mode_repair_round()
+        self.assertEqual(chamadas, [(self.tournament_id, 777, "Metade da turma faltou")])
+        self.assertIn("2 resultados anotados e 1 envio por QR", mensagens[0])
 
     def test_free_mode_repair_round_bloqueia_fora_do_modo_livre(self) -> None:
         self._set_free_mode(self.tournament_id, False)
@@ -461,65 +489,77 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.app._show_error = lambda exc: erros.append(str(exc))
         with mock.patch("src.ui.components.dialogs.confirm_dialog", return_value=True):
             self.app.free_mode_repair_round()
-        self.assertEqual(chamadas, [])  # fora do Modo Livre nao dispara re-pair
+        self.assertEqual(chamadas, [])  # fora do Modo Livre não dispara re-pair
         self.assertTrue(any("Modo Livre" in erro for erro in erros))
 
-    def test_late_entry_sem_rodadas_encerradas_usa_padrao(self) -> None:
+    # MA-04/MA-10: no máximo duas perguntas, com botões que dizem o que fazem.
+    def test_late_entry_sem_rodada_usa_caminho_normal(self) -> None:
+        self.app.db.get_latest_round = lambda _tid: None
         with mock.patch("src.ui.components.dialogs.tri_state_dialog") as pergunta:
-            proceed, points = self.app.free_mode_late_entry_starting_points(self.tournament_id)
-        self.assertTrue(proceed)
-        self.assertIsNone(points)
+            escolha = self.app.free_mode_late_entry_choice(self.tournament_id)
+        self.assertIsNone(escolha)
         pergunta.assert_not_called()
 
-    def test_late_entry_meio_ponto_por_rodada_ausente(self) -> None:
-        self.app.db.list_rounds = lambda _tid: [{"status": "closed"}, {"status": "closed"}]
+    def test_late_entry_rodada_fechada_pergunta_pontos(self) -> None:
+        self.app.db.get_latest_round = lambda _tid: {"id": 9, "number": 2, "status": "closed"}
         with mock.patch(
             "src.ui.components.dialogs.tri_state_dialog", return_value=True
-        ):
-            proceed, points = self.app.free_mode_late_entry_starting_points(self.tournament_id)
-        self.assertTrue(proceed)
-        self.assertEqual(points, 1.0)  # 0,5 x 2 rodadas encerradas
+        ) as pergunta:
+            escolha = self.app.free_mode_late_entry_choice(self.tournament_id)
+        self.assertEqual(escolha, {"per_round_points": 0.5, "join_open_round": False})
+        _args, kwargs = pergunta.call_args
+        self.assertEqual(kwargs["yes_text"], "Dar 0,5 por rodada")
+        self.assertEqual(kwargs["no_text"], "Começar com zero")
+        self.assertIn("perdeu 2 rodadas", pergunta.call_args.args[2])
+        self.assertIn("entra com 1 ponto", pergunta.call_args.args[2])
 
-    def test_late_entry_zero_por_rodada_ausente(self) -> None:
-        self.app.db.list_rounds = lambda _tid: [{"status": "closed"}, {"status": "open"}]
+    def test_late_entry_rodada_aberta_jogar_ja_e_zero(self) -> None:
+        self.app.db.get_latest_round = lambda _tid: {"id": 9, "number": 3, "status": "open"}
         with mock.patch(
-            "src.ui.components.dialogs.tri_state_dialog", return_value=False
-        ):
-            proceed, points = self.app.free_mode_late_entry_starting_points(self.tournament_id)
-        self.assertTrue(proceed)
-        self.assertEqual(points, 0.0)
+            "src.ui.components.dialogs.tri_state_dialog", side_effect=[True, False]
+        ) as pergunta:
+            escolha = self.app.free_mode_late_entry_choice(self.tournament_id)
+        self.assertEqual(escolha, {"per_round_points": 0.0, "join_open_round": True})
+        primeira, segunda = pergunta.call_args_list
+        self.assertEqual(primeira.kwargs["yes_text"], "Jogar já nesta rodada")
+        self.assertEqual(primeira.kwargs["no_text"], "Esperar a próxima")
+        self.assertIn("perdeu 2 rodadas", segunda.args[2])  # R1 e R2: joga a R3
 
     def test_late_entry_cancelar_aborta_adicao(self) -> None:
-        self.app.db.list_rounds = lambda _tid: [{"status": "closed"}]
-        with mock.patch(
-            "src.ui.components.dialogs.tri_state_dialog", return_value=None
-        ):
-            proceed, points = self.app.free_mode_late_entry_starting_points(self.tournament_id)
-        self.assertFalse(proceed)
-        self.assertIsNone(points)
+        self.app.db.get_latest_round = lambda _tid: {"id": 9, "number": 1, "status": "closed"}
+        with mock.patch("src.ui.components.dialogs.tri_state_dialog", return_value=None):
+            escolha = self.app.free_mode_late_entry_choice(self.tournament_id)
+        self.assertIs(escolha, False)
 
     def test_late_entry_fora_do_modo_livre_nao_pergunta(self) -> None:
         self._set_free_mode(self.tournament_id, False)
-        self.app.db.list_rounds = lambda _tid: [{"status": "closed"}]
+        self.app.db.get_latest_round = lambda _tid: {"id": 9, "number": 1, "status": "closed"}
         with mock.patch("src.ui.components.dialogs.tri_state_dialog") as pergunta:
-            proceed, points = self.app.free_mode_late_entry_starting_points(self.tournament_id)
-        self.assertTrue(proceed)
-        self.assertIsNone(points)
+            escolha = self.app.free_mode_late_entry_choice(self.tournament_id)
+        self.assertIsNone(escolha)
         pergunta.assert_not_called()
+
+    def test_add_player_amistoso_chama_o_servico(self) -> None:
+        self.app.db.get_latest_round = lambda _tid: {"id": 9, "number": 2, "status": "closed"}
+        with (
+            mock.patch("src.ui.components.dialogs.tri_state_dialog", return_value=True),
+            mock.patch("src.ui.screens.free_tournament.FriendlyModeService") as servico,
+        ):
+            feito = self.app.free_mode_add_player(self.tournament_id, {"name": "Aluna"})
+        self.assertTrue(feito)
+        servico.return_value.late_entry.assert_called_once_with(
+            self.tournament_id,
+            {"name": "Aluna"},
+            per_round_points=0.5,
+            join_open_round=False,
+            reason="",
+            reserve_engine=False,
+        )
 
     def test_create_player_persiste_starting_points_explicito(self) -> None:
         player_id = self.db.create_player(self.tournament_id, name="Tardio", starting_points=1.5)
         player = self.db.get_player(player_id)
         self.assertEqual(player["starting_points"], 1.5)
-
-    def test_prepare_late_entry_modo_livre_delega_meio_ponto(self) -> None:
-        self.app.db.list_rounds = lambda _tid: [{"status": "closed"}, {"status": "closed"}]
-        with mock.patch(
-            "src.ui.components.dialogs.tri_state_dialog", return_value=True
-        ):
-            proceed, points = self.app.prepare_late_entry(self.tournament_id)
-        self.assertTrue(proceed)
-        self.assertEqual(points, 1.0)
 
     def test_prepare_late_entry_oficial_avisa_e_confirma(self) -> None:
         self._set_free_mode(self.tournament_id, False)
@@ -529,7 +569,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
         ) as aviso:
             proceed, points = self.app.prepare_late_entry(self.tournament_id)
         self.assertTrue(proceed)
-        self.assertIsNone(points)  # modo oficial mantem o calculo padrao de pontos
+        self.assertIsNone(points)  # modo oficial mantém o cálculo padrão de pontos
         aviso.assert_called_once()
 
     def test_prepare_late_entry_oficial_cancela_adicao(self) -> None:
@@ -599,10 +639,10 @@ class UiLayoutSmokeTest(unittest.TestCase):
 
         self.app.show_players()
         self.app.update()
-        # O alvo do patch e o modulo que REALMENTE usa o filedialog. Ja mudou
+        # O alvo do patch e o módulo que REALMENTE usa o filedialog. Já mudou
         # duas vezes pelo mesmo motivo: primeiro apontava para
-        # screens.tournaments (funcionava so porque o `import *` re-exportava o
-        # nome de la), agora acompanha a B-6, que separou as importacoes da tela
+        # screens.tournaments (funcionava só porque o `import *` re-exportava o
+        # nome de lá), agora acompanha a B-6, que separou as importações da tela
         # de Jogadores em `tournament_players/imports.py`.
         with mock.patch(
             "src.ui.screens.tournament_players.imports.filedialog.askopenfilename",
@@ -740,7 +780,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.app.update()
         self._set_entry_after_label("Nome da equipe", "Equipe A")
         self._set_entry_after_label("Clube/Cidade", "Clube A")
-        self._set_entry_after_label("Capitao", "Capitao A")
+        self._set_entry_after_label("Capitão", "Capitao A")
         self._click_button("Criar equipe")
         self.app.update()
         self._set_entry_after_label("Tabuleiro", "1")
@@ -814,6 +854,22 @@ class UiLayoutSmokeTest(unittest.TestCase):
         ]
         self.assertIn("Lima, Lucas", row_values)
         self.assertIn("Cruz, Rafael", row_values)
+
+    def test_pairing_screen_shows_reserve_engine_notice(self) -> None:
+        """RGS-18: rodada do motor reserva carrega aviso permanente na tela."""
+        from src.services.constants import RESERVE_ENGINE_LABEL
+
+        self.db.save_tournament_settings(self.tournament_id, {"pairing_system": "fide_dutch"})
+        for index in range(4):
+            self.db.create_player(self.tournament_id, name=f"Reserva {index}", rating=1800 - index)
+        self.app.pairing_service.generate_next_round(self.tournament_id)
+
+        self.app.show_pairings()
+        self.app.update()
+
+        label = self.app._round_notice_label
+        self.assertTrue(label.winfo_ismapped())
+        self.assertIn(RESERVE_ENGINE_LABEL, label.cget("text"))
 
     def test_projector_mode_loads_and_renders_pairings(self) -> None:
         self.db.create_player(
@@ -933,7 +989,9 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.app._on_pairing_select()
         self.app.result_option.set("0-1")
         self._click_button("Salvar resultado")
-        self._invoke_menu_item("Fechar rodada")
+        # RGS-25: fechar e o estado do botão primário, com confirmação.
+        with mock.patch("src.ui.components.dialogs.confirm_dialog", return_value=True):
+            self._click_button("Fechar rodada 1")
         self.app.update()
 
         updated_match = self.db.list_team_matches_for_round(self.app.current_round_id)[0]
@@ -973,7 +1031,9 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.app._on_pairing_select()
         self.app.result_option.set("1-0")
         self._click_button("Salvar resultado")
-        self._invoke_menu_item("Fechar rodada")
+        # RGS-25: fechar e o estado do botão primário, com confirmação.
+        with mock.patch("src.ui.components.dialogs.confirm_dialog", return_value=True):
+            self._click_button("Fechar rodada 1")
         self.app.update()
 
         rounds = self.db.list_rounds(self.tournament_id)
@@ -1054,12 +1114,12 @@ class UiLayoutSmokeTest(unittest.TestCase):
 
         self.app.show_pairings()
         self.app.update()
-        self._click_button("Pre-visualizar rodada")
+        self._click_button("Pré-visualizar rodada")
         self.app.update()
 
         self.assertEqual([], self.db.list_rounds(self.tournament_id))
-        self.assertIn("Previa da rodada 1", self.messages[-1])
-        self.assertIn("nao gravou rodada", self.messages[-1])
+        self.assertIn("Prévia da rodada 1", self.messages[-1])
+        self.assertIn("não gravou rodada", self.messages[-1])
 
     def test_export_center_generates_rating_fee_report_xlsx(self) -> None:
         self.db.save_tournament_settings(
@@ -1131,8 +1191,8 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self._label("Rodadas e resultados")
         self.app.show_arbitration_panel()
         self.app.update()
-        # O botao leva a forma CURTA desde a F5.12 (em tres colunas o rotulo
-        # inteiro era cortado); o titulo da tela de destino segue completo, e e
+        # O botão leva a forma CURTA desde a F5.12 (em três colunas o rótulo
+        # inteiro era cortado); o título da tela de destino segue completo, e e
         # ele que prova que o clique foi para o lugar certo.
         self._click_button("Pendências")
         self.app.update()
@@ -1239,18 +1299,18 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.app.update()
         self.db.close_round(int(round_data["id"]))
 
-        # ARB-01: o painel recusa com o recado DELE — o lancamento rapido nao tem
-        # campo de motivo, entao ele aponta para a tela Rodadas em vez de pedir um.
+        # ARB-01: o painel recusa com o recado DELE — o lançamento rápido não tem
+        # campo de motivo, então ele aponta para a tela Rodadas em vez de pedir um.
         with self.assertRaisesRegex(AssertionError, "tela Rodadas"):
             self.app._save_arbitration_panel_result("1-0")
 
         self.assertEqual("", self.db.get_pairing(int(pairing["id"]))["result"])
 
     def test_arbitration_panel_walkover_asks_before_saving(self) -> None:
-        """ARB-02: o W.O. e decisao, nao transcricao de placar.
+        """ARB-02: o W.O. e decisão, não transcrição de placar.
 
-        O atalho fica a um dedo do que lanca o resultado normal, entao a
-        confirmacao e o que separa "declarei ausencia" de "errei a tecla".
+        O atalho fica a um dedo do que lança o resultado normal, então a
+        confirmação e o que separa "declarei ausencia" de "errei a tecla".
         """
         for index in range(2):
             self.db.create_player(
@@ -1393,11 +1453,11 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.assertEqual(2, len(tree.get_children()))
 
         # A busca e adiada (B-4): a tecla so agenda, quem executa e o flush.
-        # O termo abaixo nao casa com nada — antes, a asercao era "mesa 1", que
-        # devolvia as MESMAS 2 linhas e por isso nao provava filtro nenhum.
-        # type_into porque digitar num CTkEntry tem tres armadilhas silenciosas
+        # O termo abaixo não casa com nada — antes, a asercao era "mesa 1", que
+        # devolvia as MESMAS 2 linhas e por isso não provava filtro nenhum.
+        # type_into porque digitar num CTkEntry tem três armadilhas silenciosas
         # (ver tests/support/ui_input.py). A asercao antiga deste teste
-        # ("mesa 1" -> 2 linhas) media a tabela NAO filtrada e chamava aquilo de
+        # ("mesa 1" -> 2 linhas) media a tabela NÃO filtrada e chamava aquilo de
         # busca: o evento nunca chegava ao bind.
         type_into(self.app.arbitration_issue_search_entry, "termo-que-nao-existe")
         self.assertTrue(
@@ -1409,7 +1469,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.app.update()
         self.assertEqual(0, len(tree.get_children()))
         self.assertEqual("Exibindo 0 de 2", self.app.arbitration_issue_count_label.cget("text"))
-        # Filtrar e ler: a base continua com as duas ocorrencias.
+        # Filtrar e ler: a base continua com as duas ocorrências.
         self.assertEqual(2, self.app.pairing_service.arbitration_issues(self.tournament_id)["metrics"]["total"])
 
     def test_pairing_screen_shows_result_states_for_qr_and_correction(self) -> None:
@@ -1433,7 +1493,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
         settings = self.db.get_tournament_settings(self.tournament_id) or {}
         settings["allow_dangerous_changes"] = 1
         self.db.save_tournament_settings(self.tournament_id, settings)
-        # ARB-01: correcao em rodada fechada exige o motivo do arbitro.
+        # ARB-01: correção em rodada fechada exige o motivo do árbitro.
         self.app.pairing_service.update_result(
             self.tournament_id, int(pairing["id"]), "0-1", "Sumula trocada pelo arbitro"
         )
@@ -1464,10 +1524,10 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.app.show_pairings()
         self.app.update()
         with mock.patch("src.ui.screens.pairings.filedialog.asksaveasfilename", return_value=str(output_path)):
-            self._invoke_menu_item("Exportar sumulas")
+            self._invoke_menu_item("Exportar súmulas")
 
         self.assertEqual(output_path.read_bytes()[:4], b"%PDF")
-        self.assertIn("Sumulas exportadas", self.messages[-1])
+        self.assertIn("Súmulas exportadas", self.messages[-1])
 
     def test_pairing_screen_exports_wall_pdf(self) -> None:
         self.db.create_player(self.tournament_id, name="Bruno", rating=1800, club="Clube", category="ABS")
@@ -1500,14 +1560,14 @@ class UiLayoutSmokeTest(unittest.TestCase):
             mock.patch("src.ui.components.dialogs.confirm_dialog", return_value=False),
             mock.patch("src.ui.screens.pairings.filedialog.asksaveasfilename", return_value=str(output_path)),
         ):
-            self._invoke_menu_item("Exportar cartoes de mesa")
+            self._invoke_menu_item("Exportar cartões de mesa")
 
         from pypdf import PdfReader
 
         text = "\n".join(page.extract_text() or "" for page in PdfReader(output_path).pages)
         self.assertEqual(1, len(PdfReader(output_path).pages))
         self.assertIn("MESA", text)
-        self.assertIn("Cartoes de mesa exportados", self.messages[-1])
+        self.assertIn("Cartões de mesa exportados", self.messages[-1])
 
     def test_standings_screen_exports_crosstable_html(self) -> None:
         self.db.create_player(self.tournament_id, name="Bruno", rating=1800, club="Clube", category="ABS")
@@ -1724,7 +1784,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
         identidade_tree = id(tree)
         identidade_content = id(self.app.content)
         foco_antes = self.app.focus_get()
-        # O formulario reage a selecao da tabela, entao o texto e lido aqui, ja
+        # O formulário reage a seleção da tabela, então o texto e lido aqui, já
         # depois disso: o que importa e ele atravessar a troca de tema intacto.
         texto_antes = entrada.get()
 
@@ -1756,12 +1816,12 @@ class UiLayoutSmokeTest(unittest.TestCase):
             if isinstance(w, ctk.CTkLabel)
         ]
         self.assertTrue(
-            any("resultado" in texto and "lancar" in texto for texto in rotulos),
+            any("resultado" in texto and "lançar" in texto for texto in rotulos),
             f"esperava pendencia de resultado; veio {rotulos}",
         )
 
-        # o botao da pendencia leva para a tela onde ela se resolve
-        self._click_button("Lancar")
+        # o botão da pendência leva para a tela onde ela se resolve
+        self._click_button("Lançar")
         self.app.update()
         self.assertEqual("show_pairings", self.app.navigator.current)
 
@@ -1782,9 +1842,9 @@ class UiLayoutSmokeTest(unittest.TestCase):
     def test_home_e_a_tela_de_entrada_registrada(self) -> None:
         """A entrada pos-login deixou de ser o cadastro do clube (P1-8).
 
-        Aqui so o registro: que o login REALMENTE abre nela e verificado por
+        Aqui só o registro: que o login REALMENTE abre nela e verificado por
         comportamento em test_ui_login.test_login_valido_entra_e_abre_a_tela_inicial
-        — inspecionar o codigo-fonte do login quebrava a cada refatoracao dele.
+        — inspecionar o código-fonte do login quebrava a cada refatoracao dele.
         """
         from src.ui.navigation import find
 
@@ -1802,17 +1862,17 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.assertEqual(1, card.cget("border_width"), "borda constante evita deslocar o layout")
         self.assertEqual(THEME_PANEL_BG, card.cget("border_color"))
 
-        # when="now" despacha na hora. Um update() aqui processaria tambem os
-        # eventos reais de mouse — o ponteiro nao esta sobre o card durante o
+        # when="now" despacha na hora. Um update() aqui processaria também os
+        # eventos reais de mouse — o ponteiro não esta sobre o card durante o
         # teste, e um <Leave> verdadeiro desfaria o realce antes da asercao.
         alvo = self._hover_target(card)
         alvo.event_generate("<Enter>", when="now")
         self.assertEqual(THEME_ACCENT, card.cget("border_color"))
 
-        # Sair do canvas para um rotulo do proprio card ainda e "dentro": o
-        # realce nao pode piscar na travessia. Quem esta sob o ponteiro vem de
+        # Sair do canvas para um rótulo do próprio card ainda e "dentro": o
+        # realce não pode piscar na travessia. Quem esta sob o ponteiro vem de
         # winfo_containing, que depende do empilhamento real de janelas — aqui
-        # ele e forcado, para o teste nao depender do gerenciador de janelas.
+        # ele é forçado, para o teste não depender do gerenciador de janelas.
         rotulo = next(w for w in self._walk(card) if isinstance(w, ctk.CTkLabel))
         card.winfo_containing = lambda _x, _y: rotulo
         alvo.event_generate("<Leave>", when="now")
@@ -1832,15 +1892,15 @@ class UiLayoutSmokeTest(unittest.TestCase):
     def test_tabela_grande_continua_rapida_de_preencher(self) -> None:
         """B-4/P2-13: o guarda que diz QUANDO a tabela vira problema.
 
-        O achado da tarefa foi que ela ainda nao e: com 6.000 jogadores, encher
+        O achado da tarefa foi que ela ainda não e: com 6.000 jogadores, encher
         a Treeview custou 42 ms de 677 ms de tela (6%) — o resto e a montagem
-        dos widgets do formulario, que nao depende do numero de linhas. Este
-        teste existe para a afirmacao nao envelhecer sozinha: se um dia
-        preencher 5.000 linhas passar do orcamento, ele reprova e a
-        virtualizacao volta a pauta com numero, nao com suposicao.
+        dos widgets do formulário, que não depende do número de linhas. Este
+        teste existe para a afirmação não envelhecer sozinha: se um dia
+        preencher 5.000 linhas passar do orçamento, ele reprova e a
+        virtualização volta a pauta com número, não com suposição.
 
-        Orcamento folgado de proposito (10x o medido): o que se guarda aqui e a
-        ORDEM DE GRANDEZA, e a maquina do CI nao e a do desenvolvedor.
+        Orçamento folgado de propósito (10x o medido): o que se guarda aqui e a
+        ORDEM DE GRANDEZA, e a máquina do CI não é a do desenvolvedor.
         """
         import time
 
@@ -1868,11 +1928,11 @@ class UiLayoutSmokeTest(unittest.TestCase):
     def _arrastar_separador(self, tree: ttk.Treeview, coluna: str, largura: int) -> None:
         """Simula o fim de um arrasto no separador da coluna.
 
-        O ttk nao expoe "coluna redimensionada": quem observa e o proprio
+        O ttk não expõe "coluna redimensionada": quem observa e o próprio
         _make_tree, no par ButtonPress (estava no separador?) / ButtonRelease.
-        identify_region depende de coordenada real dentro do cabecalho, que num
-        teste headless nao e confiavel — entao ela e forcada, e o que se testa e
-        a reacao, nao a leitura do mouse.
+        identify_region depende de coordenada real dentro do cabeçalho, que num
+        teste headless não é confiável — então ela é forçada, e o que se testa e
+        a reação, não a leitura do mouse.
         """
         tree.column(coluna, width=largura)
         original = tree.identify_region
@@ -1908,7 +1968,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
         padrao = int(tree.column(coluna, "width"))
         self._arrastar_separador(tree, coluna, padrao + 90)
 
-        # Outro operador na mesma maquina abre a mesma tela.
+        # Outro operador na mesma máquina abre a mesma tela.
         self.app.security_service._current_user = {"id": "999", "username": "outro", "role": "arbiter"}
         self.app.show_members()
         self.app.update()
@@ -1958,12 +2018,12 @@ class UiLayoutSmokeTest(unittest.TestCase):
         }
 
     def test_dashboard_visual_reaproveita_a_figura_na_segunda_visita(self) -> None:
-        """B-5/P2-14: sem mudanca de dado, a segunda visita nao remonta nada.
+        """B-5/P2-14: sem mudança de dado, a segunda visita não remonta nada.
 
-        O que este teste garante e o que o teste puro NAO alcanca: que a figura
-        cacheada sobrevive a **troca de canvas**. Cada visita destroi o conteudo
-        e cria um FigureCanvasTkAgg novo em cima da mesma figura — se isso nao
-        funcionasse, o cache seria uma otimizacao que quebra a tela.
+        O que este teste garante e o que o teste puro NÃO alcança: que a figura
+        cacheada sobrevive a **troca de canvas**. Cada visita destrói o conteúdo
+        e cria um FigureCanvasTkAgg novo em cima da mesma figura — se isso não
+        funcionasse, o cache seria uma otimização que quebra a tela.
         """
         from src.ui.screens.dashboard import DASHBOARD_FIGURES
 
@@ -1979,7 +2039,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.app.update()
         self.assertEqual((2, 2), (DASHBOARD_FIGURES.hits, DASHBOARD_FIGURES.misses))
 
-        # A tela continua de pe: os dois graficos desenhados, nao um frame vazio.
+        # A tela continua de pe: os dois gráficos desenhados, não um frame vazio.
         telas = [w for w in self._walk(self.app.content) if w.winfo_class() == "Canvas"]
         self.assertGreaterEqual(len(telas), 2)
 
@@ -1996,7 +2056,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.app.show_visual_dashboard()
         self.app.update()
 
-        # O financeiro nao mudou (acerto); a pizza de membros sim (nova montagem).
+        # O financeiro não mudou (acerto); a pizza de membros sim (nova montagem).
         self.assertEqual(1, DASHBOARD_FIGURES.hits)
         self.assertEqual(3, DASHBOARD_FIGURES.misses)
 
@@ -2014,7 +2074,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.assertEqual([None], acoes, "sem restore, o toast nao pode ter acao")
 
     def test_error_dialogs_separate_expected_file_and_unexpected_errors(self) -> None:
-        # mensagem pronta (str) e tratada como recuperavel -> vira toast, nao modal
+        # mensagem pronta (str) e tratada como recuperável -> vira toast, não modal
         title, message, is_unexpected = _classify_error("Nome e obrigatorio.", "ERR-0")
         self.assertEqual("Erro", title)
         self.assertEqual("Nome e obrigatorio.", message)
@@ -2032,8 +2092,8 @@ class UiLayoutSmokeTest(unittest.TestCase):
             PermissionError(13, "Acesso negado", "torneio.csv"),
             "ERR-2",
         )
-        self.assertEqual("Erro de permissao", title)
-        self.assertIn("Sem permissao", message)
+        self.assertEqual("Erro de permissão", title)
+        self.assertIn("Sem permissão", message)
         self.assertIn("torneio.csv", message)
         self.assertFalse(is_unexpected)
 
@@ -2064,7 +2124,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
     def _linhas_da_faixa_de_filtros(self, minimo: int = 5) -> set[int]:
         """Linhas ocupadas pela maior faixa de campos da tela atual.
 
-        A faixa e um frame cujos filhos sao os campos (cada um no seu frame);
+        A faixa e um frame cujos filhos são os campos (cada um no seu frame);
         procurar pelo frame com mais filhos-frame acha a faixa sem a tela
         precisar expor nada.
         """
@@ -2083,13 +2143,13 @@ class UiLayoutSmokeTest(unittest.TestCase):
         }
 
     def _content_configure_handlers(self) -> int:
-        """Quantos callbacks de `<Configure>` estao registrados no `content`.
+        """Quantos callbacks de `<Configure>` estão registrados no `content`.
 
         Cada `bind(..., add="+")` acrescenta uma linha `if {"[...]" == "break"}`
         ao script do Tk; contar linhas conta ouvintes.
         """
-        # O `content` e um CTkFrame: quem recebe as ligacoes e o canvas interno
-        # (ver o comentario em components/wrap_row.py sobre `CTkFrame.bind`).
+        # O `content` e um CTkFrame: quem recebe as ligações e o canvas interno
+        # (ver o comentário em components/wrap_row.py sobre `CTkFrame.bind`).
         alvo = getattr(self.app.content, "_canvas", self.app.content)
         script = str(alvo.bind("<Configure>") or "")
         return len([linha for linha in script.split("\n") if linha.strip().startswith("if {")])
@@ -2102,8 +2162,17 @@ class UiLayoutSmokeTest(unittest.TestCase):
         raise AssertionError(str(error)) from error
 
     @staticmethod
-    def _run_background_now(work, on_success=None, busy_message: str = "", busy_widget=None) -> None:
-        result = work()
+    def _run_background_now(
+        work, on_success=None, busy_message: str = "", busy_widget=None, on_error=None
+    ) -> None:
+        # Mesmo contrato de AlbericusApp._run_background: on_error devolve True
+        # quando tratou o erro (RGS-03); senão o erro segue adiante.
+        try:
+            result = work()
+        except Exception as exc:
+            if on_error is not None and on_error(exc):
+                return
+            raise
         if on_success:
             on_success(result)
 
@@ -2126,13 +2195,13 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.fail(f"Entrada nao encontrada para o campo {label_text!r}")
 
     def _click_button(self, text: str) -> None:
-        """Aciona a acao pelo rotulo, esteja ela num botao ou dentro de um menu.
+        """Aciona a ação pelo rótulo, esteja ela num botão ou dentro de um menu.
 
-        Desde a F5.6 as acoes de apoio ficam recolhidas atras de um
-        ``menu_button`` ("Importar ▾"): continuam alcancaveis pelo usuario, em
+        Desde a F5.6 as ações de apoio ficam recolhidas atrás de um
+        ``menu_button`` ("Importar ▾"): continuam alcançáveis pelo usuário, em
         dois cliques em vez de um. O helper segue o mesmo caminho — o menu real
-        so existe durante o popup, entao usamos os itens que o ``menu_button``
-        expoe justamente para automacao.
+        só existe durante o popup, então usamos os itens que o ``menu_button``
+        expõe justamente para automação.
         """
         widgets = list(reversed(list(self._walk(self.app.content))))
         for widget in widgets:
@@ -2180,7 +2249,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
 
     def _invoke_menu_item(self, label: str) -> None:
         """Aciona um item recolhido em um menu_button (ex.: 'Exportar'/'Mais') pelo
-        rotulo, invocando o mesmo comando que o tk.Menu dispararia no clique."""
+        rótulo, invocando o mesmo comando que o tk.Menu dispararia no clique."""
         for widget in reversed(list(self._walk(self.app.content))):
             for item in getattr(widget, "_menu_items", None) or ():
                 if item and item[0] == label and item[1] is not None:

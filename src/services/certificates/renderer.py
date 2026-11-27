@@ -207,7 +207,7 @@ def _draw_signatures(surface, preset, palette, zones, content):
     if preset.name_align == "left":
         x = zones.content_left
         surface.line(x, y, x + 4.0 * CM, y, stroke=palette.ink, line_width=1.0)
-        surface.text(x, y - 0.5 * CM, content.signature_left or "Direcao",
+        surface.text(x, y - 0.5 * CM, content.signature_left or "Direção",
                      font=preset.meta_font, size=11, fill=palette.ink, anchor="start")
         return
     for cx_frac, sig in ((0.50, content.signature_left), (0.74, content.signature_right)):
@@ -224,7 +224,7 @@ def _draw_code(surface, preset, palette, zones, content):
         return
     y = zones.margin + (0.9 * CM if preset.border_kind == "chess_strip" else 0.4 * CM)
     surface.text(zones.content_right, y,
-                 f"Codigo {content.verification_code} · verificavel",
+                 f"Código {content.verification_code} · verificável",
                  font="Helvetica", size=8, fill=palette.muted, anchor="end")
 
 

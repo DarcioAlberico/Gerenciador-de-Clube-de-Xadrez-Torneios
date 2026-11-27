@@ -108,20 +108,20 @@ class QRResultService:
         }
 
     def submit_result(self, token: str, result: str, submitter: str = "") -> dict[str, Any]:
-        # Resultado por DECISAO DO ARBITRO (`W`/`D`/`L`, ARB-02) nao entra por
-        # aqui: quem o lanca e quem decidiu. O QR e para o que os jogadores
-        # observaram na mesa — placar e ausencia —, e mesmo isso o arbitro
+        # Resultado por DECISÃO DO ÁRBITRO (`W`/`D`/`L`, ARB-02) não entra por
+        # aqui: quem o lança e quem decidiu. O QR e para o que os jogadores
+        # observaram na mesa — placar e ausência —, e mesmo isso o árbitro
         # aprova antes de valer.
         if result not in FINAL_RESULTS or result == "BYE" or result in UNRATED_RESULTS:
-            raise AppError("Resultado invalido para envio por QR.")
+            raise AppError("Resultado inválido para envio por QR.")
         token_row = self._validate_token(token)
         pairing = self._open_pairing(int(token_row["tournament_id"]), int(token_row["pairing_id"]))
         if int(pairing["round_id"]) != int(token_row["round_id"]):
-            raise AppError("Token nao pertence a esta rodada.")
+            raise AppError("Token não pertence a esta rodada.")
         if str(pairing.get("result") or "") in FINAL_RESULTS:
-            raise AppError("Mesa ja possui resultado registrado no desktop.")
+            raise AppError("Mesa já possui resultado registrado no desktop.")
         if self._has_pending_submission(token_row):
-            raise AppError("Ja existe envio pendente para esta mesa.")
+            raise AppError("Já existe envio pendente para esta mesa.")
         submission_id = self.db.create_result_submission(
             tournament_id=int(token_row["tournament_id"]),
             round_id=int(token_row["round_id"]),
@@ -147,12 +147,12 @@ class QRResultService:
     def approve_submission(self, submission_id: int, reviewer: str = "", reason: str = "") -> None:
         submission = self._pending_submission(submission_id)
         if submission.get("round_status") == "closed":
-            raise AppError("Nao e possivel aprovar envio de rodada fechada.")
+            raise AppError("Não é possível aprovar envio de rodada fechada.")
         current_result = str(submission.get("current_result") or "")
         if current_result and current_result != str(submission["submitted_result"]):
-            raise AppError("A mesa ja possui outro resultado registrado no desktop.")
+            raise AppError("A mesa já possui outro resultado registrado no desktop.")
         if self.pairing_service is None:
-            raise AppError("Servico de emparceiramento indisponivel para aprovar resultado.")
+            raise AppError("Serviço de emparceiramento indisponível para aprovar resultado.")
         before = dict(submission)
         self.pairing_service.update_result(
             int(submission["tournament_id"]),
@@ -190,9 +190,9 @@ class QRResultService:
     def _pending_submission(self, submission_id: int) -> dict[str, Any]:
         submission = self.db.get_result_submission(submission_id)
         if not submission:
-            raise AppError("Envio de resultado nao encontrado.")
+            raise AppError("Envio de resultado não encontrado.")
         if submission.get("status") != "submitted":
-            raise AppError("Este envio ja foi revisado.")
+            raise AppError("Este envio já foi revisado.")
         return submission
 
     def _has_pending_submission(self, token_row: dict[str, Any]) -> bool:
@@ -211,33 +211,33 @@ class QRResultService:
         token_hash = self._token_hash(token)
         token_row = self.db.get_public_token_by_hash(token_hash)
         if not token_row:
-            raise AppError("Token de resultado invalido.")
+            raise AppError("Token de resultado inválido.")
         if token_row.get("status") != "active":
-            raise AppError("Token de resultado ja utilizado ou cancelado.")
+            raise AppError("Token de resultado já utilizado ou cancelado.")
         if str(token_row.get("expires_at") or "") <= self.db.now():
             raise AppError("Token de resultado expirado.")
         if not hmac.compare_digest(token_hash, self._token_hash(token)):
-            raise AppError("Assinatura do token invalida.")
+            raise AppError("Assinatura do token inválida.")
         return token_row
 
     def _open_pairing(self, tournament_id: int, pairing_id: int) -> dict[str, Any]:
         pairing = self.db.get_pairing(pairing_id)
         if not pairing or int(pairing["tournament_id"]) != int(tournament_id):
-            raise AppError("Mesa nao encontrada para este torneio.")
+            raise AppError("Mesa não encontrada para este torneio.")
         if pairing.get("is_bye"):
-            raise AppError("Mesa com bye nao recebe resultado por QR.")
+            raise AppError("Mesa com bye não recebe resultado por QR.")
         if pairing.get("round_status") == "closed":
-            raise AppError("Token nao funciona para rodada fechada.")
+            raise AppError("Token não funciona para rodada fechada.")
         return pairing
 
     @staticmethod
     def _assert_open_pairing_payload(tournament_id: int, pairing: dict[str, Any]) -> None:
         if int(pairing.get("tournament_id") or 0) != int(tournament_id):
-            raise AppError("Mesa nao encontrada para este torneio.")
+            raise AppError("Mesa não encontrada para este torneio.")
         if pairing.get("is_bye"):
-            raise AppError("Mesa com bye nao recebe resultado por QR.")
+            raise AppError("Mesa com bye não recebe resultado por QR.")
         if pairing.get("round_status") == "closed":
-            raise AppError("Token nao funciona para rodada fechada.")
+            raise AppError("Token não funciona para rodada fechada.")
 
     def _new_signed_token(
         self,
@@ -253,11 +253,11 @@ class QRResultService:
     def _assert_signed_token_shape(self, token: str) -> None:
         parts = token.split(":")
         if len(parts) != 5:
-            raise AppError("Token de resultado invalido.")
+            raise AppError("Token de resultado inválido.")
         payload = ":".join(parts[:4])
         expected = hmac.new(self._secret(), payload.encode("utf-8"), sha256).hexdigest()[:32]
         if not hmac.compare_digest(expected, parts[4]):
-            raise AppError("Assinatura do token invalida.")
+            raise AppError("Assinatura do token inválida.")
 
     def _secret(self) -> bytes:
         settings = self.db.get_app_settings()

@@ -19,18 +19,18 @@ from typing import Any
 # ``url`` opcional habilita o download direto; vazio = só import por arquivo.
 # É um ponto de partida — o usuário adiciona outras pela UI (app_settings).
 FOREIGN_FEDERATIONS: dict[str, dict[str, str]] = {
-    "POR": {"name": "Portugal (FPX)", "url": "", "notes": "Federacao Portuguesa de Xadrez"},
+    "POR": {"name": "Portugal (FPX)", "url": "", "notes": "Federação Portuguesa de Xadrez"},
     "ESP": {"name": "Espanha (FEDA)", "url": "", "notes": "Federacion Espanola de Ajedrez"},
     "ARG": {"name": "Argentina (FADA)", "url": "", "notes": "Federacion Argentina de Ajedrez"},
     "URU": {"name": "Uruguai (FAU)", "url": "", "notes": "Federacion Uruguaya de Ajedrez"},
     "PAR": {"name": "Paraguai (FEPARAX)", "url": "", "notes": "Federacion Paraguaya de Ajedrez"},
     "CHI": {"name": "Chile (FENACHED)", "url": "", "notes": "Federacion Nacional de Ajedrez de Chile"},
-    "COL": {"name": "Colombia (FECODAZ)", "url": "", "notes": "Federacion Colombiana de Ajedrez"},
+    "COL": {"name": "Colômbia (FECODAZ)", "url": "", "notes": "Federacion Colombiana de Ajedrez"},
     "USA": {"name": "Estados Unidos (USCF)", "url": "", "notes": "US Chess Federation"},
     "GER": {"name": "Alemanha (DSB)", "url": "", "notes": "Deutscher Schachbund"},
-    "FRA": {"name": "Franca (FFE)", "url": "", "notes": "Federation Francaise des Echecs"},
-    "ITA": {"name": "Italia (FSI)", "url": "", "notes": "Federazione Scacchistica Italiana"},
-    "POL": {"name": "Polonia (PZSzach)", "url": "", "notes": "Polski Zwiazek Szachowy"},
+    "FRA": {"name": "França (FFE)", "url": "", "notes": "Federation Francaise des Echecs"},
+    "ITA": {"name": "Itália (FSI)", "url": "", "notes": "Federazione Scacchistica Italiana"},
+    "POL": {"name": "Polônia (PZSzach)", "url": "", "notes": "Polski Zwiazek Szachowy"},
 }
 
 # Campos de saída e seus aliases de cabeçalho (minúsculos) para o mapeamento.

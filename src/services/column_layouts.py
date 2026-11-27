@@ -37,9 +37,9 @@ def layout_key(columns: Iterable[str], headings: Mapping[str, str] | None = None
     randomizado por processo — largura salva não sobreviveria ao reinício).
     """
     headings = headings or {}
-    # JSON como material do hash porque ele ja resolve a ambiguidade de
-    # concatenacao: sem delimitador, ("ab", "c") e ("a", "bc") virariam o
-    # mesmo texto e duas tabelas diferentes dividiriam a mesma preferencia.
+    # JSON como material do hash porque ele já resolve a ambiguidade de
+    # concatenação: sem delimitador, ("ab", "c") e ("a", "bc") virariam o
+    # mesmo texto e duas tabelas diferentes dividiriam a mesma preferência.
     material = json.dumps(
         [[code, headings.get(code, "")] for code in columns], ensure_ascii=False
     )

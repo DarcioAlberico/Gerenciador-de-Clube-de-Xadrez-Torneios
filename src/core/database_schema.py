@@ -1,8 +1,8 @@
 """DDL do schema do banco de dados Albericus.
 
-Constantes com o SQL de criacao de tabelas e indices, extraidas de
-``database.py`` para reduzir o tamanho daquele modulo. A orquestracao
-(verificacao de versao de schema, migracoes e criacao de indices)
+Constantes com o SQL de criação de tabelas e índices, extraídas de
+``database.py`` para reduzir o tamanho daquele módulo. A orquestração
+(verificação de versão de schema, migrações e criação de índices)
 permanece em :meth:`Database.initialize`.
 """
 
@@ -392,6 +392,10 @@ CREATE TABLE IF NOT EXISTS players (
     -- desloque os confrontos que ainda faltam.
     scheveningen_number INTEGER NOT NULL DEFAULT 0,
     active INTEGER NOT NULL DEFAULT 1,
+    -- Primeira rodada que o jogador podia jogar (RGS-10): a seguinte a ultima
+    -- ja gerada na inscricao. O retrato da rodada N so traz quem entrou ate N.
+    -- `0` = desconhecida: entra em todos os retratos, como era antes.
+    entry_round INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
     FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
     FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE SET NULL
@@ -438,6 +442,11 @@ CREATE TABLE IF NOT EXISTS teams (
     captain TEXT DEFAULT '',
     notes TEXT DEFAULT '',
     active INTEGER NOT NULL DEFAULT 1,
+    -- EQ-01: TPN e semente gravados na R1; nao mudam mais (C.04.2).
+    pairing_number INTEGER,
+    seed_rating INTEGER,
+    -- E6: primeira rodada que a equipe podia jogar (retrato da rodada N).
+    entry_round INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     UNIQUE (tournament_id, name),
@@ -638,6 +647,10 @@ CREATE TABLE IF NOT EXISTS tournament_settings (
     rating_regulation TEXT NOT NULL DEFAULT '',
     archived INTEGER NOT NULL DEFAULT 0,
     chess_results_url TEXT NOT NULL DEFAULT '',
+    -- Cor do nº 1 na mesa 1 da R1 (RGS-14): 'W' ou 'B', sorteada quando o
+    -- torneio nasce (ou escolhida). Vazia so em torneio antigo que ja tinha R1:
+    -- a cor e lida da propria R1 (`pairing/initial_color.py`).
+    initial_color TEXT NOT NULL DEFAULT '',
     updated_at TEXT NOT NULL,
     FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE
 );
@@ -826,6 +839,13 @@ CREATE TABLE IF NOT EXISTS standings_snapshots (
     standings_json TEXT NOT NULL,
     snapshot_hash TEXT NOT NULL,
     created_at TEXT NOT NULL,
+    -- Reconciliacao pendente (RGS-10). A correcao so MARCA o retrato, na mesma
+    -- transacao do resultado; quem regrava e o trabalhador em segundo plano.
+    -- `reconcile_generation` sobe a cada marca: o trabalhador so baixa a
+    -- pendencia se nenhuma correcao nova chegou enquanto ele calculava.
+    reconcile_pending INTEGER NOT NULL DEFAULT 0,
+    reconcile_reason TEXT NOT NULL DEFAULT '',
+    reconcile_generation INTEGER NOT NULL DEFAULT 0,
     UNIQUE (tournament_id, round_id),
     FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
     FOREIGN KEY (round_id) REFERENCES rounds(id) ON DELETE CASCADE

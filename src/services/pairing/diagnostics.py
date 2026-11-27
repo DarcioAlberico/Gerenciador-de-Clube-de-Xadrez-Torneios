@@ -5,6 +5,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Any
 
+from src.services.constants import REQUESTED_BYE_POINTS
 from src.services.pairing.constraints import color_hard_violation, is_color_valid_fide
 
 
@@ -25,8 +26,8 @@ def pairing_diagnostics(
     """Retorna alertas sobre integridade e qualidade absoluta do pareamento.
 
     Quando o campo cabe na busca exata, cada alerta recebe ``avoidable``:
-    True quando havia pareamento alternativo com menos violacoes absolutas do
-    mesmo tipo, False quando a violacao era inevitavel pelo historico atual.
+    True quando havia pareamento alternativo com menos violações absolutas do
+    mesmo tipo, False quando a violação era inevitável pelo histórico atual.
     Em campos maiores o valor fica None, pois a prova exata seria cara demais.
     """
     players_by_id = {int(player["id"]): player for player in players or []}
@@ -50,7 +51,7 @@ def pairing_diagnostics(
             continue
 
         if pairing.get("is_bye"):
-            if white_id in bye_player_ids:
+            if _is_repeated_pairing_allocated_bye(pairing, white_id, bye_player_ids):
                 diagnostics.append(
                     _diagnostic(
                         kind="bye_repeat",
@@ -59,7 +60,7 @@ def pairing_diagnostics(
                         player_ids=[white_id],
                         title="Bye repetido",
                         detail=(
-                            f"{_player_label(white_id, players_by_id)} ja tinha recebido bye; "
+                            f"{_player_label(white_id, players_by_id)} já tinha recebido bye; "
                             f"{_avoidability_text(_avoidable(current_quality, best_quality, 0))}."
                         ),
                         avoidable=_avoidable(current_quality, best_quality, 0),
@@ -82,7 +83,7 @@ def pairing_diagnostics(
                     title="Confronto repetido",
                     detail=(
                         f"{_player_label(white_id, players_by_id)} x "
-                        f"{_player_label(black_id, players_by_id)} ja ocorreu; "
+                        f"{_player_label(black_id, players_by_id)} já ocorreu; "
                         f"{_avoidability_text(_avoidable(current_quality, best_quality, 1))}."
                     ),
                     avoidable=_avoidable(current_quality, best_quality, 1),
@@ -91,16 +92,16 @@ def pairing_diagnostics(
                 )
             )
 
-        # FIDE C.04.3 (em vigor 01/02/2026): receber a mesma cor tres vezes
-        # seguidas, ou um saldo de cor alem de +-2, e' o criterio de QUALIDADE C11
-        # (com C12/C13) — algo que o motor FIDE apenas MINIMIZA, jamais um criterio
-        # absoluto. O unico criterio de cor absoluto e' o C3 (dois NAO-topscorers
-        # com a mesma preferencia de cor absoluta nao se enfrentam), que o motor
-        # homologado ja garante. Logo a violacao de cor e' sempre um ALERTA
-        # (attention) e nunca bloqueia o fechamento (decision). A unica
-        # evitabilidade real — mantido o pareamento do motor, que ja respeita
-        # grupos de pontuacao, floats e o C3 — e' "inverter as cores deste
-        # tabuleiro reduziria as violacoes?". A busca global de _best_absolute_
+        # FIDE C.04.3 (em vigor 01/02/2026): receber a mesma cor três vezes
+        # seguidas, ou um saldo de cor além de +-2, e' o critério de QUALIDADE C11
+        # (com C12/C13) — algo que o motor FIDE apenas MINIMIZA, jamais um critério
+        # absoluto. O único critério de cor absoluto e' o C3 (dois NÃO-topscorers
+        # com a mesma preferência de cor absoluta não se enfrentam), que o motor
+        # homologado já garante. Logo a violação de cor e' sempre um ALERTA
+        # (attention) e nunca bloqueia o fechamento (decision). A única
+        # evitabilidade real — mantido o pareamento do motor, que já respeita
+        # grupos de pontuação, floats e o C3 — e' "inverter as cores deste
+        # tabuleiro reduziria as violações?". A busca global de _best_absolute_
         # quality ignoraria essa hierarquia e acusaria falsos "evitaveis".
         color_swap_helps = _color_swap_reduces_hard_violations(white_id, black_id, histories)
         for player_id, color in ((white_id, "W"), (black_id, "B")):
@@ -112,7 +113,7 @@ def pairing_diagnostics(
                     board_number=board_number,
                     pairing_id=pairing_id,
                     player_ids=[player_id],
-                    title="Preferencia de cor nao atendida",
+                    title="Preferência de cor não atendida",
                     detail=(
                         f"{_player_label(player_id, players_by_id)} receberia "
                         f"{_color_name(color)}; {_hard_color_reason(player_id, color, histories)}. "
@@ -260,7 +261,7 @@ def _float_repeat_diagnostics(
                 title="Floater repetido",
                 detail=(
                     f"{_player_label(player_id, players_by_id)} voltaria a flutuar para {label}; "
-                    f"historico recente: {recent}."
+                    f"histórico recente: {recent}."
                 ),
                 avoidable=None,
                 current_quality=current_quality,
@@ -269,6 +270,23 @@ def _float_repeat_diagnostics(
             )
         )
     return diagnostics
+
+
+def _is_repeated_pairing_allocated_bye(
+    pairing: dict[str, Any],
+    player_id: int,
+    bye_player_ids: set[int],
+) -> bool:
+    """O bye ATUAL e um PAB dado a quem já tinha recebido PAB? (RGS-17)
+
+    FIDE C.04.1 (c) só proíbe repetir o bye ALOCADO pelo pareamento. O bye
+    solicitado (F/H/Z) e o jogador pedindo para não jogar a rodada: não e
+    escolha do motor e não conta como repetição, ainda que ele já tenha tido
+    PAB antes. Antes, quem teve PAB e depois pediu Z/H travava o fechamento.
+    """
+    if player_id not in bye_player_ids:
+        return False
+    return str(pairing.get("result") or "").strip().upper() not in REQUESTED_BYE_POINTS
 
 
 def _current_absolute_quality(
@@ -286,7 +304,8 @@ def _current_absolute_quality(
         if white_id is None:
             continue
         if pairing.get("is_bye"):
-            bye_repeats += 1 if white_id in bye_player_ids else 0
+            if _is_repeated_pairing_allocated_bye(pairing, white_id, bye_player_ids):
+                bye_repeats += 1
             continue
         if black_id is None:
             continue
@@ -397,13 +416,13 @@ def _color_swap_reduces_hard_violations(
     black_id: int | None,
     histories: dict[int, list[str]],
 ) -> bool:
-    """Mantido o confronto, inverter as cores reduziria as violacoes duras?
+    """Mantido o confronto, inverter as cores reduziria as violações duras?
 
-    Mede a unica evitabilidade que existe sem desfazer o pareamento do motor FIDE
-    (que ja respeita grupos de pontuacao, floats e o criterio absoluto C3): se o
-    minimo do par sob as duas atribuicoes de cor possiveis for menor que a
-    atribuicao vigente, houve um erro de cor reparavel no proprio tabuleiro; caso
-    contrario a violacao e' inevitavel neste confronto.
+    Mede a única evitabilidade que existe sem desfazer o pareamento do motor FIDE
+    (que já respeita grupos de pontuação, floats e o critério absoluto C3): se o
+    mínimo do par sob as duas atribuições de cor possíveis for menor que a
+    atribuição vigente, houve um erro de cor reparável no próprio tabuleiro; caso
+    contrário a violação e' inevitável neste confronto.
     """
     if black_id is None:
         return False
@@ -444,14 +463,14 @@ def _avoidability_text(avoidable: bool | None) -> str:
     if avoidable is True:
         return "a busca exata encontrou alternativa melhor"
     if avoidable is False:
-        return "a busca exata indica que era inevitavel"
-    return "campo grande demais para prova exata neste diagnostico"
+        return "a busca exata indica que era inevitável"
+    return "campo grande demais para prova exata neste diagnóstico"
 
 
 def _color_avoidability_text(swap_helps: bool) -> str:
     if swap_helps:
         return "bastaria inverter as cores deste tabuleiro"
-    return "inevitavel neste confronto — criterio de qualidade FIDE, nao impeditivo"
+    return "inevitável neste confronto — critério de qualidade FIDE, não impeditivo"
 
 
 def _hard_color_reason(player_id: int, color: str, histories: dict[int, list[str]]) -> str:
@@ -465,7 +484,7 @@ def _hard_color_reason(player_id: int, color: str, histories: dict[int, list[str
         reasons.append(f"seria a terceira { _color_name(color).lower() } seguida")
     if abs(next_white - next_black) > 2:
         reasons.append(f"saldo de cores iria para {next_white - next_black:+d}")
-    return "; ".join(reasons) if reasons else "restricao absoluta FIDE violada"
+    return "; ".join(reasons) if reasons else "restrição absoluta FIDE violada"
 
 
 def _color_name(color: str) -> str:

@@ -94,10 +94,10 @@ class RegistroDoAvancoTest(unittest.TestCase):
         self.assertEqual("", self._erro())
 
     def test_criterio_desconhecido_e_recusado(self) -> None:
-        self.assertIn("Criterio de avanco invalido", self._erro(criterion="cara_ou_coroa"))
+        self.assertIn("Critério de avanço inválido", self._erro(criterion="cara_ou_coroa"))
 
     def test_jogador_de_fora_da_mesa_e_recusado(self) -> None:
-        self.assertIn("nao esta nesta mesa", self._erro(player_id=99))
+        self.assertIn("não está nesta mesa", self._erro(player_id=99))
 
     def test_mesa_decidida_no_tabuleiro_nao_aceita_avanco(self) -> None:
         """Um avanço registrado não pode virar atalho para corrigir placar."""
@@ -114,7 +114,7 @@ class RegistroDoAvancoTest(unittest.TestCase):
 
     def test_bye_nao_tem_desempate(self) -> None:
         erro = self._erro(pairing=_mesa(is_bye=1, black_player_id=None))
-        self.assertIn("ja avanca sozinho", erro)
+        self.assertIn("já avança sozinho", erro)
 
     def test_todo_criterio_tem_rotulo(self) -> None:
         for codigo in ADVANCEMENT_CRITERIA:
@@ -147,7 +147,7 @@ class ChaveTest(unittest.TestCase):
             {10: "Ana", 20: "Bruno"},
         )
         texto = format_knockout_bracket({"tournament_name": "Copa", "rounds": fases, "pending": 0})
-        self.assertIn("avanca Ana (Decisao do arbitro): sorteio previsto no edital", texto)
+        self.assertIn("avança Ana (Decisão do árbitro): sorteio previsto no edital", texto)
 
     def test_terceiro_lugar_sai_dos_dois_perdedores_da_semi(self) -> None:
         semis = [
@@ -183,7 +183,7 @@ class EscalaDoScheveningenTest(unittest.TestCase):
     def test_campo_impar_e_grupos_desiguais_sao_recusados(self) -> None:
         with self.assertRaisesRegex(AppError, "par"):
             assign_scale([1, 2, 3])
-        with self.assertRaisesRegex(AppError, "mesmo numero"):
+        with self.assertRaisesRegex(AppError, "mesmo número"):
             assign_scale([1, 2, 3], {1: "A", 2: "A", 3: "B"})
 
     def test_cada_cruzamento_acontece_uma_vez(self) -> None:
@@ -249,7 +249,7 @@ class MataMataNoBancoTest(CoreServiceTestCase):
             int(pairing["black_player_id"])
             for pairing in self.db.get_pairings_for_round(int(proxima["id"]))
         }
-        # Antes, o melhor numero inicial passava: o adversario dele nem apareceria.
+        # Antes, o melhor número inicial passava: o adversário dele nem apareceria.
         self.assertIn(perdedor_no_ranking, finalistas)
 
         chave = self.service.knockout_bracket(self.tournament_id)
@@ -257,7 +257,7 @@ class MataMataNoBancoTest(CoreServiceTestCase):
         self.assertEqual("Armagedom", primeira["criterion_label"])
         self.assertEqual("armagedom apos duas rapidas", primeira["notes"])
         self.assertEqual(perdedor_no_ranking, primeira["advanced_player_id"])
-        # A fase resolvida nao tem pendencia; a final, ainda sem resultado, tem.
+        # A fase resolvida não tem pendência; a final, ainda sem resultado, tem.
         self.assertEqual(0, chave["rounds"][0]["pending"])
         self.assertEqual(1, chave["rounds"][1]["pending"])
         self.assertEqual(2, len(finalistas))

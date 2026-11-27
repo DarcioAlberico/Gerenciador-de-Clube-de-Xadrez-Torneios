@@ -3,7 +3,8 @@
 Fechar rodada é o gesto que trava lançamento e libera o pareamento seguinte. O
 checklist existe para que a decisão seja tomada olhando a lista, e não de
 memória: cada item traz o próprio "Resolver", e o botão de fechar **nasce
-desabilitado** enquanto houver item pendente.
+desabilitado** enquanto houver item pendente. É também a confirmação: diz o que
+fechar faz, e o "Fechar rodada" daqui não abre outro diálogo.
 
 Os itens vêm do serviço (``closing_checklist``), com as mesmas chaves de ação do
 painel — ver [`state`](state.py).
@@ -58,16 +59,28 @@ def open_closing_checklist(host: Any, controller: Any) -> ctk.CTkToplevel | None
                 width=90,
             ).grid(row=0, column=2, padx=(8, 0))
 
+    # O checklist e a confirmação (um passo só): diz o que fechar faz, e o
+    # "Fechar rodada" daqui não pergunta de novo.
+    ultima = controller.latest_round(int(host.current_tournament_id))
+    if ultima:
+        ctk.CTkLabel(
+            dialogo,
+            text=host._round_closing_effect(int(ultima["number"])),
+            anchor="w",
+            justify="left",
+            wraplength=520,
+        ).grid(row=len(itens) + 1, column=0, padx=16, pady=(8, 0), sticky="ew")
+
     acoes = actions_bar(
         dialogo,
-        row=len(itens) + 1,
+        row=len(itens) + 2,
         primary=(
             t("arbitration.checklist.close_round"),
-            lambda: (dialogo.close(), host._close_current_round_from_panel()),
+            lambda: (dialogo.close(), host._close_current_round_from_panel(confirmed=True)),
         ),
         close_text=t("arbitration.checklist.close_dialog"),
     )
-    # A primaria e a ultima da faixa, por construcao da ordem canonica.
+    # A primária e a última da faixa, por construção da ordem canônica.
     fechar_rodada = acoes.winfo_children()[-1]
     fechar_rodada.configure(fg_color=THEME_SUCCESS, hover_color=THEME_SUCCESS_HOVER)
     if not tudo_ok:

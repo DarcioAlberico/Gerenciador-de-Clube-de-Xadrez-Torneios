@@ -56,6 +56,27 @@ WALKOVER_INLINE_RESULTS = (
 CONFIRMED_RESULTS = frozenset(code for _rotulo, code in WALKOVER_INLINE_RESULTS)
 
 
+def confirm_walkover(host: Any, result: str, *, mesa: Any, brancas: Any, pretas: Any) -> bool:
+    """A confirmação de W.O. (ARB-02), a mesma no painel e na tela Rodadas (RGS-21).
+
+    Nomeia a mesa e os dois jogadores: o erro que ela precisa pegar é o de mesa
+    errada, não o de código errado. Esc ou "Não" devolvem ``False``.
+    """
+    return bool(
+        host._confirm_action(
+            t("arbitration.pending.walkover_confirm_title"),
+            t(
+                "arbitration.pending.walkover_confirm",
+                resultado=result,
+                mesa=mesa,
+                brancas=brancas,
+                pretas=pretas,
+            ),
+            danger=True,
+        )
+    )
+
+
 class PendingTablesSection:
     """Monta a lista de mesas pendentes dentro do painel do árbitro."""
 
@@ -162,6 +183,13 @@ class PendingTablesSection:
             host.arbitration_pending_row_map[iid] = int(item["pairing_id"])
 
         tabela.bind("<Double-1>", lambda _evento: host.show_pairings())
+        # "Corrigir resultado…" (RGS-20): o mesmo diálogo da tela Rodadas, pela
+        # mesma tecla — o árbitro não decora um atalho por tela.
+        for sequencia in ("<Button-3>", "<Shift-F10>", "<App>", "<Control-e>", "<Control-E>"):
+            try:
+                tabela.bind(sequencia, self.correct_selected)
+            except Exception:  # tecla que esta plataforma não conhece (<App>)
+                pass
         for tecla, resultado in RESULT_SHORTCUTS.items():
             tabela.bind(
                 tecla, lambda _evento, valor=resultado: host._save_arbitration_panel_result(valor)
@@ -289,6 +317,25 @@ class PendingTablesSection:
         except Exception as exc:
             host._show_error(exc)
 
+    def correct_selected(self, event: Any = None) -> str:
+        """Abre o "Corrigir resultado…" da mesa selecionada (ou clicada)."""
+        host = self.host
+        tabela = getattr(host, "arbitration_pending_tree", None)
+        if tabela is not None and event is not None and getattr(event, "num", None) == 3:
+            linha = tabela.identify_row(event.y)
+            if linha:
+                tabela.selection_set(linha)
+                tabela.focus(linha)
+        try:
+            pairing_id = self._selected_pairing_id()
+        except Exception as exc:
+            host._show_error(exc)
+            return "break"
+        from ..pairing_results.correction import ResultCorrectionActions
+
+        ResultCorrectionActions(host).open(pairing_id, on_done=host.show_arbitration_panel)
+        return "break"
+
     def resume(self) -> None:
         """Desfaz o adiamento da mesa selecionada."""
         host = self.host
@@ -325,19 +372,7 @@ class PendingTablesSection:
         mesa, brancas, pretas = "?", "?", "?"
         if len(valores) >= len(PENDING_COLUMNS):
             mesa, brancas, pretas = valores[0], valores[2], valores[3]
-        return bool(
-            self.host._confirm_action(
-                t("arbitration.pending.walkover_confirm_title"),
-                t(
-                    "arbitration.pending.walkover_confirm",
-                    resultado=result,
-                    mesa=mesa,
-                    brancas=brancas,
-                    pretas=pretas,
-                ),
-                danger=True,
-            )
-        )
+        return confirm_walkover(self.host, result, mesa=mesa, brancas=brancas, pretas=pretas)
 
     @staticmethod
     def _app_error(message: str) -> Exception:

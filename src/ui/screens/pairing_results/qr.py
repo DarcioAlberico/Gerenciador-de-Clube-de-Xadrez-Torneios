@@ -11,12 +11,15 @@ quem manda no placar.
 """
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import customtkinter as ctk
 
 from ...components import Dialog, actions_bar
 from ...support import AppError, LocalResultServer, SPACE_LG, SPACE_MD
+
+logger = logging.getLogger(__name__)
 
 
 class QrResultActions:
@@ -32,14 +35,14 @@ class QrResultActions:
             if not pairing_id:
                 raise AppError("Selecione uma mesa.")
             if getattr(host, "pairing_team_mode", False):
-                raise AppError("QR de resultado por tabuleiro de equipes sera tratado na fase de equipes avancadas.")
+                raise AppError("QR de resultado por tabuleiro de equipes será tratado na fase de equipes avançadas.")
             payload = host.qr_result_service.result_url_for_pairing(int(host.current_tournament_id), int(pairing_id))
-            # Relatorio, nao confirmacao: o endereco e a entrega, e precisa ser
+            # Relatório, não confirmação: o endereço e a entrega, e precisa ser
             # copiado para chegar ao celular do jogador (F5.7).
             host._show_report(
                 "Link para envio por QR",
                 f"{payload['url']}\n\n"
-                "O resultado enviado fica pendente ate aprovacao do arbitro.",
+                "O resultado enviado fica pendente até aprovação do árbitro.",
             )
         except Exception as exc:
             host._show_error(exc)
@@ -53,7 +56,7 @@ class QrResultActions:
             host.db.save_app_settings({"local_result_server_url": url})
             host._show_report(
                 "Servidor QR ativo",
-                f"{url}\n\nUse este endereco na mesma rede local.",
+                f"{url}\n\nUse este endereço na mesma rede local.",
             )
         except Exception as exc:
             host._show_error(exc)
@@ -65,7 +68,7 @@ class QrResultActions:
         try:
             host._load_selected_round_pairings()
         except Exception:
-            pass
+            logger.debug("Mesas da rodada nao recarregadas apos o QR", exc_info=True)
         host._show_toast("Resultado QR aprovado.", kind="success")
 
     def reject(self, submission_id: int) -> None:

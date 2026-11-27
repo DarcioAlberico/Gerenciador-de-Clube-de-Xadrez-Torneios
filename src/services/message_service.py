@@ -40,10 +40,10 @@ class MessageService:
             raise RuntimeError(f"Erro ao enviar e-mail: {e}")
 
     def send_bulk_email(self, recipients: list[dict], subject: str, body: str) -> dict:
-        """Envia o mesmo e-mail para varios destinatarios. `recipients` e uma
-        lista de dicts; cada um precisa da chave 'email' (os demais campos sao
+        """Envia o mesmo e-mail para vários destinatários. `recipients` e uma
+        lista de dicts; cada um precisa da chave 'email' (os demais campos são
         repassados intactos no resumo, ex.: 'member_id'/'name'). Nunca
-        interrompe no meio: um destinatario que falha entra em 'failed' com o
+        interrompe no meio: um destinatário que falha entra em 'failed' com o
         motivo e o envio continua. Devolve um resumo com contagens e listas."""
         sent: list[dict] = []
         failed: list[dict] = []

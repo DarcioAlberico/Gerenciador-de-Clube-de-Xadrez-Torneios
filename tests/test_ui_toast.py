@@ -48,7 +48,7 @@ class ToastStackTest(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls) -> None:
-        cancel_pending_callbacks(cls.root)  # timers de expiracao dos toasts
+        cancel_pending_callbacks(cls.root)  # timers de expiração dos toasts
         try:
             cls.root.destroy()
         except TclError:  # pragma: no cover
@@ -119,7 +119,7 @@ class ToastStackTest(unittest.TestCase):
         _find_button(toast, "Desfazer").invoke()
         self.assertEqual([], self.stack.active)
 
-        self._bombear(0.5)  # o after chega para um toast ja destruido
+        self._bombear(0.5)  # o after chega para um toast já destruído
         self.assertEqual([], self.stack.active)
 
     def test_clear_remove_todos(self) -> None:

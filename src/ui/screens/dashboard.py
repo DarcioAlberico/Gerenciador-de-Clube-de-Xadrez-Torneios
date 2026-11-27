@@ -21,7 +21,7 @@ from .dashboard_figures import build_finance_figure, build_members_figure, curre
 # quem morre justamente na hora em que o cache serviria.
 DASHBOARD_FIGURES = FigureCache()
 
-# Trocar de tema não invalida chave nenhuma (a paleta faz parte dela), mas deixa
+# Trocar de tema não inválida chave nenhuma (a paleta faz parte dela), mas deixa
 # no cache figuras de um tema que ninguém mais vai ver: solta a memória.
 on_theme_change(DASHBOARD_FIGURES.clear)
 
@@ -31,7 +31,7 @@ class DashboardPagesMixin:
         self._clear_content()
         self._page_title(
             "Dashboard Visual",
-            "Visao geral grafica do clube e finanças.",
+            "Visão geral gráfica do clube e finanças.",
         )
 
         body = ctk.CTkFrame(self.content, fg_color="transparent")
@@ -104,8 +104,8 @@ class DashboardPagesMixin:
             EmptyState(
                 parent,
                 title="Sem avisos ativos",
-                description="Os comunicados do clube aparecerao aqui.",
-                cta_text="Ir para Comunicacao",
+                description="Os comunicados do clube aparecerão aqui.",
+                cta_text="Ir para Comunicação",
                 cta_command=self.show_communication,
             ).pack(fill="both", expand=True, padx=10, pady=10)
             return
@@ -136,8 +136,8 @@ class DashboardPagesMixin:
             EmptyState(
                 parent,
                 title="Nenhum evento agendado",
-                description="Agende eventos no calendario para ve-los aqui.",
-                cta_text="Ir para Calendario",
+                description="Agende eventos no calendário para vê-los aqui.",
+                cta_text="Ir para Calendário",
                 cta_command=self.show_calendar,
             ).pack(fill="both", expand=True, padx=10, pady=10)
             return

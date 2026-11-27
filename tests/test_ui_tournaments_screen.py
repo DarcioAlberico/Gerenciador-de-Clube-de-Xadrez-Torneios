@@ -200,7 +200,7 @@ class ControladorTest(unittest.TestCase):
     def test_duplicar_com_nome_vazio_usa_o_sugerido(self) -> None:
         """Apertar Enter no diálogo não pode virar torneio sem nome."""
         self.controlador.duplicate(1, "   ")
-        self.assertEqual((1, "Aberto - copia"), self.servico.duplicados[0])
+        self.assertEqual((1, "Aberto - cópia"), self.servico.duplicados[0])
 
     def test_duplicar_torneio_inexistente_reclama(self) -> None:
         with self.assertRaises(AppError):

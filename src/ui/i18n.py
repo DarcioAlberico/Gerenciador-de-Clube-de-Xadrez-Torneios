@@ -23,29 +23,25 @@ from __future__ import annotations
 
 import json
 import logging
-import sys
 from pathlib import Path
 from typing import Any
+
+from src.core.resources import bundled_resource
 
 logger = logging.getLogger("src.ui.i18n")
 
 DEFAULT_LOCALE = "pt_BR"
 
 
-def _base_dir() -> Path:
-    """Raiz do projeto — ou a pasta do executável, quando empacotado.
+def catalog_dir() -> Path:
+    """Pasta dos catálogos: recurso EMPACOTADO (RGS-02).
 
-    Mesma convenção de `assets/` (ver ``database._base_dir``), repetida aqui em
-    três linhas em vez de importada: este módulo é puro, e puxar a camada de
-    banco só para descobrir um caminho seria trocar independência por atalho.
-    O `albericus.spec` leva `i18n/` junto no build.
+    No `.exe` onefile o `i18n/` é extraído em ``sys._MEIPASS``, não ao lado do
+    executável — procurar lá era o defeito que punha chaves na tela.
+    Resolvido a cada chamada para que o build congelado (e o teste que o
+    simula) não dependa da ordem de importação.
     """
-    if getattr(sys, "frozen", False):
-        return Path(sys.executable).resolve().parent
-    return Path(__file__).resolve().parents[2]
-
-
-CATALOG_DIR = _base_dir() / "i18n"
+    return bundled_resource("i18n")
 
 
 class Catalog:
@@ -66,7 +62,7 @@ class Catalog:
         return set(self._entries)
 
     def get(self, key: str, **params: Any) -> str:
-        """Texto da chave, com ``{parametros}`` aplicados.
+        """Texto da chave, com ``{parâmetros}`` aplicados.
 
         Parâmetro faltando **não** derruba a tela: devolve o texto cru, que ao
         menos comunica alguma coisa, e registra o erro. Um rótulo com
@@ -86,7 +82,7 @@ class Catalog:
 
 
 def catalog_path(locale: str = DEFAULT_LOCALE, base_dir: Path | None = None) -> Path:
-    return (base_dir or CATALOG_DIR) / f"{locale}.json"
+    return (base_dir or catalog_dir()) / f"{locale}.json"
 
 
 def load_catalog(locale: str = DEFAULT_LOCALE, base_dir: Path | None = None) -> Catalog:

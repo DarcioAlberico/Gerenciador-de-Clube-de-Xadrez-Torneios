@@ -40,7 +40,7 @@ def k_factor(
         try:
             return _capped(regulation, int(k_override), games, OVERRIDE)
         except (TypeError, ValueError):
-            pass
+            pass  # K digitado inválido: vale a regra do regulamento, abaixo
 
     if games_played is not None and int(games_played) < regulation.k_new_games:
         return _capped(regulation, regulation.k_new, games, NEW_PLAYER)

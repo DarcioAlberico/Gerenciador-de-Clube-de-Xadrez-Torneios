@@ -2,8 +2,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import pytest
+
 from src.core.database import Database
 from src.services.pairing_service import PairingService
+
+pytestmark = pytest.mark.gacrux  # RGS-37: roda o motor padrão de verdade
 
 
 class TestPairingGacrux(unittest.TestCase):
@@ -131,11 +135,11 @@ class TestPairingGacrux(unittest.TestCase):
         self.assertEqual(automatic_bye["white_player_id"], player_ids[2])
 
     def test_gacrux_handles_non_ascii_names(self):
-        # Nomes com Unicode nao-decomponivel (o-cortado, eszett, thorn) sobrevivem
+        # Nomes com Unicode não-decomponivel (o-cortado, eszett, thorn) sobrevivem
         # ao _trf_clean e ficam multibyte em UTF-8. Como o TRF e gravado em UTF-8 e
-        # tem colunas de largura fixa, o motor precisa le-lo em UTF-8 (flag -b);
-        # caso contrario as colunas desalinham (status 467) e o pareamento falha.
-        # Regressao do fix de encoding na integracao Gacrux.
+        # tem colunas de largura fixa, o motor precisa lê-lo em UTF-8 (flag -b);
+        # caso contrário as colunas desalinham (status 467) e o pareamento falha.
+        # Regressão do fix de encoding na integração Gacrux.
         ratings = [2200, 2100, 2000, 1900]
         names = ["Bjorn Sorensen", "Weiss Muller", "Bjørn Sørensen", "Þór Æsir"]
         ids = []

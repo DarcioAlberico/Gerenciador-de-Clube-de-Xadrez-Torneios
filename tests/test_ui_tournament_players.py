@@ -141,11 +141,13 @@ class FormularioTest(unittest.TestCase):
         self.assertEqual(0.5, payload["starting_points"])
 
     def test_payload_de_atualizacao_preserva_o_que_a_tela_nao_mostra(self) -> None:
-        """`active` e `federation_id` não estão no formulário — sobrescrevê-los
-        apagaria escolha feita em outra tela."""
+        """`federation_id` não está no formulário — sobrescrevê-lo apagaria
+        escolha feita em outra tela. O status (e o `active`) não vai de jeito
+        nenhum (RGS-22): mudar participação é com o serviço."""
         atual = jogador(active=0, federation_id="BRA")
-        payload = PlayerForm(name="Ana").update_payload(atual)
-        self.assertEqual(0, payload["active"])
+        payload = PlayerForm(name="Ana", status="active").update_payload(atual)
+        self.assertNotIn("active", payload)
+        self.assertNotIn("player_status", payload)
         self.assertEqual("BRA", payload["federation_id"])
 
     def test_formulario_vindo_do_banco_nao_traz_a_palavra_none(self) -> None:

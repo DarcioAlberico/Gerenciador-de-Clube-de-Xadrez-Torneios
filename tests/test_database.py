@@ -1,13 +1,13 @@
 """Smoke tests da God Class Database (src/core/database.py).
 
-Rede de seguranca para a extracao incremental de mixins por dominio: exercita
-o CRUD basico de cada dominio num banco temporario e congela a interface
+Rede de segurança para a extração incremental de mixins por domínio: exercita
+o CRUD básico de cada domínio num banco temporário e congela a interface
 publica num snapshot (tests/fixtures/database_public_api.txt). Se a refatoracao
-perder/renomear um metodo da fachada Database ou quebrar um fluxo, estes testes
+perder/renomear um método da fachada Database ou quebrar um fluxo, estes testes
 pegam.
 
-Complementa (nao substitui) os testes de comportamento em test_core_services.py,
-que exercitam a Database indiretamente via os servicos.
+Complementa (não substitui) os testes de comportamento em test_core_services.py,
+que exercitam a Database indiretamente via os serviços.
 """
 from __future__ import annotations
 
@@ -37,12 +37,12 @@ class DatabaseTestCase(unittest.TestCase):
 
 
 class TestDatabasePublicInterface(DatabaseTestCase):
-    """Snapshot da API publica — rede contra perda de metodo na extracao de mixins.
+    """Snapshot da API publica — rede contra perda de método na extração de mixins.
 
-    Para regenerar o snapshot apos uma mudanca INTENCIONAL de interface. O
-    cabecalho de comentario e PRESERVADO de proposito: a versao antiga deste
-    trecho reescrevia o arquivo inteiro e apagava a explicacao de para que ele
-    serve — o teste continuava passando (ele ignora linhas `#`) e ninguem via::
+    Para regenerar o snapshot após uma mudança INTENCIONAL de interface. O
+    cabeçalho de comentário e PRESERVADO de propósito: a versão antiga deste
+    trecho reescrevia o arquivo inteiro e apagava a explicação de para que ele
+    serve — o teste continuava passando (ele ignora linhas `#`) e ninguém via::
 
         from pathlib import Path
         from src.core.database import Database
@@ -66,7 +66,7 @@ class TestDatabasePublicInterface(DatabaseTestCase):
         return names
 
     def test_snapshot_is_substantial(self) -> None:
-        # guarda contra snapshot vazio/corrompido mascarar a verificacao abaixo
+        # guarda contra snapshot vazio/corrompido mascarar a verificação abaixo
         self.assertGreaterEqual(len(self._snapshot()), 250)
 
     def test_public_api_matches_snapshot(self) -> None:
@@ -89,9 +89,11 @@ class TestDatabasePublicInterface(DatabaseTestCase):
 
 class TestDatabaseSchema(DatabaseTestCase):
     def test_schema_version(self) -> None:
-        # v55 (ORG-02/ORG-03): politica e moeda por premio, rateio entre
-        # empatados, agenda com local/ritmo/descanso e tolerancia de atraso.
-        self.assertEqual(Database.SCHEMA_VERSION, 55)
+        # v57 (RGS-14): cor inicial do torneio (`tournament_settings.initial_color`),
+        # sorteada uma vez e usada igual pela prévia, pela geração e pelo Gacrux.
+        # v58 (EQ-01/E6, RGS-30): TPN, semente e rodada de entrada da equipe.
+        # v59: textos semeados (níveis e modelos de certificado) com acento.
+        self.assertEqual(Database.SCHEMA_VERSION, 59)
 
     def test_core_tables_exist(self) -> None:
         with self.db.connect() as conn:
@@ -117,7 +119,7 @@ class TestClubAndPeopleDomain(DatabaseTestCase):
         self.assertIn(club_id, [c["id"] for c in self.db.list_clubs()])
 
     def test_learning_level_crud(self) -> None:
-        # niveis padrao (Iniciante, Basico, ...) sao semeados; usar nome unico
+        # níveis padrão (Iniciante, Básico, ...) são semeados; usar nome único
         level_id = self.db.create_learning_level("Nivel Smoke", description="nivel 1")
         level = self.db.get_learning_level(level_id)
         assert level is not None
@@ -172,7 +174,7 @@ class TestTournamentDomain(DatabaseTestCase):
         player = self.db.get_player(pid)
         assert player is not None
         self.assertEqual(player["name"], "Joao")
-        self.db.update_player(pid, "Joao P", "CX", 1600, "Absoluto", 1)
+        self.db.update_player(pid, "Joao P", "CX", 1600, "Absoluto")
         updated = self.db.get_player(pid)
         assert updated is not None
         self.assertEqual(updated["rating"], 1600)
@@ -263,7 +265,7 @@ class TestAppSettingsAndAudit(DatabaseTestCase):
     def test_app_settings_roundtrip(self) -> None:
         settings = self.db.get_app_settings()
         self.assertIsInstance(settings, dict)
-        # round-trip nao deve falhar nem perder o tipo
+        # round-trip não deve falhar nem perder o tipo
         self.db.save_app_settings(settings)
         self.assertIsInstance(self.db.get_app_settings(), dict)
 

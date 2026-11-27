@@ -28,7 +28,7 @@ class KnockoutActions:
             if not pairing:
                 raise AppError("Selecione a mesa que terminou sem vencedor.")
             if pairing.get("is_bye") or not pairing.get("black_player_id"):
-                raise AppError("Mesa de bye nao tem desempate: o jogador ja avanca sozinho.")
+                raise AppError("Mesa de bye não tem desempate: o jogador já avança sozinho.")
 
             criterios = host.pairing_service.knockout_advancement_criteria()
             jogadores = {

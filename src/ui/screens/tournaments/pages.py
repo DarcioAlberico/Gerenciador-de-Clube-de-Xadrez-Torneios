@@ -8,10 +8,13 @@ trocar um diff revisável por um irrevisável.
 """
 from __future__ import annotations
 
+import logging
 from ...support import *
-from ...components import Dialog, actions_bar, danger_button, select_field
+from ...components import Dialog, FormStack, actions_bar, danger_button, select_field, text_area
 
+from src.services import friendly_mode
 from src.services.pairing.acceleration import acceleration_spec
+from src.services.pairing.pairing_check import tpn_correction_reason_error
 from src.services.pairing import (
     DEFAULT_PLAYER_TIEBREAKS,
     DEFAULT_TEAM_TIEBREAKS,
@@ -25,6 +28,8 @@ from src.services.prizes import PRIZE_POLICIES
 from src.services.list_layouts import DEFAULT_STANDINGS_COLUMNS, STANDINGS_COLUMNS
 from src.services.chess_results import normalize_results_url
 
+logger = logging.getLogger(__name__)
+
 
 
 class TournamentOtherPagesMixin:
@@ -34,7 +39,7 @@ class TournamentOtherPagesMixin:
 
         tournament = self.db.get_tournament(self.current_tournament_id)
         if not tournament:
-            self._show_error(AppError("Selecione um torneio valido."))
+            self._show_error(AppError("Selecione um torneio válido."))
             return
 
         rounds = self.db.list_rounds(self.current_tournament_id)
@@ -68,11 +73,13 @@ class TournamentOtherPagesMixin:
         summary_rows = [
             ("Formato", COMPETITION_TYPES.get(competition_type, "Individual")),
             ("Status", str(tournament.get("status") or "")),
-            ("Local", str(tournament.get("location") or "Nao informado")),
-            ("Periodo", self._tournament_period_text(tournament)),
+            ("Local", str(tournament.get("location") or "Não informado")),
+            ("Período", self._tournament_period_text(tournament)),
             ("Rodadas", f"{len(rounds)} geradas de {tournament['rounds_count']}"),
             ("Jogadores", str(len(players))),
             ("Perfil", TOURNAMENT_PROFILES.get(str(settings.get("tournament_profile") or "free"), "Livre")),
+            # MA-12: o perfil padrão de todo torneio é "Livre/Escolar"; o modo é outra coisa.
+            ("Modo", friendly_mode.mode_label(friendly_mode.is_friendly(settings))),
         ]
         if is_team_tournament:
             summary_rows.append(("Equipes", str(len(self.db.list_teams(self.current_tournament_id)))))
@@ -111,7 +118,7 @@ class TournamentOtherPagesMixin:
             return start_date
         if end_date:
             return end_date
-        return "Nao informado"
+        return "Não informado"
 
     def show_teams(self) -> None:
         if not self._require_tournament():
@@ -119,7 +126,7 @@ class TournamentOtherPagesMixin:
 
         tournament = self.db.get_tournament(self.current_tournament_id)
         if not tournament:
-            self._show_error(AppError("Selecione um torneio valido."))
+            self._show_error(AppError("Selecione um torneio válido."))
             return
 
         self._clear_content()
@@ -136,7 +143,7 @@ class TournamentOtherPagesMixin:
             panel.grid(row=0, column=0, sticky="nw")
             ctk.CTkLabel(
                 panel,
-                text="Este torneio esta no formato Individual.",
+                text="Este torneio está no formato Individual.",
                 font=font_section(),
             ).grid(row=0, column=0, padx=16, pady=(16, 6), sticky="w")
             ctk.CTkLabel(
@@ -165,7 +172,7 @@ class TournamentOtherPagesMixin:
         team_fields = [
             ("name", "Nome da equipe"),
             ("club", "Clube/Cidade"),
-            ("captain", "Capitao"),
+            ("captain", "Capitão"),
             ("notes", "Observações"),
         ]
         for index, (key, label) in enumerate(team_fields):
@@ -193,7 +200,7 @@ class TournamentOtherPagesMixin:
             sticky="w",
         )
         player_option_map: dict[str, int] = {}
-        player_option = ctk.CTkOptionMenu(form, values=["Sem jogadores disponiveis"], width=252)
+        player_option = ctk.CTkOptionMenu(form, values=["Sem jogadores disponíveis"], width=252)
         player_option.grid(row=assignment_row + 2, column=0, padx=16, pady=(4, 2), sticky="ew")
 
         ctk.CTkLabel(form, text="Função").grid(
@@ -237,18 +244,20 @@ class TournamentOtherPagesMixin:
         ).grid(row=0, column=0, padx=12, pady=(12, 6), sticky="w")
         team_tree = self._make_tree(
             teams_panel,
-            ["id", "name", "club", "captain", "starters", "players", "status"],
+            ["id", "tpn", "name", "club", "captain", "starters", "players", "status"],
             {
                 "id": "ID",
+                "tpn": "TPN",
                 "name": "Equipe",
                 "club": "Clube/Cidade",
-                "captain": "Capitao",
+                "captain": "Capitão",
                 "starters": "Titulares",
                 "players": "Jogadores",
                 "status": "Status",
             },
             {
                 "id": 60,
+                "tpn": 50,
                 "name": 220,
                 "club": 160,
                 "captain": 150,
@@ -330,7 +339,7 @@ class TournamentOtherPagesMixin:
                 values.append(label)
                 player_option_map[label] = player_id
             if not values:
-                values = ["Sem jogadores disponiveis"]
+                values = ["Sem jogadores disponíveis"]
             player_option.configure(values=values)
             player_option.set(values[0])
 
@@ -358,6 +367,7 @@ class TournamentOtherPagesMixin:
                     "end",
                     values=(
                         team["id"],
+                        team.get("pairing_number") or "",
                         team["name"],
                         team.get("club", ""),
                         team.get("captain", ""),
@@ -473,7 +483,7 @@ class TournamentOtherPagesMixin:
                     raise AppError("Selecione uma equipe.")
                 if not self._confirm_action(
                     "Excluir equipe",
-                    "Excluir esta equipe e sua escalacao? Equipes usadas em rodadas devem ser inativadas.",
+                    "Excluir esta equipe e sua escalação? Equipes usadas em rodadas devem ser inativadas.",
                     danger=True,
                 ):
                     return
@@ -491,7 +501,7 @@ class TournamentOtherPagesMixin:
                     raise AppError("Selecione uma equipe.")
                 player_id = player_option_map.get(player_option.get())
                 if not player_id:
-                    raise AppError("Nao ha jogador disponivel para adicionar.")
+                    raise AppError("Não há jogador disponível para adicionar.")
                 self.team_service.add_player(
                     team_id,
                     player_id,
@@ -532,6 +542,15 @@ class TournamentOtherPagesMixin:
             except Exception as exc:
                 self._show_error(exc)
 
+        def swap_team_tpn() -> None:
+            try:
+                team_id = selected_team_id["value"]
+                if not team_id:
+                    raise AppError("Selecione uma equipe.")
+                self._open_team_tpn_swap(int(team_id), on_done=load_teams)
+            except Exception as exc:
+                self._show_error(exc)
+
         team_tree.bind("<<TreeviewSelect>>", on_team_select)
         roster_tree.bind("<<TreeviewSelect>>", on_roster_select)
 
@@ -540,14 +559,72 @@ class TournamentOtherPagesMixin:
             ("Atualizar equipe", update_team),
             ("Excluir equipe", delete_team),
             ("Limpar equipe", clear_team_form),
+            ("Trocar TPN", swap_team_tpn),
             ("Adicionar jogador", add_player_to_team),
-            ("Atualizar escalacao", update_assignment),
+            ("Atualizar escalação", update_assignment),
             ("Remover jogador", remove_assignment),
         ]
         self._grid_form_buttons(form, button_specs, assignment_row + 7, required_action="tournament_write")
 
         load_teams()
         load_player_options()
+
+    def _open_team_tpn_swap(self, team_id: int, *, on_done: Any = None) -> None:
+        """Corrige o TPN trocando o número desta equipe com o de outra (EQ-01.5).
+
+        A regra mora no serviço (`TeamService.swap_pairing_numbers`): motivo
+        obrigatório, só entre rodadas, nunca no todos-contra-todos. A tela usa a
+        mesma checagem de motivo antes do clique e mostra o recado no próprio
+        diálogo, sem fechá-lo — fechar apagaria o que já foi digitado.
+        """
+        team = self.db.get_team(team_id)
+        if not team or not team.get("pairing_number"):
+            raise AppError(
+                "O TPN é atribuído na geração da 1ª rodada; antes dela, a ordem "
+                "segue a semente e não há número a corrigir."
+            )
+        outras = {
+            f"TPN {int(item['pairing_number'])} - {item['name']}": int(item["id"])
+            for item in sorted(
+                self.db.list_teams(int(team["tournament_id"]), active_only=False),
+                key=lambda item: int(item.get("pairing_number") or 0),
+            )
+            if item.get("pairing_number") and int(item["id"]) != int(team_id)
+        }
+        if not outras:
+            raise AppError("Não há outra equipe com TPN para a troca.")
+
+        dialog = Dialog(self, "Trocar TPN", size=(520, 420), resizable=False)
+        pilha = FormStack(dialog)
+        pilha.section(
+            f"{team['name']} (TPN {int(team['pairing_number'])})",
+            help_text=(
+                "O TPN só muda por decisão do árbitro-chefe (FIDE C.04.6): as duas "
+                "equipes trocam de número e a troca fica na auditoria."
+            ),
+        )
+        outra = pilha.select("Trocar com", list(outras))
+        motivo = pilha.field("Motivo da correção", lambda box: text_area(box, height=80))
+        aviso = pilha.note("")
+        aviso.configure(text_color=THEME_DANGER)
+
+        def confirmar() -> None:
+            texto = " ".join(motivo.get("1.0", "end").split())
+            erro = tpn_correction_reason_error(texto)
+            if erro:
+                aviso.configure(text=erro)
+                return
+            try:
+                self.team_service.swap_pairing_numbers(team_id, outras[outra.get()], reason=texto)
+            except AppError as exc:
+                aviso.configure(text=str(exc))
+                return
+            dialog.close()
+            if on_done is not None:
+                on_done()
+            self._show_toast("TPN trocado.", kind="success")
+
+        actions_bar(dialog, primary=("Trocar TPN", confirmar), close_text="Cancelar")
 
     def show_tournament_referees_dialog(self) -> None:
         if not self._require_tournament():
@@ -836,7 +913,7 @@ class TournamentOtherPagesMixin:
                 result[0] = out
                 dialog.close()
             except Exception:
-                pass
+                logger.debug("Ritmo de jogo nao confirmado", exc_info=True)
 
         actions_bar(dialog, row=6, primary=("Confirmar", save), close_text="Cancelar")
 

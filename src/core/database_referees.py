@@ -1,7 +1,7 @@
-"""Mixin do dominio de arbitros (referees) da Database.
+"""Mixin do domínio de árbitros (referees) da Database.
 
-Extraido de ``src.core.database`` como 1o passo da decomposicao da God Class
-em mixins por dominio. Os metodos preservam comportamento; a fachada
+Extraído de ``src.core.database`` como 1o passo da decomposição da God Class
+em mixins por domínio. Os métodos preservam comportamento; a fachada
 ``Database`` herda deste mixin. Ver ``_database_base._DatabaseInfra``.
 """
 from __future__ import annotations

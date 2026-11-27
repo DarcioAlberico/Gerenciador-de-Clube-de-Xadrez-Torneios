@@ -31,7 +31,7 @@ class RefereePagesMixin:
         self._page_title("Árbitros", "Gerenciamento da equipe de arbitragem.")
 
         controller = RefereesController(self.referee_service, self.db)
-        # Estado da tela num dataclass, nao num dicionario de uma chave ao
+        # Estado da tela num dataclass, não num dicionário de uma chave ao
         # lado dos widgets (P0-3) — e por isso que da para testar sem janela.
         form_atual = RefereeForm()
 

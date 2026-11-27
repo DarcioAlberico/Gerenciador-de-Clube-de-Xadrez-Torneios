@@ -38,11 +38,11 @@ def parse_hex(color: str) -> tuple[int, int, int]:
     if len(raw) == 3:
         raw = "".join(ch * 2 for ch in raw)
     if len(raw) != 6:
-        raise ValueError(f"Cor hexadecimal invalida: {color!r}")
+        raise ValueError(f"Cor hexadecimal inválida: {color!r}")
     try:
         return int(raw[0:2], 16), int(raw[2:4], 16), int(raw[4:6], 16)
     except ValueError as exc:
-        raise ValueError(f"Cor hexadecimal invalida: {color!r}") from exc
+        raise ValueError(f"Cor hexadecimal inválida: {color!r}") from exc
 
 
 def relative_luminance(color: str) -> float:
@@ -124,7 +124,7 @@ class ContrastPair:
     @property
     def passes(self) -> bool:
         # Arredonda para duas casas antes de comparar: 4.4999 exibido como
-        # "4.50" e reprovado seria um relatorio que se contradiz na tela.
+        # "4.50" e reprovado seria um relatório que se contradiz na tela.
         return round(self.ratio, 2) >= self.minimum
 
     def describe(self) -> str:

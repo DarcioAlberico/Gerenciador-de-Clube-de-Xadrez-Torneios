@@ -1052,6 +1052,13 @@ class trf2json(chessjson.chessjson):
             # Lista so acumulada: o motor nao usa AAT nominal no desempate. Quem
             # aplica o ajuste na classificacao e o Albericus (TBK-01).
             self.aatlist.append(att)
+            # patch local (RGS-03): o AAT nominal de tipo em branco (TRF25 §7.3,
+            # "penalidade/bonus", pode ser negativo) entra na pontuacao de
+            # PAREAMENTO (ACC) a partir da rodada dele — ver
+            # tiebreak.get_abnormal. Sem isto, o ajuste do arbitro nao chegava
+            # aos grupos de pontuacao (C.04.1/C.04.3).
+            if att["att"].strip() == "" and not tournament.get("teamTournament", False):
+                tournament.setdefault("abnormalPoints", []).append(att)
 
     def parse_trf_acceleratedv4(self, tournament, line):
         linelen = len(line)

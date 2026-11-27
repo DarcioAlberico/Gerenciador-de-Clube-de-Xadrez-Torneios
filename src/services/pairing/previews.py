@@ -50,17 +50,17 @@ def individual_preview_payload(
             code = str(pairing.get("result") or "").strip().upper()
             if code in {"F", "H", "Z"}:
                 alerts.append("Bye solicitado")
-                explanation.append(f"Bye solicitado pelo arbitro (tipo {code}).")
+                explanation.append(f"Bye solicitado pelo árbitro (tipo {code}).")
             else:
                 alerts.append("Bye")
-                explanation.append("Jogador recebeu bye por numero impar de participantes ativos.")
+                explanation.append("Jogador recebeu bye por número ímpar de participantes ativos.")
         elif black_id is not None:
             white_score = float(standings.get(white_id, {}).get("points", 0.0) or 0.0)
             black_score = float(standings.get(black_id, {}).get("points", 0.0) or 0.0)
             if abs(white_score - black_score) > 1.0:
                 alerts.append("Scoregroup distante")
             explanation.append(
-                "Pareado por pontuacao e criterios do metodo configurado; "
+                "Pareado por pontuação e critérios do método configurado; "
                 f"placares atuais {white_score:g} x {black_score:g}."
             )
 
@@ -104,9 +104,9 @@ def _diagnostic_alert(diagnostic: dict[str, Any]) -> str:
     title = str(diagnostic.get("title") or "Alerta de pareamento")
     avoidable = diagnostic.get("avoidable")
     if avoidable is True:
-        return f"{title} evitavel"
+        return f"{title} evitável"
     if avoidable is False:
-        return f"{title} inevitavel"
+        return f"{title} inevitável"
     return title
 
 
@@ -120,6 +120,7 @@ def team_preview_payload(
     ruleset_version: str,
 ) -> dict[str, Any]:
     teams_by_id = {int(team["id"]): team for team in plan["teams"]}
+    lineup_warnings = {int(item["team_id"]): item for item in plan.get("lineup_warnings") or []}
     preview_matches = []
     alert_count = 0
     for match in plan["matches"]:
@@ -131,17 +132,30 @@ def team_preview_payload(
             code = str(match.get("result") or "").strip().upper()
             if code in {"F", "H", "Z"}:
                 alerts.append("Bye solicitado")
-                explanation.append(f"Bye solicitado pelo arbitro (tipo {code}).")
+                explanation.append(f"Bye solicitado pelo árbitro (tipo {code}).")
             else:
                 alerts.append("Bye da equipe")
-                explanation.append("Equipe recebeu bye por numero impar de equipes ativas.")
+                explanation.append("Equipe recebeu bye por número ímpar de equipes ativas.")
         elif black_team_id is not None:
             if frozenset((white_team_id, black_team_id)) in played_pairs:
                 alerts.append("Confronto repetido")
-            explanation.append("Match gerado pelo metodo de emparceiramento por equipes configurado.")
+            explanation.append("Match gerado pelo método de emparceiramento por equipes configurado.")
+            # EQ-02.5: escalação incompleta e aviso visível antes de gerar.
+            for team_id in (white_team_id, black_team_id):
+                aviso = lineup_warnings.get(team_id)
+                if not aviso:
+                    continue
+                if "Escalação incompleta" not in alerts:
+                    alerts.append("Escalação incompleta")
+                explanation.append(_lineup_warning_text(aviso))
         alert_count += len(alerts)
-        white_team = teams_by_id.get(white_team_id, {})
-        black_team = teams_by_id.get(black_team_id or 0, {})
+        # Equipe desativada no todos-contra-todos não é em `teams` (ativas).
+        white_team = teams_by_id.get(white_team_id) or {
+            "name": lineup_warnings.get(white_team_id, {}).get("team_name")
+        }
+        black_team = teams_by_id.get(black_team_id or 0) or {
+            "name": lineup_warnings.get(black_team_id or 0, {}).get("team_name")
+        }
         preview_matches.append(
             {
                 "match_number": int(match["match_number"]),
@@ -165,4 +179,23 @@ def team_preview_payload(
         "ruleset_version": ruleset_version,
         "matches": preview_matches,
         "alerts_count": alert_count,
+        # Vai para o topo da prévia (`format_pairing_preview`), como os avisos
+        # do individual: escalação incompleta nunca some no corte por `limit`.
+        "warnings": [
+            *(str(aviso) for aviso in plan.get("warnings") or []),
+            *(_lineup_warning_text(aviso) for aviso in lineup_warnings.values()),
+        ],
     }
+
+
+def _lineup_warning_text(aviso: dict[str, Any]) -> str:
+    """Texto do aviso de escalacao incompleta (EQ-02.5)."""
+    nome = aviso.get("team_name") or aviso.get("team_id")
+    if aviso.get("empty"):
+        return (
+            f"{nome}: nenhum jogador presente. Registre um bye Z para a equipe "
+            "ou confirme o W.O. do confronto inteiro ao gerar a rodada."
+        )
+    vagas = ", ".join(str(board) for board in aviso["empty_boards"])
+    rotulo = "tabuleiro" if len(aviso["empty_boards"]) == 1 else "tabuleiros"
+    return f"{nome}: {rotulo} {vagas} sem jogador presente (W.O.)."

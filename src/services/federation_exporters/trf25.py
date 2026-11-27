@@ -60,7 +60,10 @@ Já implementados e emitidos (com testes de coluna em `trf25_records.py`):
   factor e nickname.
 - **240 / 320 / 330 / 300 / 299**: byes, PAB, forfeits, out-of-order e ajustes
   anormais de pontos.
-- **250 / 260**: aceleração clássica e proibições de pareamento.
+- **250 / 260**: aceleração (clássica, custom e Baku) e proibições de
+  pareamento. Baku (FIDE C.04.7, RGS-30) sai em blocos — VP inteiro e meio VP
+  — sobre o GA, com o sufixo `_BAKU` no 192. No Suíço por equipes (EQ-07) o
+  VP sai em match points e o GA é contado pelo TPN.
 - **XXX**: registros de rating nacional (NRS), um por jogador com rating
   nacional, sob federação válida.
 - **802**: resumo informativo de equipe (comprimento fixo).
@@ -71,11 +74,7 @@ Omissões deliberadas (não são lacunas):
 - **801** (variável): dispensado em favor do **802** (fixo).
 - **202**: a classificação usa o **212**.
 
-Lacunas conhecidas:
-
-- **Aceleração de Baku** (`_BAKU` no 192 e fórmula no 250): guardada — a fórmula
-  exata da FIDE não é pública; emite `BAKU_NOT_IMPLEMENTED` em vez de enganar o
-  árbitro (ver `pairing/acceleration.py`).
+Lacunas conhecidas: nenhuma aberta.
 
 Tabelas de código (192 e 212) já consolidadas: ver Anexos A e B da
 ESPEC_TRF25_FIDE.md (Tournament-Type Code Table e Mandatory Tie-Breaks).
@@ -93,7 +92,8 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
-from src.services.constants import RESULT_POINTS, AppError, player_pairing_name
+from src.domain.dates import Data, parse_trf_date
+from src.services.constants import RESULT_POINTS, AppError
 from src.services.federation_exporters.base import FederationExportFormat
 from src.services.federation_exporters.trf16 import TRF16Exporter
 from src.services.federation_exporters.trf25_records import (
@@ -123,17 +123,21 @@ from src.services.pairing.gacrux_tiebreak_map import (
     build_team_tiebreak_plan,
     build_tiebreak_plan,
 )
+# EQ-03: "confronto inteiro por W.O." e uma regra só, a mesma do histórico.
+from src.services.pairing.histories import team_match_unplayed
+from src.services.pairing.team_swiss import assign_team_pairing_numbers, team_seed
 from src.services.pairing.acceleration import (
-    BAKU_NOT_IMPLEMENTED,
     acceleration_spec,
+    baku_acceleration_blocks,
+    baku_applies_to_team_swiss,
+    baku_initial_field,
     scheme_emits_250,
     scheme_is_baku,
     upper_share_size,
 )
+from src.services.pairing.standings_cut import teams_as_of_round
+from src.services.pairing.initial_color import normalize_initial_color
 
-
-# Resultados de tabuleiro que representam W.O. (não jogado).
-_FORFEIT_RESULTS = frozenset({"1F-0F", "0F-1F", "0F-0F"})
 
 
 TRF25_SCAFFOLD_WARNING = (
@@ -153,6 +157,19 @@ TRF25_DATA_COMPLETE_NOTE = (
 )
 
 
+# Ordem inicial do torneio -> método do registro 172 (TRF25 §1.2). "Rating
+# principal" e "internacional" numeram pelo rating FIDE; a ordem manual não tem
+# código próprio.
+STARTING_RANK_METHOD_BY_ORDER: dict[str, str] = {
+    "rating": "FIDE",
+    "international_rating": "FIDE",
+    "national_rating": "NRO",
+    "international_then_national": "FIDON",
+    "max_rating": "HBFN",
+    "manual": "OTHER",
+}
+
+
 class TRF25Exporter(TRF16Exporter):
     """Exportador TRF25 incremental (ver ESPEC_TRF25_FIDE.md)."""
 
@@ -162,26 +179,25 @@ class TRF25Exporter(TRF16Exporter):
         extension="trf",
     )
 
-    def export(self, tournament_id: int, file_path: str | Path) -> list[str]:
+    def export(
+        self, tournament_id: int, file_path: str | Path, *, up_to_round: int | None = None
+    ) -> list[str]:
+        """Gera o TRF-25. `up_to_round`: como no TRF16 (RGS-36), so as rodadas do calculo."""
         service = self.export_service
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
-            raise AppError("Selecione um torneio valido.")
+            raise AppError("Selecione um torneio válido.")
 
         settings = self.db.get_tournament_settings(tournament_id) or {}
         warnings = self.validate(tournament_id)
-        order_warning = self._starting_rank_order_warning(settings)
-        if order_warning:
-            warnings.append(order_warning)
-        players = sorted(
-            self.db.list_players(tournament_id, active_only=False),
-            key=lambda player: (
-                -service._trf_rating(player),
-                player_pairing_name(player).casefold(),
-                int(player.get("id") or 0),
-            ),
-        )
+        # Start-rank = ordem inicial do torneio (RGS-13), a mesma do TRF16 e do
+        # pareamento; o registro 172 declara o método correspondente.
+        # No retrato da rodada N (`up_to_round`), sem quem se inscreveu depois
+        # (RGS-10): a MESMA lista e numeração do TRF16 (`TRF16Exporter.players`).
+        players = self.players(tournament_id, up_to_round=up_to_round)
         rounds = sorted(self.db.list_rounds(tournament_id), key=lambda r: r["number"])
+        if up_to_round is not None:
+            rounds = [r for r in rounds if int(r["number"]) <= up_to_round]
         schedule = {
             int(item["round_number"]): str(item.get("date") or "").strip()
             for item in self.db.list_round_schedule(tournament_id)
@@ -189,9 +205,9 @@ class TRF25Exporter(TRF16Exporter):
         is_team = tournament.get("competition_type") == "team"
         pairings_by_round = service._trf_pairings_by_round(tournament, rounds)
         start_rank_by_player = {int(p["id"]): i for i, p in enumerate(players, start=1)}
-        standings_by_player = service._trf_player_standings(tournament, players)
-        # Celulas de rodada = o que JA ACONTECEU, como no TRF16 (FED-03). Este
-        # arquivo usava o total configurado tambem nas celulas, e o mesmo torneio
+        standings_by_player = service._trf_player_standings(tournament, players, up_to_round)
+        # Células de rodada = o que JÁ ACONTECEU, como no TRF16 (FED-03). Este
+        # arquivo usava o total configurado também nas células, e o mesmo torneio
         # saia com contagens diferentes nos dois formatos.
         cells_round_count = max([int(r["number"]) for r in rounds], default=0)
         round_count = max(
@@ -223,7 +239,7 @@ class TRF25Exporter(TRF16Exporter):
 
             # Extensões TRF25 (ESPEC §1).
             handle.write(tournament_line("142", round_count))
-            initial_colour = self._initial_colour_152(players, prepared, rounds, is_team)
+            initial_colour = self._initial_colour_152(players, prepared, rounds, is_team, settings)
             if initial_colour:
                 handle.write(tournament_line("152", initial_colour))
             encoded_time = encode_time_control(tournament.get("time_control"))
@@ -269,11 +285,15 @@ class TRF25Exporter(TRF16Exporter):
                     handle.write(line)
                 for line in self._requested_team_bye_records_240(rounds, tpn_by_team):
                     handle.write(line)
+                for line in self._team_acceleration_records_250(
+                    tournament_id, teams, prepared, settings, round_count
+                ):
+                    handle.write(line)
 
             if not is_team:
-                if scheme_is_baku(str(settings.get("acceleration_method") or "none")):
-                    warnings = [*warnings, BAKU_NOT_IMPLEMENTED]
-                acceleration_line = self._acceleration_record_250(players, settings)
+                acceleration_line = self._acceleration_record_250(
+                    players, settings, round_count, pairings_by_round
+                )
                 if acceleration_line:
                     handle.write(acceleration_line)
                 for line in self._prohibited_pairing_records_260(
@@ -292,9 +312,9 @@ class TRF25Exporter(TRF16Exporter):
 
         return warnings
 
-    # O registro 250 (aceleracao) subiu para o TRF16 (FED-03): e o registro
-    # que a implementacao de referencia LE, entao vale para os dois formatos.
-    # Este exportador o herda.
+    # O registro 250 (aceleração) subiu para o TRF16 (FED-03): e o registro
+    # que a implementação de referência LÊ, então vale para os dois formatos.
+    # Este exportador o herda, Baku inclusive.
 
     def _prohibited_pairing_records_260(
         self,
@@ -491,9 +511,42 @@ class TRF25Exporter(TRF16Exporter):
 
         O projeto usa sempre a sequência de cores fixa WBWB… (ver 352) e não
         modela o sistema de cores TYPEB, então mantemos o default `TYPEA` do
-        Anexo A. Baku fica sem o sufixo `_BAKU` enquanto a fórmula oficial não
-        estiver implementada, para não enganar o árbitro."""
-        return f"FIDE_TEAM_TYPEA_{self._team_score_code_192(settings)}"
+        Anexo A. `_BAKU` quando o motor pareia com Baku (EQ-07) — o 250 o
+        declara (`_team_acceleration_records_250`)."""
+        code = f"FIDE_TEAM_TYPEA_{self._team_score_code_192(settings)}"
+        return f"{code}_BAKU" if baku_applies_to_team_swiss(settings) else code
+
+    def _team_acceleration_records_250(
+        self,
+        tournament_id: int,
+        teams: list[dict[str, Any]],
+        prepared: list[dict[str, Any]],
+        settings: dict[str, Any],
+        round_count: int,
+    ) -> list[str]:
+        """Registro 250 do Baku por equipes (EQ-07), em match points (§5.1).
+
+        A mesma conta do pareamento: GA de `2 × ⌈N/4⌉` pelo TPN entre as
+        equipes inscritas até a R1 (`teams_as_of_round`), VP de uma vitória de
+        match na 1ª parte das aceleradas e de um empate na 2ª. `prepared` está
+        na ordem do TPN; os game points fictícios ficam em branco.
+        """
+        if not baku_applies_to_team_swiss(settings):
+            return []
+        iniciais = teams_as_of_round(
+            teams, self.db.list_team_matches_for_tournament(tournament_id), 1
+        )
+        total, late_above = baku_initial_field(
+            [int(item["team_id"]) for item in prepared],
+            [int(team["id"]) for team in iniciais],
+        )
+        win = float(settings.get("team_match_win_points", 2.0) or 2.0)
+        return [
+            record_250(vp * win, 0.0, first_round, last_round, [first, last])
+            for vp, first_round, last_round, first, last in baku_acceleration_blocks(
+                total, round_count, late_above
+            )
+        ]
 
     def _initial_colour_152(
         self,
@@ -501,15 +554,19 @@ class TRF25Exporter(TRF16Exporter):
         prepared: list[dict[str, Any]],
         rounds: list[dict[str, Any]],
         is_team: bool,
+        settings: dict[str, Any] | None = None,
     ) -> str | None:
         """Cor (W/B) do 1º tabuleiro do top seed na rodada 1.
 
-        Devolve None quando não é possível determinar (sem rodada 1, top seed com
-        bye, ou pareamento ausente) — o exporter então omite o 152.
+        Individual: sem rodada 1 (ou com o top seed fora de mesa), vale a cor
+        gravada no torneio (RGS-14), que é a que a R1 usa — conhecida antes da
+        R1. Sem nenhuma das duas, None e o exporter omite o 152. Equipes não usam
+        a cor gravada: só a da R1.
         """
+        recorded = "" if is_team else normalize_initial_color((settings or {}).get("initial_color"))
         first_round = next((r for r in rounds if int(r["number"]) == 1), None)
         if not first_round:
-            return None
+            return recorded or None
         round_id = int(first_round["id"])
 
         if is_team:
@@ -535,7 +592,7 @@ class TRF25Exporter(TRF16Exporter):
                 return "W"
             if int(pairing.get("black_player_id") or 0) == top_id:
                 return "B"
-        return None
+        return recorded or None
 
     def _type_code_192(self, tournament: dict[str, Any], settings: dict[str, Any]) -> str:
         if tournament.get("competition_type") == "team":
@@ -545,7 +602,11 @@ class TRF25Exporter(TRF16Exporter):
             return "FIDE_ROUNDROBIN"
         if method == "knockout":
             return "WORLDCUP_KNOCKOUT"
-        return self._dutch_code_192(tournament)
+        code = self._dutch_code_192(tournament)
+        # Anexo A: `_BAKU` quando o torneio usa Baku (e o 250 o declara).
+        if scheme_is_baku(str(settings.get("acceleration_method") or "none")):
+            return f"{code}_BAKU"
+        return code
 
     # As regras de pareamento Dutch da FIDE mudaram em 2025-07-01: torneios
     # disputados a partir dessa data usam a versão 2025; antes, a 2017 (Anexo A).
@@ -553,22 +614,16 @@ class TRF25Exporter(TRF16Exporter):
 
     @staticmethod
     def _parse_tournament_date(value: Any) -> date | None:
-        raw = str(value or "").strip()
-        for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%Y.%m.%d", "%d/%m/%Y", "%d. %m. %Y", "%d.%m.%Y"):
-            try:
-                return datetime.strptime(raw, fmt).date()
-            except ValueError:
-                continue
-        return None
+        lido = parse_trf_date(value)
+        return lido.valor if isinstance(lido, Data) else None
 
     def _dutch_code_192(self, tournament: dict[str, Any]) -> str:
         """Código 192 do Suíço Dutch, datado conforme as regras vigentes.
 
         Usa a data do torneio (início, com fallback no fim). Sem data parseável
         devolve `FIDE_DUTCH` puro (default-por-data do Anexo A) — nunca inventamos
-        a versão das regras quando a data é desconhecida. Baku continua sem o
-        sufixo `_BAKU`: a fórmula oficial não está implementada, então não a
-        declaramos no 192 para não enganar o árbitro."""
+        a versão das regras quando a data é desconhecida. O sufixo `_BAKU` é
+        acrescentado por `_type_code_192`."""
         event_date = (
             self._parse_tournament_date(tournament.get("start_date"))
             or self._parse_tournament_date(tournament.get("end_date"))
@@ -626,11 +681,18 @@ class TRF25Exporter(TRF16Exporter):
         players: list[dict[str, Any]],
         start_rank_by_player: dict[int, int],
     ) -> list[dict[str, Any]]:
-        """Reúne e ordena os dados de equipe usados pelos 310/320 (ordena por
-        força decrescente; a ordem define o Team Pairing Number sequencial)."""
+        """Reúne e ordena os dados de equipe usados pelos 310/320.
+
+        A ordem é o TPN que o motor usou (EQ-01): o gravado na R1 ou, antes
+        dela, o que a mesma regra daria (`assign_team_pairing_numbers`). O
+        strength factor é a semente da equipe — a gravada, ou `team_seed`, a
+        mesma conta do motor."""
         if not teams:
             return []
-        rating_by_player = {int(p["id"]): self.export_service._trf_rating(p) for p in players}
+        boards_count = int(
+            (self.db.get_tournament_settings(tournament_id) or {}).get("team_boards_count") or 4
+        )
+        seeds: dict[int, int] = {}
         standings = {
             int(item["team_id"]): item
             for item in self.export_service.pairing_service.team_standings(tournament_id)
@@ -642,43 +704,42 @@ class TRF25Exporter(TRF16Exporter):
             # Reservas têm board_number nulo: se entrassem na chave de ordenação
             # como 0, viriam ANTES do tabuleiro 1 e o 310 emitiria a reserva como
             # "1º jogador", desordenando a composição mostrada ao árbitro.
-            starters: list[tuple[int, int, int]] = []  # (board, rank, rating)
-            reserves: list[tuple[int, int, int]] = []  # (id, rank, rating)
-            for assignment in self.db.list_team_players(team_id, active_only=False):
+            starters: list[tuple[int, int]] = []  # (board, rank)
+            reserves: list[tuple[int, int]] = []  # (id, rank)
+            assignments = self.db.list_team_players(team_id, active_only=False)
+            for assignment in assignments:
                 player_id = int(assignment["player_id"])
                 rank = start_rank_by_player.get(player_id)
                 if not rank:
                     continue
-                rating = int(rating_by_player.get(player_id) or 0)
                 board = assignment.get("board_number")
                 if board:
-                    starters.append((int(board), rank, rating))
+                    starters.append((int(board), rank))
                 else:
-                    reserves.append((int(assignment.get("id") or 0), rank, rating))
+                    reserves.append((int(assignment.get("id") or 0), rank))
             starters.sort()
             reserves.sort()
-            board_ranks = [rank for _, rank, _ in starters] + [rank for _, rank, _ in reserves]
-            # Strength factor = média de rating dos TITULARES (a escalação),
-            # coerente com o seed que o motor usa (ver _team_starter_roster).
-            starter_ratings = [rating for _, _, rating in starters if rating]
+            board_ranks = [rank for _, rank in starters] + [rank for _, rank in reserves]
+            seeds[team_id] = (
+                int(team["seed_rating"])
+                if team.get("seed_rating") is not None
+                else team_seed(assignments, boards_count)
+            )
             standing = standings.get(team_id, {})
             prepared.append(
                 {
                     "team": team,
                     "team_id": team_id,
                     "ranks": board_ranks,
-                    "strength": (
-                        round(sum(starter_ratings) / len(starter_ratings))
-                        if starter_ratings
-                        else 0
-                    ),
+                    "strength": seeds[team_id],
                     "match_points": float(standing.get("match_points", 0.0) or 0.0),
                     "game_points": float(standing.get("game_points", 0.0) or 0.0),
                     "rank": int(standing.get("position") or 0),
                 }
             )
 
-        prepared.sort(key=lambda item: (-item["strength"], str(item["team"].get("name") or "").casefold()))
+        tpn = assign_team_pairing_numbers(teams, seeds)
+        prepared.sort(key=lambda item: tpn[item["team_id"]])
         return prepared
 
     def _starting_rank_method_172(
@@ -686,29 +747,16 @@ class TRF25Exporter(TRF16Exporter):
     ) -> str | None:
         """Registro 172 — obrigatório quando há registros NRS (§1.2). Emite só
         sob a mesma condição do `_national_rating_records`: federação válida e ao
-        menos um jogador com rating nacional. O starting-rank do TRF é sempre
-        montado pela ordem do rating FIDE (ver `export`), independente do
-        `initial_order` do torneio, então o método declarado é `FIDE`; quando o
-        torneio usa outra ordem inicial, o `export` emite um aviso."""
+        menos um jogador com rating nacional. O starting-rank do TRF segue a
+        ordem inicial do torneio (`seeding_key`, RGS-13), e o método declarado é
+        o dela (`STARTING_RANK_METHOD_BY_ORDER`)."""
         federation = str(settings.get("federation") or "").strip()
         if not self.export_service._trf_valid_federation_code(federation):
             return None
         if not any(int(p.get("national_rating") or 0) > 0 for p in players):
             return None
-        return record_172(federation, "FIDE")
-
-    @staticmethod
-    def _starting_rank_order_warning(settings: dict[str, Any]) -> str | None:
-        """Aviso quando a ordem inicial do torneio não é o rating FIDE: o SNo do
-        TRF segue o rating FIDE e pode divergir do seeding usado no pareamento."""
         initial_order = str(settings.get("initial_order") or "rating").strip()
-        if initial_order in ("rating", "international_rating"):
-            return None
-        return (
-            f"Ordem inicial '{initial_order}' nao e o rating FIDE: o numero de "
-            "ordem (SNo) do TRF segue o rating FIDE e pode nao corresponder ao "
-            "seeding usado no pareamento (o registro 172 declara o metodo FIDE)."
-        )
+        return record_172(federation, STARTING_RANK_METHOD_BY_ORDER.get(initial_order, "OTHER"))
 
     def _national_rating_records(
         self,
@@ -814,8 +862,7 @@ class TRF25Exporter(TRF16Exporter):
             if match.get("is_bye"):
                 continue
             boards = self.db.list_team_boards(int(match["id"]))
-            results = [str(board.get("result") or "") for board in boards]
-            if not results or any(result not in _FORFEIT_RESULTS for result in results):
+            if not team_match_unplayed(match, boards):
                 continue
 
             white_points = black_points = 0.0
@@ -995,8 +1042,7 @@ class TRF25Exporter(TRF16Exporter):
         if match.get("is_bye"):
             return ""
         boards = self.db.list_team_boards(int(match["id"]))
-        results = [str(board.get("result") or "") for board in boards]
-        if not results or any(result not in _FORFEIT_RESULTS for result in results):
+        if not team_match_unplayed(match, boards):
             return ""
 
         white_points = black_points = 0.0

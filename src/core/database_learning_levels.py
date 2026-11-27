@@ -1,7 +1,7 @@
-"""Mixin do dominio de niveis de aprendizado da Database.
+"""Mixin do domínio de níveis de aprendizado da Database.
 
-Extraido de ``src.core.database`` na decomposicao da God Class em mixins por
-dominio. Comportamento preservado; a fachada ``Database`` herda deste mixin.
+Extraído de ``src.core.database`` na decomposição da God Class em mixins por
+domínio. Comportamento preservado; a fachada ``Database`` herda deste mixin.
 Ver ``_database_base._DatabaseInfra``.
 """
 from __future__ import annotations

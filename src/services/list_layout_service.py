@@ -17,6 +17,16 @@ from src.services.list_layouts import (
 )
 
 
+def validated_columns(columns: list[Any], report_key: str = "standings") -> list[dict[str, Any]]:
+    """Colunas normalizadas, sem gravar (RGS-08)."""
+    if report_key not in LAYOUT_REGISTRIES:
+        raise AppError("Lista sem layout configurável.")
+    cleaned = normalize_column_specs(columns, report_key)
+    if not cleaned:
+        raise AppError("Selecione ao menos uma coluna para a lista.")
+    return cleaned
+
+
 class ListLayoutService:
     def __init__(self, db: Database) -> None:
         self.db = db
@@ -24,13 +34,13 @@ class ListLayoutService:
     def available_columns(self, report_key: str = "standings") -> list[tuple[str, str]]:
         registry = LAYOUT_REGISTRIES.get(report_key)
         if registry is None:
-            raise AppError("Lista sem layout configuravel.")
+            raise AppError("Lista sem layout configurável.")
         return list(registry.items())
 
     def get_columns(self, tournament_id: int, report_key: str = "standings") -> dict[str, Any]:
         registry = LAYOUT_REGISTRIES.get(report_key)
         if registry is None:
-            raise AppError("Lista sem layout configuravel.")
+            raise AppError("Lista sem layout configurável.")
         selected = resolve_column_specs(
             self.db.get_report_layout_columns(tournament_id, report_key), report_key
         )
@@ -43,12 +53,10 @@ class ListLayoutService:
         report_key: str = "standings",
     ) -> list[dict[str, Any]]:
         if report_key not in LAYOUT_REGISTRIES:
-            raise AppError("Lista sem layout configuravel.")
+            raise AppError("Lista sem layout configurável.")
         if not self.db.get_tournament(tournament_id):
-            raise AppError("Selecione um torneio valido.")
-        cleaned = normalize_column_specs(columns, report_key)
-        if not cleaned:
-            raise AppError("Selecione ao menos uma coluna para a lista.")
+            raise AppError("Selecione um torneio válido.")
+        cleaned = validated_columns(columns, report_key)
         self.db.save_report_layout(tournament_id, report_key, cleaned)
         return cleaned
 

@@ -56,8 +56,8 @@ class ProhibitionsPage(TournamentRegistryPage):
         segundo = rotulos[1] if len(rotulos) > 1 else ""
         entidade = t("arbitration.field.team") if self.is_team else t("arbitration.field.player")
         return [
-            Field(KEY_TARGET_A, f"{entidade} A", Field.OPTION, values=rotulos),
-            Field(KEY_TARGET_B, f"{entidade} B", Field.OPTION, values=rotulos, initial=segundo),
+            Field(KEY_TARGET_A, f"{entidade} A", Field.SEARCH, values=rotulos),
+            Field(KEY_TARGET_B, f"{entidade} B", Field.SEARCH, values=rotulos, initial=segundo),
             Field(
                 KEY_FIRST_ROUND,
                 t("arbitration.prohibitions.field.first_round"),

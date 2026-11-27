@@ -89,7 +89,7 @@ def collect_rated_games(
         if white_id not in players_by_id or not black_id or black_id not in players_by_id:
             continue
         if result not in _RATED_RESULTS:
-            continue  # WO/forfait/bye/sem resultado nao contam para rating
+            continue  # WO/forfait/bye/sem resultado não contam para rating
         white_points, black_points = RESULT_POINTS[result]
         games[int(white_id)].append((int(black_id), white_points))
         games[int(black_id)].append((int(white_id), black_points))

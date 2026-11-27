@@ -436,7 +436,7 @@ class WebExportMixin:
       <table><thead><tr><th>Data</th><th>Comunicado</th></tr></thead><tbody>{notice_rows}</tbody></table>
     </section>
     <section>
-      <h2>Calendario</h2>
+      <h2>Calendário</h2>
       <h3>Eventos</h3>
       <table><thead><tr><th>Data</th><th>Hora</th><th>Tipo</th><th>Evento</th><th>Local</th><th>Status</th></tr></thead><tbody>{event_rows}</tbody></table>
       <h3>Aulas e treinos</h3>
@@ -444,7 +444,7 @@ class WebExportMixin:
     </section>
     <section>
       <h2>Turmas</h2>
-      <table><thead><tr><th>Turma</th><th>Professor</th><th>Dia</th><th>Horario</th><th>Local</th><th>Alunos</th></tr></thead><tbody>{class_rows}</tbody></table>
+      <table><thead><tr><th>Turma</th><th>Professor</th><th>Dia</th><th>Horário</th><th>Local</th><th>Alunos</th></tr></thead><tbody>{class_rows}</tbody></table>
     </section>
     <section>
       <h2>Ranking interno</h2>

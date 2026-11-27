@@ -100,8 +100,8 @@ def menu_button(
             menu.grab_release()
 
     button.configure(command=_open_menu)
-    # Itens expostos para introspeccao (testes/automacao): o tk.Menu so existe
-    # durante o popup, entao guardamos a lista que o alimenta.
+    # Itens expostos para introspeccao (testes/automacao): o tk.Menu só existe
+    # durante o popup, então guardamos a lista que o alimenta.
     button._menu_items = list(items)
     if tip:
         Tooltip(button, tip)

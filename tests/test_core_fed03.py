@@ -190,7 +190,7 @@ class ArquivoGeradoTest(CoreServiceTestCase):
         with self.assertRaises(AppError) as erro:
             self._exportar(submission=True)
         self.assertIn("sem resultado", str(erro.exception))
-        self.assertIn("Modo submissao", str(erro.exception))
+        self.assertIn("Modo submissão", str(erro.exception))
 
     def test_modo_submissao_recusa_fide_id_repetido(self) -> None:
         self._fixture()

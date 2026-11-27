@@ -56,7 +56,7 @@ class FidePrizesNormsTest(CoreServiceTestCase):
         self.assertEqual(fide_expected_score(2000, 2000), 0.50)
         self.assertEqual(fide_expected_score(2000, 1800), 0.76)
         self.assertEqual(fide_expected_score(1800, 2000), 0.24)
-        # Diferenca de 500 e tratada como 400 (regra dos 400).
+        # Diferença de 500 e tratada como 400 (regra dos 400).
         self.assertEqual(fide_expected_score(2000, 1500), 0.92)
         self.assertEqual(fide_expected_score(1500, 2000), 0.08)
 
@@ -101,7 +101,7 @@ class FidePrizesNormsTest(CoreServiceTestCase):
         self.assertEqual(leader["n_over_400"], 1)
         self.assertEqual(leader["delta"], 1.6)
 
-        # Adversario sem rating e ignorado no calculo; jogador sem rating recebe so Rp.
+        # Adversário sem rating e ignorado no cálculo; jogador sem rating recebe só Rp.
         rows = build_fide_report_rows(
             [self._fide_player(1, 2000), self._fide_player(2, 1800), self._fide_player(4, 0, intl=0)],
             [
@@ -111,7 +111,7 @@ class FidePrizesNormsTest(CoreServiceTestCase):
             "fide",
         )
         by_id = {row["player_id"]: row for row in rows}
-        self.assertEqual(by_id[1]["games_rated"], 1)   # D (sem rating) nao conta para A
+        self.assertEqual(by_id[1]["games_rated"], 1)   # D (sem rating) não conta para A
         self.assertEqual(by_id[1]["we"], 0.76)
         self.assertEqual(by_id[4]["ro"], 0)
         self.assertIsNone(by_id[4]["delta"])
@@ -129,7 +129,7 @@ class FidePrizesNormsTest(CoreServiceTestCase):
 
         service = FideRatingService(self.db)
         service.save_report(self.tournament_id, "fide")
-        service.save_report(self.tournament_id, "fide")  # recomputar nao duplica
+        service.save_report(self.tournament_id, "fide")  # recomputar não duplica
 
         saved = self.db.get_fide_rating_report(self.tournament_id, "fide")
         self.assertEqual(len(saved), 4)                       # 4 jogadores, 1 partida ranqueada cada
@@ -149,7 +149,7 @@ class FidePrizesNormsTest(CoreServiceTestCase):
 
         self.assertTrue(path.exists())
         content = path.read_text(encoding="utf-8-sig")
-        self.assertIn("Variacao de rating FIDE", content)
+        self.assertIn("Variação de rating FIDE", content)
         self.assertIn("Rp", content)
         # Exportar persiste um snapshot para auditoria/reimpressao.
         self.assertEqual(len(self.db.get_fide_rating_report(self.tournament_id, "fide")), 4)
@@ -217,7 +217,7 @@ class FidePrizesNormsTest(CoreServiceTestCase):
         result = allocate_prizes(self._prize_standings(), prizes, "best_only", 0.0)
         self.assertEqual(len(result["manual_prizes"]), 1)
         self.assertEqual(result["manual_prizes"][0]["label"], "Melhor feminino")
-        self.assertEqual(result["total_gross"], 1800.0)    # especial nao entra no total automatico
+        self.assertEqual(result["total_gross"], 1800.0)    # especial não entra no total automático
 
     def test_prize_service_persists_validates_and_allocates(self) -> None:
         self._create_players(4)  # categoria "Absoluto"
@@ -234,7 +234,7 @@ class FidePrizesNormsTest(CoreServiceTestCase):
                 {"kind": "overall", "label": "2o", "rank_from": 2, "rank_to": 2, "amount": 600},
             ],
         )
-        # Persistencia idempotente.
+        # Persistência idempotente.
         self.assertEqual(len(self.db.list_tournament_prizes(self.tournament_id)), 2)
 
         result = self.prize_service.allocate(self.tournament_id)
@@ -266,7 +266,7 @@ class FidePrizesNormsTest(CoreServiceTestCase):
         self.assertTrue(path.exists())
         content = path.read_text(encoding="utf-8-sig")
         self.assertIn("Premiação por jogador", content)
-        self.assertIn("Total líquido distribuido", content)
+        self.assertIn("Total líquido distribuído", content)
 
     def test_norm_verdict_meets_and_lists_missing(self) -> None:
         from src.services.norms import evaluate_norms
@@ -327,7 +327,7 @@ class FidePrizesNormsTest(CoreServiceTestCase):
         self.assertTrue(path.exists())
         content = path.read_text(encoding="utf-8-sig")
         self.assertIn("Indicadores de norma por jogador", content)
-        self.assertIn("NAO concede norma", content)
+        self.assertIn("NÃO concede norma", content)
 
     def test_export_arbiter_norm_report_writes_file(self) -> None:
         self._create_players(2)
@@ -349,14 +349,14 @@ class FidePrizesNormsTest(CoreServiceTestCase):
 
     def test_list_layout_normalizes_and_validates(self) -> None:
         self._create_players(2)
-        # Coluna desconhecida e duplicata sao descartadas; ordem preservada.
+        # Coluna desconhecida e duplicata são descartadas; ordem preservada.
         saved = self.list_layout_service.save_columns(
             self.tournament_id, ["position", "xxx", "name", "name"], "standings"
         )
         self.assertEqual([spec["key"] for spec in saved], ["position", "name"])
         selected = self.list_layout_service.get_columns(self.tournament_id, "standings")["selected"]
         self.assertEqual([spec["key"] for spec in selected], ["position", "name"])
-        # Selecao vazia / so codigos invalidos sao rejeitadas.
+        # Seleção vazia / só códigos inválidos são rejeitadas.
         with self.assertRaisesRegex(AppError, "ao menos uma coluna"):
             self.list_layout_service.save_columns(self.tournament_id, [], "standings")
         with self.assertRaisesRegex(AppError, "ao menos uma coluna"):

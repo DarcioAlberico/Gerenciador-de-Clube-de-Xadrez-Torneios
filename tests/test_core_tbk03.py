@@ -145,7 +145,7 @@ class ConfrontoDiretoTest(unittest.TestCase):
 
     def test_grupo_de_tres_sem_todos_se_enfrentarem_zera_o_criterio(self) -> None:
         """A soma parcial parecia resultado; era pedaço de uma ordem."""
-        # Todos com 1,0; 1 jogou com 2 e com 3, mas 2 e 3 nao se enfrentaram.
+        # Todos com 1,0; 1 jogou com 2 e com 3, mas 2 e 3 não se enfrentaram.
         standings = calculate_player_standings(
             _TOURNAMENT,
             _players(4),

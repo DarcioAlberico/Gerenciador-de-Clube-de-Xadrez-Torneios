@@ -162,6 +162,7 @@ list_members_without_guardians
 list_membership_plans
 list_pairing_snapshots
 list_payments
+list_pending_standings_snapshots
 list_player_status_events
 list_players
 list_point_adjustments
@@ -200,6 +201,7 @@ list_tournaments
 list_training_list_exercises
 list_training_lists
 list_training_sessions
+mark_standings_snapshots_pending
 mark_sync_outbox_failed
 mark_sync_outbox_rejected
 mark_sync_outbox_synced
@@ -229,6 +231,7 @@ save_report_layout
 save_round_robin_numbers
 save_round_schedule
 save_scheveningen_scale
+save_team_pairing_numbers
 save_tournament_settings
 search_official_players
 set_chess_results_url
@@ -245,9 +248,12 @@ set_player_active
 set_player_scheveningen_group
 set_player_status
 set_tournament_parent
+standings_snapshot_reconcile_state
 supersede_standings_snapshot
 swap_pairing_colors
+swap_team_pairing_numbers
 swap_team_board_colors
+transaction
 unlink_guardian_from_member
 update_certificate_template
 update_class

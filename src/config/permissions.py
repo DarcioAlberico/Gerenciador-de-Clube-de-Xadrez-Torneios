@@ -1,7 +1,7 @@
 # Matriz de Permissões
 # Mapeia cada role para uma lista de permissões que ela possui.
 # As permissões principais são:
-# - settings_read: Consultar configuracoes, comunicacao e auditoria
+# - settings_read: Consultar configurações, comunicação e auditoria
 # - tournament_write: Criar/Editar/Apagar torneios e rodadas
 # - member_write: Cadastrar/Editar membros (mas não deletar globalmente)
 # - education_write: Criar aulas, exercícios e gerenciar apostilas

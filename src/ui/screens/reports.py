@@ -97,6 +97,7 @@ class ReportPagesMixin:
 
         def load_dre() -> None:
             try:
+                self._refuse_invalid_dates(start_date, end_date)
                 data = self.report_engine.calculate_dre(start_date.get(), end_date.get())
                 summary_labels["total_income"].configure(text=f"R$ {data['total_income']:,.2f}", text_color=THEME_INFO[0])
                 summary_labels["total_expense"].configure(text=f"R$ {data['total_expense']:,.2f}", text_color=THEME_DANGER[0])
@@ -126,6 +127,7 @@ class ReportPagesMixin:
             )
             if path:
                 try:
+                    self._refuse_invalid_dates(start_date, end_date)
                     self.report_engine.generate_dre_report(start_date.get(), end_date.get(), Path(path))
                     self._show_toast(f"DRE salvo em {Path(path).name}", kind="success")
                     logger.info("DRE exportado.")

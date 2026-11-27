@@ -1396,7 +1396,7 @@ class DatabaseMigrationsTest(CoreServiceTestCase):
         finally:
             connection.close()
 
-        with self.assertRaisesRegex(RuntimeError, "versao mais nova"):
+        with self.assertRaisesRegex(RuntimeError, "versão mais nova"):
             Database(future_path, backup_dir=self.backup_dir)
 
 if __name__ == "__main__":

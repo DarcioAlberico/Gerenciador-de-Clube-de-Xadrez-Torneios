@@ -14,11 +14,14 @@ só o fim da última a esconde — ``start``/``stop`` sempre em pares:
 """
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import customtkinter as ctk
 
 from ..theme import THEME_ACCENT
+
+logger = logging.getLogger(__name__)
 
 
 class BusyIndicator:
@@ -65,7 +68,7 @@ class BusyIndicator:
             self.bar.grid(**self._grid_options)
             self.bar.start()
         except Exception:
-            pass
+            logger.debug("Barra de ocupado nao exibida", exc_info=True)
 
     def stop(self) -> None:
         if self._active == 0:
@@ -78,7 +81,7 @@ class BusyIndicator:
             self.bar.set(0)
             self.bar.grid_remove()
         except Exception:
-            pass
+            pass  # barra já destruída junto com a janela; nada a esconder
 
     def reset(self) -> None:
         """Zera o contador e esconde a barra (uso em teardown/troca de tela)."""
@@ -88,4 +91,4 @@ class BusyIndicator:
             self.bar.set(0)
             self.bar.grid_remove()
         except Exception:
-            pass
+            pass  # barra já destruída junto com a janela; nada a esconder

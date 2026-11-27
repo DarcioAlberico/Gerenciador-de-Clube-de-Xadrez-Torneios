@@ -78,7 +78,7 @@ class DebouncedTest(unittest.TestCase):
     def test_flush_nao_repete_o_que_ja_rodou(self) -> None:
         self.adiado()
         self.adiado.flush()
-        self.relogio.avancar()  # o agendamento ja tinha sido cancelado
+        self.relogio.avancar()  # o agendamento já tinha sido cancelado
         self.assertEqual(1, len(self.execucoes))
 
     def test_cancelar_descarta_o_pendente(self) -> None:
@@ -94,7 +94,7 @@ class DebouncedTest(unittest.TestCase):
 
         adiado = Debounced(lambda: None, self.relogio.schedule, cancel_quebrado)
         adiado()
-        adiado.cancel()  # nao pode levantar
+        adiado.cancel()  # não pode levantar
         self.assertFalse(adiado.is_pending)
 
     def test_usa_o_atraso_padrao_e_aceita_outro(self) -> None:

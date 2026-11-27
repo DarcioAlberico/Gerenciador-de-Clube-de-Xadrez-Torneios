@@ -7,7 +7,8 @@ import os
 import shutil
 import sqlite3
 import sys
-from contextlib import contextmanager
+import threading
+from contextlib import contextmanager, suppress
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterable, Mapping
@@ -32,47 +33,47 @@ logger = logging.getLogger(__name__)
 DEFAULT_LEARNING_LEVELS = (
     (
         "Iniciante",
-        "Conhece o tabuleiro, movimento das pecas, xeque, xeque-mate e empates basicos.",
+        "Conhece o tabuleiro, movimento das peças, xeque, xeque-mate e empates básicos.",
     ),
     (
-        "Basico",
-        "Joga uma partida completa, conhece regras especiais, valor das pecas e mates simples.",
+        "Básico",
+        "Joga uma partida completa, conhece regras especiais, valor das peças e mates simples.",
     ),
     (
-        "Intermediario",
-        "Reconhece taticas, aplica principios de abertura, finais basicos, relogio e anotacao.",
+        "Intermediário",
+        "Reconhece táticas, aplica princípios de abertura, finais básicos, relógio e anotação.",
     ),
     (
-        "Avancado",
-        "Entende planos estrategicos, analisa partidas e conhece finais essenciais.",
+        "Avançado",
+        "Entende planos estratégicos, analisa partidas e conhece finais essenciais.",
     ),
     (
         "Competitivo",
-        "Participa de torneios, conhece regras de competicao e representa clube ou turma.",
+        "Participa de torneios, conhece regras de competição e representa clube ou turma.",
     ),
 )
 
 CERTIFICATE_BACKGROUND_PRESETS = (
     ("Tabuleiro sutil", "assets/certificates/backgrounds/tabuleiro_sutil.png", 0.18),
-    ("Xadrez classico", "assets/certificates/backgrounds/xadrez_classico.png", 0.16),
+    ("Xadrez clássico", "assets/certificates/backgrounds/xadrez_classico.png", 0.16),
     ("Xadrez escolar", "assets/certificates/backgrounds/xadrez_escolar.png", 0.20),
     ("Xadrez premium", "assets/certificates/backgrounds/xadrez_premium.png", 0.12),
-    ("Pecas marca d'agua", "assets/certificates/backgrounds/pecas_marca_dagua.png", 0.18),
+    ("Peças marca d'água", "assets/certificates/backgrounds/pecas_marca_dagua.png", 0.18),
 )
 
 DEFAULT_CERTIFICATE_TEMPLATES = (
     {
-        "name": "Participacao padrao",
+        "name": "Participação padrão",
         "certificate_type": "participation",
-        "title_template": "Certificado de Participacao",
+        "title_template": "Certificado de Participação",
         "body_template": (
             "participou do torneio {torneio}, "
-            "obtendo {pontos} ponto(s) e a {posicao} colocacao na classificacao."
+            "obtendo {pontos} ponto(s) e a {posicao} colocação na classificação."
         ),
         "footer_template": "{local} - {periodo}",
         "orientation": "landscape",
-        "signature_left": "Organizacao",
-        "signature_right": "Arbitragem / Direcao",
+        "signature_left": "Organização",
+        "signature_right": "Arbitragem / Direção",
         "logo_path": "",
         "primary_color": "#1E3A8A",
         "accent_color": "#93C5FD",
@@ -81,17 +82,17 @@ DEFAULT_CERTIFICATE_TEMPLATES = (
         "footer_font_size": 10,
     },
     {
-        "name": "Premiacao geral padrao",
+        "name": "Premiação geral padrão",
         "certificate_type": "overall_award",
-        "title_template": "Certificado de Premiacao",
+        "title_template": "Certificado de Premiação",
         "body_template": (
-            "conquistou a {posicao} colocacao geral "
+            "conquistou a {posicao} colocação geral "
             "no torneio {torneio}, com {pontos} ponto(s)."
         ),
         "footer_template": "{local} - {periodo}",
         "orientation": "landscape",
-        "signature_left": "Organizacao",
-        "signature_right": "Arbitragem / Direcao",
+        "signature_left": "Organização",
+        "signature_right": "Arbitragem / Direção",
         "logo_path": "",
         "primary_color": "#1E3A8A",
         "accent_color": "#93C5FD",
@@ -100,17 +101,17 @@ DEFAULT_CERTIFICATE_TEMPLATES = (
         "footer_font_size": 10,
     },
     {
-        "name": "Premiacao por categoria padrao",
+        "name": "Premiação por categoria padrão",
         "certificate_type": "category_award",
-        "title_template": "Certificado de Premiacao",
+        "title_template": "Certificado de Premiação",
         "body_template": (
-            "conquistou a {posicao_categoria} colocacao "
+            "conquistou a {posicao_categoria} colocação "
             "na categoria {categoria} do torneio {torneio}, com {pontos} ponto(s)."
         ),
         "footer_template": "{local} - {periodo}",
         "orientation": "landscape",
-        "signature_left": "Organizacao",
-        "signature_right": "Arbitragem / Direcao",
+        "signature_left": "Organização",
+        "signature_right": "Arbitragem / Direção",
         "logo_path": "",
         "primary_color": "#1E3A8A",
         "accent_color": "#93C5FD",
@@ -119,7 +120,7 @@ DEFAULT_CERTIFICATE_TEMPLATES = (
         "footer_font_size": 10,
     },
     {
-        "name": "Membro aluno padrao",
+        "name": "Membro aluno padrão",
         "certificate_type": "member_certificate",
         "title_template": "Certificado",
         "body_template": (
@@ -128,7 +129,7 @@ DEFAULT_CERTIFICATE_TEMPLATES = (
         ),
         "footer_template": "{local} - {data}",
         "orientation": "landscape",
-        "signature_left": "Coordenacao",
+        "signature_left": "Coordenação",
         "signature_right": "Professor / Instrutor",
         "logo_path": "",
         "primary_color": "#1E3A8A",
@@ -138,16 +139,16 @@ DEFAULT_CERTIFICATE_TEMPLATES = (
         "footer_font_size": 10,
     },
     {
-        "name": "Aula turma padrao",
+        "name": "Aula turma padrão",
         "certificate_type": "training_participation",
-        "title_template": "Certificado de Participacao",
+        "title_template": "Certificado de Participação",
         "body_template": (
             "participou da atividade {aula}, "
             "realizada em {data}, na turma {turma}."
         ),
         "footer_template": "{clube} - {local}",
         "orientation": "landscape",
-        "signature_left": "Coordenacao",
+        "signature_left": "Coordenação",
         "signature_right": "Professor / Instrutor",
         "logo_path": "",
         "primary_color": "#1E3A8A",
@@ -157,14 +158,14 @@ DEFAULT_CERTIFICATE_TEMPLATES = (
         "footer_font_size": 10,
     },
     {
-        "name": "Evento padrao",
+        "name": "Evento padrão",
         "certificate_type": "event_participation",
-        "title_template": "Certificado de Participacao",
+        "title_template": "Certificado de Participação",
         "body_template": "participou do evento {evento}, realizado em {data}.",
         "footer_template": "{clube} - {local}",
         "orientation": "landscape",
-        "signature_left": "Organizacao",
-        "signature_right": "Coordenacao",
+        "signature_left": "Organização",
+        "signature_right": "Coordenação",
         "logo_path": "",
         "primary_color": "#1E3A8A",
         "accent_color": "#93C5FD",
@@ -173,17 +174,17 @@ DEFAULT_CERTIFICATE_TEMPLATES = (
         "footer_font_size": 10,
     },
     {
-        "name": "Ranking interno padrao",
+        "name": "Ranking interno padrão",
         "certificate_type": "internal_ranking",
         "title_template": "Certificado de Destaque",
         "body_template": (
-            "obteve a {posicao} colocacao no ranking interno, "
+            "obteve a {posicao} colocação no ranking interno, "
             "com rating {rating}."
         ),
         "footer_template": "{clube} - {data}",
         "orientation": "landscape",
-        "signature_left": "Coordenacao",
-        "signature_right": "Direcao",
+        "signature_left": "Coordenação",
+        "signature_right": "Direção",
         "logo_path": "",
         "primary_color": "#1E3A8A",
         "accent_color": "#93C5FD",
@@ -192,17 +193,17 @@ DEFAULT_CERTIFICATE_TEMPLATES = (
         "footer_font_size": 10,
     },
     {
-        "name": "Xadrez classico - Participacao",
+        "name": "Xadrez clássico - Participação",
         "certificate_type": "participation",
-        "title_template": "Certificado de Participacao",
+        "title_template": "Certificado de Participação",
         "body_template": (
             "participou do torneio {torneio}, "
-            "obtendo {pontos} ponto(s) e a {posicao} colocacao na classificacao."
+            "obtendo {pontos} ponto(s) e a {posicao} colocação na classificação."
         ),
         "footer_template": "{local} - {periodo}",
         "orientation": "landscape",
-        "signature_left": "Organizacao",
-        "signature_right": "Arbitragem / Direcao",
+        "signature_left": "Organização",
+        "signature_right": "Arbitragem / Direção",
         "logo_path": "",
         "background_image_path": CERTIFICATE_BACKGROUND_PRESETS[1][1],
         "background_opacity": CERTIFICATE_BACKGROUND_PRESETS[1][2],
@@ -222,7 +223,7 @@ DEFAULT_CERTIFICATE_TEMPLATES = (
         ),
         "footer_template": "{local} - {data}",
         "orientation": "landscape",
-        "signature_left": "Coordenacao",
+        "signature_left": "Coordenação",
         "signature_right": "Professor / Instrutor",
         "logo_path": "",
         "background_image_path": CERTIFICATE_BACKGROUND_PRESETS[2][1],
@@ -234,17 +235,17 @@ DEFAULT_CERTIFICATE_TEMPLATES = (
         "footer_font_size": 10,
     },
     {
-        "name": "Xadrez premium - Premiacao geral",
+        "name": "Xadrez premium - Premiação geral",
         "certificate_type": "overall_award",
-        "title_template": "Certificado de Premiacao",
+        "title_template": "Certificado de Premiação",
         "body_template": (
-            "conquistou a {posicao} colocacao geral "
+            "conquistou a {posicao} colocação geral "
             "no torneio {torneio}, com {pontos} ponto(s)."
         ),
         "footer_template": "{local} - {periodo}",
         "orientation": "landscape",
-        "signature_left": "Organizacao",
-        "signature_right": "Arbitragem / Direcao",
+        "signature_left": "Organização",
+        "signature_right": "Arbitragem / Direção",
         "logo_path": "",
         "background_image_path": CERTIFICATE_BACKGROUND_PRESETS[3][1],
         "background_opacity": CERTIFICATE_BACKGROUND_PRESETS[3][2],
@@ -255,17 +256,17 @@ DEFAULT_CERTIFICATE_TEMPLATES = (
         "footer_font_size": 10,
     },
     {
-        "name": "Tabuleiro sutil - Premiacao por categoria",
+        "name": "Tabuleiro sutil - Premiação por categoria",
         "certificate_type": "category_award",
-        "title_template": "Certificado de Premiacao",
+        "title_template": "Certificado de Premiação",
         "body_template": (
-            "conquistou a {posicao_categoria} colocacao "
+            "conquistou a {posicao_categoria} colocação "
             "na categoria {categoria} do torneio {torneio}, com {pontos} ponto(s)."
         ),
         "footer_template": "{local} - {periodo}",
         "orientation": "landscape",
-        "signature_left": "Organizacao",
-        "signature_right": "Arbitragem / Direcao",
+        "signature_left": "Organização",
+        "signature_right": "Arbitragem / Direção",
         "logo_path": "",
         "background_image_path": CERTIFICATE_BACKGROUND_PRESETS[0][1],
         "background_opacity": CERTIFICATE_BACKGROUND_PRESETS[0][2],
@@ -276,17 +277,17 @@ DEFAULT_CERTIFICATE_TEMPLATES = (
         "footer_font_size": 10,
     },
     {
-        "name": "Pecas marca d'agua - Ranking interno",
+        "name": "Peças marca d'água - Ranking interno",
         "certificate_type": "internal_ranking",
         "title_template": "Certificado de Destaque",
         "body_template": (
-            "obteve a {posicao} colocacao no ranking interno, "
+            "obteve a {posicao} colocação no ranking interno, "
             "com rating {rating}."
         ),
         "footer_template": "{clube} - {data}",
         "orientation": "landscape",
-        "signature_left": "Coordenacao",
-        "signature_right": "Direcao",
+        "signature_left": "Coordenação",
+        "signature_right": "Direção",
         "logo_path": "",
         "background_image_path": CERTIFICATE_BACKGROUND_PRESETS[4][1],
         "background_opacity": CERTIFICATE_BACKGROUND_PRESETS[4][2],
@@ -301,9 +302,17 @@ DEFAULT_CERTIFICATE_TEMPLATES = (
 
 APP_NAME = "Albericus"
 APP_DATA_DIR_ENV_VAR = "ALBERICUS_DATA_DIR"
+# Quanto uma conexão espera pelo bloqueio de escrita de outra (RGS-08).
+BUSY_TIMEOUT_MS = 5000
 
 
 def _base_dir() -> Path:
+    """Pasta de DADOS legados (``data/``, ``backups/``...) ao lado do executável.
+
+    Ao lado do `.exe` de propósito (instalação portátil): é dado do usuário e
+    precisa sobreviver ao processo. Recurso EMPACOTADO (textos, ícones, Gacrux)
+    é outra pasta — ``src.core.resources.bundled_resource`` (RGS-02).
+    """
     if getattr(sys, "frozen", False):
         return Path(sys.executable).resolve().parent
     return Path(__file__).resolve().parents[2]
@@ -373,6 +382,23 @@ LEGACY_EXPORTS_DIR = BASE_DIR / "exports"
 LEGACY_LOGS_DIR = BASE_DIR / "logs"
 
 
+def _copy_database(source_path: Path | str, target_path: Path | str) -> None:
+    """Copia um banco pela API de backup do SQLite.
+
+    Em WAL (RGS-08) o estado gravado mora no `.db` MAIS o `-wal`; a API de
+    backup lê os dois de forma consistente, mesmo com outra conexão aberta.
+    """
+    source = sqlite3.connect(source_path, timeout=BUSY_TIMEOUT_MS / 1000)
+    try:
+        target = sqlite3.connect(target_path, timeout=BUSY_TIMEOUT_MS / 1000)
+        try:
+            source.backup(target)
+        finally:
+            target.close()
+    finally:
+        source.close()
+
+
 class Database(
     CertificateMixin,
     MemberMixin,
@@ -388,7 +414,7 @@ class Database(
     RefereesMixin,
     UiPrefsMixin,
 ):
-    SCHEMA_VERSION = 55
+    SCHEMA_VERSION = 59
 
     def __init__(
         self,
@@ -398,11 +424,14 @@ class Database(
         using_default_db_path = db_path is None
         self.db_path = default_db_path() if db_path is None else Path(db_path)
         self.backup_dir = Path(backup_dir) if backup_dir else default_backup_dir()
-        # Resultado da ultima copia de backup para a nuvem (pasta sincronizada).
+        # Resultado da última copia de backup para a nuvem (pasta sincronizada).
         # Preenchido por backup(); lido pela UI/SecurityService para reportar
         # status sem repetir a copia. Inicializado antes de qualquer backup de
-        # migracao disparado no __init__.
+        # migração disparado no __init__.
         self.last_cloud_backup: dict[str, str] | None = None
+        # Conexão da transação aberta em CADA thread (RGS-08): nunca e
+        # compartilhada, entre threads, porque o sqlite3 não permite.
+        self._thread_state = threading.local()
         if using_default_db_path:
             self._copy_legacy_default_database_if_needed()
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -432,11 +461,35 @@ class Database(
             if not target_path.exists():
                 shutil.copy2(backup_path, target_path)
 
-    @contextmanager
-    def connect(self):
+    def _open_connection(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.db_path)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
+        # RGS-08: com WAL, a thread de reconciliação (RGS-10) e o result_server
+        # gravam enquanto a UI lê; quem esbarra no bloqueio de escrita ESPERA até
+        # 5 s em vez de falhar na hora com "database is locked".
+        connection.execute(f"PRAGMA busy_timeout = {BUSY_TIMEOUT_MS}")
+        return connection
+
+    def _active_connection(self) -> sqlite3.Connection | None:
+        return getattr(self._thread_state, "connection", None)
+
+    @contextmanager
+    def connect(self):
+        """Conexão para um bloco de leitura/gravacao.
+
+        Sem transação aberta nesta thread: o comportamento de sempre — conexão
+        própria, commit na saída, rollback na exceção, fechada no fim. Dentro de
+        ``transaction()``: a conexão da transação, num SAVEPOINT, para que o
+        bloco continue atômico por si (uma falha desfaz só a parte dele) e nada
+        chegue ao arquivo antes da saída da transação mais externa (RGS-08).
+        """
+        active = self._active_connection()
+        if active is not None:
+            with self._savepoint(active):
+                yield active
+            return
+        connection = self._open_connection()
         try:
             yield connection
             connection.commit()
@@ -446,6 +499,56 @@ class Database(
         finally:
             connection.close()
 
+    @contextmanager
+    def transaction(self):
+        """Tudo o que esta thread gravar no bloco entra junto, ou nada entra (RGS-08).
+
+        Reentrante: uma transação dentro de outra vira SAVEPOINT da externa, e
+        só a saída da mais externa grava (commit); uma exceção que atravessa a
+        externa desfaz tudo. Enquanto ela é aberta, todo ``db.*`` chamado
+        NESTA thread reutiliza a mesma conexão. Outras threads seguem com
+        conexão própria: leem o ultimo estado gravado (WAL) e, para gravar,
+        esperam a saída desta (``busy_timeout``).
+        """
+        active = self._active_connection()
+        if active is not None:
+            with self._savepoint(active):
+                yield active
+            return
+        connection = self._open_connection()
+        # IMMEDIATE: reserva a escrita já na abertura. Uma transação que só
+        # pedisse o bloqueio na primeira gravação poderia falhar na hora
+        # (SQLITE_BUSY sem espera) se outra thread gravasse no meio.
+        connection.execute("BEGIN IMMEDIATE")
+        self._thread_state.connection = connection
+        try:
+            yield connection
+            connection.commit()
+        except BaseException:
+            connection.rollback()
+            raise
+        finally:
+            self._thread_state.connection = None
+            connection.close()
+
+    @contextmanager
+    def _savepoint(self, connection: sqlite3.Connection):
+        """Trecho aninhado da transacao: a falha desfaz so ele e segue subindo."""
+        self._thread_state.savepoints = getattr(self._thread_state, "savepoints", 0) + 1
+        name = f"albericus_sp_{self._thread_state.savepoints}"
+        connection.execute(f"SAVEPOINT {name}")
+        try:
+            yield
+        except BaseException:
+            # Se o próprio SQLite já desfez a transação inteira (disco cheio,
+            # ON CONFLICT ROLLBACK), o savepoint não existe mais: a exceção que
+            # sobe e a original, não a do ROLLBACK TO.
+            with suppress(sqlite3.Error):
+                connection.execute(f"ROLLBACK TO {name}")
+                connection.execute(f"RELEASE {name}")
+            raise
+        connection.execute(f"RELEASE {name}")
+
     @staticmethod
     def _create_indexes(connection: sqlite3.Connection) -> None:
         connection.executescript(CREATE_INDEXES_SQL)
@@ -453,6 +556,9 @@ class Database(
     def initialize(self) -> None:
         with self.connect() as connection:
             self._ensure_supported_schema_version(connection)
+            # RGS-08: leitor não espera escritor (UI x thread de reconciliação x
+            # result_server). O modo fica gravado no arquivo; repetir e inócuo.
+            connection.execute("PRAGMA journal_mode = WAL")
             connection.executescript(CREATE_TABLES_SQL)
             from src.core.migration_engine import MigrationEngine
             MigrationEngine(self).run_migrations(connection)
@@ -475,7 +581,7 @@ class Database(
         current_version = self._schema_user_version(connection)
         if current_version > self.SCHEMA_VERSION:
             raise RuntimeError(
-                "Banco criado por uma versao mais nova do Albericus. "
+                "Banco criado por uma versão mais nova do Albericus. "
                 "Atualize o aplicativo antes de abrir este arquivo."
             )
 
@@ -938,7 +1044,7 @@ class Database(
 
     def backup(self, reason: str = "manual") -> Path:
         if not self.db_path.exists():
-            raise FileNotFoundError(f"Banco nao encontrado: {self.db_path}")
+            raise FileNotFoundError(f"Banco não encontrado: {self.db_path}")
 
         safe_reason = "".join(
             character.lower() if character.isalnum() else "_"
@@ -947,33 +1053,38 @@ class Database(
         safe_reason = safe_reason or "manual"
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        backup_path = self.backup_dir / f"{self.db_path.stem}_{safe_reason}_{timestamp}{self.db_path.suffix}"
         self.backup_dir.mkdir(parents=True, exist_ok=True)
-
-        source = sqlite3.connect(self.db_path)
-        try:
-            target = sqlite3.connect(backup_path)
-            try:
-                source.backup(target)
-            finally:
-                target.close()
-        finally:
-            source.close()
+        backup_path = self._unique_backup_path(f"{self.db_path.stem}_{safe_reason}_{timestamp}")
+        _copy_database(self.db_path, backup_path)
 
         self.last_cloud_backup = self.copy_backup_to_cloud(backup_path)
         return backup_path
 
+    def _unique_backup_path(self, stem: str) -> Path:
+        """Nome livre na pasta de backups (RGS-11).
+
+        O carimbo tem resolução de segundos: dois backups no mesmo segundo
+        gravavam no MESMO arquivo, e o segundo apagava o primeiro.
+        """
+        suffix = self.db_path.suffix
+        candidate = self.backup_dir / f"{stem}{suffix}"
+        counter = 2
+        while candidate.exists():
+            candidate = self.backup_dir / f"{stem}_{counter}{suffix}"
+            counter += 1
+        return candidate
+
     def copy_backup_to_cloud(self, backup_path: Path | str) -> dict[str, str]:
         """Copia um backup para a pasta de nuvem configurada (`cloud_sync_dir`),
-        no estilo Dropbox/OneDrive/Drive desktop. Nunca levanta excecao — o
-        backup local ja foi gravado, entao uma falha de nuvem e registrada e
-        reportada, mas nao interrompe o fluxo. Devolve `{status, path}` com
+        no estilo Dropbox/OneDrive/Drive desktop. Nunca levanta exceção — o
+        backup local já foi gravado, então uma falha de nuvem e registrada e
+        reportada, mas não interrompe o fluxo. Devolve `{status, path}` com
         status em {`success`, `not_configured`, `invalid_directory`,
         `error: <msg>`}."""
         try:
             cloud_dir_str = (self.get_app_settings().get("cloud_sync_dir") or "").strip()
         except Exception:
-            # Cedo no __init__ (backup de migracao) as settings podem nao existir.
+            # Cedo no __init__ (backup de migração) as settings podem não existir.
             return {"status": "not_configured", "path": ""}
         if not cloud_dir_str:
             return {"status": "not_configured", "path": ""}
@@ -1006,7 +1117,7 @@ class Database(
             tournament_id=tournament_id,
             round_id=round_id,
             entity_type="backup",
-            reason=f"Backup automatico antes de {action}.",
+            reason=f"Backup automático antes de {action}.",
             after={"path": str(backup_path), "reason": "_".join(parts)},
         )
         return backup_path
@@ -1041,27 +1152,21 @@ class Database(
         source_path = Path(backup_path).resolve()
         backup_root = self.backup_dir.resolve()
         if not source_path.exists():
-            raise FileNotFoundError(f"Backup nao encontrado: {source_path}")
+            raise FileNotFoundError(f"Backup não encontrado: {source_path}")
         if not source_path.is_file() or source_path.suffix.lower() != self.db_path.suffix.lower():
-            raise ValueError("Selecione um arquivo de backup valido.")
+            raise ValueError("Selecione um arquivo de backup válido.")
         if source_path != backup_root and backup_root not in source_path.parents:
-            raise ValueError("Por seguranca, restaure apenas arquivos da pasta de backups configurada.")
+            raise ValueError("Por segurança, restaure apenas arquivos da pasta de backups configurada.")
 
         safety_backup = self.backup("before_restore")
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         try:
-            source = sqlite3.connect(source_path)
-            try:
-                target = sqlite3.connect(self.db_path)
-                try:
-                    source.backup(target)
-                finally:
-                    target.close()
-            finally:
-                source.close()
+            _copy_database(source_path, self.db_path)
             self.initialize()
         except Exception:
-            shutil.copy2(safety_backup, self.db_path)
+            # Pela API de backup, não por copia de arquivo: em WAL, copiar só o
+            # `.db` por cima deixaria o `-wal` antigo ser aplicado ao arquivo novo.
+            _copy_database(safety_backup, self.db_path)
             self.initialize()
             raise
         return safety_backup
@@ -1083,7 +1188,7 @@ class Database(
             "arbitration_refresh_interval_seconds": "15",
             "arbitration_inline_tables_limit": "20",
             # "1" quando o operador marcou "Nao mostrar novamente" no aviso do
-            # Modo Livre: o menu passa direto para a criacao do torneio.
+            # Modo Livre: o menu passa direto para a criação do torneio.
             "free_mode_notice_hidden": "0",
         }
         with self.connect() as connection:

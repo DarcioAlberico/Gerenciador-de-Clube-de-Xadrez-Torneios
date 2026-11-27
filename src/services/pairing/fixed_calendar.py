@@ -15,25 +15,25 @@ from typing import Sequence
 def late_entry_warning(names: Sequence[str], *, formato: str) -> str:
     quem = ", ".join(names)
     return (
-        f"Fora do calendario do {formato}: {quem}. Os numeros foram distribuidos "
-        "quando a primeira rodada foi gerada e o calendario e fixo — incluir "
-        "alguem agora mudaria os confrontos de todo mundo. Quem entra depois joga "
-        "o proximo torneio, ou o calendario e refeito antes da rodada 1."
+        f"Fora do calendário do {formato}: {quem}. Os números foram distribuídos "
+        "quando a primeira rodada foi gerada e o calendário é fixo — incluir "
+        "alguém agora mudaria os confrontos de todo mundo. Quem entra depois joga "
+        "o próximo torneio, ou o calendário e refeito antes da rodada 1."
     )
 
 
 def withdrawn_on_board_warning(names: Sequence[str], *, formato: str) -> str:
     quem = ", ".join(names)
     return (
-        f"Mesa(s) com jogador fora do torneio: {quem}. No {formato} o calendario "
-        "nao se recalcula, entao a mesa e gerada e o resultado sai por W.O. "
-        "(ausencia). Lance o W.O. na mesa para fechar a rodada."
+        f"Mesa(s) com jogador fora do torneio: {quem}. No {formato} o calendário "
+        "não se recalcula, então a mesa é gerada e o resultado sai por W.O. "
+        "(ausência). Lance o W.O. na mesa para fechar a rodada."
     )
 
 
 def rounds_mismatch_warning(configured: int, calendar: int, *, formato: str) -> str:
     return (
-        f"O {formato} deste campo tem {calendar} rodada(s), e o torneio esta "
+        f"O {formato} deste campo tem {calendar} rodada(s), e o torneio está "
         f"configurado com {configured}. Ajuste as rodadas do torneio para o "
-        "calendario fechar."
+        "calendário fechar."
     )
