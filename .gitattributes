@@ -1,4 +1,14 @@
+# Texto fica em LF no repositório e no disco; o Windows lê LF sem problema
+# (Python, PowerShell, cmd). Sem isto, o core.autocrlf de cada máquina decide
+# e o git avisa "LF will be replaced by CRLF" em todo arquivo tocado.
+* text=auto eol=lf
+
 *.pdf binary
 *.png binary
 *.jpg binary
 *.jpeg binary
+*.ico binary
+*.db binary
+*.accdb binary
+# A lista CBX (.xls) entrou no repositório como texto; marcá-la como binária
+# aqui faria o git vê-la alterada. Ela sai do repositório no RG2-41.
