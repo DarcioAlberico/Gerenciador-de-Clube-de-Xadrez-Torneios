@@ -97,7 +97,11 @@ class RegistryPage:
     def snapshot(self, record_id: int) -> dict[str, Any] | None:
         raise NotImplementedError
 
-    def delete(self, record_id: int) -> None:
+    def deletion_reason(self, host: Any) -> str | None:
+        """Motivo pedido antes de excluir. ``""`` = não pergunta; ``None`` = cancelou."""
+        return ""
+
+    def delete(self, record_id: int, reason: str = "") -> None:
         raise NotImplementedError
 
     def restore(self, record: dict[str, Any]) -> None:

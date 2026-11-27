@@ -144,7 +144,7 @@ class AdjustmentsPage(TournamentRegistryPage):
     def snapshot(self, record_id: int) -> dict[str, Any] | None:
         return self.controller.find_adjustment(self.tournament_id, record_id)
 
-    def delete(self, record_id: int) -> None:
+    def delete(self, record_id: int, reason: str = "") -> None:
         self.controller.delete_adjustment(self.tournament_id, record_id)
 
     def restore(self, record: dict[str, Any]) -> None:

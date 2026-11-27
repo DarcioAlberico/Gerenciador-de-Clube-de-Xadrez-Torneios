@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ...components import reason_dialog
 from ...i18n import t
 from .page import Field, TournamentRegistryPage
 from .state import RequestedByeForm, requested_bye_labels, round_labels
@@ -131,8 +132,18 @@ class RequestedByesPage(TournamentRegistryPage):
     def snapshot(self, record_id: int) -> dict[str, Any] | None:
         return self.controller.find_bye(self.tournament_id, record_id, self.is_team)
 
-    def delete(self, record_id: int) -> None:
-        self.controller.delete_bye(record_id, self.is_team)
+    def deletion_reason(self, host: Any) -> str | None:
+        """Motivo da exclusão (RG2-05): exigido no individual, que é auditado."""
+        if self.is_team:
+            return ""
+        return reason_dialog(
+            host,
+            t("arbitration.byes.remove_reason_title"),
+            t("arbitration.byes.remove_reason_prompt"),
+        )
+
+    def delete(self, record_id: int, reason: str = "") -> None:
+        self.controller.delete_bye(self.tournament_id, record_id, self.is_team, reason)
 
     def restore(self, record: dict[str, Any]) -> None:
         self.controller.restore_bye(self.tournament_id, record, self.is_team)

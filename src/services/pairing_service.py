@@ -1081,6 +1081,49 @@ class PairingService:
         )
         return bye_id
 
+    def cancel_requested_bye(self, tournament_id: int, bye_id: int, reason: str) -> None:
+        """Exclui um bye solicitado com regra e rastro (RG2-05).
+
+        A tela apagava direto no banco: o bye já aplicado numa rodada gerada
+        sumia do cadastro, a mesa continuava "H" e o saldo zerava — com limite
+        no regulamento, um bye a mais. Agora: rodada do bye já gerada (ou
+        fechada) recusa, porque o bye já está na mesa; sem rodada, exige motivo
+        e audita.
+        """
+        bye = next(
+            (
+                item
+                for item in self.db.list_requested_byes(tournament_id)
+                if int(item["id"]) == int(bye_id)
+            ),
+            None,
+        )
+        if bye is None:
+            raise AppError("Bye solicitado não encontrado neste torneio.")
+        round_number = int(bye.get("round_number") or 0)
+        if self.db.get_round_by_number(tournament_id, round_number):
+            raise AppError(
+                f"O bye da rodada {round_number} já está na rodada gerada e conta no saldo "
+                "do jogador. Para desfazê-lo, exclua a rodada ainda não fechada ou corrija "
+                "o resultado da mesa."
+            )
+        motivo = str(reason or "").strip()
+        if not motivo:
+            raise AppError("Informe o motivo da exclusão do bye.")
+        self.db.delete_requested_bye(int(bye_id))
+        self.db.create_audit_event(
+            action="requested_bye_removed",
+            tournament_id=int(tournament_id),
+            entity_type="player",
+            entity_id=int(bye["player_id"]),
+            reason=motivo,
+            before={
+                "round_number": round_number,
+                "bye_type": str(bye.get("bye_type") or "").strip().upper(),
+                "reason": str(bye.get("reason") or "").strip(),
+            },
+        )
+
     def _warn_discarded_byes(
         self,
         tournament_id: int,

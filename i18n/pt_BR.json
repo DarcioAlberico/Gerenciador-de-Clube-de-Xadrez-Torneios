@@ -73,6 +73,8 @@
   "arbitration.byes.hint.policy": "Regulamento deste torneio: {limites}.",
   "arbitration.byes.hint.team": "O bye é aplicado quando a rodada for gerada:\na equipe fica de fora e pontua por tipo\n(F=vitória, H=empate, Z=derrota).",
   "arbitration.byes.reason_placeholder": "Ex.: ausência comunicada",
+  "arbitration.byes.remove_reason_prompt": "Por que o bye solicitado está sendo removido? O motivo fica na auditoria.",
+  "arbitration.byes.remove_reason_title": "Motivo da remoção do bye",
   "arbitration.byes.removed": "Bye removido.",
   "arbitration.byes.table": "Byes solicitados",
   "arbitration.byes.title": "Byes solicitados (TRF25)",
