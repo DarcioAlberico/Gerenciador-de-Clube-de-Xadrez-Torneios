@@ -78,6 +78,97 @@ class EnterGravaUmaMesaTest(_RodadasBase):
         self.assertEqual([], escaparam)
 
 
+class AutoAtualizacaoPreservaOArbitroTest(_RodadasBase):
+    """RG2-03 — o tick não muda a mesa-alvo nem rouba o foco."""
+
+    JOGADORES = 8
+
+    def _painel(self) -> None:
+        self.app.show_arbitration_panel()
+        self.app.update()
+        self.app.focus_force()
+        self.app.update()
+
+    def _tick(self) -> None:
+        self.app._arbitration_auto_refresh()._tick()
+        self.app.update()
+
+    def _mesa_selecionada(self) -> int:
+        tabela = self.app.arbitration_pending_tree
+        return int(self.app.arbitration_pending_row_map[tabela.selection()[0]])
+
+    def test_tick_mantem_a_mesa_selecionada_e_o_foco_na_tabela(self) -> None:
+        self._painel()
+        tabela = self.app.arbitration_pending_tree
+        terceira = tabela.get_children()[2]
+        tabela.selection_set(terceira)
+        tabela.focus(terceira)
+        tabela.focus_set()
+        self.app.update()
+        alvo = self._mesa_selecionada()
+
+        self._tick()
+
+        self.assertIsNot(tabela, self.app.arbitration_pending_tree, "o tick não remontou")
+        self.assertEqual(alvo, self._mesa_selecionada())
+        self.assertEqual(self.app.arbitration_pending_tree, self.app.focus_get())
+
+    def test_tick_com_foco_na_busca_nao_tira_o_foco_nem_o_texto(self) -> None:
+        self._painel()
+        busca = self.app.arbitration_pending_query_entry
+        busca.insert(0, "15")
+        busca._entry.focus_set()
+        self.app.update()
+
+        self._tick()
+
+        foco = self.app.focus_get()
+        self.assertEqual(busca._entry, foco)
+        self.assertEqual("15", self.app.arbitration_pending_query_entry.get())
+        foco.event_generate("<Key-1>")
+        self.app.update()
+        self.assertEqual(["", "", "", ""], [mesa["result"] for mesa in self._mesas()])
+
+    def test_tick_com_dialogo_aberto_espera_e_reagenda(self) -> None:
+        self._painel()
+        tabela = self.app.arbitration_pending_tree
+        visto: dict[str, object] = {}
+
+        def no_dialogo(dialogo: object) -> None:
+            self._tick()
+            visto["mesma_tabela"] = self.app.arbitration_pending_tree is tabela
+            visto["reagendado"] = self.app._arbitration_refresh_job is not None
+            dialogo.close()  # type: ignore[attr-defined]
+
+        self._quando_abrir(no_dialogo)
+        self.app._arbitration_panel_view().pending.correct_selected()
+
+        self.assertEqual({"mesma_tabela": True, "reagendado": True}, visto)
+
+    def test_tick_guarda_rascunho_da_busca_quando_o_foco_esta_fora_dela(self) -> None:
+        self._painel()
+        self.app.arbitration_pending_query_entry.insert(0, "Jog")
+        self.app.arbitration_pending_tree.focus_set()
+        self.app.update()
+
+        self._tick()
+
+        self.assertEqual("Jog", self.app.arbitration_pending_query_entry.get())
+
+    def test_tick_sem_foco_na_tabela_nao_chama_focus_set(self) -> None:
+        self._painel()
+        self.app.arbitration_pending_tree.focus_set()
+        self.app.update()
+        self.app.arbitration_pending_tree.selection_set(())
+        self.app.focus_set()  # o foco sai da tabela: fica na janela
+        self.app.update()
+
+        with mock.patch("tkinter.Misc.focus_set") as focar:
+            self._tick()
+
+        self.assertFalse(focar.called)
+
+
 class EnterEmRodadaFechadaTest(_RodadasBase):
     """RG2-02 — o diálogo de correção abre uma vez só."""
 

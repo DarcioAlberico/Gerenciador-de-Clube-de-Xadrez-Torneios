@@ -141,7 +141,11 @@ class PendingTablesSection:
         busca = ctk.CTkEntry(
             faixa.frame, width=160, placeholder_text=t("arbitration.pending.search_placeholder")
         )
-        busca.insert(0, getattr(host, "_arbitration_pending_query", ""))
+        # No tick (RG2-03) volta o que estava digitado, aplicado ou não; quem
+        # monta por ação do árbitro mostra a consulta aplicada.
+        estado = getattr(host, "_arbitration_refresh_state", None)
+        texto = estado.rascunho if estado is not None and estado.rascunho is not None else None
+        busca.insert(0, texto if texto is not None else getattr(host, "_arbitration_pending_query", ""))
         host.arbitration_pending_query_entry = busca
         faixa.add(busca, 160, grow=True)
         faixa.add(
@@ -194,16 +198,33 @@ class PendingTablesSection:
             tabela.bind(
                 tecla, lambda _evento, valor=resultado: host._save_arbitration_panel_result(valor)
             )
-        primeira = tabela.get_children()
-        if primeira:
-            # A primeira mesa já nasce selecionada: o atalho de teclado só serve
-            # se houver alvo, e o árbitro lança de cima para baixo.
-            tabela.selection_set(primeira[0])
-            tabela.focus(primeira[0])
-            tabela.see(primeira[0])
+        estado = getattr(host, "_arbitration_refresh_state", None)
+        alvo = self._linha_inicial(tabela, estado)
+        if alvo:
+            tabela.selection_set(alvo)
+            tabela.focus(alvo)
+            tabela.see(alvo)
 
         self._build_inline_actions(painel)
-        tabela.focus_set()
+        # O tick (RG2-03) só devolve o foco a quem já o tinha; tomar o foco de
+        # outro widget é o que fazia o "1" seguinte gravar na mesa errada.
+        if estado is None or estado.foco_na_tabela:
+            tabela.focus_set()
+
+    def _linha_inicial(self, tabela: Any, estado: Any) -> str | None:
+        """A mesa que nasce selecionada.
+
+        Por ação do árbitro, a primeira: o atalho de teclado só serve se houver
+        alvo, e ele lança de cima para baixo. No tick, a mesma mesa de antes —
+        e nenhuma, se antes não havia seleção ou a mesa saiu da lista.
+        """
+        linhas = tabela.get_children()
+        if estado is None:
+            return linhas[0] if linhas else None
+        for iid in linhas:
+            if self.host.arbitration_pending_row_map.get(iid) == estado.pairing_id:
+                return str(iid)
+        return None
 
     def _build_inline_actions(self, painel: ctk.CTkFrame) -> None:
         host = self.host

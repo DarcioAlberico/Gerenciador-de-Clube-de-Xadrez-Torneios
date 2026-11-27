@@ -13,6 +13,9 @@ política — quais intervalos valem, qual é o padrão — é dado puro e mora 
 from __future__ import annotations
 
 import logging
+import tkinter
+from dataclasses import dataclass
+from tkinter import ttk
 from typing import Any
 
 from .state import (
@@ -27,6 +30,23 @@ from .state import (
 VIEW_METHOD = "show_arbitration_panel"
 
 logger = logging.getLogger("src.ui.screens.pairing_arbitration")
+
+# Onde a tecla é do campo, não do atalho da mesa.
+CAIXAS_DE_TEXTO = (tkinter.Entry, tkinter.Text, tkinter.Spinbox, ttk.Entry)
+
+
+@dataclass(frozen=True)
+class RefreshState:
+    """O painel como o árbitro o deixou, para a remontagem do tick (RG2-03).
+
+    ``None`` em ``host._arbitration_refresh_state`` quer dizer que quem monta é
+    o árbitro (abriu o painel, buscou, lançou): aí vale a primeira mesa e o
+    foco na tabela.
+    """
+
+    pairing_id: int | None
+    foco_na_tabela: bool
+    rascunho: str | None
 
 
 class AutoRefresh:
@@ -62,6 +82,13 @@ class AutoRefresh:
         # qualquer tela que o árbitro tivesse aberto nesse meio-tempo.
         if getattr(self.host, "_current_view_method", "") != VIEW_METHOD:
             return
+        # RG2-03: com um diálogo aberto ou o cursor num campo, o árbitro está no
+        # meio de algo; remontar agora trocaria a mesa-alvo ou levaria o foco
+        # para a tabela, onde o próximo "1" vira 1-0. Espera o ciclo seguinte.
+        if self._arbitro_ocupado():
+            self.schedule()
+            return
+        self.host._arbitration_refresh_state = self._capturar_estado()
         try:
             self.host.show_arbitration_panel()
         except Exception:
@@ -72,10 +99,41 @@ class AutoRefresh:
                 "Falha na auto-atualização do painel do árbitro; nova tentativa no próximo ciclo"
             )
         finally:
+            self.host._arbitration_refresh_state = None
             # Religa só se a montagem não chegou a agendar (o caminho feliz já
             # agendou; ``schedule`` respeita a auto-atualização desligada).
             if self.host._arbitration_refresh_job is None:
                 self.schedule()
+
+    def _arbitro_ocupado(self) -> bool:
+        """Diálogo aberto (janela filha visível) ou foco num campo de texto."""
+        host = self.host
+        for filho in host.winfo_children():
+            if isinstance(filho, tkinter.Toplevel) and filho.winfo_exists() and filho.winfo_viewable():
+                return True
+        try:
+            foco = host.focus_get()
+        except (KeyError, tkinter.TclError):  # foco num widget que o Tk já soltou
+            return False
+        return isinstance(foco, CAIXAS_DE_TEXTO)
+
+    def _capturar_estado(self) -> RefreshState:
+        """O que a remontagem do tick precisa devolver ao árbitro como estava."""
+        host = self.host
+        tabela = getattr(host, "arbitration_pending_tree", None)
+        pairing_id = None
+        foco_na_tabela = False
+        if tabela is not None and tabela.winfo_exists():
+            selecionado = tabela.selection()
+            if selecionado:
+                pairing_id = host.arbitration_pending_row_map.get(selecionado[0])
+            try:
+                foco_na_tabela = host.focus_get() == tabela
+            except (KeyError, tkinter.TclError):
+                foco_na_tabela = False
+        busca = getattr(host, "arbitration_pending_query_entry", None)
+        rascunho = busca.get() if busca is not None and busca.winfo_exists() else None
+        return RefreshState(pairing_id=pairing_id, foco_na_tabela=foco_na_tabela, rascunho=rascunho)
 
     # ---- Preferências ----------------------------------------------------- #
 

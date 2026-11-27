@@ -37,6 +37,13 @@ class _Anfitriao:
     def after_cancel(self, job: str) -> None:
         self.cancelados.append(job)
 
+    # RG2-03: o tick pergunta se há diálogo aberto ou foco num campo.
+    def winfo_children(self) -> list[Any]:
+        return []
+
+    def focus_get(self) -> None:
+        return None
+
     def show_arbitration_panel(self) -> None:
         self.montagens += 1
         self._montar(self)
