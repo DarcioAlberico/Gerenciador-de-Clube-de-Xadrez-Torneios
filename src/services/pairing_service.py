@@ -187,6 +187,7 @@ from src.services.pairing.corrections import (
 )
 from src.services.pairing.team_swiss import (
     baku_first_round_team_matches as _baku_first_round_team_matches,
+    team_round_violations as _team_round_violations,
 )
 from src.services.pairing.acceleration import (
     baku_accelerated_player_ids as _baku_accelerated_player_ids,
@@ -2344,7 +2345,9 @@ class PairingService:
         *,
         forfeit_empty_teams: bool = False,
     ) -> dict[str, Any]:
-        plan = self._team_next_round_plan(tournament_id, tournament)
+        # A guarda da C.04.1 (RG2-07a) só vale ao gravar: a prévia mostra a
+        # repetição como alerta, que é o que o árbitro precisa ver antes.
+        plan = self._team_next_round_plan(tournament_id, tournament, enforce_absolute=True)
         sem_ninguem = [aviso["team_name"] for aviso in plan["lineup_warnings"] if aviso["empty"]]
         if sem_ninguem and not forfeit_empty_teams:
             # EQ-02.4: antes de qualquer gravação — cancelar não deixa rastro.
@@ -2411,7 +2414,13 @@ class PairingService:
         logger.info("Rodada por equipes %s gerada para o torneio %s", next_number, tournament_id)
         return self._finalize_generated_round(tournament_id, tournament, next_number, round_id)
 
-    def _team_next_round_plan(self, tournament_id: int, tournament: dict[str, Any]) -> dict[str, Any]:
+    def _team_next_round_plan(
+        self,
+        tournament_id: int,
+        tournament: dict[str, Any],
+        *,
+        enforce_absolute: bool = False,
+    ) -> dict[str, Any]:
         settings = self.db.get_tournament_settings(tournament_id) or {}
         teams = self.db.list_teams(tournament_id, active_only=True)
         if len(teams) < 2:
@@ -2501,6 +2510,7 @@ class PairingService:
             matches = self._swiss_team_matches(
                 tournament_id, to_pair, rosters, strengths, boards_count, settings, next_number,
                 acceleration=(acelerados, vp),
+                enforce_absolute=enforce_absolute,
             )
         matches = self._append_requested_team_byes(matches, bye_by_team, settings, boards_count)
 
@@ -2629,6 +2639,7 @@ class PairingService:
         round_number: int,
         *,
         acceleration: tuple[list[int], float] = ([], 0.0),
+        enforce_absolute: bool = False,
     ) -> list[dict[str, Any]]:
         standings = {int(item["team_id"]): item for item in self._team_standings(tournament_id)}
         # EQ-07: o VP de Baku soma no score de pareamento (C.04.7 1.5) — grupos,
@@ -2647,7 +2658,7 @@ class PairingService:
             played_pairs = played_pairs | prohibited
         bye_team_ids = self._team_bye_ids(tournament_id)
         histories = self._team_color_histories(tournament_id)
-        return _swiss_team_matches(
+        matches = _swiss_team_matches(
             teams,
             rosters,
             seed_ratings,
@@ -2662,6 +2673,51 @@ class PairingService:
             score_group_float_penalty=self.SCORE_GROUP_FLOAT_PENALTY,
             score_diff_penalty=self.SCORE_DIFF_PENALTY,
             float_histories=self._team_float_histories(tournament_id),
+        )
+        if enforce_absolute:
+            self._refuse_illegal_team_round(
+                tournament_id, round_number, matches, played_pairs, bye_team_ids, teams
+            )
+        return matches
+
+    def _refuse_illegal_team_round(
+        self,
+        tournament_id: int,
+        round_number: int,
+        matches: list[dict[str, Any]],
+        played_pairs: set[frozenset[int]],
+        bye_team_ids: set[int],
+        teams: list[dict[str, Any]],
+    ) -> None:
+        """Guarda do RG2-07a: rodada que fere a C.04.1 não é gravada.
+
+        O motor de equipes repetia confronto quando havia pareamento sem
+        repetição (o redesenho é o RG2-07b). Até lá, a rodada pronta é
+        conferida; se repete confronto ou dá um segundo PAB, o caso vai à
+        auditoria e a geração para com o motivo — melhor nenhuma rodada do que
+        uma ilegal gravada em silêncio.
+        """
+        names = {int(team["id"]): str(team.get("name") or "") for team in teams}
+        problemas = _team_round_violations(matches, played_pairs, bye_team_ids, names)
+        if not problemas:
+            return
+        try:
+            self.db.create_audit_event(
+                action="team_pairing_refused",
+                tournament_id=int(tournament_id),
+                entity_type="round",
+                reason="; ".join(problemas),
+                metadata={"round_number": int(round_number), "problems": problemas},
+            )
+        except Exception:  # pragma: no cover - a trilha não esconde a recusa
+            logger.exception("Falha ao registrar a recusa do pareamento de equipes")
+        raise AppError(
+            f"O pareamento automático da rodada {round_number} feriria a regra da FIDE "
+            "(C.04.1: duas equipes não se enfrentam duas vezes, e nenhuma recebe dois byes):\n"
+            + "\n".join(f"- {item}" for item in problemas)
+            + "\n\nA rodada não foi gerada, e o caso ficou registrado na auditoria. "
+            "O motor de equipes ainda não encontra sozinho a alternativa sem repetição; "
+            "confira os confrontos anteriores e as proibições de pareamento antes de tentar de novo."
         )
 
     def _team_float_histories(self, tournament_id: int) -> dict[int, list[str]]:
