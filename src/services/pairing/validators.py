@@ -36,7 +36,7 @@ def plan_pairing_player_swap(
     for values in updates.values():
         black_player_id = values["black"]
         if black_player_id is not None and values["white"] == black_player_id:
-            raise AppError("Uma mesa nao pode ter o mesmo jogador dos dois lados.")
+            raise AppError("Uma mesa não pode ter o mesmo jogador dos dois lados.")
 
     affected_ids = {int(source_pairing["id"])}
     if target_slot:
@@ -80,7 +80,7 @@ def plan_team_board_player_swap(
     for board_id in affected_board_ids:
         values = updates[board_id]
         if values["white"] is not None and values["white"] == values["black"]:
-            raise AppError("Um tabuleiro nao pode ter o mesmo jogador dos dois lados.")
+            raise AppError("Um tabuleiro não pode ter o mesmo jogador dos dois lados.")
 
     return [
         (board_id, updates[board_id]["white"], updates[board_id]["black"])

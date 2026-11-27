@@ -41,7 +41,7 @@ class ClubService:
             raise AppError("Informe o nome do clube/escola.")
         kind = str(data.get("kind", "club")).strip() or "club"
         if kind not in CLUB_KINDS:
-            raise AppError("Tipo de unidade invalido.")
+            raise AppError("Tipo de unidade inválido.")
         saved_id = self.db.save_club(
             name=name,
             kind=kind,
@@ -60,9 +60,9 @@ class ClubService:
         try:
             club_id = int(data.get("club_id") or 0)
         except ValueError as exc:
-            raise AppError("Clube/escola invalido para a turma.") from exc
+            raise AppError("Clube/escola inválido para a turma.") from exc
         if not self.db.get_club(club_id):
-            raise AppError("Clube/escola nao encontrado.")
+            raise AppError("Clube/escola não encontrado.")
 
         name = str(data.get("name", "")).strip()
         if not name:
@@ -80,7 +80,7 @@ class ClubService:
         }
         if class_id:
             if not self.db.get_class(class_id):
-                raise AppError("Turma nao encontrada.")
+                raise AppError("Turma não encontrada.")
             self.db.update_class(class_id, **payload)
             logger.info("Turma atualizada: %s", class_id)
             return class_id

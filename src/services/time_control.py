@@ -81,9 +81,9 @@ def normalized_text(value: object) -> str:
         lances, minutos = compacto.group(1), compacto.group(2)
         resto = text[compacto.end() :].strip()
         # `40/90+30` -> 40 lances em 90 min, e o que sobra e o 2o periodo/incremento.
-        # Depois de `40/90`, um `+30` SEM marca e o 2o periodo em MINUTOS
-        # ("40 lances em 90 min, depois 30 min"), que e a leitura corrente da
-        # notacao da FIDE. So `+30"` e incremento. A distincao importa: como
+        # Depois de `40/90`, um `+30` SEM marca e o 2o período em MINUTOS
+        # ("40 lances em 90 min, depois 30 min"), que é a leitura corrente da
+        # notação da FIDE. Só `+30"` e incremento. A distinção importa: como
         # incremento o mesmo texto daria 210 minutos em vez de 120.
         segundo = ""
         incremento = ""
@@ -97,7 +97,7 @@ def normalized_text(value: object) -> str:
                 if numeros:
                     segundo = f" + {numeros[0]} min"
         if not segundo:
-            # Sem 2o periodo declarado, o resto do jogo corre no mesmo tempo.
+            # Sem 2o período declarado, o resto do jogo corre no mesmo tempo.
             segundo = f" + {minutos} min"
         return f"{minutos} min / {lances} lances{segundo}{incremento}"
 

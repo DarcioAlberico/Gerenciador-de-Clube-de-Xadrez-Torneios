@@ -20,18 +20,18 @@ from src.services.pairing.gacrux_tiebreak_map import (
 
 logger = logging.getLogger(__name__)
 
-# Mesmo teto do motor de pareamento: evita pendurar a aplicacao se o subprocesso
+# Mesmo teto do motor de pareamento: evita pendurar a aplicação se o subprocesso
 # do Gacrux travar (ver GacruxEngine em gacrux_engine.py).
 GACRUX_TIMEOUT_SECONDS = 120
 
 
 class GacruxTiebreakEngine:
-    """Calcula os desempates (classificacao) com o motor FIDE oficial Gacrux.
+    """Calcula os desempates (classificação) com o motor FIDE oficial Gacrux.
 
     Espelha o fluxo do ``GacruxEngine`` de pareamento: exporta o estado do
     torneio para TRF, roda ``tiebreakchecker.py`` e traduz ``tiebreakResult`` de
     volta para ``player_id`` (individual) ou ``team_id`` (equipes). Lida apenas
-    com I/O; o mapeamento de criterios e o parse vivem em ``gacrux_tiebreak_map``.
+    com I/O; o mapeamento de critérios e o parse vivem em ``gacrux_tiebreak_map``.
     """
 
     def __init__(self, db) -> None:
@@ -46,11 +46,11 @@ class GacruxTiebreakEngine:
         codes: list[Any],
         current_round: int | None = None,
     ) -> dict[int, dict[str, Any]]:
-        """Devolve ``{player_id: {"rank": int, "scores": {codigo: float}}}``.
+        """Devolve ``{player_id: {"rank": int, "scores": {código: float}}}``.
 
-        ``codes`` e a sequencia de criterios do Albericus (sem ``points``);
-        ``current_round`` e o numero de rodadas a considerar (por padrao, o
-        total de rodadas fechadas). Retorna ``{}`` quando nao ha rodadas
+        ``codes`` e a sequência de critérios do Albericus (sem ``points``);
+        ``current_round`` e o número de rodadas a considerar (por padrão, o
+        total de rodadas fechadas). Retorna ``{}`` quando não há rodadas
         fechadas. Levanta ``AppError`` em qualquer falha do motor.
         """
         rounds = self._closed_rounds(tournament_id, current_round)
@@ -95,10 +95,10 @@ class GacruxTiebreakEngine:
         codes: list[Any],
         current_round: int | None = None,
     ) -> dict[int, dict[str, Any]]:
-        """Devolve ``{team_id: {"rank": int, "scores": {codigo: float}}}``.
+        """Devolve ``{team_id: {"rank": int, "scores": {código: float}}}``.
 
         Usa o TRF-25 (que carrega o tipo de torneio por equipes e o sistema de
-        pontos), nao o TRF-16. ``codes`` e a sequencia de criterios de equipe do
+        pontos), não o TRF-16. ``codes`` e a sequência de critérios de equipe do
         Albericus (match_points, game_points, buchholz, wins).
         """
         rounds = self._closed_rounds(tournament_id, current_round)
@@ -173,7 +173,7 @@ class GacruxTiebreakEngine:
         current_dir = Path(__file__).resolve().parent
         script_path = current_dir / "gacrux" / "tiebreakchecker.py"
         if not script_path.exists():
-            raise AppError(f"Motor Gacrux (desempate) nao encontrado em: {script_path}")
+            raise AppError(f"Motor Gacrux (desempate) não encontrado em: {script_path}")
         project_root = current_dir.parent.parent.parent
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -222,10 +222,10 @@ class GacruxTiebreakEngine:
 
             if result.returncode != 0:
                 error_msg = result.stderr.strip() or result.stdout.strip() or "Erro desconhecido"
-                raise AppError(f"Erro no calculo de desempates do Gacrux: {error_msg}")
+                raise AppError(f"Erro no cálculo de desempates do Gacrux: {error_msg}")
 
             if not output_path.exists():
-                raise AppError("O motor Gacrux (desempate) nao gerou o arquivo de saida esperado.")
+                raise AppError("O motor Gacrux (desempate) não gerou o arquivo de saída esperado.")
 
             try:
                 with open(output_path, "r", encoding="utf-8") as handle:
@@ -233,7 +233,7 @@ class GacruxTiebreakEngine:
             except Exception as exc:
                 raise AppError(f"Falha ao ler o resultado dos desempates do Gacrux: {exc}")
 
-        # code 0 = OK; 1 = OK porem divergente no modo -c (nao usamos -c aqui).
+        # code 0 = OK; 1 = OK porem divergente no modo -c (não usamos -c aqui).
         status = data.get("status", {})
         if status.get("code", 0) not in (0, 1):
             errors = status.get("error", [])

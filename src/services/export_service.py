@@ -25,9 +25,9 @@ from src.services.list_layouts import STANDINGS_COLUMNS, resolve_column_specs, r
 from src.services.prizes import PRIZE_KINDS, PRIZE_POLICIES, allocate_prizes
 from src.services.trf_import import build_trf_rounds, parse_trf
 
-# ImportService e CertificateService foram extraidos para modulos proprios
+# ImportService e CertificateService foram extraídos para módulos próprios
 # (import_service.py / certificate_service.py). Reexportados aqui para
-# preservar a API publica historica deste modulo:
+# preservar a API publica histórica deste módulo:
 #     from src.services.export_service import ImportService, CertificateService
 from src.services.certificate_service import CertificateService
 from src.services.import_service import (

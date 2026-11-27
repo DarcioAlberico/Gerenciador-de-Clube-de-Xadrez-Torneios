@@ -117,7 +117,7 @@ class Sidebar:
             command=lambda key=destino.key: self._navigate(key),
         )
         botao.grid(row=linha, column=0, sticky="ew", padx=SPACE_XS, pady=1)
-        # No modo rail so sobra o icone: o tooltip e quem diz o que o item e.
+        # No modo rail só sobra o ícone: o tooltip e quem diz o que o item e.
         Tooltip(botao, destino.label)
         return botao
 
@@ -180,7 +180,7 @@ class Sidebar:
                     text_color=THEME_ON_ACCENT if ativo else THEME_TEXT_MAIN,
                 )
             except Exception:
-                pass  # janela em destruicao
+                pass  # janela em destruição
 
     @property
     def active(self) -> str | None:

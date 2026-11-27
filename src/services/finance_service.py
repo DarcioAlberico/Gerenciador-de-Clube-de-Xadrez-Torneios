@@ -39,7 +39,7 @@ class FinanceService:
         payload = self._validated_plan_payload(data)
         if plan_id:
             if not self.db.get_membership_plan(plan_id):
-                raise AppError("Plano nao encontrado.")
+                raise AppError("Plano não encontrado.")
             self.db.update_membership_plan(plan_id, **payload)
             logger.info("Plano financeiro atualizado: %s", plan_id)
             return plan_id
@@ -50,7 +50,7 @@ class FinanceService:
     def toggle_plan_active(self, plan_id: int) -> int:
         plan = self.db.get_membership_plan(plan_id)
         if not plan:
-            raise AppError("Plano nao encontrado.")
+            raise AppError("Plano não encontrado.")
         next_active = 0 if plan.get("active") else 1
         self.db.set_membership_plan_active(plan_id, next_active)
         logger.info("Plano financeiro %s alterado para active=%s", plan_id, next_active)
@@ -60,7 +60,7 @@ class FinanceService:
         payload = self._validated_payment_payload(data)
         if payment_id:
             if not self.db.get_payment(payment_id):
-                raise AppError("Pagamento nao encontrado.")
+                raise AppError("Pagamento não encontrado.")
             self.db.update_payment(payment_id, **payload)
             logger.info("Pagamento atualizado: %s", payment_id)
             return payment_id
@@ -76,7 +76,7 @@ class FinanceService:
     ) -> None:
         payment = self.db.get_payment(payment_id)
         if not payment:
-            raise AppError("Pagamento nao encontrado.")
+            raise AppError("Pagamento não encontrado.")
         payload = dict(payment)
         payload["status"] = "paid"
         payload["payment_date"] = payment_date.strip() or date.today().isoformat()
@@ -95,19 +95,19 @@ class FinanceService:
     ) -> dict[str, Any]:
         plan = self.db.get_membership_plan(int(plan_id or 0))
         if not plan:
-            raise AppError("Plano nao encontrado.")
+            raise AppError("Plano não encontrado.")
         if not plan.get("active"):
             raise AppError("Selecione um plano ativo para gerar mensalidades.")
 
         reference = self._validated_reference_period(reference_period)
         due = due_date.strip()
-        self._validate_optional_date(due, "Vencimento invalido.")
+        self._validate_optional_date(due, "Vencimento inválido.")
         if not due:
             raise AppError("Informe o vencimento das mensalidades.")
 
         members = self._members_for_recurring_payments(member_ids, club_id, class_id)
         if not members:
-            raise AppError("Nao ha membros ativos para gerar mensalidades.")
+            raise AppError("Não há membros ativos para gerar mensalidades.")
 
         created_ids: list[int] = []
         skipped = 0
@@ -154,8 +154,8 @@ class FinanceService:
         end_date: str = "",
         member_id: int | None = None,
     ) -> list[dict[str, Any]]:
-        self._validate_optional_date(start_date, "Data inicial invalida.")
-        self._validate_optional_date(end_date, "Data final invalida.")
+        self._validate_optional_date(start_date, "Data inicial inválida.")
+        self._validate_optional_date(end_date, "Data final inválida.")
         rows = self.db.list_payments(
             start_date=start_date.strip(),
             end_date=end_date.strip(),
@@ -217,13 +217,13 @@ class FinanceService:
 
     def member_financial_status(self, member_id: int) -> dict[str, Any]:
         if not self.db.get_member(member_id):
-            raise AppError("Membro nao encontrado.")
+            raise AppError("Membro não encontrado.")
         payments = [
             self._with_effective_status(payment)
             for payment in self.db.list_payments(member_id=member_id, include_canceled=False)
         ]
         if not payments:
-            return {"status": "none", "label": "Sem lancamentos", "open_amount": 0.0, "late_amount": 0.0}
+            return {"status": "none", "label": "Sem lançamentos", "open_amount": 0.0, "late_amount": 0.0}
 
         late_amount = sum(
             float(payment.get("amount") or 0.0)
@@ -245,7 +245,7 @@ class FinanceService:
             status = "paid"
         return {
             "status": status,
-            "label": PAYMENT_STATUSES.get(status, "Sem lancamentos"),
+            "label": PAYMENT_STATUSES.get(status, "Sem lançamentos"),
             "open_amount": round(pending_amount + late_amount, 2),
             "late_amount": round(late_amount, 2),
         }
@@ -258,7 +258,7 @@ class FinanceService:
     def save_transaction(self, data: dict[str, Any], transaction_id: int | None = None) -> int:
         payload = {
             "type": data.get("type", "income"),
-            "amount": self._parse_amount(data.get("amount", 0.0), "Valor invalido"),
+            "amount": self._parse_amount(data.get("amount", 0.0), "Valor inválido"),
             "transaction_date": data.get("transaction_date", date.today().isoformat()),
             "description": data.get("description", "").strip(),
             "category": data.get("category", "").strip(),
@@ -266,7 +266,7 @@ class FinanceService:
             "notes": data.get("notes", "").strip()
         }
         if not payload["description"]:
-            raise AppError("A descricao da transacao e obrigatoria.")
+            raise AppError("A descrição da transação é obrigatória.")
 
         if transaction_id:
             self.db.update_financial_transaction(transaction_id, **payload)
@@ -283,9 +283,9 @@ class FinanceService:
     def generate_receipt(self, payment_id: int, output_path: Path) -> None:
         payment = self.db.get_payment(payment_id)
         if not payment:
-            raise AppError("Pagamento nao encontrado.")
+            raise AppError("Pagamento não encontrado.")
         if payment.get("status") not in ("paid", "exempt"):
-            raise AppError("Nao e possivel emitir recibo para pagamentos pendentes/atrasados.")
+            raise AppError("Não é possível emitir recibo para pagamentos pendentes/atrasados.")
             
         try:
             from reportlab.pdfgen import canvas
@@ -309,7 +309,7 @@ class FinanceService:
             c.drawString(50, 440, f"Referente a: {payment.get('description', '')} / Ref: {payment.get('reference_period', '')}")
             c.drawString(50, 420, f"Plano: {payment.get('plan_name') or 'N/A'}")
             c.drawString(50, 400, f"Data do Pagamento: {payment.get('payment_date', '')}")
-            c.drawString(50, 380, f"Metodo: {payment.get('method', '')}")
+            c.drawString(50, 380, f"Método: {payment.get('method', '')}")
             
             c.line(50, 350, 350, 350)
             c.drawString(50, 330, "Albericus - Gerenciador de Clube de Xadrez")
@@ -358,7 +358,7 @@ class FinanceService:
             for member_id in member_ids:
                 member = self.db.get_member(int(member_id))
                 if not member:
-                    raise AppError("Membro selecionado para mensalidade nao encontrado.")
+                    raise AppError("Membro selecionado para mensalidade não encontrado.")
                 members.append(member)
         else:
             members = self.db.list_members(active_only=True, club_id=club_id, class_id=class_id)
@@ -382,13 +382,13 @@ class FinanceService:
         reference = value.strip()
         parts = reference.split("-")
         if len(parts) != 2 or len(parts[0]) != 4 or len(parts[1]) != 2:
-            raise AppError("Informe a referencia no formato AAAA-MM.")
+            raise AppError("Informe a referência no formato AAAA-MM.")
         try:
             year = int(parts[0])
             month = int(parts[1])
             date(year, month, 1)
         except ValueError as exc:
-            raise AppError("Referencia financeira invalida.") from exc
+            raise AppError("Referência financeira inválida.") from exc
         return reference
 
     def _validated_plan_payload(self, data: dict[str, Any]) -> dict[str, Any]:
@@ -397,10 +397,10 @@ class FinanceService:
             raise AppError("Informe o nome do plano.")
         billing_cycle = str(data.get("billing_cycle", "monthly")).strip() or "monthly"
         if billing_cycle not in BILLING_CYCLES:
-            raise AppError("Ciclo de cobranca invalido.")
-        amount = self._parse_amount(data.get("amount"), "Valor do plano invalido.")
+            raise AppError("Ciclo de cobrança inválido.")
+        amount = self._parse_amount(data.get("amount"), "Valor do plano inválido.")
         if amount < 0:
-            raise AppError("Valor do plano nao pode ser negativo.")
+            raise AppError("Valor do plano não pode ser negativo.")
         return {
             "name": name,
             "amount": amount,
@@ -413,39 +413,39 @@ class FinanceService:
         try:
             member_id = int(data.get("member_id") or 0)
         except ValueError as exc:
-            raise AppError("Membro do pagamento invalido.") from exc
+            raise AppError("Membro do pagamento inválido.") from exc
         if not self.db.get_member(member_id):
-            raise AppError("Membro do pagamento nao encontrado.")
+            raise AppError("Membro do pagamento não encontrado.")
 
         try:
             plan_id = int(data.get("plan_id") or 0)
         except ValueError as exc:
-            raise AppError("Plano do pagamento invalido.") from exc
+            raise AppError("Plano do pagamento inválido.") from exc
         plan = self.db.get_membership_plan(plan_id) if plan_id else None
         if plan_id and not plan:
-            raise AppError("Plano do pagamento nao encontrado.")
+            raise AppError("Plano do pagamento não encontrado.")
 
         status = str(data.get("status", "pending")).strip() or "pending"
         if status not in PAYMENT_STATUSES:
-            raise AppError("Status financeiro invalido.")
+            raise AppError("Status financeiro inválido.")
 
         due_date = str(data.get("due_date", "")).strip()
         payment_date = str(data.get("payment_date", "")).strip()
-        self._validate_optional_date(due_date, "Vencimento invalido.")
-        self._validate_optional_date(payment_date, "Data de pagamento invalida.")
+        self._validate_optional_date(due_date, "Vencimento inválido.")
+        self._validate_optional_date(payment_date, "Data de pagamento inválida.")
 
         amount_value = data.get("amount")
-        amount = self._parse_amount(amount_value, "Valor do pagamento invalido.")
+        amount = self._parse_amount(amount_value, "Valor do pagamento inválido.")
         if amount <= 0 and plan:
             amount = float(plan.get("amount") or 0.0)
         if amount < 0:
-            raise AppError("Valor do pagamento nao pode ser negativo.")
+            raise AppError("Valor do pagamento não pode ser negativo.")
 
         description = str(data.get("description", "")).strip()
         if not description and plan:
             description = str(plan.get("name") or "")
         if not description:
-            description = "Lancamento financeiro"
+            description = "Lançamento financeiro"
 
         if status == "paid" and not payment_date:
             payment_date = date.today().isoformat()

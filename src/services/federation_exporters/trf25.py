@@ -166,7 +166,7 @@ class TRF25Exporter(TRF16Exporter):
         service = self.export_service
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
-            raise AppError("Selecione um torneio valido.")
+            raise AppError("Selecione um torneio válido.")
 
         settings = self.db.get_tournament_settings(tournament_id) or {}
         warnings = self.validate(tournament_id)
@@ -190,8 +190,8 @@ class TRF25Exporter(TRF16Exporter):
         pairings_by_round = service._trf_pairings_by_round(tournament, rounds)
         start_rank_by_player = {int(p["id"]): i for i, p in enumerate(players, start=1)}
         standings_by_player = service._trf_player_standings(tournament, players)
-        # Celulas de rodada = o que JA ACONTECEU, como no TRF16 (FED-03). Este
-        # arquivo usava o total configurado tambem nas celulas, e o mesmo torneio
+        # Células de rodada = o que JÁ ACONTECEU, como no TRF16 (FED-03). Este
+        # arquivo usava o total configurado também nas células, e o mesmo torneio
         # saia com contagens diferentes nos dois formatos.
         cells_round_count = max([int(r["number"]) for r in rounds], default=0)
         round_count = max(
@@ -292,8 +292,8 @@ class TRF25Exporter(TRF16Exporter):
 
         return warnings
 
-    # O registro 250 (aceleracao) subiu para o TRF16 (FED-03): e o registro
-    # que a implementacao de referencia LE, entao vale para os dois formatos.
+    # O registro 250 (aceleração) subiu para o TRF16 (FED-03): e o registro
+    # que a implementação de referência LÊ, então vale para os dois formatos.
     # Este exportador o herda.
 
     def _prohibited_pairing_records_260(

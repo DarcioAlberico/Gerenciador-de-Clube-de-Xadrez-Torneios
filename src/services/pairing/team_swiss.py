@@ -120,13 +120,13 @@ def team_match_summary(
     for board in boards:
         resultado = str(board.get("result") or "")
         if resultado not in result_points:
-            # Era `result_points[...]` cru: um tabuleiro em branco ou com codigo
+            # Era `result_points[...]` cru: um tabuleiro em branco ou com código
             # desconhecido subia como KeyError, que a tela mostrava como "erro
-            # inesperado" com codigo de log — para uma situacao previsivel e que
-            # o arbitro resolve sozinho (PAR-04).
+            # inesperado" com código de log — para uma situação previsível e que
+            # o árbitro resolve sozinho (PAR-04).
             raise AppError(
                 f"Tabuleiro {board.get('board_number', '?')} do confronto tem "
-                f"resultado invalido ({resultado or 'em branco'}). "
+                f"resultado inválido ({resultado or 'em branco'}). "
                 "Preencha todos os tabuleiros antes de fechar a rodada."
             )
         white_points, black_points = result_points[resultado]
@@ -260,8 +260,8 @@ def round_robin_team_matches(
     total = len(ordered)
     if round_number > total - 1:
         raise AppError(
-            "Todos contra todos por equipes: o numero maximo de rodadas "
-            f"({total - 1}) ja foi atingido."
+            "Todos contra todos por equipes: o número máximo de rodadas "
+            f"({total - 1}) já foi atingido."
         )
 
     girado = [ordered[0]]

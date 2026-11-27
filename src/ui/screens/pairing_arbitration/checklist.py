@@ -67,7 +67,7 @@ def open_closing_checklist(host: Any, controller: Any) -> ctk.CTkToplevel | None
         ),
         close_text=t("arbitration.checklist.close_dialog"),
     )
-    # A primaria e a ultima da faixa, por construcao da ordem canonica.
+    # A primária e a última da faixa, por construção da ordem canônica.
     fechar_rodada = acoes.winfo_children()[-1]
     fechar_rodada.configure(fg_color=THEME_SUCCESS, hover_color=THEME_SUCCESS_HOVER)
     if not tudo_ok:

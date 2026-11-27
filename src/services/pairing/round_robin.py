@@ -64,8 +64,8 @@ def berger_round(field_size: int, round_number: int, *, double: bool = False) ->
     total = calendar_rounds(field_size, double=double)
     if size < 2 or round_number < 1 or round_number > total:
         raise AppError(
-            f"Todos contra todos: o calendario tem {total} rodada(s) e a rodada "
-            f"{round_number} esta fora dele."
+            f"Todos contra todos: o calendário tem {total} rodada(s) e a rodada "
+            f"{round_number} está fora dele."
         )
     returno = round_number > size - 1
     base = round_number - (size - 1) if returno else round_number
@@ -144,8 +144,8 @@ def withdrawn_on_board_warning(names: Sequence[str]) -> str:
 
 
 def rounds_mismatch_warning(configured: int, calendar: int, *, double: bool) -> str:
-    turno = "com returno" if double else "de turno unico"
-    return _rounds_mismatch_warning(configured, calendar, formato=f"rodizio {turno}")
+    turno = "com returno" if double else "de turno único"
+    return _rounds_mismatch_warning(configured, calendar, formato=f"rodízio {turno}")
 
 
 def annulment_candidates(
@@ -172,9 +172,9 @@ def annulment_candidates(
 def annulment_warning(names: Sequence[str], scheduled_rounds: int) -> str:
     quem = ", ".join(names)
     return (
-        f"Desistencia com menos de metade das partidas jogadas: {quem} (calendario "
-        f"de {scheduled_rounds} rodada(s)). A regra FIDE do rodizio (C.05) manda "
-        "anular os resultados de quem desiste antes da metade; o Albericus NAO "
-        "anula sozinho, porque isso reescreve a classificacao publicada — a "
-        "decisao e sua, com o regulamento do evento."
+        f"Desistência com menos de metade das partidas jogadas: {quem} (calendário "
+        f"de {scheduled_rounds} rodada(s)). A regra FIDE do rodízio (C.05) manda "
+        "anular os resultados de quem desiste antes da metade; o Albericus NÃO "
+        "anula sozinho, porque isso reescreve a classificação publicada — a "
+        "decisão e sua, com o regulamento do evento."
     )

@@ -303,7 +303,7 @@ class RelatorioDeRatingTest(CoreServiceTestCase):
         secoes = self._secoes(tournament_id)
         resumo = {linha[0]: linha[1] for linha in secoes["Resumo do relatório de rating"]}
         self.assertIn("Rápido", str(resumo["Ritmo"]))
-        detalhe = secoes["Variacao de rating FIDE"]
+        detalhe = secoes["Variação de rating FIDE"]
         self.assertEqual([1950, 1900], sorted((linha[1] for linha in detalhe), reverse=True))
         self.assertTrue(all(linha[2] == "rápido" for linha in detalhe))
 
@@ -318,7 +318,7 @@ class RelatorioDeRatingTest(CoreServiceTestCase):
         )
         self._rodada(tournament_id, 1, [(ids[0], ids[1], "1-0")])
 
-        detalhe = self._secoes(tournament_id)["Variacao de rating FIDE"]
+        detalhe = self._secoes(tournament_id)["Variação de rating FIDE"]
         por_nome = {linha[0]: linha for linha in detalhe}
         self.assertEqual(40, por_nome["Jogador 1"][3])
         self.assertEqual("jogador novo", por_nome["Jogador 1"][4])
@@ -352,7 +352,7 @@ class RelatorioDeRatingTest(CoreServiceTestCase):
         )
         self._rodada(tournament_id, 1, [(ids[0], ids[1], "1-0")])
         avisos = " | ".join(linha[0] for linha in self._secoes(tournament_id)["Aviso"])
-        self.assertIn("NAO foram conferidos", avisos)
+        self.assertIn("NÃO foram conferidos", avisos)
 
     def test_aviso_quando_falta_o_rating_do_ritmo(self) -> None:
         tournament_id = self._torneio("15 min + 10 s")
@@ -400,7 +400,7 @@ class RelatorioDeRatingTest(CoreServiceTestCase):
         self._rodada(tournament_id, 1, [(ids[1], ids[0], "1-0")])
 
         secoes = self._secoes(tournament_id)
-        por_nome = {linha[0]: linha for linha in secoes["Variacao de rating FIDE"]}
+        por_nome = {linha[0]: linha for linha in secoes["Variação de rating FIDE"]}
         self.assertEqual(2010, por_nome["Jogador 1"][9])  # Rc publicado no piso
         avisos = " | ".join(linha[0] for linha in secoes["Aviso"])
         self.assertIn("abaixo do piso", avisos)
@@ -419,5 +419,5 @@ class RelatorioDeRatingTest(CoreServiceTestCase):
             destino = Path(tmp) / "rating.csv"
             self.export_service.export_fide_rating_report(tournament_id, destino, "fide")
             conteudo = destino.read_text(encoding="utf-8-sig")
-        self.assertIn("Variacao de rating FIDE", conteudo)
+        self.assertIn("Variação de rating FIDE", conteudo)
         self.assertIn("Regulamento", conteudo)

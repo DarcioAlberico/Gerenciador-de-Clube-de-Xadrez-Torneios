@@ -193,8 +193,8 @@ class MotorQueFalhaTest(CoreServiceTestCase):
         self.assertEqual("engine_fallback", pendencias[0]["kind"])
         self.assertIn("FIDE (Gacrux) falhou", pendencias[0]["detail"])
         self.assertEqual(1, issues["metrics"]["tiebreak_alerts"])
-        # "attention", nao "decision": o aviso nao pode barrar o fechamento da
-        # rodada — quem segura a publicacao e o modo estrito, em standings().
+        # "attention", não "decision": o aviso não pode barrar o fechamento da
+        # rodada — quem segura a publicação e o modo estrito, em standings().
         self.assertEqual("attention", pendencias[0]["severity"])
         self.assertEqual(0, issues["metrics"]["decision_required"])
 
@@ -241,12 +241,12 @@ class MotorQueFalhaTest(CoreServiceTestCase):
         que explica o bloqueio.
         """
         self._estrito(True)
-        self.service.generate_next_round(self.tournament_id)  # rodada aberta -> diagnostico roda
+        self.service.generate_next_round(self.tournament_id)  # rodada aberta -> diagnóstico roda
         with self._com_motor_quebrado():
             issues = self.service.arbitration_issues(self.tournament_id)
         self.assertIn("metrics", issues)
 
-    # -- O modo estrito barra a PUBLICACAO, nao o torneio ------------------- #
+    # -- O modo estrito barra a PUBLICAÇÃO, não o torneio ------------------- #
 
     def test_modo_estrito_nao_impede_gerar_a_proxima_rodada(self) -> None:
         """Pareamento só precisa da ordem por pontos, que os dois motores dão igual.
@@ -311,9 +311,9 @@ class MotorQueFalhaTest(CoreServiceTestCase):
         self.db.save_tournament_settings(self.tournament_id, {"tiebreak_engine": ENGINE_ALBERICUS})
         faixa = self.service.tiebreak_engine_badge(self.tournament_id)
         self.assertIn("Albericus", faixa["label"])
-        # Desde a TBK-03 o motor proprio e legado, entao a faixa avisa mesmo
-        # quando ele foi escolhido de proposito — nao e falha, mas a tabela nao
-        # e a oficial. O tom "ok" ficou so para o motor homologado.
+        # Desde a TBK-03 o motor próprio e legado, então a faixa avisa mesmo
+        # quando ele foi escolhido de propósito — não é falha, mas a tabela não
+        # e a oficial. O tom "ok" ficou só para o motor homologado.
         self.assertEqual("warning", faixa["tone"])
         self.assertIn("legado", faixa["label"])
 

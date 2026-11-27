@@ -45,7 +45,7 @@ def render_guide(surface: DrawingSurface, orientation: str = "landscape") -> Non
         surface.text(zones.content_left + 0.2 * CM, y + height - 0.45 * CM, label,
                      font="Helvetica", size=9, fill=muted, anchor="start")
 
-    zone(zones.hero_y + 0.7 * CM, 0.9 * CM, "titulo / saudacao")
+    zone(zones.hero_y + 0.7 * CM, 0.9 * CM, "título / saudação")
     zone(zones.hero_y - 0.5 * CM, 1.1 * CM, "NOME DO PREMIADO")
     zone(zones.body_top - 2.0 * CM, 1.8 * CM, "texto do diploma")
     zone(zones.footer_y - 0.4 * CM, 1.0 * CM, "assinaturas")
@@ -54,5 +54,5 @@ def render_guide(surface: DrawingSurface, orientation: str = "landscape") -> Non
                  size=20, fill=ink, anchor="middle")
     surface.text(cx, zones.margin + 0.7 * CM,
                  f"Guia de arte A4 {orientation} — desenhe o fundo em {width_px}x{height_px}px (300 DPI); "
-                 "os campos serao sobrepostos nas areas tracejadas.",
+                 "os campos serão sobrepostos nas áreas tracejadas.",
                  font="Helvetica", size=9, fill=muted, anchor="middle")

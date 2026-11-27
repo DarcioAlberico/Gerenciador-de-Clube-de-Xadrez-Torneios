@@ -170,7 +170,7 @@ def format_pairing_preview(preview: dict[str, Any], *, limit: int = 12) -> str:
     conferir o topo do emparceiramento, não para ler 60 mesas num toast.
     """
     cabecalho = [
-        f"Previa da rodada {preview['round_number']}",
+        f"Prévia da rodada {preview['round_number']}",
         f"Sistema: {preview.get('pairing_system', '')}",
         f"Alertas: {preview.get('alerts_count', 0)}",
         "",
@@ -201,7 +201,7 @@ def format_pairing_preview(preview: dict[str, Any], *, limit: int = 12) -> str:
     if not linhas:
         linhas.append("Nenhuma mesa prevista.")
     linhas.append("")
-    linhas.append("Esta pre-visualizacao nao gravou rodada no banco.")
+    linhas.append("Esta pré-visualização não gravou rodada no banco.")
     return "\n".join(cabecalho + linhas)
 
 
@@ -231,15 +231,15 @@ def format_knockout_bracket(bracket: dict[str, Any]) -> str:
                 confronto += f" ({mesa['result']})"
             linhas.append(confronto)
             if mesa.get("pending"):
-                linhas.append("    -> sem vencedor: registre quem avanca e por que")
+                linhas.append("    -> sem vencedor: registre quem avança e por que")
                 continue
-            motivo = f"    -> avanca {mesa['advanced_name']} ({mesa['criterion_label']})"
+            motivo = f"    -> avança {mesa['advanced_name']} ({mesa['criterion_label']})"
             if mesa.get("notes"):
                 motivo += f": {mesa['notes']}"
             linhas.append(motivo)
         linhas.append("")
     if bracket.get("pending"):
-        linhas.append(f"Mesas sem decisao registrada: {bracket['pending']}.")
+        linhas.append(f"Mesas sem decisão registrada: {bracket['pending']}.")
     return "\n".join(linhas).rstrip()
 
 

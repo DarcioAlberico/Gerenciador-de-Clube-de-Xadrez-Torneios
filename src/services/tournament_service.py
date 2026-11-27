@@ -104,7 +104,7 @@ class TournamentService:
     def duplicate_tournament(self, source_tournament_id: int, new_name: str) -> int:
         source = self.db.get_tournament(source_tournament_id)
         if not source:
-            raise AppError("Selecione um torneio valido para duplicar.")
+            raise AppError("Selecione um torneio válido para duplicar.")
         clean_name = str(new_name or "").strip()
         if not clean_name:
             raise AppError("Informe o nome do novo torneio.")
@@ -135,7 +135,7 @@ class TournamentService:
             definicao = normalize_category(category_from_row(item))
             if not definicao.is_valid:
                 if str(item.get("name") or "").strip():
-                    raise AppError(f"Tipo de categoria invalido em '{definicao.name}'.")
+                    raise AppError(f"Tipo de categoria inválido em '{definicao.name}'.")
                 continue
             chave = definicao.name.casefold()
             if chave in vistos:
@@ -160,7 +160,7 @@ class TournamentService:
     def delete_tournament(self, tournament_id: int) -> None:
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
-            raise AppError("Selecione um torneio valido para excluir.")
+            raise AppError("Selecione um torneio válido para excluir.")
         self.db.delete_tournament(tournament_id)
         logger.info("Torneio excluido: %s", tournament_id)
 
@@ -182,7 +182,7 @@ class TournamentService:
         highest_generated_round = max((int(item["number"]) for item in generated_rounds), default=0)
         if int(tournament_payload["rounds_count"]) < highest_generated_round:
             raise AppError(
-                f"O torneio ja possui rodadas geradas ate a rodada {highest_generated_round}. "
+                f"O torneio já possui rodadas geradas até a rodada {highest_generated_round}. "
                 "Exclua as rodadas geradas antes de reduzir o total."
             )
         self._validate_competition_type_change(
@@ -232,13 +232,13 @@ class TournamentService:
         """Muda o metodo de pareamento (RR <-> Suico <-> ...), bloqueado apos a R1."""
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
-            raise AppError("Selecione um torneio valido.")
+            raise AppError("Selecione um torneio válido.")
         method = str(pairing_method or "").strip()
         if method not in PAIRING_METHODS:
-            raise AppError("Metodo de pareamento invalido.")
+            raise AppError("Método de pareamento inválido.")
         if self.db.list_rounds(tournament_id):
             raise AppError(
-                "Nao e possivel mudar o metodo de pareamento depois de gerar a primeira rodada."
+                "Não é possível mudar o método de pareamento depois de gerar a primeira rodada."
             )
         self.db.update_pairing_method(tournament_id, method)
         logger.info("Torneio %s teve o pareamento alterado para %s", tournament_id, method)
@@ -247,13 +247,13 @@ class TournamentService:
         """Divide os jogadores em N torneios-filho por ranking inicial (A=mais forte)."""
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
-            raise AppError("Selecione um torneio valido.")
+            raise AppError("Selecione um torneio válido.")
         if tournament.get("competition_type") == "team":
-            raise AppError("A divisao esta disponivel apenas para torneios individuais.")
+            raise AppError("A divisão está disponível apenas para torneios individuais.")
         try:
             groups = int(group_count)
         except (TypeError, ValueError) as exc:
-            raise AppError("Quantidade de grupos invalida.") from exc
+            raise AppError("Quantidade de grupos inválida.") from exc
         if groups < 2:
             raise AppError("Divida em pelo menos 2 grupos.")
         if self.db.list_rounds(tournament_id):
@@ -342,9 +342,9 @@ class TournamentService:
         if requested_type == current_type:
             return
         if generated_rounds:
-            raise AppError("Nao e possivel mudar o formato do torneio depois de gerar rodadas.")
+            raise AppError("Não é possível mudar o formato do torneio depois de gerar rodadas.")
         if current_type == "team" and self.db.list_teams(tournament_id, active_only=False):
-            raise AppError("Nao e possivel mudar o formato do torneio enquanto houver equipes cadastradas.")
+            raise AppError("Não é possível mudar o formato do torneio enquanto houver equipes cadastradas.")
 
     def _validate_team_settings_compatibility(
         self,
@@ -362,7 +362,7 @@ class TournamentService:
                     highest_board = max(highest_board, int(assignment["board_number"]))
         if highest_board > boards_count:
             raise AppError(
-                f"Ja existe jogador escalado no tabuleiro {highest_board}. "
+                f"Já existe jogador escalado no tabuleiro {highest_board}. "
                 f"Aumente ou mantenha a quantidade de tabuleiros por equipe."
             )
 
@@ -378,27 +378,27 @@ class TournamentService:
         try:
             rounds_count = int(data.get("rounds_count") or 1)
         except ValueError as exc:
-            raise AppError("Numero de rodadas invalido.") from exc
+            raise AppError("Número de rodadas inválido.") from exc
         if rounds_count < 1:
             raise AppError("O torneio precisa ter pelo menos uma rodada.")
 
         try:
             bye_points = float(str(data.get("bye_points") or "0").replace(",", "."))
         except ValueError as exc:
-            raise AppError("Pontuacao do bye invalida.") from exc
+            raise AppError("Pontuação do bye inválida.") from exc
         if bye_points < 0:
-            raise AppError("Pontuacao do bye nao pode ser negativa.")
+            raise AppError("Pontuação do bye não pode ser negativa.")
 
-        start_date = self._normalize_optional_date(data.get("start_date", ""), "Data inicial invalida.")
-        end_date = self._normalize_optional_date(data.get("end_date", ""), "Data final invalida.")
+        start_date = self._normalize_optional_date(data.get("start_date", ""), "Data inicial inválida.")
+        end_date = self._normalize_optional_date(data.get("end_date", ""), "Data final inválida.")
         if start_date and end_date and start_date > end_date:
-            raise AppError("Data final nao pode ser anterior a data inicial.")
+            raise AppError("Data final não pode ser anterior a data inicial.")
 
         competition_type = str(
             data.get("competition_type") or tournament.get("competition_type") or "individual"
         ).strip() or "individual"
         if competition_type not in COMPETITION_TYPES:
-            raise AppError("Formato do torneio invalido.")
+            raise AppError("Formato do torneio inválido.")
 
         _scope, club_id, class_id = self._validated_tournament_scope(data, tournament)
         return {
@@ -430,7 +430,7 @@ class TournamentService:
             else:
                 scope = "standalone"
         if scope not in TOURNAMENT_SCOPES:
-            raise AppError("Escopo do torneio invalido.")
+            raise AppError("Escopo do torneio inválido.")
 
         if scope == "standalone":
             return scope, None, None
@@ -441,11 +441,11 @@ class TournamentService:
             if scope == "class":
                 class_id = int(data.get("class_id") or tournament.get("class_id") or 0)
         except ValueError as exc:
-            raise AppError("Turma do torneio invalida.") from exc
+            raise AppError("Turma do torneio inválida.") from exc
         if scope == "class":
             class_data = self.db.get_class(class_id or 0)
             if not class_data:
-                raise AppError("Turma do torneio nao encontrada.")
+                raise AppError("Turma do torneio não encontrada.")
 
         if data.get("club_id"):
             club_source = data.get("club_id")
@@ -456,29 +456,29 @@ class TournamentService:
         try:
             club_id = int(club_source or 0)
         except ValueError as exc:
-            raise AppError("Clube/escola do torneio invalido.") from exc
+            raise AppError("Clube/escola do torneio inválido.") from exc
         if not club_id or not self.db.get_club(club_id):
-            raise AppError("Clube/escola do torneio nao encontrado.")
+            raise AppError("Clube/escola do torneio não encontrado.")
 
         if scope == "club":
             return scope, club_id, None
 
         if class_data and int(class_data["club_id"]) != club_id:
-            raise AppError("A turma selecionada nao pertence ao clube/escola do torneio.")
+            raise AppError("A turma selecionada não pertence ao clube/escola do torneio.")
         return scope, club_id, class_id
 
     def _validated_settings(self, data: dict[str, Any]) -> dict[str, Any]:
         initial_order = str(data.get("initial_order", "rating")).strip() or "rating"
         if initial_order not in INITIAL_ORDER_OPTIONS:
-            raise AppError("Ordem inicial invalida.")
+            raise AppError("Ordem inicial inválida.")
 
         tournament_type = str(data.get("tournament_type", "real")).strip() or "real"
         if tournament_type not in TOURNAMENT_TYPES:
-            raise AppError("Tipo de torneio invalido.")
+            raise AppError("Tipo de torneio inválido.")
 
         tournament_profile = str(data.get("tournament_profile", "free")).strip() or "free"
         if tournament_profile not in TOURNAMENT_PROFILES:
-            raise AppError("Perfil do torneio invalido.")
+            raise AppError("Perfil do torneio inválido.")
 
         pairing_system = str(data.get("pairing_system", default_pairing_system())).strip() or default_pairing_system()
         if pairing_system not in PAIRING_SYSTEMS:
@@ -488,12 +488,12 @@ class TournamentService:
         if "pairing_method" in data:
             pairing_method = str(data.get("pairing_method") or "swiss").strip() or "swiss"
             if pairing_method not in PAIRING_METHODS:
-                raise AppError("Metodo de pareamento invalido.")
+                raise AppError("Método de pareamento inválido.")
 
         acceleration_method = str(data.get("acceleration_method", "none")).strip() or "none"
         acceleration_head = acceleration_method.partition(":")[0]
         if acceleration_head not in ACCELERATION_METHODS:
-            raise AppError("Metodo de aceleracao invalido.")
+            raise AppError("Método de aceleração inválido.")
         if acceleration_head == "custom":
             spec = acceleration_spec(acceleration_method)
             if (
@@ -502,37 +502,37 @@ class TournamentService:
                 or float(spec.get("bonus") or 0.0) <= 0.0
                 or not 0.0 < float(spec.get("upper_fraction") or 0.0) <= 1.0
             ):
-                raise AppError("Metodo de aceleracao invalido.")
+                raise AppError("Método de aceleração inválido.")
 
         try:
             late_entry_points = float(str(data.get("late_entry_points") or "0").replace(",", "."))
         except ValueError as exc:
-            raise AppError("Pontos por adesao tardia invalidos.") from exc
+            raise AppError("Pontos por adesão tardia inválidos.") from exc
         try:
             team_boards_count = int(data.get("team_boards_count") or 4)
         except ValueError as exc:
-            raise AppError("Quantidade de tabuleiros por equipe invalida.") from exc
+            raise AppError("Quantidade de tabuleiros por equipe inválida.") from exc
         if team_boards_count < 1:
             raise AppError("Use pelo menos um tabuleiro por equipe.")
 
         try:
             team_rating_tolerance = int(data.get("team_rating_tolerance") or 0)
         except ValueError as exc:
-            raise AppError("Tolerancia de rating por equipe invalida.") from exc
+            raise AppError("Tolerância de rating por equipe inválida.") from exc
         if team_rating_tolerance < 0:
-            raise AppError("Tolerancia de rating por equipe nao pode ser negativa.")
+            raise AppError("Tolerância de rating por equipe não pode ser negativa.")
 
         try:
             team_max_substitutions = int(data.get("team_max_substitutions") or 0)
         except ValueError as exc:
-            raise AppError("Limite de substituicoes por equipe invalido.") from exc
+            raise AppError("Limite de substituições por equipe inválido.") from exc
         if team_max_substitutions < 0:
             team_max_substitutions = 0
 
         team_point_fields = {
-            "team_match_win_points": "Pontos por vitoria da equipe invalidos.",
-            "team_match_draw_points": "Pontos por empate da equipe invalidos.",
-            "team_match_loss_points": "Pontos por derrota da equipe invalidos.",
+            "team_match_win_points": "Pontos por vitória da equipe inválidos.",
+            "team_match_draw_points": "Pontos por empate da equipe inválidos.",
+            "team_match_loss_points": "Pontos por derrota da equipe inválidos.",
         }
         team_point_defaults = {
             "team_match_win_points": "2",
@@ -561,22 +561,22 @@ class TournamentService:
             try:
                 value = float(str(data.get(field) or "0").replace(",", "."))
             except ValueError as exc:
-                raise AppError(f"Taxa de rating {label} invalida.") from exc
+                raise AppError(f"Taxa de rating {label} inválida.") from exc
             if value < 0:
-                raise AppError(f"Taxa de rating {label} nao pode ser negativa.")
+                raise AppError(f"Taxa de rating {label} não pode ser negativa.")
             rating_fees[field] = value
 
         team_pairing_method = str(data.get("team_pairing_method", "swiss")).strip() or "swiss"
         if team_pairing_method not in TEAM_PAIRING_METHODS:
-            raise AppError("Metodo de emparceiramento por equipes invalido.")
+            raise AppError("Método de emparceiramento por equipes inválido.")
         team_standing_primary = str(data.get("team_standing_primary", "match_points")).strip() or "match_points"
         team_standing_secondary = str(data.get("team_standing_secondary", "game_points")).strip() or "game_points"
         if team_standing_primary not in TEAM_STANDING_CRITERIA:
-            raise AppError("Criterio principal por equipes invalido.")
+            raise AppError("Critério principal por equipes inválido.")
         if team_standing_secondary not in TEAM_STANDING_CRITERIA:
-            raise AppError("Criterio secundario por equipes invalido.")
+            raise AppError("Critério secundário por equipes inválido.")
         if team_standing_primary == team_standing_secondary:
-            raise AppError("Use criterios diferentes para classificacao por equipes.")
+            raise AppError("Use critérios diferentes para classificação por equipes.")
 
         tiebreak_sequence = serialize_tiebreak_sequence(
             parse_player_tiebreak_sequence(data.get("tiebreak_sequence"))
@@ -587,28 +587,28 @@ class TournamentService:
 
         rating_speed = str(data.get("rating_speed", "")).strip().lower()
         if rating_speed not in SPEED_CHOICES:
-            raise AppError("Ritmo para rating invalido.")
+            raise AppError("Ritmo para rating inválido.")
         rating_regulation = serialize_regulation_overrides(data.get("rating_regulation"))
 
         prize_tie_split = str(data.get("prize_tie_split", "equal")).strip() or "equal"
         if prize_tie_split not in PRIZE_TIE_SPLITS:
-            raise AppError("Forma de rateio entre empatados invalida.")
+            raise AppError("Forma de rateio entre empatados inválida.")
         try:
             late_tolerance_minutes = int(data.get("late_tolerance_minutes") or 0)
         except (TypeError, ValueError) as exc:
-            raise AppError("Tolerancia de atraso invalida.") from exc
+            raise AppError("Tolerância de atraso inválida.") from exc
         if late_tolerance_minutes < 0:
-            raise AppError("Tolerancia de atraso nao pode ser negativa.")
+            raise AppError("Tolerância de atraso não pode ser negativa.")
 
         prize_policy = str(data.get("prize_policy", "best_only")).strip() or "best_only"
         if prize_policy not in PRIZE_POLICIES:
-            raise AppError("Politica de premiacao invalida.")
+            raise AppError("Política de premiação inválida.")
         try:
             prize_tax_percent = float(str(data.get("prize_tax_percent") or "0").replace(",", "."))
         except ValueError as exc:
-            raise AppError("Imposto de premiacao invalido.") from exc
+            raise AppError("Imposto de premiação inválido.") from exc
         if not 0.0 <= prize_tax_percent <= 100.0:
-            raise AppError("Imposto de premiacao deve estar entre 0 e 100%.")
+            raise AppError("Imposto de premiação deve estar entre 0 e 100%.")
 
         payload = {
             "fide_event_id": str(data.get("fide_event_id", "")),
@@ -779,11 +779,11 @@ class TournamentService:
             try:
                 round_number = int(item.get("round_number") or 0)
             except ValueError as exc:
-                raise AppError("Numero de rodada invalido na agenda.") from exc
+                raise AppError("Número de rodada inválido na agenda.") from exc
             if round_number < 1:
                 raise AppError("Agenda contem rodada fora do total configurado.")
             if round_number > rounds_count:
-                # ORG-03: descartar em silencio apagava data ja publicada. Quem
+                # ORG-03: descartar em silêncio apagava data já publicada. Quem
                 # reduz rodadas com agenda preenchida tem de saber o que perde.
                 if str(item.get("date", "")).strip() or str(item.get("time", "")).strip():
                     dropped.append(round_number)
@@ -822,8 +822,8 @@ class TournamentService:
                 )
 
         if dropped and not confirm_schedule_loss:
-            # ORG-03: confirmacao, nao descarte calado. Quem reduziu o total de
-            # rodadas esta prestes a perder datas que ja podem ter sido
+            # ORG-03: confirmação, não descarte calado. Quem reduziu o total de
+            # rodadas esta prestes a perder datas que já podem ter sido
             # publicadas — e o programa apagava sem dizer nada.
             perdidas = ", ".join(str(numero) for numero in sorted(dropped))
             raise AppError(
@@ -846,13 +846,13 @@ class TournamentService:
         try:
             total_rounds = int(rounds_count)
         except (TypeError, ValueError) as exc:
-            raise AppError("Numero de rodadas invalido para gerar agenda.") from exc
+            raise AppError("Número de rodadas inválido para gerar agenda.") from exc
         if total_rounds < 1:
             raise AppError("O torneio precisa ter pelo menos uma rodada para gerar agenda.")
 
         start_date_text = TournamentService._normalize_optional_date(
             start_date,
-            "Data inicial da agenda invalida.",
+            "Data inicial da agenda inválida.",
         )
         if not start_date_text:
             raise AppError("Informe a data inicial da agenda.")
@@ -861,26 +861,26 @@ class TournamentService:
         try:
             start_time = time.fromisoformat(str(first_time or "").strip())
         except ValueError as exc:
-            raise AppError("Hora inicial da agenda invalida. Use HH:MM.") from exc
+            raise AppError("Hora inicial da agenda inválida. Use HH:MM.") from exc
 
         try:
             duration_minutes = int(round_duration_minutes)
         except (TypeError, ValueError) as exc:
-            raise AppError("Duracao da rodada invalida.") from exc
+            raise AppError("Duração da rodada inválida.") from exc
         if duration_minutes < 1:
-            raise AppError("Duracao da rodada deve ser maior que zero.")
+            raise AppError("Duração da rodada deve ser maior que zero.")
 
         try:
             interval_minutes = int(break_minutes)
         except (TypeError, ValueError) as exc:
-            raise AppError("Intervalo entre rodadas invalido.") from exc
+            raise AppError("Intervalo entre rodadas inválido.") from exc
         if interval_minutes < 0:
-            raise AppError("Intervalo entre rodadas nao pode ser negativo.")
+            raise AppError("Intervalo entre rodadas não pode ser negativo.")
 
         try:
             per_day = int(rounds_per_day)
         except (TypeError, ValueError) as exc:
-            raise AppError("Rodadas por dia invalidas.") from exc
+            raise AppError("Rodadas por dia inválidas.") from exc
         if per_day < 1 or per_day > total_rounds:
             per_day = total_rounds
 
@@ -910,20 +910,20 @@ class TeamService:
         try:
             team_id = self.db.create_team(tournament_id, **payload)
         except sqlite3.IntegrityError as exc:
-            raise AppError("Ja existe uma equipe com este nome no torneio.") from exc
+            raise AppError("Já existe uma equipe com este nome no torneio.") from exc
         logger.info("Equipe criada no torneio %s: %s", tournament_id, team_id)
         return team_id
 
     def update_team(self, team_id: int, data: dict[str, Any]) -> None:
         team = self.db.get_team(team_id)
         if not team:
-            raise AppError("Equipe nao encontrada.")
+            raise AppError("Equipe não encontrada.")
         self._require_team_tournament(int(team["tournament_id"]))
         payload = self._validated_team_payload(data)
         try:
             self.db.update_team(team_id, **payload)
         except sqlite3.IntegrityError as exc:
-            raise AppError("Ja existe uma equipe com este nome no torneio.") from exc
+            raise AppError("Já existe uma equipe com este nome no torneio.") from exc
         logger.info("Equipe atualizada: %s", team_id)
 
     def add_player(
@@ -935,16 +935,16 @@ class TeamService:
     ) -> int:
         team = self.db.get_team(team_id)
         if not team:
-            raise AppError("Equipe nao encontrada.")
+            raise AppError("Equipe não encontrada.")
         self._require_team_tournament(int(team["tournament_id"]))
 
         player = self.db.get_player(player_id)
         if not player or int(player["tournament_id"]) != int(team["tournament_id"]):
-            raise AppError("Jogador nao pertence ao torneio da equipe.")
+            raise AppError("Jogador não pertence ao torneio da equipe.")
 
         existing = self.db.get_team_player_by_player(player_id)
         if existing:
-            raise AppError(f"Jogador ja esta na equipe {existing['team_name']}.")
+            raise AppError(f"Jogador já está na equipe {existing['team_name']}.")
 
         payload = self._validated_assignment_payload(
             int(team["tournament_id"]),
@@ -955,7 +955,7 @@ class TeamService:
         try:
             team_player_id = self.db.add_player_to_team(team_id, player_id, **payload)
         except sqlite3.IntegrityError as exc:
-            raise AppError("Jogador ou tabuleiro ja cadastrado em uma equipe.") from exc
+            raise AppError("Jogador ou tabuleiro já cadastrado em uma equipe.") from exc
         logger.info("Jogador %s adicionado a equipe %s", player_id, team_id)
         return team_player_id
 
@@ -967,7 +967,7 @@ class TeamService:
     ) -> None:
         assignment = self.db.get_team_player(team_player_id)
         if not assignment:
-            raise AppError("Jogador da equipe nao encontrado.")
+            raise AppError("Jogador da equipe não encontrado.")
         self._require_team_tournament(int(assignment["tournament_id"]))
         payload = self._validated_assignment_payload(
             int(assignment["tournament_id"]),
@@ -982,22 +982,22 @@ class TeamService:
         try:
             self.db.update_team_player(team_player_id, **payload)
         except sqlite3.IntegrityError as exc:
-            raise AppError("Tabuleiro ja ocupado nesta equipe.") from exc
+            raise AppError("Tabuleiro já ocupado nesta equipe.") from exc
         logger.info("Escalacao da equipe atualizada: %s", team_player_id)
 
     def remove_player(self, team_player_id: int) -> None:
         if not self.db.get_team_player(team_player_id):
-            raise AppError("Jogador da equipe nao encontrado.")
+            raise AppError("Jogador da equipe não encontrado.")
         self.db.remove_player_from_team(team_player_id)
         logger.info("Jogador removido da equipe: %s", team_player_id)
 
     def delete_team(self, team_id: int) -> None:
         team = self.db.get_team(team_id)
         if not team:
-            raise AppError("Equipe nao encontrada.")
+            raise AppError("Equipe não encontrada.")
         if self.db.count_team_matches(team_id) > 0:
             raise AppError(
-                "Equipe ja apareceu em rodadas. Para preservar o historico, desmarque Ativa e atualize a equipe."
+                "Equipe já apareceu em rodadas. Para preservar o histórico, desmarque Ativa e atualize a equipe."
             )
         self.db.delete_team(team_id)
         logger.info("Equipe excluida: %s", team_id)
@@ -1082,7 +1082,7 @@ class TeamService:
     def _require_team_tournament(self, tournament_id: int) -> dict[str, Any]:
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
-            raise AppError("Selecione um torneio valido.")
+            raise AppError("Selecione um torneio válido.")
         if tournament.get("competition_type") != "team":
             raise AppError("Esta tela exige um torneio no formato Equipes.")
         return tournament
@@ -1108,20 +1108,20 @@ class TeamService:
     ) -> dict[str, Any]:
         role_value = str(role or "starter").strip() or "starter"
         if role_value not in TEAM_PLAYER_ROLES:
-            raise AppError("Funcao do jogador na equipe invalida.")
+            raise AppError("Função do jogador na equipe inválida.")
 
         board_value: int | None = None
         if role_value == "starter":
             try:
                 board_value = int(board_number or 0)
             except ValueError as exc:
-                raise AppError("Numero do tabuleiro invalido.") from exc
+                raise AppError("Número do tabuleiro inválido.") from exc
             if board_value < 1:
                 raise AppError("Informe o tabuleiro do titular.")
             settings = self.db.get_tournament_settings(tournament_id) or {}
             boards_count = int(settings.get("team_boards_count") or 4)
             if board_value > boards_count:
-                raise AppError(f"O torneio esta configurado para {boards_count} tabuleiros por equipe.")
+                raise AppError(f"O torneio está configurado para {boards_count} tabuleiros por equipe.")
 
         return {
             "board_number": board_value,
@@ -1141,4 +1141,4 @@ class TeamService:
             if ignore_team_player_id and int(assignment["id"]) == ignore_team_player_id:
                 continue
             if assignment.get("board_number") and int(assignment["board_number"]) == board_number:
-                raise AppError("Ja existe jogador neste tabuleiro da equipe.")
+                raise AppError("Já existe jogador neste tabuleiro da equipe.")

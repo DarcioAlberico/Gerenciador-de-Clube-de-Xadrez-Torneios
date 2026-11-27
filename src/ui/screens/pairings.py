@@ -55,9 +55,9 @@ class PairingPagesMixin(ArbitrationPagesMixin, PairingResultsMixin):
                 toolbar, text="Recalcular", command=self._recalculate_standings
             ).pack(side="left", padx=12, pady=12)
             botao_cruzada = ctk.CTkButton(toolbar, text="Exportar tabela cruzada")
-            # O botao entra no proprio comando (F5.9): e ele que o
-            # `_run_background` esmaece enquanto a exportacao roda. Sem isso a
-            # espera so aparecia na barra de 6px do rodape, longe de onde o
+            # O botão entra no próprio comando (F5.9): e ele que o
+            # `_run_background` esmaece enquanto a exportação roda. Sem isso a
+            # espera só aparecia na barra de 6px do rodapé, longe de onde o
             # clique aconteceu (P3-11).
             botao_cruzada.configure(
                 command=lambda b=botao_cruzada: self._export_crosstable_from_standings(b)
@@ -72,9 +72,9 @@ class PairingPagesMixin(ArbitrationPagesMixin, PairingResultsMixin):
             team_standings = self._standings_or_empty(
                 lambda: self.pairing_service.team_standings(self.current_tournament_id)
             )
-            # Colunas dos criterios configurados que nao tem lugar fixo
-            # (TBK-05): a tabela precisa mostrar o numero que decidiu a ordem,
-            # senao o arbitro publica uma classificacao que nao consegue
+            # Colunas dos critérios configurados que não tem lugar fixo
+            # (TBK-05): a tabela precisa mostrar o número que decidiu a ordem,
+            # senão o árbitro publica uma classificação que não consegue
             # explicar. Vem antes do status, na ordem em que desempatam.
             extras = extra_team_columns(team_standings)
 
@@ -99,7 +99,7 @@ class PairingPagesMixin(ArbitrationPagesMixin, PairingResultsMixin):
                     "pos": "Pos",
                     "team": "Equipe",
                     "club": "Clube/Cidade",
-                    "captain": "Capitao",
+                    "captain": "Capitão",
                     "match_points": "MP",
                     "game_points": "GP",
                     "wins": "V",
@@ -197,7 +197,7 @@ class PairingPagesMixin(ArbitrationPagesMixin, PairingResultsMixin):
                 )
                 self._show_info(
                     "Ratings internos atualizados: {updated}\n"
-                    "Ja aplicados anteriormente: {duplicates}\n"
+                    "Já aplicados anteriormente: {duplicates}\n"
                     "Sem performance suficiente: {skipped}\n"
                     "Convidados externos ignorados: {external}".format(**result)
                 )
@@ -301,7 +301,7 @@ class PairingPagesMixin(ArbitrationPagesMixin, PairingResultsMixin):
                 player_id=player_id,
             )
             if not standings:
-                self._show_warning("Nao ha componentes de desempate para este jogador.")
+                self._show_warning("Não há componentes de desempate para este jogador.")
                 return
 
             narrative = self.pairing_service.tiebreak_narrative(

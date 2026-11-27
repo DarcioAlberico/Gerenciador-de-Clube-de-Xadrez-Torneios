@@ -64,10 +64,10 @@ class PairingResultsMixin:
             ("Exportar rodada", self._export_current_round_pairings),
             ("Imprimir rodada", self._print_current_round_pairings),
             None,
-            ("Exportar sumulas", self._export_current_round_scoresheets),
-            ("Imprimir sumulas", self._print_current_round_scoresheets),
+            ("Exportar súmulas", self._export_current_round_scoresheets),
+            ("Imprimir súmulas", self._print_current_round_scoresheets),
             None,
-            ("Exportar cartoes de mesa", self._export_table_cards),
+            ("Exportar cartões de mesa", self._export_table_cards),
         ]
 
     def _round_more_menu_items(self):
@@ -79,13 +79,13 @@ class PairingResultsMixin:
             ("Trocar cores da mesa", self._swap_selected_colors),
             ("Trocar jogador da mesa", self._open_player_swap_dialog),
             None,
-            # Mata-mata (PAR-03): a mesa empatada precisa de decisao registrada
-            # para a proxima fase existir, e a chave e onde ela aparece depois.
-            ("Registrar avanco (mata-mata)", self._open_knockout_advancement_dialog),
+            # Mata-mata (PAR-03): a mesa empatada precisa de decisão registrada
+            # para a próxima fase existir, e a chave e onde ela aparece depois.
+            ("Registrar avanço (mata-mata)", self._open_knockout_advancement_dialog),
             ("Chave do mata-mata", self._show_knockout_bracket),
             None,
             ("QR da mesa selecionada", self._show_selected_pairing_qr_link),
-            ("Submissoes via QR", self._open_qr_submissions_queue),
+            ("Submissões via QR", self._open_qr_submissions_queue),
             ("Servidor de resultados QR", self._start_qr_result_server),
         ]
         if self._is_free_mode():
@@ -93,9 +93,9 @@ class PairingResultsMixin:
         return items
 
     def _build_round_toolbar(self, toolbar) -> None:
-        """Barra de acoes hierarquica da tela de Rodadas (P1-1 / F2.1): primarias
-        preenchidas, secundarias recolhidas em 'Exportar'/'Mais' e destrutiva isolada."""
-        # Linha 1 - acao principal + menus de secundarias + destrutiva isolada a direita.
+        """Barra de ações hierárquica da tela de Rodadas (P1-1 / F2.1): primárias
+        preenchidas, secundárias recolhidas em 'Exportar'/'Mais' e destrutiva isolada."""
+        # Linha 1 - ação principal + menus de secundárias + destrutiva isolada a direita.
         actions = ctk.CTkFrame(toolbar, fg_color="transparent")
         actions.grid(row=0, column=0, padx=SPACE_MD, pady=(SPACE_MD, SPACE_SM), sticky="ew")
         actions.grid_columnconfigure(3, weight=1)  # espaco flexivel isola a acao destrutiva
@@ -110,7 +110,7 @@ class PairingResultsMixin:
             actions,
             "Exportar",
             self._round_export_menu_items(),
-            tip="Exportar/imprimir a rodada, as sumulas e os cartoes de mesa.",
+            tip="Exportar/imprimir a rodada, as súmulas e os cartões de mesa.",
         ).grid(row=0, column=1, padx=(0, SPACE_SM))
         menu_button(
             actions,
@@ -125,22 +125,22 @@ class PairingResultsMixin:
             tip="Apaga a rodada selecionada e todos os resultados lançados nela.",
         ).grid(row=0, column=4, sticky="e")
 
-        # Linha 2 - lancamento de resultados (fluxo mais frequente do dia a dia).
+        # Linha 2 - lançamento de resultados (fluxo mais frequente do dia a dia).
         #
-        # **Faixa que quebra linha** (continuacao da B-8): esta era a linha que
-        # definia o gargalo de largura do app — 1.220px, medidos no botao
-        # "Limpar", que e o ultimo da fila. Sao dois seletores, uma primaria e
-        # quatro botoes rapidos: em janela estreita nao havia como caber, e o
-        # que sobrava para fora era justamente o "Limpar", a acao de desfazer.
+        # **Faixa que quebra linha** (continuação da B-8): esta era a linha que
+        # definia o gargalo de largura do app — 1.220px, medidos no botão
+        # "Limpar", que é o ultimo da fila. São dois seletores, uma primária e
+        # quatro botões rápidos: em janela estreita não havia como caber, e o
+        # que sobrava para fora era justamente o "Limpar", a ação de desfazer.
         #
-        # Aqui a `WrapRow` funciona (e no painel de arbitragem nao funcionava)
-        # porque a faixa mede o `content`, que tem largura propria vinda da
-        # janela — a barra da rodada ocupa a largura toda, nao uma coluna
-        # estreita cuja largura depende da propria faixa.
+        # Aqui a `WrapRow` funciona (e no painel de arbitragem não funcionava)
+        # porque a faixa mede o `content`, que tem largura própria vinda da
+        # janela — a barra da rodada ocupa a largura toda, não uma coluna
+        # estreita cuja largura depende da própria faixa.
         entry = WrapRow(toolbar)
         entry.grid(row=1, column=0, padx=SPACE_MD, pady=(0, SPACE_SM), sticky="ew")
         # Piloto da F5.2: seletores com anatomia de CAMPO (select_field) — mesma
-        # altura dos botoes da linha; sao dados a escolher, nao acoes.
+        # altura dos botões da linha; são dados a escolher, não ações.
         self.round_option = entry.add(
             select_field(
                 entry.frame,
@@ -165,10 +165,10 @@ class PairingResultsMixin:
             width=160,
         )
         quick_tips = {
-            "1-0": "Lanca vitoria das brancas na mesa selecionada.",
-            "1/2-1/2": "Lanca empate na mesa selecionada.",
-            "0-1": "Lanca vitoria das pretas na mesa selecionada.",
-            "": "Limpa o resultado lancado na mesa selecionada.",
+            "1-0": "Lança vitória das brancas na mesa selecionada.",
+            "1/2-1/2": "Lança empate na mesa selecionada.",
+            "0-1": "Lança vitória das pretas na mesa selecionada.",
+            "": "Limpa o resultado lançado na mesa selecionada.",
         }
         for label, result in [("1-0", "1-0"), ("1/2", "1/2-1/2"), ("0-1", "0-1"), ("Limpar", "")]:
             quick = entry.add(
@@ -182,10 +182,10 @@ class PairingResultsMixin:
                 width=64,
             )
             Tooltip(quick, quick_tips[result])
-        # Arranja agora e a cada mudanca de largura da janela.
+        # Arranja agora e a cada mudança de largura da janela.
         entry.bind_to(self.content)
 
-        # Linha 3 - modo apresentacao (destaque proprio, cor ambar dedicada).
+        # Linha 3 - modo apresentação (destaque próprio, cor âmbar dedicada).
         projector = ctk.CTkButton(
             toolbar,
             text="  📽  Modo Projetor",
@@ -223,13 +223,13 @@ class PairingResultsMixin:
         toolbar.grid(row=0, column=0, sticky="ew", pady=(0, 12))
         toolbar.grid_columnconfigure(0, weight=1)
 
-        # Zerados a cada montagem: a tela e reconstruida e os botoes antigos morrem —
-        # sem isto, _run_background tentaria reabilitar um widget destruido.
+        # Zerados a cada montagem: a tela e reconstruida e os botões antigos morrem —
+        # sem isto, _run_background tentaria reabilitar um widget destruído.
         self._generate_round_button = None
         self._preview_round_button = None
 
         if show_initial_call:
-            # Antes da 1a rodada nao ha rodada para editar/exportar: so gerar e pre-visualizar.
+            # Antes da 1a rodada não há rodada para editar/exportar: só gerar e pré-visualizar.
             launch = ctk.CTkFrame(toolbar, fg_color="transparent")
             launch.grid(row=0, column=0, padx=SPACE_MD, pady=SPACE_MD, sticky="w")
             self._generate_round_button = primary_button(
@@ -241,7 +241,7 @@ class PairingResultsMixin:
             self._generate_round_button.pack(side="left", padx=(0, SPACE_SM))
             self._preview_round_button = secondary_button(
                 launch,
-                "Pre-visualizar rodada",
+                "Pré-visualizar rodada",
                 self._preview_next_round,
                 tip="Mostra como ficaria o emparceiramento da primeira rodada sem grava-lo.",
             )
@@ -250,10 +250,10 @@ class PairingResultsMixin:
             self._build_round_toolbar(toolbar)
 
         if show_initial_call:
-            # A chamada inicial e OUTRA tela: antes da primeira rodada nao ha
+            # A chamada inicial e OUTRA tela: antes da primeira rodada não há
             # rodada para editar nem exportar. Ela tem dono desde a B-6
             # ([`initial_call`](pairing_results/initial_call.py)) — aqui ficou
-            # so a decisao de qual das duas telas montar.
+            # só a decisão de qual das duas telas montar.
             self._initial_call_section = InitialCallSection(self)
             self._initial_call_section.build(body)
             return
@@ -329,14 +329,14 @@ class PairingResultsMixin:
         self.pairing_tree.focus_set()
         self._load_round_options()
 
-    # ---- Chamada inicial: ponte para a secao (B-6) ------------------------- #
+    # ---- Chamada inicial: ponte para a seção (B-6) ------------------------- #
 
     def _initial_call(self) -> InitialCallSection:
-        """A secao da chamada inicial em exibicao, ou uma nova se nao houver.
+        """A seção da chamada inicial em exibição, ou uma nova se não houver.
 
-        Delegadores finos e nao repasse automatico: o teste de janela chama
+        Delegadores finos e não repasse automático: o teste de janela chama
         `app._load_initial_players()` e `app.initial_players_tree` — o contrato
-        externo da tela nao muda porque o interior foi reorganizado.
+        externo da tela não muda porque o interior foi reorganizado.
         """
         secao = getattr(self, "_initial_call_section", None)
         if secao is None:
@@ -353,7 +353,7 @@ class PairingResultsMixin:
     def _print_initial_player_list(self) -> None:
         self._initial_call().print_list()
 
-    # ---- Exportacoes da rodada: ponte para o modulo (B-6) ------------------ #
+    # ---- Exportações da rodada: ponte para o módulo (B-6) ------------------ #
 
     def _round_exports(self) -> RoundExportActions:
         return RoundExportActions(self)
@@ -559,17 +559,17 @@ class PairingResultsMixin:
 
     # Em que estado esta um resultado e dado puro (B-6): mora em
     # [`state`](pairing_results/state.py), com teste em milissegundos. Aqui
-    # ficam so os nomes que a tela ja usava.
+    # ficam só os nomes que a tela já usava.
     _individual_result_state = staticmethod(individual_result_state)
     _team_board_result_state = staticmethod(team_board_result_state)
     _result_state_tag = staticmethod(result_state_tag)
 
     @staticmethod
     def _configure_result_state_tags(tree: ttk.Treeview) -> None:
-        """Pinta as tags da tabela na aparencia atual.
+        """Pinta as tags da tabela na aparência atual.
 
         As cores vem de RESULT_STATE_COLORS (theme.py) e passam por pick(): o
-        ttk aceita uma cor so, e antes isto era um bloco de literais de modo
+        ttk aceita uma cor só, e antes isto era um bloco de literais de modo
         escuro — no tema claro a tabela ficava escura no meio da tela clara.
         """
         import platform
@@ -591,7 +591,7 @@ class PairingResultsMixin:
                 opcoes["background"] = pick(fundo)
             tree.tag_configure(f"result_state_{estado}", **opcoes)
 
-        # Resultado lancado
+        # Resultado lançado
         tree.tag_configure("result_win_white", foreground=pick(THEME_RESULT_WIN), font=_bold)
         tree.tag_configure("result_win_black", foreground=pick(THEME_RESULT_WIN), font=_bold)
         tree.tag_configure("result_draw", foreground=pick(THEME_RESULT_DRAW), font=_bold)
@@ -683,7 +683,7 @@ class PairingResultsMixin:
         if not needs_round_count_warning(
             players_count=players_count,
             configured_rounds=configured_rounds,
-            has_rounds=False,  # ja garantido acima
+            has_rounds=False,  # já garantido acima
             team_mode=False,
         ):
             return True
@@ -709,7 +709,7 @@ class PairingResultsMixin:
         return True
 
     def _generate_round(self) -> None:
-        # Permissao e confirmacoes ficam na thread da UI (abrem modal); so o
+        # Permissão e confirmações ficam na thread da UI (abrem modal); só o
         # emparceiramento em si vai para background — antes ele congelava a
         # janela por segundos em torneios grandes (P1-3 / ESPEC_UI_UX §5.2).
         try:
@@ -750,7 +750,7 @@ class PairingResultsMixin:
             if pairing_detail and pairing_detail.get("row_type") == "individual_pairing" and pairing_detail.get("is_bye"):
                 allowed.update({"BYE", "F", "H", "Z"})
             if result not in allowed:
-                raise AppError("Resultado invalido.")
+                raise AppError("Resultado inválido.")
                 
             if pairing_detail and pairing_detail.get("row_type") == "individual_pairing" and pairing_detail.get("is_bye"):
                 # Determine default bye result
@@ -886,7 +886,7 @@ class PairingResultsMixin:
             )
         )
 
-    # ---- Resultado por QR: ponte para o modulo (B-6) ----------------------- #
+    # ---- Resultado por QR: ponte para o módulo (B-6) ----------------------- #
 
     def _qr_actions(self) -> QrResultActions:
         return QrResultActions(self)
@@ -909,7 +909,7 @@ class PairingResultsMixin:
     def _quick_save_result(self, result: str) -> str:
         try:
             if result not in RESULTS:
-                raise AppError("Resultado invalido.")
+                raise AppError("Resultado inválido.")
             if not self._selected_pairing_id():
                 return "break"
             self.result_option.set(result)
@@ -930,7 +930,7 @@ class PairingResultsMixin:
             self._show_error(exc)
             return "break"
 
-    # ---- Trocas na mesa: ponte para o modulo (B-6) -------------------------- #
+    # ---- Trocas na mesa: ponte para o módulo (B-6) -------------------------- #
 
     def _board_swaps(self) -> BoardSwapActions:
         return BoardSwapActions(self)
@@ -944,7 +944,7 @@ class PairingResultsMixin:
     def _open_team_player_swap_dialog(self) -> None:
         self._board_swaps().open_team_player_swap()
 
-    # ---- Mata-mata: avanco registrado e chave (PAR-03) ---------------------- #
+    # ---- Mata-mata: avanço registrado e chave (PAR-03) ---------------------- #
 
     def _knockout_actions(self) -> KnockoutActions:
         return KnockoutActions(self)
@@ -979,12 +979,12 @@ class PairingResultsMixin:
             self._show_error(exc)
 
     def _projector_rows(self) -> list[dict[str, str]]:
-        """As mesas da rodada no formato que a projecao mostra.
+        """As mesas da rodada no formato que a projeção mostra.
 
-        Le o banco e devolve dado plano; quem desenha e o
+        Lê o banco e devolve dado plano; quem desenha e o
         [`ProjectorWindow`](pairing_results/projector.py). No modo equipes cada
         tabuleiro vira uma linha, com o nome da equipe ao lado do jogador —
-        na parede, "Silva" sem a equipe nao diz de quem e o ponto.
+        na parede, "Silva" sem a equipe não diz de quem e o ponto.
         """
         if not self.current_round_id:
             return []

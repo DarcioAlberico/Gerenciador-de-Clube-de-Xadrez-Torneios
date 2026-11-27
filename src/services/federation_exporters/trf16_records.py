@@ -112,9 +112,9 @@ def reciprocity_errors(lines: Sequence[str]) -> list[str]:
     """Confere que cada mesa aparece igual nas DUAS linhas 001 (FED-03).
 
     Se o jogador 5 diz "rodada 3, adversario 12, brancas", a linha do 12 tem de
-    dizer "rodada 3, adversario 5, pretas". Uma divergencia aqui e arquivo
-    corrompido — o validador da federacao recusa, e o arbitro descobre depois do
-    envio. E a checagem que so se pode fazer sobre o ARQUIVO PRONTO.
+    dizer "rodada 3, adversario 5, pretas". Uma divergência aqui e arquivo
+    corrompido — o validador da federação recusa, e o árbitro descobre depois do
+    envio. E a checagem que só se pode fazer sobre o ARQUIVO PRONTO.
     """
     celulas: dict[int, list[str]] = {}
     nomes: dict[int, str] = {}
@@ -137,8 +137,8 @@ def reciprocity_errors(lines: Sequence[str]) -> list[str]:
             outro = celulas.get(adversario)
             if outro is None or len(outro) < rodada:
                 erros.append(
-                    f"Rodada {rodada}: {nomes.get(rank, rank)} aponta o adversario "
-                    f"{adversario}, que nao tem essa rodada no arquivo."
+                    f"Rodada {rodada}: {nomes.get(rank, rank)} aponta o adversário "
+                    f"{adversario}, que não tem essa rodada no arquivo."
                 )
                 continue
             bloco_oposto = outro[rodada - 1]
@@ -151,7 +151,7 @@ def reciprocity_errors(lines: Sequence[str]) -> list[str]:
                 )
             elif cor and cor_oposta and cor == cor_oposta:
                 erros.append(
-                    f"Rodada {rodada}: {nomes.get(rank, rank)} e {adversario} estao "
+                    f"Rodada {rodada}: {nomes.get(rank, rank)} e {adversario} estão "
                     f"os dois com '{cor}'."
                 )
     return erros
@@ -190,10 +190,10 @@ def duplicate_fide_ids(players: Iterable[Mapping[str, Any]]) -> list[str]:
 def submission_message(blockers: Sequence[str]) -> str:
     lista = "\n".join(f"- {item}" for item in blockers)
     return (
-        "Modo submissao: o arquivo NAO foi gerado porque ha pendencia que a "
-        "federacao recusaria.\n"
+        "Modo submissão: o arquivo NÃO foi gerado porque há pendência que a "
+        "federação recusaria.\n"
         f"{lista}\n"
-        "Resolva as pendencias ou exporte no modo normal (que gera o arquivo com "
+        "Resolva as pendências ou exporte no modo normal (que gera o arquivo com "
         "os avisos)."
     )
 

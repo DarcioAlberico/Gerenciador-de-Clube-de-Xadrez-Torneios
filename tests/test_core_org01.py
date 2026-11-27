@@ -291,7 +291,7 @@ class TorneioComEditalProprioTest(CoreServiceTestCase):
         player_id = self.db.create_player(
             self.tournament_id, name="Ana", birth_date="2017", sex="F", rating=1300
         )
-        # Em 2028 ela completa 11, e ja nao e Sub-09.
+        # Em 2028 ela completa 11, e já não é Sub-09.
         self.assertEqual("Sub-11", self.db.get_player(player_id)["category"])
 
     def test_categorias_sao_regravadas_por_inteiro(self) -> None:

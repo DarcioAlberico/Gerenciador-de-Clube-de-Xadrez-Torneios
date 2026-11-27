@@ -33,11 +33,11 @@ DECISION_EXPULSION = "expulsion"
 DECISION_NONE = "none"
 
 INCIDENT_DECISIONS: dict[str, str] = {
-    DECISION_WARNING: "Advertencia",
+    DECISION_WARNING: "Advertência",
     DECISION_LOSS: "Partida perdida",
-    DECISION_DEDUCTION: "Deducao de pontos",
-    DECISION_EXPULSION: "Expulsao do torneio",
-    DECISION_NONE: "Sem sancao (registrado)",
+    DECISION_DEDUCTION: "Dedução de pontos",
+    DECISION_EXPULSION: "Expulsão do torneio",
+    DECISION_NONE: "Sem sanção (registrado)",
 }
 
 # Decisões que MEXEM em pontuação e por isso exigem o resto do formulário.
@@ -57,27 +57,27 @@ class Infraction:
 
 INFRACTIONS: dict[str, Infraction] = {
     "mobile_phone": Infraction(
-        "mobile_phone", "11.3.2", "Telefone celular / dispositivo eletronico", DECISION_LOSS
+        "mobile_phone", "11.3.2", "Telefone celular / dispositivo eletrônico", DECISION_LOSS
     ),
     "illegal_move": Infraction(
         "illegal_move", "7.5", "Lance ilegal", DECISION_WARNING
     ),
     "default_time": Infraction(
-        "default_time", "6.7", "Atraso alem do tempo de tolerancia", DECISION_LOSS
+        "default_time", "6.7", "Atraso além do tempo de tolerância", DECISION_LOSS
     ),
     "conduct": Infraction(
-        "conduct", "12.2", "Conduta / perturbacao do adversario", DECISION_WARNING
+        "conduct", "12.2", "Conduta / perturbação do adversário", DECISION_WARNING
     ),
     "notation": Infraction(
-        "notation", "8.1", "Anotacao incompleta ou ausente", DECISION_WARNING
+        "notation", "8.1", "Anotação incompleta ou ausente", DECISION_WARNING
     ),
     "agreed_result": Infraction(
-        "agreed_result", "11.1", "Resultado combinado / falta de esforco", DECISION_EXPULSION
+        "agreed_result", "11.1", "Resultado combinado / falta de esforço", DECISION_EXPULSION
     ),
     "flag_fall": Infraction(
         "flag_fall", "6.2", "Queda de seta contestada", DECISION_NONE
     ),
-    "other": Infraction("other", "-", "Outro (descrever nas observacoes)", DECISION_NONE),
+    "other": Infraction("other", "-", "Outro (descrever nas observações)", DECISION_NONE),
 }
 
 MAX_NOTES_LENGTH = 500
@@ -88,7 +88,7 @@ def clean_notes(notes: Any) -> str:
 
 
 def infraction_label(code: str) -> str:
-    """``"Telefone celular / dispositivo eletronico (art. 11.3.2)"``."""
+    """``"Telefone celular / dispositivo eletrônico (art. 11.3.2)"``."""
     item = INFRACTIONS.get(str(code or "").strip())
     if item is None:
         return str(code or "")
@@ -110,23 +110,23 @@ def register_error(
 ) -> str:
     """Por que ESTE incidente não pode ser registrado. ``""`` quando pode."""
     if str(infraction or "").strip() not in INFRACTIONS:
-        return "Infracao invalida. Escolha uma do catalogo."
+        return "Infração inválida. Escolha uma do catálogo."
     if str(decision or "").strip() not in INCIDENT_DECISIONS:
-        return "Decisao invalida. Escolha uma das opcoes."
+        return "Decisão inválida. Escolha uma das opções."
     if not player_id:
         return "Informe o jogador envolvido no incidente."
     if str(infraction).strip() == "other" and not clean_notes(notes):
         return (
-            "A infracao \"Outro\" exige descricao nas observacoes: e ela que a ata "
+            "A infração \"Outro\" exige descrição nas observações: é ela que a ata "
             "vai citar no lugar do artigo."
         )
     if str(decision).strip() in DECISION_NEEDS_PAIRING and not pairing_id:
         return (
-            "Partida perdida precisa da MESA: e nela que o resultado sera lancado. "
-            "Se o incidente nao e de uma partida, use advertencia ou deducao."
+            "Partida perdida precisa da MESA: é nela que o resultado será lançado. "
+            "Se o incidente não é de uma partida, use advertência ou dedução."
         )
     if str(decision).strip() in DECISION_NEEDS_POINTS and not deduction_points:
-        return "Deducao de pontos precisa de um valor diferente de zero."
+        return "Dedução de pontos precisa de um valor diferente de zero."
     return ""
 
 

@@ -436,8 +436,8 @@ class ImportPlayerNameTest(unittest.TestCase):
 
 
 class _FakeImportDB:
-    """DB falso para o assistente de importacao (REG-02): torneio fixo, sem
-    jogadores previos, app_settings em memoria."""
+    """DB falso para o assistente de importação (REG-02): torneio fixo, sem
+    jogadores prévios, app_settings em memória."""
 
     def __init__(self) -> None:
         self.players: list[dict] = []
@@ -493,7 +493,7 @@ class InspectSourceTest(unittest.TestCase):
         self.assertEqual(suggestion["club"], "Clube / Cidade")
         self.assertEqual(suggestion["fide_id"], "ID FIDE")
         self.assertEqual(suggestion["birth_date"], "")
-        # cada campo canonico aparece no palpite
+        # cada campo canônico aparece no palpite
         self.assertEqual({field["key"] for field in result["fields"]}, set(suggestion))
 
     def test_suggestion_does_not_reuse_a_column(self) -> None:
@@ -752,7 +752,7 @@ class GoogleFormsBuildRequestsTest(unittest.TestCase):
             {"title": "Sexo", "type": "choice", "required": False, "choices": ["M", "F"]},
         ]
         requests = GoogleFormsService.build_form_requests(questions)
-        self.assertEqual(len(requests), 4)  # 1 descricao + 3 perguntas
+        self.assertEqual(len(requests), 4)  # 1 descrição + 3 perguntas
         self.assertIn("updateFormInfo", requests[0])
 
         text_q = requests[1]["createItem"]["item"]["questionItem"]["question"]
@@ -850,10 +850,10 @@ class GoogleFormsAvailabilityTest(unittest.TestCase):
 
             with mock.patch.object(GoogleFormsService, "_config_dir", return_value=user_dir), \
                  mock.patch.object(GoogleFormsService, "_bundled_client_secret_path", return_value=bundled):
-                # sem credencial do usuario -> usa a embarcada (distribuicao)
+                # sem credencial do usuário -> usa a embarcada (distribuição)
                 self.assertEqual(service.client_secret_path(), bundled)
 
-                # credencial do proprio usuario vence a embarcada
+                # credencial do próprio usuário vence a embarcada
                 user_secret = user_dir / "google_client_secret.json"
                 user_secret.write_text("{}", encoding="utf-8")
                 self.assertEqual(service.client_secret_path(), user_secret)
@@ -889,8 +889,8 @@ class SelectRatingForOrderTest(unittest.TestCase):
         )
 
     def test_default_branch_differs_by_caller(self) -> None:
-        # "rating"/"manual"/desconhecida: o seeding usa o proprio rating
-        # (default=None); a importacao oficial passa o melhor disponivel.
+        # "rating"/"manual"/desconhecida: o seeding usa o próprio rating
+        # (default=None); a importação oficial passa o melhor disponível.
         for order in ("rating", "manual", "ordem_desconhecida"):
             self.assertEqual(select_rating_for_order(order, **self.KWARGS), 1500)
             self.assertEqual(

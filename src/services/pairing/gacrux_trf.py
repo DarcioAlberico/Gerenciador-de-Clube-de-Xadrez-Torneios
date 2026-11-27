@@ -234,9 +234,9 @@ def acceleration_records(
 
 def acceleration_ignored_warning(bonus: float) -> str:
     return (
-        f"Aceleracao de {bonus:g} ponto(s) nao e representavel no arquivo do motor "
-        "FIDE (o registro 250 so transporta 0,5 ou 1,0). Esta rodada foi pareada "
-        "pelo motor proprio, que aplica o bonus configurado."
+        f"Aceleração de {bonus:g} ponto(s) não é representável no arquivo do motor "
+        "FIDE (o registro 250 só transporta 0,5 ou 1,0). Esta rodada foi pareada "
+        "pelo motor próprio, que aplica o bônus configurado."
     )
 
 

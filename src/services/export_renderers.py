@@ -549,7 +549,7 @@ class ReportRenderersMixin:
                 document.drawCentredString(center_x, bottom + 27 * mm, "QR para enviar resultado")
             elif include_qr:
                 document.setFont("Helvetica", 7)
-                document.drawCentredString(center_x, bottom + 30 * mm, "QR indisponivel para esta mesa")
+                document.drawCentredString(center_x, bottom + 30 * mm, "QR indisponível para esta mesa")
 
         if boards:
             document.showPage()
@@ -705,7 +705,7 @@ class ReportRenderersMixin:
 </head>
 <body>
   <h1>{html.escape(title)}</h1>
-  <p>Celulas: posição do adversario, lado (B = brancas; P = pretas), resultado e pontuação.</p>
+  <p>Células: posição do adversário, lado (B = brancas; P = pretas), resultado e pontuação.</p>
   <table>
     <thead><tr>{header_html}</tr></thead>
     <tbody>{rows_html}</tbody>

@@ -220,7 +220,7 @@ class PareamentoAceleradoTest(CoreServiceTestCase):
         self._configurar(acceleration_method="custom:rounds=2;bonus=0.75;upper=0.5")
         self._create_players(8)
         previa = self.service.preview_next_round(self.tournament_id)
-        self.assertTrue(any("motor proprio" in aviso for aviso in previa["warnings"]))
+        self.assertTrue(any("motor próprio" in aviso for aviso in previa["warnings"]))
         self.assertGreaterEqual(previa["alerts_count"], 1)
 
         self.service.generate_next_round(self.tournament_id)
@@ -295,7 +295,7 @@ class EntradaTardiaTest(CoreServiceTestCase):
             if int(mesa["white_player_id"]) == tardio
             else int(mesa["white_player_id"])
         )
-        # Sem os pontos de entrada tardia o motor o poria contra alguem de 0.0.
+        # Sem os pontos de entrada tardia o motor o poria contra alguém de 0.0.
         self.assertEqual(1.0, pontos[adversario])
 
     def test_pareamento_do_entrante_nao_gera_aviso(self) -> None:

@@ -57,7 +57,7 @@ class AppShell:
 
     def _configure_grid(self) -> None:
         self.grid_columnconfigure(0, weight=0)  # sidebar: largura fixa
-        self.grid_columnconfigure(1, weight=1)  # conteudo: ocupa o resto
+        self.grid_columnconfigure(1, weight=1)  # conteúdo: ocupa o resto
         self.grid_rowconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=0)
 
@@ -83,7 +83,7 @@ class AppShell:
 
     @property
     def _current_view_method(self) -> str | None:
-        """Tela em exibicao. Mantido como atributo por compatibilidade: telas
+        """Tela em exibição. Mantido como atributo por compatibilidade: telas
         legadas leem isto para decidir se um refresh agendado ainda faz sentido.
         Tolerante a ser lido antes do Navigator existir (login)."""
         navigator = getattr(self, "navigator", None)
@@ -96,11 +96,11 @@ class AppShell:
         self._refresh_statusbar()
 
     def _command_palette_actions(self) -> list[tuple[str, Callable[[], None], str, str | None]]:
-        """Acoes do command palette: destinos do registro unico + acoes soltas.
+        """Ações do command palette: destinos do registro único + ações soltas.
 
-        O registro (navigation.DESTINATIONS) e a unica lista de destinos do app;
-        aqui ela so vira o formato que o palette consome. Destino sem metodo na
-        aplicacao e ignorado, em vez de quebrar a paleta inteira."""
+        O registro (navigation.DESTINATIONS) e a única lista de destinos do app;
+        aqui ela só vira o formato que o palette consome. Destino sem método na
+        aplicação e ignorado, em vez de quebrar a paleta inteira."""
         acoes: list[tuple[str, Callable[[], None], str, str | None]] = []
         for destino in DESTINATIONS:
             metodo = getattr(self, destino.method, None)
@@ -258,7 +258,7 @@ class AppShell:
         )
         self.status_label.grid(row=0, column=2, padx=10, pady=2, sticky="e")
 
-        # Progresso de tarefas em background: some quando nao ha nada rodando.
+        # Progresso de tarefas em background: some quando não há nada rodando.
         self.busy_indicator = BusyIndicator(self.statusbar)
         self.busy_indicator.grid_config(row=0, column=3, padx=(0, 12), pady=2, sticky="e")
 
@@ -368,37 +368,37 @@ class AppShell:
         self.bind("<Configure>", self._sync_sidebar_mode, add="+")
         self._sync_sidebar_mode()
 
-    # Limiares REMEDIDOS na continuacao da B-8, com as 23 telas do smoke e com a
-    # barra FORCADA no modo medido — a primeira medicao nao forcava, e por isso
+    # Limiares REMEDIDOS na continuação da B-8, com as 23 telas do smoke e com a
+    # barra FORÇADA no modo medido — a primeira medição não forcava, e por isso
     # media com a barra escondida e mentia. Eram 1500/1440 na B-8 e 1416/1260
     # depois dela; as cinco telas administrativas densas que seguravam o 1.416
-    # (Ranking interno, Financeiro, Calendario, Exercicios, Relatorios) agora
+    # (Ranking interno, Financeiro, Calendário, Exercícios, Relatórios) agora
     # quebram a faixa de filtros em linhas e cabem em 768px.
     #
     # Medido: com a barra COMPLETA todas cabem a partir de 1.200px reais. Quem
-    # manda agora e o Painel de Arbitragem ("Atualizar agora"), e ele e a
-    # proxima tela da fila da B-6 — sera atacado la, com a tela aberta de
+    # manda agora e o Painel de Arbitragem ("Atualizar agora"), e ele é a
+    # próxima tela da fila da B-6 — será atacado lá, com a tela aberta de
     # qualquer forma.
     #
-    # O limiar do RAIL sai da diferenca medida entre as duas barras (235px x
-    # 62px = 173px de conteudo a mais), com folga: o que cabe em 1.200px com a
-    # barra completa cabe em 1.027px com o rail. Nao e conta no papel — o smoke
+    # O limiar do RAIL sai da diferença medida entre as duas barras (235px x
+    # 62px = 173px de conteúdo a mais), com folga: o que cabe em 1.200px com a
+    # barra completa cabe em 1.027px com o rail. Não é conta no papel — o smoke
     # de layout cobra as duas larguras, tela por tela.
     #
     # Abaixo do menor limiar a barra virava OCULTA — e era esse o achado P3-14:
-    # a navegacao primaria sumia e sobrava o menu nativo, que ninguem procura
+    # a navegação primária sumia e sobrava o menu nativo, que ninguém procura
     # depois de ter uma barra. A F5.11 tira o modo `hidden` do caminho
-    # responsivo: o **rail e o piso**. Ele custa 52px e nao tem rotulo para
-    # espremer, entao nao existe largura em que "some" seja melhor que "encolhe"
+    # responsivo: o **rail e o piso**. Ele custa 52px e não tem rótulo para
+    # espremer, então não existe largura em que "some" seja melhor que "encolhe"
     # — e o smoke de layout cobra as telas em 800px pedidos (960 reais) para
-    # provar que nada e empurrado para fora com ele ligado.
+    # provar que nada é empurrado para fora com ele ligado.
     #
     # `set_mode(SIDEBAR_HIDDEN)` continua existindo para quem quiser esconder a
-    # barra de proposito (uma futura tela de apresentacao, por exemplo); o que
-    # mudou e que a LARGURA nao a esconde mais sozinha.
+    # barra de propósito (uma futura tela de apresentação, por exemplo); o que
+    # mudou e que a LARGURA não a esconde mais sozinha.
     #
     # Pixels REAIS: o CTk multiplica a geometria pela escala de UI (120% por
-    # padrao), entao uma janela pedida em 1000 mede 1200 na tela.
+    # padrão), então uma janela pedida em 1000 mede 1200 na tela.
     _SIDEBAR_FULL_FROM = 1200
 
     def _sync_sidebar_mode(self, event: Any = None) -> None:
@@ -406,12 +406,12 @@ class AppShell:
         if sidebar is None:
             return
         if event is not None and getattr(event, "widget", self) is not self:
-            return  # <Configure> de widget filho: nao interessa
+            return  # <Configure> de widget filho: não interessa
         # Dentro do <Configure>, winfo_width() ainda devolve a largura ANTIGA:
-        # a nova vem no proprio evento.
+        # a nova vem no próprio evento.
         largura = getattr(event, "width", 0) or self.winfo_width()
-        # A barra do torneio se redistribui na mesma carona: ela ja escuta a
-        # largura da janela por tabela interposta, e um segundo <Configure> so
+        # A barra do torneio se redistribui na mesma carona: ela já escuta a
+        # largura da janela por tabela interposta, e um segundo <Configure> só
         # para ela seria o dobro de trabalho no mesmo evento.
         relayout = getattr(self, "_layout_tournament_nav", None)
         if callable(relayout):
@@ -427,8 +427,8 @@ class AppShell:
                 pass
             self._arbitration_refresh_job = None
         # Anota o show_* que disparou esta limpeza, para o F5 saber o que
-        # recarregar. Fica aqui (e nao so no Navigator.go) porque muita tela e
-        # aberta por chamada direta — botao que chama self.show_pairings().
+        # recarregar. Fica aqui (e não só no Navigator.go) porque muita tela e
+        # aberta por chamada direta — botão que chama self.show_pairings().
         metodo = self._calling_show_method()
         if metodo:
             self.navigator.record(metodo)
@@ -437,14 +437,14 @@ class AppShell:
 
     @staticmethod
     def _calling_show_method(limite: int = 12) -> str | None:
-        """Nome do ``show_*`` mais proximo na pilha de chamadas.
+        """Nome do ``show_*`` mais próximo na pilha de chamadas.
 
-        Era ``f_back`` e so, o que valia enquanto toda tela chamava
-        ``_clear_content`` de dentro do proprio ``show_*``. As telas migradas
+        Era ``f_back`` e só, o que valia enquanto toda tela chamava
+        ``_clear_content`` de dentro do próprio ``show_*``. As telas migradas
         pela B-6 delegam para o ``build()`` de uma view, e ai o quadro anterior
         se chama "build": a tela abria, mas o registro continuava apontando para
         a anterior — sidebar destacando o item errado e F5 recarregando outra
-        tela. Subir a pilha ate achar o ``show_*`` cobre os dois formatos sem
+        tela. Subir a pilha até achar o ``show_*`` cobre os dois formatos sem
         pedir nada de quem escreve tela.
         """
         quadro = inspect.currentframe()

@@ -105,8 +105,8 @@ class AnatomiaDosCamposTest(unittest.TestCase):
         """P3-5: o CTkTextbox de fábrica tem border_width=0 e some no painel."""
         area = text_area(self.root)
         self.assertEqual(1, area.cget("border_width"))
-        # O cget do CTkTextbox nao repassa opcoes do tk.Text interno; o wrap
-        # so e visivel perguntando ao proprio Text.
+        # O cget do CTkTextbox não repassa opções do tk.Text interno; o wrap
+        # só é visível perguntando ao próprio Text.
         self.assertEqual("word", str(area._textbox.cget("wrap")))
         area.destroy()
 
@@ -124,7 +124,7 @@ class AnatomiaDosCamposTest(unittest.TestCase):
             self.root, "Local", lambda parent: text_field(parent, placeholder="Clube")
         )
         rotulos = [w for w in box.winfo_children() if isinstance(w, ctk.CTkLabel)]
-        # Rotulo (linha 0) + linha de mensagem reservada (linha 2).
+        # Rótulo (linha 0) + linha de mensagem reservada (linha 2).
         self.assertEqual(2, len(rotulos))
         self.assertEqual("Local", rotulos[0].cget("text"))
         self.assertIs(box, campo.master)
@@ -199,7 +199,7 @@ class EstadosDoCampoTest(unittest.TestCase):
             lambda parent: text_field(parent, placeholder="Ex.: 7"),
             help_text="Entre 1 e 30.",
         )
-        # Mapeado de verdade: o Tk nao entrega evento de foco a widget que nao
+        # Mapeado de verdade: o Tk não entrega evento de foco a widget que não
         # esta na tela (mesma familia da pegadinha registrada na B-4).
         self.box.pack(fill="x")
         self.root.update()

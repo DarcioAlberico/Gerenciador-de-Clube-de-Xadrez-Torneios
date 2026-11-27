@@ -63,10 +63,10 @@ class TournamentListController:
         opcoes: dict[str, int] = {}
         for club in self.db.list_clubs(active_only=True):
             kind = str(club.get("kind", "club"))
-            rotulo = f"{club['id']} - {club['name'] or 'Clube padrao'} ({club_kind_labels.get(kind, kind)})"
+            rotulo = f"{club['id']} - {club['name'] or 'Clube padrão'} ({club_kind_labels.get(kind, kind)})"
             opcoes[rotulo] = int(club["id"])
         if not opcoes:
-            opcoes["1 - Clube padrao (Clube)"] = 1
+            opcoes["1 - Clube padrão (Clube)"] = 1
         return opcoes
 
     def class_options(self, club_id: int | None) -> dict[str, int | None]:
@@ -92,13 +92,13 @@ class TournamentListController:
         """Duplica. Nome vazio cai no sugerido — o usuário só apertou Enter."""
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
-            raise self._app_error("Torneio selecionado nao encontrado.")
+            raise self._app_error("Torneio selecionado não encontrado.")
         nome = new_name.strip() or self.suggested_copy_name(tournament)
         return int(self.tournament_service.duplicate_tournament(tournament_id, nome))
 
     @staticmethod
     def suggested_copy_name(tournament: dict[str, Any]) -> str:
-        return f"{tournament['name']} - copia"
+        return f"{tournament['name']} - cópia"
 
     def delete(self, tournament_id: int) -> None:
         self.tournament_service.delete_tournament(tournament_id)

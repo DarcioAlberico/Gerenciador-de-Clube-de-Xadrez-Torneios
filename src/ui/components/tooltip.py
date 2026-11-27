@@ -7,7 +7,7 @@ atraso ao passar o mouse, some ao sair ou clicar, e segue as cores do tema.
 Uso::
 
     from src.ui.components import Tooltip
-    Tooltip(botao, "Gera a próxima rodada do torneio")
+    Tooltip(botão, "Gera a próxima rodada do torneio")
 """
 from __future__ import annotations
 

@@ -82,11 +82,11 @@ def team_float_histories(matches: list[dict[str, Any]]) -> dict[int, list[str]]:
 
 
 def played_pairs(pairings: list[dict[str, Any]]) -> set[frozenset[int]]:
-    """Pares que efetivamente JOGARAM entre si (regra de nao-repeticao).
+    """Pares que efetivamente JOGARAM entre si (regra de não-repeticao).
 
-    Partidas por W.O./forfait (``WALKOVER_RESULTS``) sao ignoradas: pela FIDE
-    C.04.2 (3.5) jogadores que foram pareados mas nao jogaram a partida PODEM
-    voltar a se enfrentar. Assim a deteccao de ``opponent_repeat`` e o proprio
+    Partidas por W.O./forfait (``WALKOVER_RESULTS``) são ignoradas: pela FIDE
+    C.04.2 (3.5) jogadores que foram pareados mas não jogaram a partida PODEM
+    voltar a se enfrentar. Assim a deteccao de ``opponent_repeat`` e o próprio
     motor ficam alinhados ao Gacrux e a regra vigente (rules 2026-02-01).
     """
     played: set[frozenset[int]] = set()
@@ -120,12 +120,12 @@ def _blocks_pairing_allocated_bye(result: Any) -> bool:
 
 
 def color_histories(pairings: list[dict[str, Any]]) -> dict[int, list[str]]:
-    """Sequencia de cores por jogador (W/B/BYE) para preferencia de cor.
+    """Sequência de cores por jogador (W/B/BYE) para preferência de cor.
 
-    Partidas por W.O./forfait (``WALKOVER_RESULTS``) NAO entram na sequencia:
-    pela FIDE C.04.2 (3.4) "only played games count" quando a sequencia de cores
-    importa. Sem isso, a cor de um jogo nao jogado inflaria o saldo/streak e
-    geraria violacao dura de cor (``hard_color``) onde o Gacrux nao ve nenhuma.
+    Partidas por W.O./forfait (``WALKOVER_RESULTS``) NÃO entram na sequência:
+    pela FIDE C.04.2 (3.4) "only played games count" quando a sequência de cores
+    importa. Sem isso, a cor de um jogo não jogado inflaria o saldo/streak e
+    geraria violação dura de cor (``hard_color``) onde o Gacrux não vê nenhuma.
     """
     histories: dict[int, list[str]] = {}
     for pairing in pairings:
@@ -150,16 +150,16 @@ def float_histories(
     bye_points: float,
     result_points: dict[str, tuple[float, float]],
 ) -> dict[int, list[str]]:
-    """Sequencia de flutuacoes por jogador (up/down/=/bye).
+    """Sequência de flutuações por jogador (up/down/=/bye).
 
-    Partida NAO JOGADA nao produz flutuacao por diferenca de pontos: quem pontuou
+    Partida NÃO JOGADA não produz flutuação por diferença de pontos: quem pontuou
     sem jogar (W.O. a favor, bye que vale ponto) conta como DOWNFLOAT, e quem
-    perdeu por W.O. nao conta nada. E a regra do motor FIDE — `compute_flt` do
-    Gacrux compara os pontos so quando `played`, e no ramo "dutch" da `d` a quem
+    perdeu por W.O. não conta nada. E a regra do motor FIDE — `compute_flt` do
+    Gacrux compara os pontos só quando `played`, e no ramo "dutch" da `d` a quem
     ganhou ponto sem jogar (PAR-04).
 
-    Antes, o W.O. entrava como flutuacao normal dos DOIS lados enquanto a cor e a
-    nao-repeticao ja o excluiam: o mesmo jogo contava de tres jeitos diferentes.
+    Antes, o W.O. entrava como flutuação normal dos DOIS lados enquanto a cor e a
+    não-repeticao já o excluíam: o mesmo jogo contava de três jeitos diferentes.
     """
     scores = {
         int(player["id"]): float(player.get("starting_points", 0.0) or 0.0)
@@ -178,8 +178,8 @@ def float_histories(
                 str(pairing.get("result") or "").strip().upper(), bye_points
             )
             # `bye` continua marcado a parte (a escolha do bye usa esta marca),
-            # e o downfloat so entra quando o bye PONTUOU — bye de zero ponto nao
-            # e flutuacao para ninguem.
+            # e o downfloat só entra quando o bye PONTUOU — bye de zero ponto não
+            # e flutuação para ninguém.
             histories[white_id].append("bye")
             if ganhos > 0:
                 histories[white_id].append("down")
@@ -192,8 +192,8 @@ def float_histories(
         scores.setdefault(black_id, 0.0)
 
         if str(pairing.get("result") or "").strip().upper() in WALKOVER_RESULTS:
-            # Nao jogada: quem pontuou sem jogar conta como downfloat; o outro
-            # lado nao flutua. Ver o docstring — e o ramo "dutch" do Gacrux.
+            # Não jogada: quem pontuou sem jogar conta como downfloat; o outro
+            # lado não flutua. Ver o docstring — e o ramo "dutch" do Gacrux.
             pontos = result_points.get(str(pairing.get("result") or "").strip())
             if pontos:
                 brancas, pretas = pontos

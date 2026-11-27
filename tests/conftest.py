@@ -17,7 +17,7 @@ import os
 os.environ.setdefault("ALBERICUS_DEFAULT_PAIRING_SYSTEM", "fide_dutch")
 os.environ.setdefault("ALBERICUS_DEFAULT_TIEBREAK_ENGINE", "albericus")
 
-# Nota: manter aqui uma raiz Tk "ancora" viva pela sessao parece resolver os
-# skips de criacao de raiz (ver cancel_pending_callbacks), mas NAO funciona: a
-# ancora vira o _default_root do tkinter e os menus da AlbericusApp passam a ser
-# criados no interpretador errado, quebrando ~6 testes de layout. Ja tentado.
+# Nota: manter aqui uma raiz Tk "ancora" viva pela sessão parece resolver os
+# skips de criação de raiz (ver cancel_pending_callbacks), mas NÃO funciona: a
+# âncora vira o _default_root do tkinter e os menus da AlbericusApp passam a ser
+# criados no interpretador errado, quebrando ~6 testes de layout. Já tentado.

@@ -45,24 +45,24 @@ coerente com o offline-first.
 
 ## Fase K — Robustez do emparceiramento Dutch (BBP/Swiss-Manager)
 
-**Status: em execucao.** K0 concluida em 2026-06-09; K1 iniciada com auditoria
-ampliada. Nova frente criada para reduzir falhas e repeticoes evitaveis de cor
+**Status: em execução.** K0 concluída em 2026-06-09; K1 iniciada com auditoria
+ampliada. Nova frente criada para reduzir falhas e repetições evitáveis de cor
 nos emparceiramentos, especialmente no fundo da tabela, usando o BBP Pairings
-como referencia tecnica local e mantendo comparacao operacional com
-Swiss-Manager quando houver massa de dados disponivel.
+como referência técnica local e mantendo comparação operacional com
+Swiss-Manager quando houver massa de dados disponível.
 
-### K0 — Bateria de referencia com BBP Pairings
+### K0 — Bateria de referência com BBP Pairings
 
-**Status: concluida em 2026-06-09.**
+**Status: concluída em 2026-06-09.**
 
-Implementacao entregue:
+Implementação entregue:
 
-- Script reprodutivel `scripts/run_bbp_reference_tests.py`.
+- Script reprodutível `scripts/run_bbp_reference_tests.py`.
 - Download sob demanda do release oficial `v6.0.0` para
   `bbpPairings-6.0.0/.bin/v6.0.0/`.
-- Validacao SHA256 do asset Windows x86_64:
+- Validação SHA256 do asset Windows x86_64:
   `d2bfc61cbd291a5458f18adccb43b19b6f1be40a9c0cc86a5142b605298dc0d7`.
-- Comparacao textual normalizada para absorver diferenca esperada de `LF` vs
+- Comparação textual normalizada para absorver diferença esperada de `LF` vs
   `CRLF` no Windows.
 
 Resultado da bateria local:
@@ -74,127 +74,127 @@ Resultado da bateria local:
 | `issue_7` | Dutch | 31 | passou |
 | `issue_15` | Burstein check | 11 | passou |
 
-Observacao: nao havia `bbpPairings.exe`, `g++`, `make`, `clang`, `cl` ou
-`cmake` disponivel no PATH; o WSL tambem nao estava instalado. Por isso a
-bateria usa o binario oficial do release em vez de compilar localmente.
+Observação: não havia `bbpPairings.exe`, `g++`, `make`, `clang`, `cl` ou
+`cmake` disponível no PATH; o WSL também não estava instalado. Por isso a
+bateria usa o binário oficial do release em vez de compilar localmente.
 
 Detalhamento original:
 
-1. Preparar execucao local do `bbpPairings.exe` a partir de
+1. Preparar execução local do `bbpPairings.exe` a partir de
    `bbpPairings-6.0.0`.
 2. Rodar os fixtures oficiais/locais do BBP (`dutch_2025_C5`,
    `dutch_2025_C9`, `issue_7`, `issue_15`) e salvar as evidencias.
 3. Criar um script de apoio para executar o BBP com entrada TRF e comparar a
-   saida esperada, sem depender da interface grafica.
-4. Documentar se o ambiente local tem compilador/binario suficiente ou se sera
-   necessario adicionar o binario do BBP como dependencia opcional.
+   saída esperada, sem depender da interface gráfica.
+4. Documentar se o ambiente local tem compilador/binario suficiente ou se será
+   necessário adicionar o binário do BBP como dependência opcional.
 
 ### K1 — Testes e auditoria interna do Albericus
 
-**Status: em execucao.** Auditoria pura ampliada para detectar jogador
-duplicado na mesma rodada e floater repetido na mesma direcao. Fixtures BBP
-pequenos C5/C9 portados para regressao interna do Albericus.
+**Status: em execução.** Auditoria pura ampliada para detectar jogador
+duplicado na mesma rodada e floater repetido na mesma direção. Fixtures BBP
+pequenos C5/C9 portados para regressão interna do Albericus.
 
 Evidencias em 2026-06-09:
 
 - `tests/test_pairing_pure.py`: passou.
 - `tests/test_core_pairing.py`: passou.
-- Bateria ad hoc Albericus: 57 cenarios, 228 rodadas, jogadores pares e
-  impares de 10 a 30, padroes de resultado por rating/ciclo/upset, sem
-  duplicidade de jogador, bye repetido, adversario repetido ou violacao dura de
+- Bateria ad hoc Albericus: 57 cenários, 228 rodadas, jogadores pares e
+  ímpares de 10 a 30, padrões de resultado por rating/ciclo/upset, sem
+  duplicidade de jogador, bye repetido, adversário repetido ou violação dura de
   cor.
 
 Evidencias adicionais:
 
-- Adaptador minimo TRF(bx)/BBP nos testes para `dutch_2025_C5` e
+- Adaptador mínimo TRF(bx)/BBP nos testes para `dutch_2025_C5` e
   `dutch_2025_C9`.
-- Fixture grande `issue_7` portado como regressao de robustez: o Albericus
-  gera 30 mesas sem repeticao de adversario e sem violacao dura de cor, mas
+- Fixture grande `issue_7` portado como regressão de robustez: o Albericus
+  gera 30 mesas sem repetição de adversário e sem violação dura de cor, mas
   ainda diverge do snapshot exato do BBP. A paridade exata fica condicionada a
   K3/K5.
-- Correcao C9: na escolha do bye alocado, jogadores com mais partidas nao
-  jogadas deixam de ser preferidos quando ha candidato equivalente no menor
-  grupo de pontuacao.
+- Correção C9: na escolha do bye alocado, jogadores com mais partidas não
+  jogadas deixam de ser preferidos quando há candidato equivalente no menor
+  grupo de pontuação.
 - `Z` e `H` deixam de bloquear elegibilidade futura ao bye alocado; `BYE` e
   `F` seguem bloqueando.
-- Bateria pos-correcao: 33 cenarios, 132 rodadas, jogadores pares e impares de
+- Bateria pos-correção: 33 cenários, 132 rodadas, jogadores pares e ímpares de
   10 a 20, sem falhas estruturais.
 
-Proximas entregas de K1:
+Próximas entregas de K1:
 
 1. Adicionar auditoria pura de rodada: jogador duplicado, bye repetido,
-   adversario repetido, violacao dura de cor, float repetido e casos em que a
-   repeticao de cor era evitavel.
-2. Rodar bateria com quantidades pares e impares de jogadores, incluindo grupos
+   adversário repetido, violação dura de cor, float repetido e casos em que a
+   repetição de cor era evitável.
+2. Rodar bateria com quantidades pares e ímpares de jogadores, incluindo grupos
    pequenos de fundo de tabela.
 
-### K2 — Modelo formal de preferencia de cor
+### K2 — Modelo formal de preferência de cor
 
 **Status: implementada em 2026-06-09.**
 
-Implementacao entregue:
+Implementação entregue:
 
 - `ColorPreference` e `color_preference` em `src/services/pairing/constraints.py`.
-- Classificacao de preferencia em `absolute`, `strong`, `mild` e `none`,
-  alinhada ao criterio estudado no BBP.
+- Classificação de preferência em `absolute`, `strong`, `mild` e `none`,
+  alinhada ao critério estudado no BBP.
 - `assignment_color_penalty` passa a usar o perfil formal de cor, mantendo a
-  API publica e a separacao entre violacao dura e preferencia.
+  API pública e a separação entre violação dura e preferência.
 - `choose_colors` e `choose_team_colors` passam a se beneficiar da nova
-  penalidade sem alteracao de assinatura.
-- Testes puros para historico sem cor, preferencia absoluta, forte, leve e
-  escolha com preferencias absolutas opostas.
+  penalidade sem alteração de assinatura.
+- Testes puros para histórico sem cor, preferência absoluta, forte, leve e
+  escolha com preferências absolutas opostas.
 
 Evidencias:
 
 - `tests/test_pairing_pure.py`: passou.
 - `tests/test_core_pairing.py`: passou.
 - `scripts/run_bbp_reference_tests.py`: BBP C5, C9, issue_7 e issue_15 passaram.
-- Bateria ad hoc pos-K2: 33 cenarios, 132 rodadas, jogadores pares e impares de
-  10 a 20, sem duplicidade, bye repetido, adversario repetido ou violacao dura
+- Bateria ad hoc pos-K2: 33 cenários, 132 rodadas, jogadores pares e ímpares de
+  10 a 20, sem duplicidade, bye repetido, adversário repetido ou violação dura
   de cor.
 
 Detalhamento original:
 
-1. Criar um perfil de cor explicito: preferencia absoluta, forte, leve ou
+1. Criar um perfil de cor explicito: preferência absoluta, forte, leve ou
    neutra.
 2. Usar esse perfil em `choose_colors` e nas penalidades de cor, preservando a
-   API atual do servico.
-3. Cobrir por testes os casos de duas cores iguais seguidas, desequilibrio
-   maior que 1 e desempates entre preferencias compativeis.
+   API atual do serviço.
+3. Cobrir por testes os casos de duas cores iguais seguidas, desequilíbrio
+   maior que 1 e desempates entre preferências compatíveis.
 
-### K3 — Qualidade lexicografica do par
+### K3 — Qualidade lexicográfica do par
 
-1. Substituir a comparacao por penalidade escalar por uma tupla/objeto de
+1. Substituir a comparação por penalidade escalar por uma tupla/objeto de
    qualidade com prioridades fixas.
-2. Separar criterios duros (rematch, cor absoluta, bye inelegivel) de criterios
-   de qualidade (score, floater, preferencia de cor, distancia de ranking).
-3. Evitar que uma penalidade menor compense indevidamente uma violacao mais
+2. Separar critérios duros (rematch, cor absoluta, bye inelegível) de critérios
+   de qualidade (score, floater, preferência de cor, distancia de ranking).
+3. Evitar que uma penalidade menor compense indevidamente uma violação mais
    grave.
 
-### K4 — Transposicoes e trocas deterministicas
+### K4 — Transposições e trocas determinísticas
 
-1. Gerar candidatos S1/S2 em ordem explicavel: padrao, transposicoes, trocas
+1. Gerar candidatos S1/S2 em ordem explicável: padrão, transposições, trocas
    pequenas e fallback limitado.
 2. Usar esse gerador antes dos fallbacks mais heurisiticos.
-3. Registrar no diagnostico qual reparo foi necessario para fechar o grupo.
+3. Registrar no diagnóstico qual reparo foi necessário para fechar o grupo.
 
 ### K5 — Comparador opcional BBP/Swiss-Manager
 
-1. Exportar o torneio atual para TRF compativel.
-2. Rodar BBP como oraculo opcional quando o binario estiver disponivel.
+1. Exportar o torneio atual para TRF compatível.
+2. Rodar BBP como oráculo opcional quando o binário estiver disponível.
 3. Comparar pares, cores, bye e floaters contra BBP e/ou Swiss-Manager.
-4. Exibir diferencas como diagnostico arbitral, nao como alteracao automatica
+4. Exibir diferenças como diagnóstico arbitral, não como alteração automática
    de resultado.
 
 ### K6 — Checklist arbitral de emparceiramento
 
-1. Gerar checklist por rodada com pontos, historico de cores, preferencia de
+1. Gerar checklist por rodada com pontos, histórico de cores, preferência de
    cor, elegibilidade de bye, float anterior e par proposto.
-2. Explicar quando uma repeticao de cor foi inevitavel e quando foi escolha
+2. Explicar quando uma repetição de cor foi inevitável e quando foi escolha
    subotima do algoritmo.
 
 **Ordem recomendada:** K0, K1, K2, K3, K4, K5 e K6. O BBP deve ser tratado
-primeiro como referencia e oraculo de testes; substituir o motor interno so deve
+primeiro como referência e oráculo de testes; substituir o motor interno só deve
 ser considerado depois de evidencia suficiente.
 
 ---
@@ -346,7 +346,7 @@ exportável, com aviso de conformidade.
   retrocompatível). `PrizeService` (list/replace/allocate) em
   `src/services/prize_service.py`, wired em `app.py`/`support.py`/`core/services.py`.
 - UI: seção **Premiação** em `Config. torneio` com política, imposto e o editor
-  de prêmios em linhas (`PrizeEditor`, com botão próprio "Salvar premios").
+  de prêmios em linhas (`PrizeEditor`, com botão próprio "Salvar prêmios").
 - Exportação: opção **`Premiacao`** na tela `Relatorios` →
   `export_prize_report` (CSV/XLSX/PDF) com resumo, premiação por jogador e
   prêmios manuais.
@@ -482,7 +482,7 @@ estimativa.
 - `ExportService._standings_section` passou a ser **dirigido por layout**: usa as
   colunas salvas (ou as padrão), aplicando a CSV/XLSX/PDF da classificação.
 - UI: editor `ColumnLayoutEditor` (mostrar/ocultar + ordem, com "Restaurar
-  padrão") na seção **Colunas da classificacao** de `Config. torneio`, com botão
+  padrão") na seção **Colunas da classificação** de `Config. torneio`, com botão
   próprio "Salvar colunas".
 - Testes: colunas padrão inalteradas (regressão), layout altera as colunas,
   normalização/validação, reset e migração v38. Gate verde.

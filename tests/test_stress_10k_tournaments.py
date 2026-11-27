@@ -120,10 +120,10 @@ def _player_size(rng: random.Random) -> int:
 
 
 def _num_rounds(n: int, rng: random.Random) -> int:
-    # Nunca pedir mais rodadas do que o Suico comporta: com n jogadores o teto
-    # absoluto sem repetir confronto e n-1 (round-robin). Pedir alem disso gera
-    # cenarios IMPOSSIVEIS (ex.: 2 jogadores / 2 rodadas) — ruido de teste, nao
-    # bug do motor. O clamp nao altera o consumo do rng (mesmos n/seeds por torneio).
+    # Nunca pedir mais rodadas do que o Suíço comporta: com n jogadores o teto
+    # absoluto sem repetir confronto e n-1 (round-robin). Pedir além disso gera
+    # cenários IMPOSSÍVEIS (ex.: 2 jogadores / 2 rodadas) — ruído de teste, não
+    # bug do motor. O clamp não altera o consumo do rng (mesmos n/seeds por torneio).
     max_r = min(_profile_for_size(n).max_rounds, n - 1)
     base  = max(1, math.ceil(math.log2(max(2, n))))
     return max(1, min(base + rng.randint(-1, 1), max_r))

@@ -1,8 +1,8 @@
-"""Mixin do dominio de membros (socios) da Database.
+"""Mixin do domínio de membros (sócios) da Database.
 
-Membros, presencas, titulos e historico de rating interno. Extraido de
-``src.core.database`` na decomposicao da God Class. Usa get_club (clubes) e
-create_player (nucleo de torneios) via fachada. Ver ``_database_base._DatabaseInfra``.
+Membros, presenças, títulos e histórico de rating interno. Extraído de
+``src.core.database`` na decomposição da God Class. Usa get_club (clubes) e
+create_player (núcleo de torneios) via fachada. Ver ``_database_base._DatabaseInfra``.
 """
 from __future__ import annotations
 
@@ -521,7 +521,7 @@ class MemberMixin(_DatabaseInfra):
     def create_player_from_member(self, tournament_id: int, member_id: int) -> int:
         member = self.get_member(member_id)
         if not member:
-            raise ValueError("Membro nao encontrado.")
+            raise ValueError("Membro não encontrado.")
 
         club = self.get_club(int(member.get("club_id") or 1))
         club_name = club["name"] if club and club["name"] else member["city"]

@@ -248,7 +248,7 @@ class MigracaoV44Test(unittest.TestCase):
         self.assertEqual(Database.SCHEMA_VERSION, versao)
         self.assertEqual("Arbitro Antigo", preservado["value"])
 
-        # E a tabela nova ja aceita escrita.
+        # E a tabela nova já aceita escrita.
         db.save_column_layout(1, "abc", '{"nome": 200}')
         self.assertEqual('{"nome": 200}', db.get_column_layout(1, "abc"))
 

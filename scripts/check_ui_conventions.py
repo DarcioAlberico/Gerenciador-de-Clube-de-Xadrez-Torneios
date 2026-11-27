@@ -1,28 +1,28 @@
 """Lint das convenções de UI que o ruff não expressa (F1.6 e F3.3).
 
-Quatro regras, todas com a mesma logica: o que ja existe fica registrado numa
+Quatro regras, todas com a mesma lógica: o que já existe fica registrado numa
 linha de base explicita, e **qualquer coisa nova reprova**. A divida some pela
-lista encolher, nunca por alguem afrouxar a regra.
+lista encolher, nunca por alguém afrouxar a regra.
 
 1. `import *` em `src/ui` (achado P0-4). O ruff acusa F403, mas as telas legadas
    precisariam de um `per-file-ignore` cada; a linha de base abaixo faz esse
    papel e some junto com as telas migradas.
 
 2. Cor ou tamanho de fonte cravado em `src/ui/screens` (P2-1/P2-2/P2-3). Vale a
-   regra: **nomear e permitido, embutir nao**. Uma constante de modulo
+   regra: **nomear e permitido, embutir não**. Uma constante de módulo
    (`PROJETOR_FUNDO = "#000000"`) passa; a mesma cor dentro de uma chamada de
-   widget reprova — a primeira diz o que a cor significa, a segunda so a esconde.
+   widget reprova — a primeira diz o que a cor significa, a segunda só a esconde.
 
-3. `ctk.CTkToplevel` cru em `src/ui` (achado P3-10). Um modal a mao **parece**
-   certo em revisao: o que falta nele — Esc, centralizacao, tamanho que cabe na
-   tela em 160%, ordem dos botoes — so aparece usando. Mesma linha de base.
+3. `ctk.CTkToplevel` cru em `src/ui` (achado P3-10). Um modal à mão **parece**
+   certo em revisão: o que falta nele — Esc, centralização, tamanho que cabe na
+   tela em 160%, ordem dos botões — só aparece usando. Mesma linha de base.
 
 4. `_run_background(...)` sem `busy_widget=` (achado P3-11). Aqui a linha de
-   base e um **numero por arquivo**, e ele so pode cair: sao 33 chamadas, e
+   base e um **número por arquivo**, e ele só pode cair: são 33 chamadas, e
    exigir todas de uma vez pararia a fase.
 
 Uso:
-    python scripts/check_ui_conventions.py           # reprova o que e novo
+    python scripts/check_ui_conventions.py           # reprova o que é novo
     python scripts/check_ui_conventions.py --baseline # reimprime a linha de base
 """
 from __future__ import annotations
@@ -37,7 +37,7 @@ UI = RAIZ / "src" / "ui"
 TELAS = UI / "screens"
 
 # --- Linha de base: telas que ainda usam `from ..support import *` -----------
-# Encolhe a cada tela migrada para imports explicitos (F1.6). Nao cresce.
+# Encolhe a cada tela migrada para imports explícitos (F1.6). Não cresce.
 WILDCARD_PERMITIDO = {
     "app.py",
     "screens/admin.py",
@@ -60,9 +60,9 @@ WILDCARD_PERMITIDO = {
     "screens/tournaments/pages.py",
 }
 
-# `\.+` e nao `\.{1,2}`: a B-6 moveu uma tela para subpacote e o `import *`
+# `\.+` e não `\.{1,2}`: a B-6 moveu uma tela para subpacote e o `import *`
 # dela virou `from ...support import *` — com o limite antigo, mudar de
-# profundidade escapava do lint em silencio.
+# profundidade escapava do lint em silêncio.
 _WILDCARD = re.compile(r"^\s*from\s+\.+support\s+import\s+\*", re.MULTILINE)
 _HEX = re.compile(r"#[0-9a-fA-F]{6}\b")
 _FONTE = re.compile(r"CTkFont\(\s*size\s*=\s*\d+")
@@ -89,7 +89,7 @@ def checar_wildcards() -> list[str]:
                 f"{nome}: `from ..support import *` novo. Importe os nomes "
                 f"explicitamente (P0-4/F1.6)."
             )
-    # a linha de base tambem nao pode envelhecer: arquivo migrado sai da lista
+    # a linha de base também não pode envelhecer: arquivo migrado sai da lista
     presentes = {
         _relativo(arquivo)
         for arquivo in UI.rglob("*.py")
@@ -97,27 +97,27 @@ def checar_wildcards() -> list[str]:
     }
     for obsoleto in sorted(WILDCARD_PERMITIDO - presentes):
         problemas.append(
-            f"{obsoleto}: nao usa mais `import *` — remova-o de WILDCARD_PERMITIDO "
+            f"{obsoleto}: não usa mais `import *` — remova-o de WILDCARD_PERMITIDO "
             f"em scripts/check_ui_conventions.py."
         )
     return problemas
 
 
-# --- Linha de base: telas que ainda abrem `CTkToplevel` na mao (F5.8) --------
-# Encolhe a cada dialogo migrado para o `Dialog` canonico. Nao cresce.
+# --- Linha de base: telas que ainda abrem `CTkToplevel` na mão (F5.8) --------
+# Encolhe a cada diálogo migrado para o `Dialog` canônico. Não cresce.
 #
 # A regra existe porque as quatro coisas que o P3-10 achou faltando — Esc,
-# centralizacao, tamanho que cabe na tela em 160% e ordem de botoes — sao todas
-# invisiveis em revisao de codigo: um `CTkToplevel` cru **parece** correto.
-# Casa canonica do modal: aqui `CTkToplevel` **e** o certo. Nao entra na conta
-# de divida e nunca e cobrada como obsoleta.
+# centralização, tamanho que cabe na tela em 160% e ordem de botões — são todas
+# invisíveis em revisão de código: um `CTkToplevel` cru **parece** correto.
+# Casa canônica do modal: aqui `CTkToplevel` **e** o certo. Não entra na conta
+# de divida e nunca é cobrada como obsoleta.
 TOPLEVEL_CANONICO = {"components/dialogs.py"}
 
 TOPLEVEL_PERMITIDO = {
-    "components/donation.py",  # modal de doacao, com layout proprio
-    "screens/free_tournament.py",  # aviso do Modo Livre: pack + rodape ancorado
-    "screens/pairing_results/projector.py",  # Modo Projetor: janela de apresentacao
-    "shell.py",  # paleta de comandos (Ctrl+K), que nao e dialogo
+    "components/donation.py",  # modal de doação, com layout próprio
+    "screens/free_tournament.py",  # aviso do Modo Livre: pack + rodapé ancorado
+    "screens/pairing_results/projector.py",  # Modo Projetor: janela de apresentação
+    "shell.py",  # paleta de comandos (Ctrl+K), que não é diálogo
 }
 
 _TOPLEVEL = re.compile(r"ctk\.CTkToplevel\s*\(")
@@ -128,7 +128,7 @@ def checar_dialogos() -> list[str]:
     presentes = set()
     for arquivo in sorted(UI.rglob("*.py")):
         texto = arquivo.read_text(encoding="utf-8")
-        # so contam ocorrencias fora de comentario e de anotacao de tipo
+        # só contam ocorrências fora de comentário e de anotação de tipo
         linhas = [
             linha
             for linha in texto.splitlines()
@@ -143,22 +143,22 @@ def checar_dialogos() -> list[str]:
         if nome not in TOPLEVEL_PERMITIDO:
             problemas.append(
                 f"{nome}: `ctk.CTkToplevel` novo. Use `Dialog` de "
-                f"components/dialogs.py — ele traz Esc, centralizacao e tamanho "
+                f"components/dialogs.py — ele traz Esc, centralização e tamanho "
                 f"que cabe na tela (P3-10/F5.8)."
             )
     for obsoleto in sorted(TOPLEVEL_PERMITIDO - presentes):
         problemas.append(
-            f"{obsoleto}: nao abre mais `CTkToplevel` — remova-o de "
+            f"{obsoleto}: não abre mais `CTkToplevel` — remova-o de "
             f"TOPLEVEL_PERMITIDO em scripts/check_ui_conventions.py."
         )
     return problemas
 
 
 # --- Linha de base: `_run_background` sem `busy_widget` (F5.9) ---------------
-# O veu de progresso (components/progress.py) ja impede o clique repetido por
-# construcao: ele cobre o painel em acao. O `busy_widget` e a segunda camada —
-# o botao esmaecido diz "essa acao ja esta rodando" e continua dizendo depois
-# de o veu sair. Aqui a linha de base e um NUMERO por arquivo, e ele so cai.
+# O véu de progresso (components/progress.py) já impede o clique repetido por
+# construção: ele cobre o painel em ação. O `busy_widget` e a segunda camada —
+# o botão esmaecido diz "essa acao ja esta rodando" e continua dizendo depois
+# de o véu sair. Aqui a linha de base e um NÚMERO por arquivo, e ele só cai.
 BUSY_WIDGET_PENDENTE: dict[str, int] = {
     "screens/admin_calendar_ranking.py": 3,
     "screens/admin_training_finance.py": 2,
@@ -202,15 +202,15 @@ def checar_busy_widget() -> list[str]:
         if quantidade > teto:
             problemas.append(
                 f"{nome}: {quantidade} chamada(s) de `_run_background` sem "
-                f"`busy_widget=` (limite {teto}). Passe o botao que disparou a "
-                f"acao — ele fica esmaecido enquanto ela roda (P3-11/F5.9)."
+                f"`busy_widget=` (limite {teto}). Passe o botão que disparou a "
+                f"ação — ele fica esmaecido enquanto ela roda (P3-11/F5.9)."
             )
     for nome, teto in sorted(BUSY_WIDGET_PENDENTE.items()):
         if atuais.get(nome, 0) < teto:
             problemas.append(
-                f"{nome}: hoje sao {atuais.get(nome, 0)} chamada(s) sem "
+                f"{nome}: hoje são {atuais.get(nome, 0)} chamada(s) sem "
                 f"`busy_widget` e a linha de base ainda permite {teto} — baixe "
-                f"o numero em BUSY_WIDGET_PENDENTE."
+                f"o número em BUSY_WIDGET_PENDENTE."
             )
     return problemas
 
@@ -261,14 +261,14 @@ def main() -> int:
         + checar_busy_widget()
     )
     if problemas:
-        print("Convencoes de UI violadas:\n")
+        print("Convenções de UI violadas:\n")
         for problema in problemas:
             print(f"  {problema}")
         print(f"\n{len(problemas)} problema(s).")
         return 1
     print(
-        f"Convencoes de UI OK "
-        f"({len(WILDCARD_PERMITIDO)} tela(s) ainda com `import *`, e so encolhe)."
+        f"Convenções de UI OK "
+        f"({len(WILDCARD_PERMITIDO)} tela(s) ainda com `import *`, e só encolhe)."
     )
     return 0
 

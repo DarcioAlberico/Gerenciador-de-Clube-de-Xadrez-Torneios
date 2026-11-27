@@ -43,7 +43,7 @@ class GuardianService:
 
     def update_guardian(self, guardian_id: int, data: dict[str, Any]) -> None:
         if not self.db.get_guardian(guardian_id):
-            raise AppError("Responsavel nao encontrado.")
+            raise AppError("Responsável não encontrado.")
         payload = self._validated_payload(data)
         self.db.update_guardian(guardian_id, **payload)
         logger.info("Responsavel atualizado: %s", guardian_id)
@@ -51,7 +51,7 @@ class GuardianService:
     def toggle_guardian_active(self, guardian_id: int) -> int:
         guardian = self.db.get_guardian(guardian_id)
         if not guardian:
-            raise AppError("Responsavel nao encontrado.")
+            raise AppError("Responsável não encontrado.")
         next_active = 0 if guardian.get("active") else 1
         self.db.set_guardian_active(guardian_id, next_active)
         logger.info("Responsavel %s alterado para active=%s", guardian_id, next_active)
@@ -62,16 +62,16 @@ class GuardianService:
             member_id = int(data.get("member_id") or 0)
             guardian_id = int(data.get("guardian_id") or 0)
         except ValueError as exc:
-            raise AppError("Membro ou responsavel invalido.") from exc
+            raise AppError("Membro ou responsável inválido.") from exc
 
         member = self.db.get_member(member_id)
         if not member:
-            raise AppError("Membro nao encontrado.")
+            raise AppError("Membro não encontrado.")
         guardian = self.db.get_guardian(guardian_id)
         if not guardian:
-            raise AppError("Responsavel nao encontrado.")
+            raise AppError("Responsável não encontrado.")
         if not guardian.get("active"):
-            raise AppError("Responsavel inativo nao pode receber novo vinculo.")
+            raise AppError("Responsável inativo não pode receber novo vínculo.")
 
         self.db.link_guardian_to_member(
             member_id=member_id,
@@ -85,9 +85,9 @@ class GuardianService:
 
     def unlink_guardian_from_member(self, member_id: int, guardian_id: int) -> None:
         if not self.db.get_member(member_id):
-            raise AppError("Membro nao encontrado.")
+            raise AppError("Membro não encontrado.")
         if not self.db.get_guardian(guardian_id):
-            raise AppError("Responsavel nao encontrado.")
+            raise AppError("Responsável não encontrado.")
         self.db.unlink_guardian_from_member(member_id, guardian_id)
         logger.info("Responsavel %s removido do membro %s", guardian_id, member_id)
 
@@ -109,7 +109,7 @@ class GuardianService:
     def _validated_payload(data: dict[str, Any]) -> dict[str, Any]:
         name = str(data.get("name", "")).strip()
         if not name:
-            raise AppError("Informe o nome do responsavel.")
+            raise AppError("Informe o nome do responsável.")
         return {
             "name": name,
             "phone": str(data.get("phone", "")),
@@ -148,7 +148,7 @@ class MemberService:
 
     def update_member(self, member_id: int, data: dict[str, Any]) -> None:
         if not self.db.get_member(member_id):
-            raise AppError("Membro nao encontrado.")
+            raise AppError("Membro não encontrado.")
         payload = self._validated_payload(data)
         class_id = payload.pop("class_id", None)
         self.db.update_member(member_id, **payload)
@@ -158,7 +158,7 @@ class MemberService:
     def toggle_member_status(self, member_id: int) -> str:
         member = self.db.get_member(member_id)
         if not member:
-            raise AppError("Membro nao encontrado.")
+            raise AppError("Membro não encontrado.")
         next_status = "inactive" if member["status"] == "active" else "active"
         self.db.set_member_status(member_id, next_status)
         logger.info("Status do membro %s alterado para %s", member_id, next_status)
@@ -167,7 +167,7 @@ class MemberService:
     def deactivate_member(self, member_id: int, reason: str, date: str, notes: str = "") -> None:
         member = self.db.get_member(member_id)
         if not member:
-            raise AppError("Membro nao encontrado.")
+            raise AppError("Membro não encontrado.")
         
         self.db.update_member(
             member_id=member_id,
@@ -219,11 +219,11 @@ class MemberService:
     ) -> int:
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
-            raise AppError("Selecione um torneio valido.")
+            raise AppError("Selecione um torneio válido.")
 
         member = self.db.get_member(member_id)
         if not member:
-            raise AppError("Membro nao encontrado.")
+            raise AppError("Membro não encontrado.")
         if member["status"] != "active":
             raise AppError("Somente membros ativos podem ser inscritos.")
 
@@ -238,7 +238,7 @@ class MemberService:
 
         existing = self.db.get_player_by_member(tournament_id, member_id)
         if existing:
-            raise AppError("Este membro ja esta inscrito no torneio.")
+            raise AppError("Este membro já está inscrito no torneio.")
 
         player_id = self.db.create_player_from_member(tournament_id, member_id)
         logger.info(
@@ -264,7 +264,7 @@ class MemberService:
     ) -> dict[str, Any]:
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
-            raise AppError("Selecione um torneio valido.")
+            raise AppError("Selecione um torneio válido.")
 
         registered_player_ids = []
         skipped = 0
@@ -294,7 +294,7 @@ class MemberService:
 
     def tournament_history(self, member_id: int) -> list[dict[str, Any]]:
         if not self.db.get_member(member_id):
-            raise AppError("Membro nao encontrado.")
+            raise AppError("Membro não encontrado.")
 
         pairing_service = __import__('src.services.pairing_service', fromlist=['PairingService']).PairingService(self.db)
         history = []
@@ -328,7 +328,7 @@ class MemberService:
                     "position": standing["position"] if standing else "",
                     "performance": standing["performance"] if standing else "",
                     "rounds_played": len(closed_results),
-                    "wins": self._count_outcomes(closed_results, "Vitoria"),
+                    "wins": self._count_outcomes(closed_results, "Vitória"),
                     "draws": self._count_outcomes(closed_results, "Empate"),
                     "losses": self._count_outcomes(closed_results, "Derrota"),
                     "byes": self._count_outcomes(closed_results, "Bye"),
@@ -339,10 +339,10 @@ class MemberService:
 
     def tournament_results(self, member_id: int, tournament_id: int) -> list[dict[str, Any]]:
         if not self.db.get_member(member_id):
-            raise AppError("Membro nao encontrado.")
+            raise AppError("Membro não encontrado.")
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
-            raise AppError("Selecione um torneio valido.")
+            raise AppError("Selecione um torneio válido.")
         player = self.db.get_player_by_member(tournament_id, member_id)
         if not player:
             return []
@@ -414,7 +414,7 @@ class MemberService:
         if points is None:
             return "Pendente"
         if points == 1.0:
-            return "Vitoria"
+            return "Vitória"
         if points == 0.5:
             return "Empate"
         return "Derrota"
@@ -430,36 +430,36 @@ class MemberService:
 
         member_type = str(data.get("member_type", "socio")).strip() or "socio"
         if member_type not in MEMBER_TYPES:
-            raise AppError("Tipo de vinculo invalido.")
+            raise AppError("Tipo de vínculo inválido.")
 
         status = str(data.get("status", "active")).strip() or "active"
         if status not in MEMBER_STATUSES:
-            raise AppError("Status de membro invalido.")
+            raise AppError("Status de membro inválido.")
 
         try:
             rating = int(data.get("rating") or 0)
         except ValueError as exc:
-            raise AppError("Rating do membro invalido.") from exc
+            raise AppError("Rating do membro inválido.") from exc
         try:
             club_id = int(data.get("club_id") or 1)
         except ValueError as exc:
-            raise AppError("Clube/escola do membro invalido.") from exc
+            raise AppError("Clube/escola do membro inválido.") from exc
         if not self.db.get_club(club_id):
-            raise AppError("Clube/escola do membro nao encontrado.")
+            raise AppError("Clube/escola do membro não encontrado.")
         try:
             class_id = int(data.get("class_id") or 0)
         except ValueError as exc:
-            raise AppError("Turma do membro invalida.") from exc
+            raise AppError("Turma do membro inválida.") from exc
         if class_id:
             class_data = self.db.get_class(class_id)
             if not class_data or int(class_data["club_id"]) != club_id:
-                raise AppError("Turma nao pertence ao clube/escola selecionado.")
+                raise AppError("Turma não pertence ao clube/escola selecionado.")
         try:
             learning_level_id = int(data.get("learning_level_id") or 0)
         except ValueError as exc:
-            raise AppError("Nivel de aprendizagem invalido.") from exc
+            raise AppError("Nível de aprendizagem inválido.") from exc
         if learning_level_id and not self.db.get_learning_level(learning_level_id):
-            raise AppError("Nivel de aprendizagem nao encontrado.")
+            raise AppError("Nível de aprendizagem não encontrado.")
 
         try:
             online_blitz_rating = int(data.get("online_blitz_rating") or 0)

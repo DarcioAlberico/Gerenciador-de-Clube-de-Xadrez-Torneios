@@ -290,7 +290,7 @@ class CorrecaoNoServicoTest(CoreServiceTestCase):
         self.assertEqual(1, len(pendencias))
         self.assertEqual("cascade", pendencias[0]["kind"])
         self.assertEqual(1, issues["metrics"]["correction_alerts"])
-        # `attention`: quem decide se repareia e o arbitro; travar nao ajudaria.
+        # `attention`: quem decide se repareia e o árbitro; travar não ajudaria.
         self.assertEqual("attention", pendencias[0]["severity"])
 
     def test_corrigir_a_ultima_rodada_nao_gera_cascata(self) -> None:

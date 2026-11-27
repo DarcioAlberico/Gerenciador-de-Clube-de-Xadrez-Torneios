@@ -32,47 +32,47 @@ logger = logging.getLogger(__name__)
 DEFAULT_LEARNING_LEVELS = (
     (
         "Iniciante",
-        "Conhece o tabuleiro, movimento das pecas, xeque, xeque-mate e empates basicos.",
+        "Conhece o tabuleiro, movimento das peças, xeque, xeque-mate e empates básicos.",
     ),
     (
-        "Basico",
-        "Joga uma partida completa, conhece regras especiais, valor das pecas e mates simples.",
+        "Básico",
+        "Joga uma partida completa, conhece regras especiais, valor das peças e mates simples.",
     ),
     (
-        "Intermediario",
-        "Reconhece taticas, aplica principios de abertura, finais basicos, relogio e anotacao.",
+        "Intermediário",
+        "Reconhece táticas, aplica princípios de abertura, finais básicos, relógio e anotação.",
     ),
     (
-        "Avancado",
-        "Entende planos estrategicos, analisa partidas e conhece finais essenciais.",
+        "Avançado",
+        "Entende planos estratégicos, analisa partidas e conhece finais essenciais.",
     ),
     (
         "Competitivo",
-        "Participa de torneios, conhece regras de competicao e representa clube ou turma.",
+        "Participa de torneios, conhece regras de competição e representa clube ou turma.",
     ),
 )
 
 CERTIFICATE_BACKGROUND_PRESETS = (
     ("Tabuleiro sutil", "assets/certificates/backgrounds/tabuleiro_sutil.png", 0.18),
-    ("Xadrez classico", "assets/certificates/backgrounds/xadrez_classico.png", 0.16),
+    ("Xadrez clássico", "assets/certificates/backgrounds/xadrez_classico.png", 0.16),
     ("Xadrez escolar", "assets/certificates/backgrounds/xadrez_escolar.png", 0.20),
     ("Xadrez premium", "assets/certificates/backgrounds/xadrez_premium.png", 0.12),
-    ("Pecas marca d'agua", "assets/certificates/backgrounds/pecas_marca_dagua.png", 0.18),
+    ("Peças marca d'água", "assets/certificates/backgrounds/pecas_marca_dagua.png", 0.18),
 )
 
 DEFAULT_CERTIFICATE_TEMPLATES = (
     {
-        "name": "Participacao padrao",
+        "name": "Participação padrão",
         "certificate_type": "participation",
-        "title_template": "Certificado de Participacao",
+        "title_template": "Certificado de Participação",
         "body_template": (
             "participou do torneio {torneio}, "
-            "obtendo {pontos} ponto(s) e a {posicao} colocacao na classificacao."
+            "obtendo {pontos} ponto(s) e a {posicao} colocação na classificação."
         ),
         "footer_template": "{local} - {periodo}",
         "orientation": "landscape",
-        "signature_left": "Organizacao",
-        "signature_right": "Arbitragem / Direcao",
+        "signature_left": "Organização",
+        "signature_right": "Arbitragem / Direção",
         "logo_path": "",
         "primary_color": "#1E3A8A",
         "accent_color": "#93C5FD",
@@ -81,17 +81,17 @@ DEFAULT_CERTIFICATE_TEMPLATES = (
         "footer_font_size": 10,
     },
     {
-        "name": "Premiacao geral padrao",
+        "name": "Premiação geral padrão",
         "certificate_type": "overall_award",
-        "title_template": "Certificado de Premiacao",
+        "title_template": "Certificado de Premiação",
         "body_template": (
-            "conquistou a {posicao} colocacao geral "
+            "conquistou a {posicao} colocação geral "
             "no torneio {torneio}, com {pontos} ponto(s)."
         ),
         "footer_template": "{local} - {periodo}",
         "orientation": "landscape",
-        "signature_left": "Organizacao",
-        "signature_right": "Arbitragem / Direcao",
+        "signature_left": "Organização",
+        "signature_right": "Arbitragem / Direção",
         "logo_path": "",
         "primary_color": "#1E3A8A",
         "accent_color": "#93C5FD",
@@ -100,17 +100,17 @@ DEFAULT_CERTIFICATE_TEMPLATES = (
         "footer_font_size": 10,
     },
     {
-        "name": "Premiacao por categoria padrao",
+        "name": "Premiação por categoria padrão",
         "certificate_type": "category_award",
-        "title_template": "Certificado de Premiacao",
+        "title_template": "Certificado de Premiação",
         "body_template": (
-            "conquistou a {posicao_categoria} colocacao "
+            "conquistou a {posicao_categoria} colocação "
             "na categoria {categoria} do torneio {torneio}, com {pontos} ponto(s)."
         ),
         "footer_template": "{local} - {periodo}",
         "orientation": "landscape",
-        "signature_left": "Organizacao",
-        "signature_right": "Arbitragem / Direcao",
+        "signature_left": "Organização",
+        "signature_right": "Arbitragem / Direção",
         "logo_path": "",
         "primary_color": "#1E3A8A",
         "accent_color": "#93C5FD",
@@ -119,7 +119,7 @@ DEFAULT_CERTIFICATE_TEMPLATES = (
         "footer_font_size": 10,
     },
     {
-        "name": "Membro aluno padrao",
+        "name": "Membro aluno padrão",
         "certificate_type": "member_certificate",
         "title_template": "Certificado",
         "body_template": (
@@ -128,7 +128,7 @@ DEFAULT_CERTIFICATE_TEMPLATES = (
         ),
         "footer_template": "{local} - {data}",
         "orientation": "landscape",
-        "signature_left": "Coordenacao",
+        "signature_left": "Coordenação",
         "signature_right": "Professor / Instrutor",
         "logo_path": "",
         "primary_color": "#1E3A8A",
@@ -138,16 +138,16 @@ DEFAULT_CERTIFICATE_TEMPLATES = (
         "footer_font_size": 10,
     },
     {
-        "name": "Aula turma padrao",
+        "name": "Aula turma padrão",
         "certificate_type": "training_participation",
-        "title_template": "Certificado de Participacao",
+        "title_template": "Certificado de Participação",
         "body_template": (
             "participou da atividade {aula}, "
             "realizada em {data}, na turma {turma}."
         ),
         "footer_template": "{clube} - {local}",
         "orientation": "landscape",
-        "signature_left": "Coordenacao",
+        "signature_left": "Coordenação",
         "signature_right": "Professor / Instrutor",
         "logo_path": "",
         "primary_color": "#1E3A8A",
@@ -157,14 +157,14 @@ DEFAULT_CERTIFICATE_TEMPLATES = (
         "footer_font_size": 10,
     },
     {
-        "name": "Evento padrao",
+        "name": "Evento padrão",
         "certificate_type": "event_participation",
-        "title_template": "Certificado de Participacao",
+        "title_template": "Certificado de Participação",
         "body_template": "participou do evento {evento}, realizado em {data}.",
         "footer_template": "{clube} - {local}",
         "orientation": "landscape",
-        "signature_left": "Organizacao",
-        "signature_right": "Coordenacao",
+        "signature_left": "Organização",
+        "signature_right": "Coordenação",
         "logo_path": "",
         "primary_color": "#1E3A8A",
         "accent_color": "#93C5FD",
@@ -173,17 +173,17 @@ DEFAULT_CERTIFICATE_TEMPLATES = (
         "footer_font_size": 10,
     },
     {
-        "name": "Ranking interno padrao",
+        "name": "Ranking interno padrão",
         "certificate_type": "internal_ranking",
         "title_template": "Certificado de Destaque",
         "body_template": (
-            "obteve a {posicao} colocacao no ranking interno, "
+            "obteve a {posicao} colocação no ranking interno, "
             "com rating {rating}."
         ),
         "footer_template": "{clube} - {data}",
         "orientation": "landscape",
-        "signature_left": "Coordenacao",
-        "signature_right": "Direcao",
+        "signature_left": "Coordenação",
+        "signature_right": "Direção",
         "logo_path": "",
         "primary_color": "#1E3A8A",
         "accent_color": "#93C5FD",
@@ -192,17 +192,17 @@ DEFAULT_CERTIFICATE_TEMPLATES = (
         "footer_font_size": 10,
     },
     {
-        "name": "Xadrez classico - Participacao",
+        "name": "Xadrez clássico - Participação",
         "certificate_type": "participation",
-        "title_template": "Certificado de Participacao",
+        "title_template": "Certificado de Participação",
         "body_template": (
             "participou do torneio {torneio}, "
-            "obtendo {pontos} ponto(s) e a {posicao} colocacao na classificacao."
+            "obtendo {pontos} ponto(s) e a {posicao} colocação na classificação."
         ),
         "footer_template": "{local} - {periodo}",
         "orientation": "landscape",
-        "signature_left": "Organizacao",
-        "signature_right": "Arbitragem / Direcao",
+        "signature_left": "Organização",
+        "signature_right": "Arbitragem / Direção",
         "logo_path": "",
         "background_image_path": CERTIFICATE_BACKGROUND_PRESETS[1][1],
         "background_opacity": CERTIFICATE_BACKGROUND_PRESETS[1][2],
@@ -222,7 +222,7 @@ DEFAULT_CERTIFICATE_TEMPLATES = (
         ),
         "footer_template": "{local} - {data}",
         "orientation": "landscape",
-        "signature_left": "Coordenacao",
+        "signature_left": "Coordenação",
         "signature_right": "Professor / Instrutor",
         "logo_path": "",
         "background_image_path": CERTIFICATE_BACKGROUND_PRESETS[2][1],
@@ -234,17 +234,17 @@ DEFAULT_CERTIFICATE_TEMPLATES = (
         "footer_font_size": 10,
     },
     {
-        "name": "Xadrez premium - Premiacao geral",
+        "name": "Xadrez premium - Premiação geral",
         "certificate_type": "overall_award",
-        "title_template": "Certificado de Premiacao",
+        "title_template": "Certificado de Premiação",
         "body_template": (
-            "conquistou a {posicao} colocacao geral "
+            "conquistou a {posicao} colocação geral "
             "no torneio {torneio}, com {pontos} ponto(s)."
         ),
         "footer_template": "{local} - {periodo}",
         "orientation": "landscape",
-        "signature_left": "Organizacao",
-        "signature_right": "Arbitragem / Direcao",
+        "signature_left": "Organização",
+        "signature_right": "Arbitragem / Direção",
         "logo_path": "",
         "background_image_path": CERTIFICATE_BACKGROUND_PRESETS[3][1],
         "background_opacity": CERTIFICATE_BACKGROUND_PRESETS[3][2],
@@ -255,17 +255,17 @@ DEFAULT_CERTIFICATE_TEMPLATES = (
         "footer_font_size": 10,
     },
     {
-        "name": "Tabuleiro sutil - Premiacao por categoria",
+        "name": "Tabuleiro sutil - Premiação por categoria",
         "certificate_type": "category_award",
-        "title_template": "Certificado de Premiacao",
+        "title_template": "Certificado de Premiação",
         "body_template": (
-            "conquistou a {posicao_categoria} colocacao "
+            "conquistou a {posicao_categoria} colocação "
             "na categoria {categoria} do torneio {torneio}, com {pontos} ponto(s)."
         ),
         "footer_template": "{local} - {periodo}",
         "orientation": "landscape",
-        "signature_left": "Organizacao",
-        "signature_right": "Arbitragem / Direcao",
+        "signature_left": "Organização",
+        "signature_right": "Arbitragem / Direção",
         "logo_path": "",
         "background_image_path": CERTIFICATE_BACKGROUND_PRESETS[0][1],
         "background_opacity": CERTIFICATE_BACKGROUND_PRESETS[0][2],
@@ -276,17 +276,17 @@ DEFAULT_CERTIFICATE_TEMPLATES = (
         "footer_font_size": 10,
     },
     {
-        "name": "Pecas marca d'agua - Ranking interno",
+        "name": "Peças marca d'água - Ranking interno",
         "certificate_type": "internal_ranking",
         "title_template": "Certificado de Destaque",
         "body_template": (
-            "obteve a {posicao} colocacao no ranking interno, "
+            "obteve a {posicao} colocação no ranking interno, "
             "com rating {rating}."
         ),
         "footer_template": "{clube} - {data}",
         "orientation": "landscape",
-        "signature_left": "Coordenacao",
-        "signature_right": "Direcao",
+        "signature_left": "Coordenação",
+        "signature_right": "Direção",
         "logo_path": "",
         "background_image_path": CERTIFICATE_BACKGROUND_PRESETS[4][1],
         "background_opacity": CERTIFICATE_BACKGROUND_PRESETS[4][2],
@@ -398,10 +398,10 @@ class Database(
         using_default_db_path = db_path is None
         self.db_path = default_db_path() if db_path is None else Path(db_path)
         self.backup_dir = Path(backup_dir) if backup_dir else default_backup_dir()
-        # Resultado da ultima copia de backup para a nuvem (pasta sincronizada).
+        # Resultado da última copia de backup para a nuvem (pasta sincronizada).
         # Preenchido por backup(); lido pela UI/SecurityService para reportar
         # status sem repetir a copia. Inicializado antes de qualquer backup de
-        # migracao disparado no __init__.
+        # migração disparado no __init__.
         self.last_cloud_backup: dict[str, str] | None = None
         if using_default_db_path:
             self._copy_legacy_default_database_if_needed()
@@ -475,7 +475,7 @@ class Database(
         current_version = self._schema_user_version(connection)
         if current_version > self.SCHEMA_VERSION:
             raise RuntimeError(
-                "Banco criado por uma versao mais nova do Albericus. "
+                "Banco criado por uma versão mais nova do Albericus. "
                 "Atualize o aplicativo antes de abrir este arquivo."
             )
 
@@ -938,7 +938,7 @@ class Database(
 
     def backup(self, reason: str = "manual") -> Path:
         if not self.db_path.exists():
-            raise FileNotFoundError(f"Banco nao encontrado: {self.db_path}")
+            raise FileNotFoundError(f"Banco não encontrado: {self.db_path}")
 
         safe_reason = "".join(
             character.lower() if character.isalnum() else "_"
@@ -965,15 +965,15 @@ class Database(
 
     def copy_backup_to_cloud(self, backup_path: Path | str) -> dict[str, str]:
         """Copia um backup para a pasta de nuvem configurada (`cloud_sync_dir`),
-        no estilo Dropbox/OneDrive/Drive desktop. Nunca levanta excecao — o
-        backup local ja foi gravado, entao uma falha de nuvem e registrada e
-        reportada, mas nao interrompe o fluxo. Devolve `{status, path}` com
+        no estilo Dropbox/OneDrive/Drive desktop. Nunca levanta exceção — o
+        backup local já foi gravado, então uma falha de nuvem e registrada e
+        reportada, mas não interrompe o fluxo. Devolve `{status, path}` com
         status em {`success`, `not_configured`, `invalid_directory`,
         `error: <msg>`}."""
         try:
             cloud_dir_str = (self.get_app_settings().get("cloud_sync_dir") or "").strip()
         except Exception:
-            # Cedo no __init__ (backup de migracao) as settings podem nao existir.
+            # Cedo no __init__ (backup de migração) as settings podem não existir.
             return {"status": "not_configured", "path": ""}
         if not cloud_dir_str:
             return {"status": "not_configured", "path": ""}
@@ -1006,7 +1006,7 @@ class Database(
             tournament_id=tournament_id,
             round_id=round_id,
             entity_type="backup",
-            reason=f"Backup automatico antes de {action}.",
+            reason=f"Backup automático antes de {action}.",
             after={"path": str(backup_path), "reason": "_".join(parts)},
         )
         return backup_path
@@ -1041,11 +1041,11 @@ class Database(
         source_path = Path(backup_path).resolve()
         backup_root = self.backup_dir.resolve()
         if not source_path.exists():
-            raise FileNotFoundError(f"Backup nao encontrado: {source_path}")
+            raise FileNotFoundError(f"Backup não encontrado: {source_path}")
         if not source_path.is_file() or source_path.suffix.lower() != self.db_path.suffix.lower():
-            raise ValueError("Selecione um arquivo de backup valido.")
+            raise ValueError("Selecione um arquivo de backup válido.")
         if source_path != backup_root and backup_root not in source_path.parents:
-            raise ValueError("Por seguranca, restaure apenas arquivos da pasta de backups configurada.")
+            raise ValueError("Por segurança, restaure apenas arquivos da pasta de backups configurada.")
 
         safety_backup = self.backup("before_restore")
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1083,7 +1083,7 @@ class Database(
             "arbitration_refresh_interval_seconds": "15",
             "arbitration_inline_tables_limit": "20",
             # "1" quando o operador marcou "Nao mostrar novamente" no aviso do
-            # Modo Livre: o menu passa direto para a criacao do torneio.
+            # Modo Livre: o menu passa direto para a criação do torneio.
             "free_mode_notice_hidden": "0",
         }
         with self.connect() as connection:

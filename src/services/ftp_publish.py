@@ -31,7 +31,7 @@ def list_images(local_dir: str | Path) -> list[Path]:
 
 def build_gallery_html(image_names: list[str], title: str) -> str:
     """HTML simples e responsivo de galeria (referencia as imagens por nome)."""
-    safe_title = html.escape(title or "Album de fotos")
+    safe_title = html.escape(title or "Álbum de fotos")
     cards = "\n".join(
         f'      <figure><img src="{html.escape(name)}" alt="{html.escape(name)}" loading="lazy">'
         f"<figcaption>{html.escape(name)}</figcaption></figure>"

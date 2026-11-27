@@ -8,8 +8,8 @@ from ..dialog_layout import centered_position, fitted_size, geometry_string
 # Mixin do "Modo Livre" (Torneio | Livre) — eventos casuais, escolares ou treinos.
 # Por ora exibe apenas o aviso informativo do modo, sem alterar nenhuma regra.
 # Fica deliberadamente isolado do fluxo oficial (FIDE/CBX) e serve de ponto de
-# extensao para o backlog do "Modo Escolar Amistoso" (entrada tardia, re-pair
-# manual, pontuacao retroativa) sem tocar no emparceiramento oficial vigente.
+# extensão para o backlog do "Modo Escolar Amistoso" (entrada tardia, re-pair
+# manual, pontuação retroativa) sem tocar no emparceiramento oficial vigente.
 class FreeTournamentMixin:
     def _free_mode_notice_hidden(self) -> bool:
         """True se o operador pediu para nao ver mais o aviso do Modo Livre."""
@@ -22,8 +22,8 @@ class FreeTournamentMixin:
         """Abre o aviso modal do Modo Livre e devolve a janela criada.
 
         Se o operador marcou "Nao mostrar novamente", pula o aviso e vai direto
-        para a criacao do torneio (P1-11) — que ainda pede o nome, entao nada e
-        criado sem confirmacao. Devolve ``None`` nesse caso.
+        para a criação do torneio (P1-11) — que ainda pede o nome, então nada e
+        criado sem confirmação. Devolve ``None`` nesse caso.
         """
         if self._free_mode_notice_hidden():
             self._start_free_tournament(None)
@@ -37,14 +37,14 @@ class FreeTournamentMixin:
         body = ctk.CTkFrame(dialog, fg_color=THEME_PANEL_BG)
         body.pack(fill="both", expand=True, padx=16, pady=16)
 
-        # Rodape fixado na parte inferior (empacotado primeiro para ancorar
+        # Rodapé fixado na parte inferior (empacotado primeiro para ancorar
         # embaixo independentemente da altura do texto). "Iniciar Modo Livre"
-        # cria um torneio ja no perfil Livre/Escolar; "Cancelar" so fecha.
+        # cria um torneio já no perfil Livre/Escolar; "Cancelar" só fecha.
         footer = ctk.CTkFrame(body, fg_color="transparent")
         footer.pack(side="bottom", fill="x", pady=(12, 0))
 
-        # A escolha e gravada nos dois caminhos de saida (iniciar e cancelar):
-        # marcar a caixa e so entao cancelar tambem tem de valer.
+        # A escolha e gravada nos dois caminhos de saída (iniciar e cancelar):
+        # marcar a caixa e só então cancelar também tem de valer.
         hide_notice = ctk.CTkCheckBox(footer, text="Não mostrar novamente")
         hide_notice.pack(side="left")
         self.free_mode_hide_checkbox = hide_notice
@@ -146,7 +146,7 @@ class FreeTournamentMixin:
         def _grab() -> None:
             try:
                 dialog.grab_set()
-            except Exception:  # janela ainda nao visivel em alguns gerenciadores
+            except Exception:  # janela ainda não visível em alguns gerenciadores
                 pass
 
         dialog.after(50, _grab)
@@ -155,12 +155,12 @@ class FreeTournamentMixin:
         return dialog
 
     def _start_free_tournament(self, dialog: ctk.CTkToplevel | None) -> int | None:
-        """Fecha o aviso e cria um torneio ja em Modo Livre.
+        """Fecha o aviso e cria um torneio já em Modo Livre.
 
-        Nao toca em torneios existentes nem no fluxo oficial: cria um evento
+        Não toca em torneios existentes nem no fluxo oficial: cria um evento
         novo e grava a marca dedicada free_mode (set_free_mode). E essa marca,
-        nao o perfil, que habilita o re-emparceiramento livre, a entrada tardia
-        flexivel e o indicador 'Modo Livre' apenas neste evento.
+        não o perfil, que habilita o re-emparceiramento livre, a entrada tardia
+        flexível e o indicador 'Modo Livre' apenas neste evento.
         """
         if dialog is not None:  # None quando o aviso foi suprimido pelo operador
             dialog.destroy()
@@ -189,11 +189,11 @@ class FreeTournamentMixin:
     # Mecanicas do Modo Livre (so atuam quando a marca free_mode esta ligada)
     # ------------------------------------------------------------------
     def _is_free_mode(self, tournament_id: int | None = None) -> bool:
-        """True se o torneio (atual, por padrao) foi aberto em Modo Livre.
+        """True se o torneio (atual, por padrão) foi aberto em Modo Livre.
 
-        Le a marca dedicada free_mode, gravada so pelo fluxo 'Torneio | Modo
+        Lê a marca dedicada free_mode, gravada só pelo fluxo 'Torneio | Modo
         Livre'. Nao depende mais do perfil 'free' (default de todo torneio):
-        assim o re-emparceiramento livre e a entrada tardia flexivel nao vazam
+        assim o re-emparceiramento livre e a entrada tardia flexível não vazam
         para eventos comuns ou legados.
         """
         tid = tournament_id or getattr(self, "current_tournament_id", None)
@@ -301,10 +301,10 @@ class FreeTournamentMixin:
     def _center_over_self(self, win: ctk.CTkToplevel, width: int, height: int) -> None:
         """Centraliza sobre a janela principal, levemente acima, **e cabendo**.
 
-        A conta e a mesma do `Dialog` canonico (F5.8): o pedido passa por
+        A conta e a mesma do `Dialog` canônico (F5.8): o pedido passa por
         `fitted_size` antes, porque o customtkinter multiplica a geometria
-        pela escala da janela e nao olha para o monitor — a 160% um modal de
-        500x430 vira 800x688 e o rodape sai da tela num notebook (P3-10).
+        pela escala da janela e não olha para o monitor — a 160% um modal de
+        500x430 vira 800x688 e o rodapé sai da tela num notebook (P3-10).
         """
         win.update_idletasks()
         try:

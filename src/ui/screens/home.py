@@ -53,7 +53,7 @@ class HomePagesMixin:
         except Exception:
             pass
         self._page_title(
-            "Inicio" + (f" — {operador}" if operador else ""),
+            "Início" + (f" — {operador}" if operador else ""),
             "O que precisa da sua ação agora.",
         )
 
@@ -72,7 +72,7 @@ class HomePagesMixin:
             EmptyState(
                 painel,
                 title="Tudo em dia",
-                description="Nenhuma pendencia encontrada no clube nem no torneio atual.",
+                description="Nenhuma pendência encontrada no clube nem no torneio atual.",
                 cta_text="Ver torneios",
                 cta_command=lambda: self.navigator.go("tournaments"),
             ).grid(row=0, column=0, sticky="nsew", padx=SPACE_LG, pady=SPACE_XL)
@@ -123,8 +123,8 @@ class HomePagesMixin:
     # -- leitura do estado (I/O) ------------------------------------------
 
     def _home_snapshot(self) -> HomeSnapshot:
-        """Le o estado atual. Cada fonte em seu try: uma falha isolada vira
-        ausencia daquele dado, nao uma tela inicial vazia."""
+        """Lê o estado atual. Cada fonte em seu try: uma falha isolada vira
+        ausência daquele dado, não uma tela inicial vazia."""
         dados: dict[str, object] = {}
 
         tournament_id = getattr(self, "current_tournament_id", None)

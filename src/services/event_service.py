@@ -39,7 +39,7 @@ class EventService:
         payload = self._validated_event_payload(data)
         if event_id:
             if not self.db.get_club_event(event_id):
-                raise AppError("Evento nao encontrado.")
+                raise AppError("Evento não encontrado.")
             self.db.update_club_event(event_id, **payload)
             logger.info("Evento atualizado: %s", event_id)
             return event_id
@@ -50,7 +50,7 @@ class EventService:
     def sync_tournament_event(self, tournament_id: int) -> int:
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
-            raise AppError("Torneio nao encontrado.")
+            raise AppError("Torneio não encontrado.")
         existing = self.db.get_club_event_by_tournament(tournament_id)
         data = {
             "club_id": tournament.get("club_id") or 1,
@@ -72,8 +72,8 @@ class EventService:
         end_date: str = "",
         club_id: int | None = None,
     ) -> list[dict[str, Any]]:
-        self._validate_optional_date(start_date, "Data inicial invalida.")
-        self._validate_optional_date(end_date, "Data final invalida.")
+        self._validate_optional_date(start_date, "Data inicial inválida.")
+        self._validate_optional_date(end_date, "Data final inválida.")
         return self.db.list_club_events(
             start_date=start_date.strip(),
             end_date=end_date.strip(),
@@ -90,34 +90,34 @@ class EventService:
         try:
             tournament_id = int(data.get("tournament_id") or 0)
         except ValueError as exc:
-            raise AppError("Torneio vinculado invalido.") from exc
+            raise AppError("Torneio vinculado inválido.") from exc
         tournament = self.db.get_tournament(tournament_id) if tournament_id else None
         if tournament_id and not tournament:
-            raise AppError("Torneio vinculado nao encontrado.")
+            raise AppError("Torneio vinculado não encontrado.")
 
         try:
             club_id = int(data.get("club_id") or (tournament.get("club_id") if tournament else 1) or 1)
         except ValueError as exc:
-            raise AppError("Clube/escola do evento invalido.") from exc
+            raise AppError("Clube/escola do evento inválido.") from exc
         if not self.db.get_club(club_id):
-            raise AppError("Clube/escola do evento nao encontrado.")
+            raise AppError("Clube/escola do evento não encontrado.")
 
         title = str(data.get("title", "")).strip()
         if not title and tournament:
             title = str(tournament["name"])
         if not title:
-            raise AppError("Informe o titulo do evento.")
+            raise AppError("Informe o título do evento.")
 
         event_type = str(data.get("event_type", "other")).strip() or "other"
         if event_type not in EVENT_TYPES:
-            raise AppError("Tipo de evento invalido.")
+            raise AppError("Tipo de evento inválido.")
 
         status = str(data.get("status", "planned")).strip() or "planned"
         if status not in EVENT_STATUSES:
-            raise AppError("Status de evento invalido.")
+            raise AppError("Status de evento inválido.")
 
         event_date = str(data.get("event_date", "")).strip()
-        self._validate_optional_date(event_date, "Data do evento invalida.")
+        self._validate_optional_date(event_date, "Data do evento inválida.")
 
         return {
             "club_id": club_id,

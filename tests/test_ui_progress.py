@@ -103,7 +103,7 @@ class ProgressOverlayTest(unittest.TestCase):
 
     def test_duas_tarefas_mostram_um_veu_e_a_ultima_o_retira(self) -> None:
         # Mesma regra do BusyIndicator: start/stop em pares, e a primeira a
-        # terminar nao pode apagar a espera da outra.
+        # terminar não pode apagar a espera da outra.
         self.veu.start("Primeira...")
         self.veu.start("Segunda...")
         self.root.update()
@@ -136,7 +136,7 @@ class ProgressOverlayTest(unittest.TestCase):
 
     def test_reaparece_depois_de_escondido(self) -> None:
         # O quadro e reaproveitado entre tarefas; `place_forget` seguido de
-        # `place` tem de devolve-lo a tela.
+        # `place` tem de devolvê-lo a tela.
         self.veu.start("Uma vez...")
         self.veu.stop()
         self.root.update()
@@ -179,9 +179,9 @@ class AlvoDoVeuTest(unittest.TestCase):
         self.assertEqual("area-de-conteudo", AlbericusApp._busy_target(app, botao))
 
     def test_acao_disparada_de_um_modal_cobre_o_modal(self) -> None:
-        # Cobrir a area de conteudo quando o clique veio de um dialogo deixaria
-        # o dialogo livre para receber o segundo clique — que e exatamente o
-        # que o veu existe para impedir.
+        # Cobrir a área de conteúdo quando o clique veio de um diálogo deixaria
+        # o diálogo livre para receber o segundo clique — que é exatamente o
+        # que o véu existe para impedir.
         modal = object()
         self.assertIs(modal, self._alvo(self._Widget(modal)))
 

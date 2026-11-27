@@ -72,7 +72,7 @@ class AlbericusApp(
 
         self.title(app_title())
         # Janela começa pequena e centralizada para a tela de login.
-        # Apos o login bem-sucedido e maximizada automaticamente.
+        # Após o login bem-sucedido e maximizada automaticamente.
         _lw, _lh = self.LOGIN_LARGURA, self.LOGIN_ALTURA
         self.update_idletasks()
         _sw = self.winfo_screenwidth()
@@ -86,7 +86,7 @@ class AlbericusApp(
         self._arbitration_auto_refresh_enabled = True
         self._arbitration_refresh_interval_seconds = 15
         self._arbitration_inline_tables_limit = 20
-        # Aplica os presets de aparencia antes de criar qualquer widget.
+        # Aplica os presets de aparência antes de criar qualquer widget.
         try:
             _init_settings = self.db.get_app_settings()
             from src.ui.theme import apply_accent_preset, apply_bg_preset, apply_frame_bg_preset
@@ -144,7 +144,7 @@ class AlbericusApp(
         self._scheduled_dispatch_job: str | None = None
         self._arbitration_refresh_job: str | None = None
 
-        # Navegacao central (registro unico de destinos) — a casca monta.
+        # Navegação central (registro único de destinos) — a casca monta.
         self._build_shell_navigation()
 
         self._configure_grid()
@@ -174,13 +174,13 @@ class AlbericusApp(
         self.destroy()
 
     # Intervalo do tick de mensagens agendadas (5 min). Num desktop offline, o
-    # disparo so ocorre com o app aberto; a fila persistida garante que nada se
-    # perde, mas o envio fica para a proxima vez que o app estiver rodando.
+    # disparo só ocorre com o app aberto; a fila persistida garante que nada se
+    # perde, mas o envio fica para a próxima vez que o app estiver rodando.
     _SCHEDULED_DISPATCH_INTERVAL_MS = 5 * 60 * 1000
 
     def _start_scheduled_dispatch(self) -> None:
-        """Dispara as mensagens agendadas vencidas na inicializacao e reagenda um
-        tick periodico enquanto o app estiver aberto."""
+        """Dispara as mensagens agendadas vencidas na inicialização e reagenda um
+        tick periódico enquanto o app estiver aberto."""
         self._dispatch_scheduled_messages_once()
         self._scheduled_dispatch_job = self.after(
             self._SCHEDULED_DISPATCH_INTERVAL_MS, self._scheduled_dispatch_tick
@@ -189,20 +189,20 @@ class AlbericusApp(
     def _rebuild_ui_after_theme_change(self) -> None:
         """Aplica o tema **na hora**, reestilizando o que ja esta na tela (P0-6).
 
-        Antes isto destruia `statusbar` e `content` e remontava tudo: a tela
-        voltava ao inicio, a selecao da tabela sumia, o scroll ia ao topo e o
+        Antes isto destruía `statusbar` e `content` e remontava tudo: a tela
+        voltava ao início, a seleção da tabela sumia, o scroll ia ao topo e o
         foco se perdia. Agora a troca e `configure()` widget a widget — como
-        nada e recriado, foco, scroll e selecao ficam onde estavam.
+        nada é recriado, foco, scroll e seleção ficam onde estavam.
 
-        O nome antigo foi mantido porque a tela de configuracoes o chama; o que
-        mudou e a estrategia, nao o contrato.
+        O nome antigo foi mantido porque a tela de configurações o chama; o que
+        mudou e a estratégia, não o contrato.
         """
         from src.ui.restyle import restyle, snapshot_defaults
         from src.ui.theme import apply_accent_preset, apply_bg_preset, apply_frame_bg_preset
 
         settings = self.db.get_app_settings()
-        # Retrato ANTES: e ele que diz quem seguia o padrao do tema e deve
-        # acompanhar a troca, sem repintar quem tem cor propria (danger, etc.).
+        # Retrato ANTES: e ele que diz quem seguia o padrão do tema e deve
+        # acompanhar a troca, sem repintar quem tem cor própria (danger, etc.).
         padroes_antes = snapshot_defaults()
 
         apply_bg_preset(str(settings.get("bg_preset") or "slate"))
@@ -223,7 +223,7 @@ class AlbericusApp(
 
     def _dispatch_scheduled_messages_once(self) -> None:
         """Roda o despacho da fila de mensagens agendadas. Nunca propaga erro: uma
-        falha de envio nao pode derrubar a interface."""
+        falha de envio não pode derrubar a interface."""
         try:
             settings = self.db.get_app_settings()
             mailer = MessageService(
@@ -238,9 +238,9 @@ class AlbericusApp(
         except Exception as exc:
             logger.error("Falha no despacho de mensagens agendadas: %s", exc)
 
-    # Login em duas faixas: marca a esquerda, formulario a direita (P2-6). A
-    # janela antiga era 420x400 — o formulario ficava espremido e nao sobrava
-    # lugar para versao nem para orientar quem entra pela primeira vez.
+    # Login em duas faixas: marca a esquerda, formulário a direita (P2-6). A
+    # janela antiga era 420x400 — o formulário ficava espremido e não sobrava
+    # lugar para versão nem para orientar quem entra pela primeira vez.
     LOGIN_LARGURA = 900
     LOGIN_ALTURA = 540
 
@@ -337,7 +337,7 @@ class AlbericusApp(
 
     def _show_first_access_help(self) -> None:
         """Orienta sem entregar credencial: senha na tela de login seria um
-        convite a nunca troca-la."""
+        convite a nunca trocá-la."""
         alert_dialog(
             self,
             "Primeiro acesso",
@@ -361,7 +361,7 @@ class AlbericusApp(
             return
 
         self.login_frame.destroy()
-        # Maximiza a janela principal apos o login.
+        # Maximiza a janela principal após o login.
         self.resizable(True, True)
         self.minsize(980, 640)
         self.state("zoomed")
@@ -369,7 +369,7 @@ class AlbericusApp(
         self._build_statusbar()
         self._build_content()
         self._register_shortcuts()
-        # Abre nas pendencias, nao no cadastro do clube (P1-8 / F3.2).
+        # Abre nas pendências, não no cadastro do clube (P1-8 / F3.2).
         self.show_home()
         self._refresh_statusbar()
         self._start_scheduled_dispatch()
@@ -409,8 +409,8 @@ class AlbericusApp(
         self._update_tree_colors(style)
 
     def _update_tree_colors(self, style: ttk.Style) -> None:
-        """Cores da tabela na aparencia atual. O ttk so aceita uma cor por vez,
-        entao cada token passa por pick() (ver theme.py)."""
+        """Cores da tabela na aparência atual. O ttk só aceita uma cor por vez,
+        então cada token passa por pick() (ver theme.py)."""
         bg = pick(THEME_TREE_BG)
         fg = pick(THEME_TREE_FG)
         style.configure("Treeview", background=bg, fieldbackground=bg, foreground=fg)
@@ -425,8 +425,8 @@ class AlbericusApp(
 
 
     # Atalhos exibidos no menu. A MESMA tabela alimenta os bindings globais em
-    # `shell._register_shortcuts`: antes o acelerador era escrito a mao no menu
-    # e o binding a mao no shell, sem nada garantindo que combinassem.
+    # `shell._register_shortcuts`: antes o acelerador era escrito à mão no menu
+    # e o binding à mão no shell, sem nada garantindo que combinassem.
     MENU_ACCELERATORS = {
         "show_visual_dashboard": "Ctrl+1",
         "show_tournaments": "Ctrl+2",
@@ -438,14 +438,14 @@ class AlbericusApp(
 
     @staticmethod
     def _menu_em_breve() -> dict[str, tuple[tuple[str, str, str], ...]]:
-        """Itens do menu que NAO sao destinos navegaveis: as duas telas
-        pedagogicas desativadas. Ficam explicitas porque sao excecao — o rotulo
+        """Itens do menu que NÃO são destinos navegáveis: as duas telas
+        pedagógicas desativadas. Ficam explicitas porque são exceção — o rótulo
         "(em breve)" evita a leitura de "quebrado" que um item cinza sem
-        explicacao passa (P1-12 / F3.4).
+        explicação passa (P1-12 / F3.4).
 
-        Os rotulos sao resolvidos aqui, com `t("chave")` literal: chave vinda
-        de variavel e invisivel para o `test_ui_i18n`, que cobra que toda chave
-        do catalogo tenha uso — e uma chave orfa hoje e um texto perdido amanha.
+        Os rótulos são resolvidos aqui, com `t("chave")` literal: chave vinda
+        de variável e invisível para o `test_ui_i18n`, que cobra que toda chave
+        do catálogo tenha uso — e uma chave órfã hoje e um texto perdido amanha.
         """
         return {
             "training": (
@@ -457,11 +457,11 @@ class AlbericusApp(
     def _build_menu(self) -> None:
         """Menu nativo **gerado** do registro de destinos (F5.11 / P3-14).
 
-        Ele era 31 itens escritos a mao, em paralelo a `DESTINATIONS` — e os
-        rotulos ja tinham divergido da sidebar, que le o mesmo registro pelo
-        catalogo. Duas listas da mesma coisa so ficam iguais por disciplina;
-        aqui passam a ficar por construcao. O menu tambem ganhou o que faltava
-        (Inicio, Biblioteca) e perdeu o risco de esquecer um destino novo.
+        Ele era 31 itens escritos à mão, em paralelo a `DESTINATIONS` — e os
+        rótulos já tinham divergido da sidebar, que lê o mesmo registro pelo
+        catálogo. Duas listas da mesma coisa só ficam iguais por disciplina;
+        aqui passam a ficar por construção. O menu também ganhou o que faltava
+        (Início, Biblioteca) e perdeu o risco de esquecer um destino novo.
         """
         menubar = tk.Menu(self)
         self.config(menu=menubar)
@@ -520,11 +520,11 @@ class AlbericusApp(
         header.grid_columnconfigure(0, weight=1)
         self._page_header = header
 
-        # `anchor="w"` nos dois (P3-16): `sticky` posiciona o WIDGET na celula,
-        # mas quem alinha o TEXTO dentro dele e o anchor do proprio CTkLabel, e
+        # `anchor="w"` nos dois (P3-16): `sticky` posiciona o WIDGET na célula,
+        # mas quem alinha o TEXTO dentro dele e o anchor do próprio CTkLabel, e
         # ele nasce centralizado. Quando a barra do torneio espreme a coluna, o
         # texto centralizado e cortado **dos dois lados** — foi assim que o
-        # subtitulo da Config. do torneio virou "rneio: Aberto Primavera - Clube
+        # subtítulo da Config. do torneio virou "rneio: Aberto Primavera - Clube
         # Modelo Alberic" no screenshot do manual.
         ctk.CTkLabel(
             header,
@@ -591,13 +591,13 @@ class AlbericusApp(
         self._tournament_nav_buttons = botoes
         self._layout_tournament_nav()
 
-    # Barra de navegacao do torneio: 8 itens (9 em torneio por equipes) de 112px
-    # numa linha so custam ~950px, e era ELA — nao o conteudo das telas — que
-    # empurrava botao para fora da janela em todas as telas de torneio (B-8).
-    # Medido: o unico widget fora da borda era sempre o ultimo item ("Diplomas").
+    # Barra de navegação do torneio: 8 itens (9 em torneio por equipes) de 112px
+    # numa linha só custam ~950px, e era ELA — não o conteúdo das telas — que
+    # empurrava botão para fora da janela em todas as telas de torneio (B-8).
+    # Medido: o único widget fora da borda era sempre o ultimo item ("Diplomas").
     _NAV_ITEM_WIDTH = 112
     _NAV_ITEM_PAD = 6
-    # Espaco reservado ao titulo da pagina, a esquerda da barra.
+    # Espaço reservado ao título da página, a esquerda da barra.
     _NAV_TITLE_RESERVE = 300
 
     @staticmethod
@@ -612,7 +612,7 @@ class AlbericusApp(
         """Distribui os itens em quantas linhas couberem na largura atual.
 
         Quebrar em duas linhas custa ~38px de altura, que sobra; insistir numa
-        linha so custa um botao inacessivel, que nao tem substituto — o menu
+        linha só custa um botão inacessível, que não tem substituto — o menu
         nativo leva as mesmas telas, mas quem esta olhando a barra nao sabe
         disso.
         """
@@ -623,21 +623,21 @@ class AlbericusApp(
         try:
             if not nav.winfo_exists():
                 return
-            # Pelo `content`, e nao pelo cabecalho: o cabecalho acabou de nascer
+            # Pelo `content`, e não pelo cabeçalho: o cabeçalho acabou de nascer
             # junto com a tela e ainda mede 1px, enquanto o `content` sobrevive
-            # a troca de tela e ja traz a largura util (sem a sidebar).
+            # a troca de tela e já traz a largura útil (sem a sidebar).
             largura = self.content.winfo_width()
         except Exception:
             return
         # A conta esta em ui/layout.py, sem Tk: e a mesma que as faixas de
-        # filtro das telas administrativas passaram a usar (continuacao da B-8).
-        # Largura 1 (antes do primeiro desenho) vira linha unica la dentro, para
-        # nao piscar um layout intermediario que o proximo <Configure> desfaz.
+        # filtro das telas administrativas passaram a usar (continuação da B-8).
+        # Largura 1 (antes do primeiro desenho) vira linha única lá dentro, para
+        # não piscar um layout intermediário que o próximo <Configure> desfaz.
         #
-        # `winfo_reqwidth` e nao `_NAV_ITEM_WIDTH`: o botao criado com width=112
+        # `winfo_reqwidth` e não `_NAV_ITEM_WIDTH`: o botão criado com width=112
         # desenha 134px, porque o CTk multiplica pela escala de UI (120% por
-        # padrao). Medido: com a conta em unidades logicas, a barra so quebrava
-        # tarde demais e "Diplomas" ficava fora da janela ate 1.416px.
+        # padrão). Medido: com a conta em unidades lógicas, a barra só quebrava
+        # tarde demais e "Diplomas" ficava fora da janela até 1.416px.
         larguras = [max(self._NAV_ITEM_WIDTH, self._requested_width(b)) for b in botoes]
         arranjo = wrap_positions(
             larguras,
@@ -697,8 +697,8 @@ class AlbericusApp(
                 anchor="w", padx=14, pady=(0, 12)
             )
         if command is not None:
-            # Borda sempre presente (na cor do painel, invisivel) para o realce do
-            # hover nao deslocar o conteudo em 1px ao entrar/sair (P1-10).
+            # Borda sempre presente (na cor do painel, invisível) para o realce do
+            # hover não deslocar o conteúdo em 1px ao entrar/sair (P1-10).
             card.configure(border_width=1, border_color=THEME_PANEL_BG)
 
             def highlight(active: bool) -> None:
@@ -708,7 +708,7 @@ class AlbericusApp(
                     pass
 
             def left_card(event: Any) -> None:
-                # Os rotulos cobrem o card: sair do rotulo para o card ainda e
+                # Os rótulos cobrem o card: sair do rótulo para o card ainda e
                 # "dentro". Sem esta checagem o realce piscaria a cada travessia.
                 try:
                     under = card.winfo_containing(event.x_root, event.y_root)
@@ -734,10 +734,10 @@ class AlbericusApp(
         parent: ctk.CTkBaseClass | None = None,
         width: int = FORM_PANEL_WIDTH,
     ) -> ctk.CTkScrollableFrame:
-        """Coluna de formulario. A largura e uma so (F5.4): antes o mesmo painel
+        """Coluna de formulário. A largura e uma só (F5.4): antes o mesmo painel
         media 272, 280, 292, 300 ou 302 conforme a tela — cinco ajustes no olho
         para a mesma coisa (P3-12). Quem precisa de outra largura passa `width`
-        de proposito (a redacao de mensagem, o editor de certificado)."""
+        de propósito (a redação de mensagem, o editor de certificado)."""
         panel = ctk.CTkScrollableFrame(
             parent or self.content,
             fg_color=THEME_PANEL_BG,
@@ -795,15 +795,15 @@ class AlbericusApp(
         return tree
 
     def _remember_column_widths(self, tree: ttk.Treeview) -> None:
-        """Aplica a largura que o usuario escolheu e passa a guardar o arrasto (B-1).
+        """Aplica a largura que o usuário escolheu e passa a guardar o arrasto (B-1).
 
-        Recebe a tabela **pronta** e le dela tudo de que precisa: colunas,
-        titulos e a largura que o codigo pediu (que e o padrao). Por isso serve
-        tanto ao _make_tree quanto as tabelas montadas a mao — e foi assim que
-        as tres tabelas fora do helper entraram sem virar excecao.
+        Recebe a tabela **pronta** e lê dela tudo de que precisa: colunas,
+        títulos e a largura que o código pediu (que é o padrão). Por isso serve
+        tanto ao _make_tree quanto as tabelas montadas à mão — e foi assim que
+        as três tabelas fora do helper entraram sem virar exceção.
 
-        A identidade da tabela sai das proprias colunas (ver column_layouts):
-        sao ~59 chamadas de _make_tree, e exigir uma chave em cada uma seriam
+        A identidade da tabela sai das próprias colunas (ver column_layouts):
+        são ~59 chamadas de _make_tree, e exigir uma chave em cada uma seriam
         59 chances de errar.
         """
         columns = [str(column) for column in tree["columns"]]
@@ -819,8 +819,8 @@ class AlbericusApp(
         ).items():
             tree.column(column, width=width)
 
-        # Grava no soltar do botao, e nao a cada pixel: o ttk nao avisa que uma
-        # coluna mudou de tamanho, entao a alternativa seria vigiar o <Motion> —
+        # Grava no soltar do botão, e não a cada pixel: o ttk não avisa que uma
+        # coluna mudou de tamanho, então a alternativa seria vigiar o <Motion> —
         # uma escrita em banco por pixel arrastado.
         state = {"dragging": False}
 
@@ -894,7 +894,7 @@ class AlbericusApp(
             # Sempre usa "blue" como base estrutural (formas, raios, espessuras).
             # A cor de destaque e controlada por accent_preset via ThemeManager.
             ctk.set_default_color_theme("blue")
-            # Re-aplica o accent apos carregar o tema base (set_default_color_theme
+            # Re-aplica o accent após carregar o tema base (set_default_color_theme
             # sobrescreve o ThemeManager; o patch deve vir depois).
             try:
                 accent_key = str(settings.get("accent_preset") or "blue")
@@ -1002,12 +1002,12 @@ class AlbericusApp(
             return fallback
 
     def _busy_target(self, busy_widget: Any | None) -> Any:
-        """Painel que o veu de progresso cobre (F5.9).
+        """Painel que o véu de progresso cobre (F5.9).
 
-        Regra: a acao disparada de dentro de um modal cobre o **modal**; as
-        demais cobrem a area de conteudo. Cobrir `self.content` quando o clique
-        veio de um dialogo deixaria o dialogo livre para receber o segundo
-        clique — que e justamente o que o veu existe para impedir.
+        Regra: a ação disparada de dentro de um modal cobre o **modal**; as
+        demais cobrem a área de conteúdo. Cobrir `self.content` quando o clique
+        veio de um diálogo deixaria o diálogo livre para receber o segundo
+        clique — que é justamente o que o véu existe para impedir.
         """
         if busy_widget is not None:
             try:
@@ -1035,8 +1035,8 @@ class AlbericusApp(
         indicator = getattr(self, "busy_indicator", None)
         if indicator is not None:
             indicator.start()
-        # O veu vem depois do indicador de propósito: se montar o veu falhar
-        # (janela em destruicao), a statusbar ainda registra a tarefa.
+        # O véu vem depois do indicador de propósito: se montar o véu falhar
+        # (janela em destruição), a statusbar ainda registra a tarefa.
         overlay = overlay_of(self._busy_target(busy_widget))
         overlay.start(busy_message)
 
@@ -1057,9 +1057,9 @@ class AlbericusApp(
                     busy_widget.configure(state="normal")
                 except Exception:
                     logger.exception("Falha ao reabilitar widget apos tarefa em background")
-            # So volta ao texto padrao quando nao ha mais nada rodando: com duas
-            # tarefas simultaneas, a primeira a terminar limparia a mensagem da
-            # outra e a statusbar contradiria a barra de progresso (ainda visivel).
+            # Só volta ao texto padrão quando não há mais nada rodando: com duas
+            # tarefas simultâneas, a primeira a terminar limparia a mensagem da
+            # outra e a statusbar contradiria a barra de progresso (ainda visível).
             ocioso = indicator is None or not indicator.is_running
             if hasattr(self, "status_label") and ocioso:
                 self.status_label.configure(text=self._default_status_text())
@@ -1090,30 +1090,30 @@ class AlbericusApp(
         padx: int = 16,
         required_action: str = "",
     ) -> None:
-        """Empilha as acoes do formulario em coluna.
+        """Empilha as ações do formulário em coluna.
 
-        Aceita ``(rotulo, comando)`` como sempre e, desde a F5.6, tambem
+        Aceita ``(rótulo, comando)`` como sempre e, desde a F5.6, também
         ``ActionGroup`` (vira menu recolhido) e ``DangerAction`` (cor de perigo,
-        posicao isolada). Chamadas antigas com lista plana seguem identicas.
+        posição isolada). Chamadas antigas com lista plana seguem idênticas.
         """
         autorizado = not required_action or self.security_service.has_permission(required_action)
         for offset, acao in enumerate(buttons):
             pady = (8 if offset == 0 else 4, 0)
             if isinstance(acao, ActionGroup):
-                # Sem permissao, os itens do menu nascem inativos: desabilitar so
-                # o gatilho esconderia a razao atras de um clique.
+                # Sem permissão, os itens do menu nascem inativos: desabilitar só
+                # o gatilho esconderia a razão atrás de um clique.
                 itens = list(acao.items) if autorizado else [
                     (item[0], None) for item in acao.items if item is not None
                 ]
                 widget = menu_button(parent, acao.label, itens, tip=acao.tip or None)
-                # O gatilho continua clicavel de proposito: o menu abre e mostra
+                # O gatilho continua clicável de propósito: o menu abre e mostra
                 # o que existe, acinzentado. Desabilitar o gatilho esconderia a
-                # razao atras de um botao morto.
+                # razão atrás de um botão morto.
                 widget.grid(row=start_row + offset, column=0, padx=padx, pady=pady, sticky="ew")
                 continue
             if isinstance(acao, DangerAction):
                 widget = danger_button(parent, acao.label, acao.command, tip=acao.tip or None)
-                pady = (SPACE_MD, 0)  # respiro extra isola a acao destrutiva
+                pady = (SPACE_MD, 0)  # respiro extra isola a ação destrutiva
             else:
                 label, command = acao
                 widget = ctk.CTkButton(parent, text=label, command=command)

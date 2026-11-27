@@ -23,7 +23,7 @@ class OperationalPilotTest(unittest.TestCase):
             details, elapsed_ms = simulate_locate_and_submit_table_result(Path(temp_name), players_count=120)
 
         self.assertEqual(
-            "mesa 60 localizada fora do recorte inline, lancada e removida das pendencias",
+            "mesa 60 localizada fora do recorte inline, lançada e removida das pendências",
             details,
         )
         self.assertGreaterEqual(elapsed_ms, 0)
@@ -39,7 +39,7 @@ class OperationalPilotTest(unittest.TestCase):
             [
                 "Importar base oficial FIDE local",
                 "Comparar ratings oficiais antes da rodada 1",
-                "Confirmar correcoes oficiais selecionadas",
+                "Confirmar correções oficiais selecionadas",
             ],
             [measurement.operation for measurement in measurements],
         )
@@ -50,7 +50,7 @@ class OperationalPilotTest(unittest.TestCase):
             details, elapsed_ms = simulate_last_minute_registration(Path(temp_name), players_count=8)
 
         self.assertEqual(
-            "9 inscritos; 0,5 ponto; historico preservado; jogador presente na previa seguinte",
+            "9 inscritos; 0,5 ponto; histórico preservado; jogador presente na prévia seguinte",
             details,
         )
         self.assertGreaterEqual(elapsed_ms, 0)
@@ -66,7 +66,7 @@ class OperationalPilotTest(unittest.TestCase):
             details = verify_offline_local_flow(Path(temp_name))
 
         self.assertEqual(
-            "painel, 4 resultados, fechamento, classificacao, exportacoes e backup validados",
+            "painel, 4 resultados, fechamento, classificação, exportações e backup validados",
             details,
         )
 

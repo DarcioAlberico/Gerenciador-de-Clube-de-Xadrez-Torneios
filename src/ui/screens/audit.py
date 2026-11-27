@@ -133,9 +133,9 @@ class AuditPagesMixin:
             except Exception:
                 formatted = meta_json
 
-            # Conteudo que se le e se copia: e exatamente o `report_dialog` da
-            # F5.7. O modal a mao aqui nao tinha Esc, nao tinha botao de saida e
-            # nao dava para copiar o JSON — que e a unica coisa util a fazer com
+            # Conteúdo que se lê e se copia: e exatamente o `report_dialog` da
+            # F5.7. O modal à mão aqui não tinha Esc, não tinha botão de saída e
+            # não dava para copiar o JSON — que é a única coisa útil a fazer com
             # ele (P3-10).
             report_dialog(self, f"Metadados - Log #{row_id}", formatted)
 

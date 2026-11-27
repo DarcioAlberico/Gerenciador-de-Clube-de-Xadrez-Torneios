@@ -15,8 +15,8 @@ from src.services.pairing.gacrux_trf import acceleration_records, reconcile_scor
 
 logger = logging.getLogger(__name__)
 
-# Teto de tempo do subprocesso do Gacrux: evita pendurar a aplicacao se o motor
-# travar (essencial agora que o Gacrux pode ser o motor padrao de pareamento).
+# Teto de tempo do subprocesso do Gacrux: evita pendurar a aplicação se o motor
+# travar (essencial agora que o Gacrux pode ser o motor padrão de pareamento).
 GACRUX_TIMEOUT_SECONDS = 120
 
 
@@ -96,7 +96,7 @@ class GacruxEngine:
             current_dir = Path(__file__).resolve().parent
             script_path = current_dir / "gacrux" / "pairingchecker.py"
             if not script_path.exists():
-                raise AppError(f"Motor Gacrux nao encontrado em: {script_path}")
+                raise AppError(f"Motor Gacrux não encontrado em: {script_path}")
             project_root = current_dir.parent.parent.parent
 
             # Construct Gacrux command using script path invocation
@@ -133,8 +133,8 @@ class GacruxEngine:
             except subprocess.TimeoutExpired as exc:
                 raise AppError(
                     f"O motor Gacrux excedeu {GACRUX_TIMEOUT_SECONDS}s ao parear a rodada "
-                    f"{round_number} e foi interrompido. Tente novamente ou use o motor proprio "
-                    "nas configuracoes do torneio."
+                    f"{round_number} e foi interrompido. Tente novamente ou use o motor próprio "
+                    "nas configurações do torneio."
                 ) from exc
             except Exception as e:
                 raise AppError(f"Falha ao executar o motor Gacrux: {e}")
@@ -223,9 +223,9 @@ class GacruxEngine:
         with open(input_path, "r", encoding="utf-8", newline="") as handle:
             lines = handle.read().splitlines()
 
-        # O exportador tambem declara a aceleracao (registro 250, FED-03), mas
+        # O exportador também declara a aceleração (registro 250, FED-03), mas
         # para o TORNEIO inteiro; aqui o que vale e o conjunto acelerado DESTA
-        # rodada (PAR-02). Duas declaracoes deixariam a ultima vencer por ordem
+        # rodada (PAR-02). Duas declarações deixariam a última vencer por ordem
         # no arquivo — preferimos remover a do exportador e escrever a nossa.
         lines = [line for line in lines if not line.startswith("250")]
         lines, warnings = reconcile_scores(lines)

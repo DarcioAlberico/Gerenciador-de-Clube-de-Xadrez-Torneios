@@ -1,11 +1,11 @@
-"""Tipagem da infraestrutura compartilhada da Database para os mixins de dominio.
+"""Tipagem da infraestrutura compartilhada da Database para os mixins de domínio.
 
 A God Class ``Database`` esta sendo decomposta em mixins por dominio. Cada mixin
-usa metodos de infraestrutura (``connect``, ``_insert``, ``_fetch_all``...) cujos
+usa métodos de infraestrutura (``connect``, ``_insert``, ``_fetch_all``...) cujos
 corpos reais vivem na fachada ``Database``. Como o mypy cobre ``src/core``, os
 mixins herdam de ``_DatabaseInfra`` para que o type-checker saiba que esses
-metodos existem. As assinaturas ficam sob ``TYPE_CHECKING`` (em runtime a classe
-e vazia); a resolucao real acontece via MRO na classe ``Database``.
+métodos existem. As assinaturas ficam sob ``TYPE_CHECKING`` (em runtime a classe
+e vazia); a resolução real acontece via MRO na classe ``Database``.
 """
 from __future__ import annotations
 
@@ -16,14 +16,14 @@ from typing import TYPE_CHECKING, Any, Iterable, Mapping
 
 
 class _DatabaseInfra:
-    # Atributos de instancia definidos no __init__ da fachada Database:
+    # Atributos de instância definidos no __init__ da fachada Database:
     db_path: Path
 
     if TYPE_CHECKING:
-        # connect() real e um @contextmanager sem anotacao de retorno; o mypy o
+        # connect() real e um @contextmanager sem anotação de retorno; o mypy o
         # trata de forma permissiva (connection ~ Any). Declaramos com Any aqui
         # para os mixins enxergarem o mesmo que enxergavam dentro de Database —
-        # mantendo a extracao neutra (sem forcar mudancas no codigo movido).
+        # mantendo a extração neutra (sem forçar mudanças no código movido).
         def connect(self) -> AbstractContextManager[Any]: ...
 
         def _insert(self, table: str, values: Mapping[str, Any]) -> int: ...
@@ -49,7 +49,7 @@ class _DatabaseInfra:
 
         def _get_connection(self) -> AbstractContextManager[Any]: ...
 
-        # Metodos de outros mixins chamados cross-dominio (fornecidos pela fachada):
+        # Métodos de outros mixins chamados cross-dominio (fornecidos pela fachada):
         def get_club(self, club_id: int = 1) -> dict[str, Any] | None: ...
 
         def create_player(

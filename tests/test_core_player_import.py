@@ -495,8 +495,8 @@ class PlayerImportTest(CoreServiceTestCase):
         self.assertEqual(player["rating"], 1750)
 
     def test_official_rating_update_default_order_uses_best_rating(self) -> None:
-        # initial_order "rating" (padrao): a importacao oficial adota o melhor
-        # rating disponivel como rating de trabalho (national/international/atual).
+        # initial_order "rating" (padrão): a importação oficial adota o melhor
+        # rating disponível como rating de trabalho (national/international/atual).
         self.tournament_service.save_profile(
             self.tournament_id,
             {

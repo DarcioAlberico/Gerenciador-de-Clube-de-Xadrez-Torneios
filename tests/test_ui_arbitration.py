@@ -25,7 +25,7 @@ RAIZ = Path(__file__).resolve().parents[1]
 
 
 def _chamadas(codigo: str, funcao: str) -> list[str]:
-    """Os argumentos de cada ``funcao(...)`` do código, com parênteses balanceados.
+    """Os argumentos de cada ``função(...)`` do código, com parênteses balanceados.
 
     Uma regex ``\\([^)]*\\)`` não serve aqui: metade dos alertas do serviço é
     montada com f-string que **contém** parêntese — ``"resultado(s)"`` —, e a
@@ -288,13 +288,13 @@ class ControladorTest(unittest.TestCase):
         self.assertEqual({"Time (#5)": 5}, controlador.targets(1, is_team=True))
 
     def test_bye_individual_e_de_equipe_chamam_funcoes_diferentes(self) -> None:
-        """O individual passa pelo SERVICO desde a ARB-04.
+        """O individual passa pelo SERVIÇO desde a ARB-04.
 
-        E la que a politica mora (limite por jogador, ultima rodada, jogador
-        inativo), e a tela nao pode ser o unico lugar que valida — ela pode ser
-        burlada. Equipes seguem gravando direto: a politica e do individual, e
+        E lá que a política mora (limite por jogador, última rodada, jogador
+        inativo), e a tela não pode ser o único lugar que valida — ela pode ser
+        burlada. Equipes seguem gravando direto: a política e do individual, e
         inventar uma regra para equipes que nenhum regulamento pediu seria pior
-        do que deixar explicito que ela nao existe la.
+        do que deixar explicito que ela não existe lá.
         """
         controlador, db, servico = self.controlador_com_servico()
         controlador.add_bye(1, state.RequestedByeForm(3, 2, "H", "", is_team=False))

@@ -86,8 +86,8 @@ class InitialCallSection:
             cabecalho, text="", text_color=THEME_TEXT_SUB, anchor="w"
         )
         self.summary_label.grid(row=1, column=0, pady=(2, 0), sticky="w")
-        # Expostos no host porque e por eles que o smoke de janela le a tela —
-        # o contrato externo nao muda so porque o interior ganhou dono.
+        # Expostos no host porque é por eles que o smoke de janela lê a tela —
+        # o contrato externo não muda só porque o interior ganhou dono.
         host.initial_call_summary_label = self.summary_label
 
         self.search_entry = ctk.CTkEntry(
@@ -97,7 +97,7 @@ class InitialCallSection:
         self.search_debounced = debounce(self.search_entry, self.reload)
         self.search_entry.bind("<KeyRelease>", self.search_debounced)
         # A tela legada guardava este debounce no host (`initial_player_search_debounced`)
-        # para o teste alcancar; segue exposto, agora com dono claro.
+        # para o teste alcançar; segue exposto, agora com dono claro.
         host.initial_player_search_debounced = self.search_debounced
         host.initial_player_search_entry = self.search_entry
 
@@ -124,9 +124,9 @@ class InitialCallSection:
         acoes.grid(row=2, column=0, padx=SPACE_MD, pady=(SPACE_SM, SPACE_MD), sticky="ew")
         for coluna in range(3):
             acoes.grid_columnconfigure(coluna, weight=1)
-        # Rotulos resolvidos com `t("chave")` LITERAL: chave vinda de variavel e
-        # invisivel para o `test_ui_i18n`, que cobra que toda chave do catalogo
-        # tenha uso — e chave orfa hoje e texto perdido amanha.
+        # Rótulos resolvidos com `t("chave")` LITERAL: chave vinda de variável e
+        # invisível para o `test_ui_i18n`, que cobra que toda chave do catálogo
+        # tenha uso — e chave órfã hoje e texto perdido amanha.
         for coluna, (rotulo, comando) in enumerate(
             (
                 (t("initial_call.all_present"), self.mark_all_present),
@@ -204,9 +204,9 @@ class InitialCallSection:
                 return
             if not player_ids:
                 raise AppError(t("initial_call.select_first"))
-            # Pelo SERVICO (ARB-05): a chamada inicial e onde a ausencia da
-            # rodada 1 nasce, e ela precisa entrar no historico como qualquer
-            # outra — senao a ata nao sabe quem faltou desde o comeco.
+            # Pelo SERVIÇO (ARB-05): a chamada inicial e onde a ausência da
+            # rodada 1 nasce, e ela precisa entrar no histórico como qualquer
+            # outra — senão a ata não sabe quem faltou desde o começo.
             for player_id in player_ids:
                 self.host.pairing_service.set_player_participation(
                     int(self.host.current_tournament_id), int(player_id), status

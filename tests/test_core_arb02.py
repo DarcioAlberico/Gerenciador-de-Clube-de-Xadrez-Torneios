@@ -142,20 +142,20 @@ class RegrasDoAdiamentoTest(unittest.TestCase):
 
     def test_rodada_fechada_nao(self) -> None:
         erro = postpone_error(self._mesa(round_status="closed"))
-        self.assertIn("rodada esta fechada", erro)
+        self.assertIn("rodada está fechada", erro)
 
     def test_bye_nao(self) -> None:
-        self.assertIn("nao e partida", postpone_error(self._mesa(is_bye=1)))
+        self.assertIn("não é partida", postpone_error(self._mesa(is_bye=1)))
 
     def test_mesa_com_resultado_nao(self) -> None:
-        self.assertIn("ja tem resultado", postpone_error(self._mesa(result="1-0")))
+        self.assertIn("já tem resultado", postpone_error(self._mesa(result="1-0")))
 
     def test_mesa_inexistente_nao(self) -> None:
-        self.assertIn("nao encontrada", postpone_error(None))
+        self.assertIn("não encontrada", postpone_error(None))
 
     def test_so_se_retoma_o_que_esta_adiado(self) -> None:
         self.assertEqual("", resume_error(self._mesa(postponed=1)))
-        self.assertIn("nao esta marcada", resume_error(self._mesa()))
+        self.assertIn("não está marcada", resume_error(self._mesa()))
 
     def test_a_nota_e_normalizada_e_limitada(self) -> None:
         self.assertEqual("sabado 14h", clean_note("  sabado   14h \n"))
@@ -275,7 +275,7 @@ class AdiamentoNoServicoTest(CoreServiceTestCase):
         outro = self.tournament_service.create_tournament(
             {"name": "Outro", "rounds_count": "3", "bye_points": "1"}
         )
-        with self.assertRaisesRegex(AppError, "nao encontrada"):
+        with self.assertRaisesRegex(AppError, "não encontrada"):
             self.service.postpone_pairing(outro, int(self.mesas[0]["id"]))
 
     def test_a_mesa_adiada_aparece_no_painel_com_o_combinado(self) -> None:
@@ -347,7 +347,7 @@ class DecisaoDoArbitroNaoVemDoCelularTest(CoreServiceTestCase):
             self.tournament_id, int(mesa["id"])
         )
 
-        with self.assertRaisesRegex(AppError, "invalido para envio por QR"):
+        with self.assertRaisesRegex(AppError, "inválido para envio por QR"):
             self.qr_result_service.submit_result(payload["token"], "1U-0U")
 
     def test_o_qr_continua_aceitando_placar_e_ausencia(self) -> None:

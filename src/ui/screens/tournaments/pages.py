@@ -34,7 +34,7 @@ class TournamentOtherPagesMixin:
 
         tournament = self.db.get_tournament(self.current_tournament_id)
         if not tournament:
-            self._show_error(AppError("Selecione um torneio valido."))
+            self._show_error(AppError("Selecione um torneio válido."))
             return
 
         rounds = self.db.list_rounds(self.current_tournament_id)
@@ -68,8 +68,8 @@ class TournamentOtherPagesMixin:
         summary_rows = [
             ("Formato", COMPETITION_TYPES.get(competition_type, "Individual")),
             ("Status", str(tournament.get("status") or "")),
-            ("Local", str(tournament.get("location") or "Nao informado")),
-            ("Periodo", self._tournament_period_text(tournament)),
+            ("Local", str(tournament.get("location") or "Não informado")),
+            ("Período", self._tournament_period_text(tournament)),
             ("Rodadas", f"{len(rounds)} geradas de {tournament['rounds_count']}"),
             ("Jogadores", str(len(players))),
             ("Perfil", TOURNAMENT_PROFILES.get(str(settings.get("tournament_profile") or "free"), "Livre")),
@@ -111,7 +111,7 @@ class TournamentOtherPagesMixin:
             return start_date
         if end_date:
             return end_date
-        return "Nao informado"
+        return "Não informado"
 
     def show_teams(self) -> None:
         if not self._require_tournament():
@@ -119,7 +119,7 @@ class TournamentOtherPagesMixin:
 
         tournament = self.db.get_tournament(self.current_tournament_id)
         if not tournament:
-            self._show_error(AppError("Selecione um torneio valido."))
+            self._show_error(AppError("Selecione um torneio válido."))
             return
 
         self._clear_content()
@@ -136,7 +136,7 @@ class TournamentOtherPagesMixin:
             panel.grid(row=0, column=0, sticky="nw")
             ctk.CTkLabel(
                 panel,
-                text="Este torneio esta no formato Individual.",
+                text="Este torneio está no formato Individual.",
                 font=font_section(),
             ).grid(row=0, column=0, padx=16, pady=(16, 6), sticky="w")
             ctk.CTkLabel(
@@ -165,7 +165,7 @@ class TournamentOtherPagesMixin:
         team_fields = [
             ("name", "Nome da equipe"),
             ("club", "Clube/Cidade"),
-            ("captain", "Capitao"),
+            ("captain", "Capitão"),
             ("notes", "Observações"),
         ]
         for index, (key, label) in enumerate(team_fields):
@@ -193,7 +193,7 @@ class TournamentOtherPagesMixin:
             sticky="w",
         )
         player_option_map: dict[str, int] = {}
-        player_option = ctk.CTkOptionMenu(form, values=["Sem jogadores disponiveis"], width=252)
+        player_option = ctk.CTkOptionMenu(form, values=["Sem jogadores disponíveis"], width=252)
         player_option.grid(row=assignment_row + 2, column=0, padx=16, pady=(4, 2), sticky="ew")
 
         ctk.CTkLabel(form, text="Função").grid(
@@ -242,7 +242,7 @@ class TournamentOtherPagesMixin:
                 "id": "ID",
                 "name": "Equipe",
                 "club": "Clube/Cidade",
-                "captain": "Capitao",
+                "captain": "Capitão",
                 "starters": "Titulares",
                 "players": "Jogadores",
                 "status": "Status",
@@ -330,7 +330,7 @@ class TournamentOtherPagesMixin:
                 values.append(label)
                 player_option_map[label] = player_id
             if not values:
-                values = ["Sem jogadores disponiveis"]
+                values = ["Sem jogadores disponíveis"]
             player_option.configure(values=values)
             player_option.set(values[0])
 
@@ -473,7 +473,7 @@ class TournamentOtherPagesMixin:
                     raise AppError("Selecione uma equipe.")
                 if not self._confirm_action(
                     "Excluir equipe",
-                    "Excluir esta equipe e sua escalacao? Equipes usadas em rodadas devem ser inativadas.",
+                    "Excluir esta equipe e sua escalação? Equipes usadas em rodadas devem ser inativadas.",
                     danger=True,
                 ):
                     return
@@ -491,7 +491,7 @@ class TournamentOtherPagesMixin:
                     raise AppError("Selecione uma equipe.")
                 player_id = player_option_map.get(player_option.get())
                 if not player_id:
-                    raise AppError("Nao ha jogador disponivel para adicionar.")
+                    raise AppError("Não há jogador disponível para adicionar.")
                 self.team_service.add_player(
                     team_id,
                     player_id,
@@ -541,7 +541,7 @@ class TournamentOtherPagesMixin:
             ("Excluir equipe", delete_team),
             ("Limpar equipe", clear_team_form),
             ("Adicionar jogador", add_player_to_team),
-            ("Atualizar escalacao", update_assignment),
+            ("Atualizar escalação", update_assignment),
             ("Remover jogador", remove_assignment),
         ]
         self._grid_form_buttons(form, button_specs, assignment_row + 7, required_action="tournament_write")

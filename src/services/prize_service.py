@@ -28,7 +28,7 @@ class PrizeService:
         prizes: list[dict[str, Any]],
     ) -> list[dict[str, Any]]:
         if not self.db.get_tournament(tournament_id):
-            raise AppError("Selecione um torneio valido.")
+            raise AppError("Selecione um torneio válido.")
         cleaned = [self._validated_prize(prize) for prize in prizes]
         self.db.replace_tournament_prizes(tournament_id, cleaned)
         return self.db.list_tournament_prizes(tournament_id)
@@ -37,26 +37,26 @@ class PrizeService:
     def _validated_prize(prize: dict[str, Any]) -> dict[str, Any]:
         kind = str(prize.get("kind") or "overall").strip()
         if kind not in PRIZE_KINDS:
-            raise AppError("Tipo de premio invalido.")
+            raise AppError("Tipo de prêmio inválido.")
         label = str(prize.get("label") or "").strip()
         if not label:
             raise AppError("Informe o nome de cada premio.")
         category = str(prize.get("category") or "").strip()
         if kind == "category" and not category:
-            raise AppError("Premio de categoria exige o nome da categoria.")
+            raise AppError("Prêmio de categoria exige o nome da categoria.")
         try:
             rank_from = int(prize.get("rank_from") or 1)
             rank_to = int(prize.get("rank_to") or rank_from)
         except (TypeError, ValueError) as exc:
-            raise AppError("Faixa de colocacao do premio invalida.") from exc
+            raise AppError("Faixa de colocação do prêmio inválida.") from exc
         if rank_from < 1 or rank_to < rank_from:
-            raise AppError("Faixa de colocacao do premio invalida.")
+            raise AppError("Faixa de colocação do prêmio inválida.")
         try:
             amount = float(str(prize.get("amount") or "0").replace(",", "."))
         except (TypeError, ValueError) as exc:
-            raise AppError("Valor do premio invalido.") from exc
+            raise AppError("Valor do prêmio inválido.") from exc
         if amount < 0:
-            raise AppError("Valor do premio nao pode ser negativo.")
+            raise AppError("Valor do prêmio não pode ser negativo.")
         return {
             "kind": kind,
             "label": label,
@@ -64,9 +64,9 @@ class PrizeService:
             "rank_from": rank_from,
             "rank_to": rank_to,
             "amount": round(amount, 2),
-            # Politica POR PREMIO (ORG-02): o edital tipico soma o premio
-            # Feminino ao geral mesmo quando a politica do torneio e "apenas o
-            # maior", e antes isso nao tinha como ser dito.
+            # Política POR PRÊMIO (ORG-02): o edital típico soma o prêmio
+            # Feminino ao geral mesmo quando a política do torneio e "apenas o
+            # maior", e antes isso não tinha como ser dito.
             "cumulative": 1 if prize.get("cumulative") else 0,
             "currency": str(prize.get("currency") or "").strip()[:8],
         }
@@ -74,9 +74,9 @@ class PrizeService:
     def allocate(self, tournament_id: int) -> dict[str, Any]:
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
-            raise AppError("Selecione um torneio valido.")
+            raise AppError("Selecione um torneio válido.")
         if tournament.get("competition_type") == "team":
-            raise AppError("Distribuicao de premios disponivel apenas para torneios individuais.")
+            raise AppError("Distribuição de prêmios disponível apenas para torneios individuais.")
         settings = self.db.get_tournament_settings(tournament_id) or {}
         prizes = self.db.list_tournament_prizes(tournament_id)
         pairing_service = __import__(

@@ -1,8 +1,8 @@
-"""Fase 1 da integracao de desempates FIDE via Gacrux.
+"""Fase 1 da integração de desempates FIDE via Gacrux.
 
-Cobre o modulo PURO de mapeamento (sem subprocesso) e um teste de integracao do
+Cobre o módulo PURO de mapeamento (sem subprocesso) e um teste de integração do
 motor de I/O ``GacruxTiebreakEngine`` (roda o ``tiebreakchecker.py`` real, como
-os testes de pareamento Gacrux ja fazem).
+os testes de pareamento Gacrux já fazem).
 """
 
 import json
@@ -44,7 +44,7 @@ class TestGacruxTiebreakMap(unittest.TestCase):
         plan = build_tiebreak_plan(
             ["points", "buchholz", "buchholz", "cumulative_opp", "buchholz_median"]
         )
-        # 'points' e a duplicata sao ignorados; 'cumulative_opp' nao tem
+        # 'points' e a duplicata são ignorados; 'cumulative_opp' não tem
         # equivalente Gacrux e vai para skipped.
         self.assertEqual(plan.specifiers, ("PTS", "BH", "BH/M1"))
         self.assertEqual(plan.code_order, ("points", "buchholz", "buchholz_median"))
@@ -81,7 +81,7 @@ class TestGacruxTiebreakMap(unittest.TestCase):
         plan = build_tiebreak_plan(["buchholz"])
         competitors = [
             {"cid": 5, "rank": 1, "tiebreakScore": [4.0]},  # falta coluna do buchholz
-            {"cid": None, "rank": 2, "tiebreakScore": [1.0, 1.0]},  # cid invalido
+            {"cid": None, "rank": 2, "tiebreakScore": [1.0, 1.0]},  # cid inválido
             {"cid": "7", "rank": 3, "tiebreakScore": ["2.5", "9.0"]},  # strings
         ]
         parsed = parse_competitors(competitors, plan)
@@ -109,7 +109,7 @@ class TestGacruxTiebreakEngine(unittest.TestCase):
         self.tournament_id = self.db.create_tournament(
             "Test Gacrux Tiebreak", rounds_count=3, bye_points=1.0
         )
-        # Dados minimos para um TRF-16 valido (mesmo conjunto do teste de pareamento).
+        # Dados mínimos para um TRF-16 válido (mesmo conjunto do teste de pareamento).
         self.db.save_tournament_settings(self.tournament_id, {
             "pairing_method": "swiss",
             "time_control": "10 min",
@@ -164,9 +164,9 @@ class TestGacruxTiebreakEngine(unittest.TestCase):
                 self.assertIn(code, payload["scores"])
 
         ranks = sorted(payload["rank"] for payload in result.values())
-        self.assertEqual(ranks[0], 1)  # ha um lider
+        self.assertEqual(ranks[0], 1)  # há um líder
 
-        # O lider (rank 1) tem a maior pontuacao do campo.
+        # O líder (rank 1) tem a maior pontuação do campo.
         leader = min(result.values(), key=lambda payload: payload["rank"])
         top_points = max(payload["scores"]["points"] for payload in result.values())
         self.assertEqual(leader["scores"]["points"], top_points)
@@ -256,7 +256,7 @@ class TestGacruxTiebreakStandings(unittest.TestCase):
         """TBK-02 pelo lado bom: com o motor de pe, nenhum aviso e nenhum evento.
 
         Vale como guarda contra alarme falso — um alerta que aparece no caminho
-        normal treina o arbitro a ignorar o alerta.
+        normal treina o árbitro a ignorar o alerta.
         """
         self._set_engine("gacrux")
         self.pairing_service.standings(self.tournament_id)
@@ -273,8 +273,8 @@ class TestGacruxTiebreakStandings(unittest.TestCase):
         )
 
     def test_prizes_follow_gacrux_standings(self):
-        # Fase 4: a premiacao consome standings() -> respeita o ranking do Gacrux
-        # sem qualquer mudanca no motor de premios (contrato preservado).
+        # Fase 4: a premiação consome standings() -> respeita o ranking do Gacrux
+        # sem qualquer mudança no motor de prêmios (contrato preservado).
         from src.services.prize_service import PrizeService
         self._set_engine("gacrux")
         prize_service = PrizeService(self.db)
@@ -290,8 +290,8 @@ class TestGacruxTiebreakStandings(unittest.TestCase):
         self.assertEqual(winner["player_id"], leader["player_id"])
 
     def test_trf_export_runs_in_gacrux_mode(self):
-        # Fase 4: o export externo do TRF (nao-reentrante) usa o rank do Gacrux e
-        # nao recai na recursao standings -> Gacrux -> export -> standings.
+        # Fase 4: o export externo do TRF (não-reentrante) usa o rank do Gacrux e
+        # não recai na recursao standings -> Gacrux -> export -> standings.
         from src.services.export_service import ExportService
         from src.services.federation_exporters.trf16 import TRF16Exporter
         self._set_engine("gacrux")
@@ -308,12 +308,12 @@ class TestGacruxTiebreakStandings(unittest.TestCase):
 
 
 class TestGacruxFideParity(unittest.TestCase):
-    """Fase 6: confirma que o motor FIDE muda o calculo onde a FIDE diverge.
+    """Fase 6: confirma que o motor FIDE muda o cálculo onde a FIDE diverge.
 
-    Numero impar de jogadores => ha byes => o adversario virtual (item #1 do
-    backlog) entra em acao: o Buchholz do motor Gacrux difere do calculo proprio
-    (modo 'real', que ignora jogos nao disputados), enquanto os pontos sao
-    identicos (mesmos resultados; so o desempate muda).
+    Número ímpar de jogadores => há byes => o adversário virtual (item #1 do
+    backlog) entra em ação: o Buchholz do motor Gacrux difere do cálculo próprio
+    (modo 'real', que ignora jogos não disputados), enquanto os pontos são
+    idênticos (mesmos resultados; só o desempate muda).
     """
 
     def setUp(self) -> None:
@@ -336,7 +336,7 @@ class TestGacruxFideParity(unittest.TestCase):
             "start_date": "2026-06-09",
             "end_date": "2026-06-09",
         })
-        # 5 jogadores (impar) garante um bye por rodada.
+        # 5 jogadores (ímpar) garante um bye por rodada.
         self.player_ids = [
             self.db.create_player(
                 self.tournament_id, f"Jogador {i + 1:03d}", club="Club",
@@ -365,15 +365,15 @@ class TestGacruxFideParity(unittest.TestCase):
         gacrux = self._standings_by_id("gacrux")
         albericus = self._standings_by_id("albericus")
 
-        # Mesmos resultados => pontos identicos nos dois motores.
+        # Mesmos resultados => pontos idênticos nos dois motores.
         for pid in self.player_ids:
             self.assertEqual(
                 gacrux[pid]["points"], albericus[pid]["points"],
                 f"pontos divergiram para o jogador {pid}",
             )
 
-        # O adversario virtual (FIDE) faz o Buchholz do Gacrux divergir do
-        # calculo proprio em ao menos um jogador (os que pegaram bye).
+        # O adversário virtual (FIDE) faz o Buchholz do Gacrux divergir do
+        # cálculo próprio em ao menos um jogador (os que pegaram bye).
         differs = [
             pid for pid in self.player_ids
             if gacrux[pid]["tiebreak_values"]["buchholz"]
@@ -385,7 +385,7 @@ class TestGacruxFideParity(unittest.TestCase):
         )
 
     def test_wins_mapping_matches_without_forfeits(self):
-        # Valida o mapeamento wins -> WON: sem W.O./forfeits, o numero de vitorias
+        # Valida o mapeamento wins -> WON: sem W.O./forfeits, o número de vitórias
         # do Albericus deve bater com o "games won" (WON) do Gacrux.
         gacrux = self._standings_by_id("gacrux")
         albericus = self._standings_by_id("albericus")
@@ -400,8 +400,8 @@ class TestGacruxFideParity(unittest.TestCase):
 class TestGacruxTeamTiebreaks(unittest.TestCase):
     """Fase 5 (follow-up): desempate por EQUIPES via Gacrux (TRF-25 -> isteam).
 
-    Com o placar padrao FIDE (2/1/0), os match/game points do Gacrux devem bater
-    com os do motor proprio — valida o round-trip TRF-25 e o mapa cid->team_id.
+    Com o placar padrão FIDE (2/1/0), os match/game points do Gacrux devem bater
+    com os do motor próprio — valida o round-trip TRF-25 e o mapa cid->team_id.
     """
 
     def setUp(self) -> None:
@@ -466,7 +466,7 @@ class TestGacruxTeamTiebreaks(unittest.TestCase):
         albericus = self._team_standings_by_id("albericus")
 
         self.assertEqual(set(gacrux.keys()), set(self.team_ids))
-        # Placar padrao 2/1/0 => match/game points do Gacrux == motor proprio.
+        # Placar padrão 2/1/0 => match/game points do Gacrux == motor próprio.
         for team_id in self.team_ids:
             self.assertEqual(gacrux[team_id]["match_points"], albericus[team_id]["match_points"])
             self.assertEqual(gacrux[team_id]["game_points"], albericus[team_id]["game_points"])
@@ -485,7 +485,7 @@ class TestGacruxTeamTiebreaks(unittest.TestCase):
 
         O `parse_trf_abnormal` do Gacrux v1.9.52 lia a rodada da fatia do
         gamePoints: com "-0.5" o `parse_int` estourava e o motor morria. O
-        Albericus caia no motor proprio em silencio — exatamente o que a TBK-02
+        Albericus caia no motor próprio em silêncio — exatamente o que a TBK-02
         passou a denunciar. Depois do patch local, o 299 e lido e ignorado pelo
         desempate (o ajuste quem aplica e o Albericus, TBK-01) e o rank do motor
         continua chegando.
@@ -513,10 +513,10 @@ class TestGacruxTeamTiebreaks(unittest.TestCase):
 
 
 class TestGacruxRoundRobin(unittest.TestCase):
-    """Round-robin: o motor deve usar regras pre-determinadas (-p), nao Suico (-s).
+    """Round-robin: o motor deve usar regras pré-determinadas (-p), não Suíço (-s).
 
-    Os tiebreaks da FIDE diferem entre Suico e round-robin, entao o flag enviado
-    ao tiebreakchecker depende do metodo de pareamento do torneio.
+    Os tiebreaks da FIDE diferem entre Suíço e round-robin, então o flag enviado
+    ao tiebreakchecker depende do método de pareamento do torneio.
     """
 
     def setUp(self) -> None:
@@ -601,10 +601,10 @@ class TestGacruxRoundRobin(unittest.TestCase):
 class TestRegistro299RoundTrip(unittest.TestCase):
     """O que o Albericus escreve no 299, o Gacrux tem de ler igual.
 
-    Teste rapido (sem subprocesso) do patch local em `parse_trf_abnormal`: e o
-    unico lugar onde o escritor e o leitor do registro 299 se encontram, e as
-    tres colunas em disputa (rodada, entidades) sao aritmetica de posicao, que
-    quebra em silencio. Importa o modulo do motor com o diretorio dele no
+    Teste rápido (sem subprocesso) do patch local em `parse_trf_abnormal`: e o
+    único lugar onde o escritor e o leitor do registro 299 se encontram, e as
+    três colunas em disputa (rodada, entidades) são aritmética de posição, que
+    quebra em silêncio. Importa o módulo do motor com o diretório dele no
     sys.path porque o Gacrux usa imports planos (`import qdefs`).
     """
 
@@ -636,15 +636,15 @@ class TestRegistro299RoundTrip(unittest.TestCase):
         self.assertEqual("W", segundo["att"])
 
     def test_ajuste_nominal_nao_redefine_o_sistema_de_pontos(self):
-        """Com entidade nomeada o 299 vai para a lista, e nao ao score system.
+        """Com entidade nomeada o 299 vai para a lista, e não ao score system.
 
-        `add_unplayed` reescreveria quanto vale um jogo nao disputado no torneio
-        inteiro — consequencia bem maior do que a penalidade de um competidor.
+        `add_unplayed` reescreveria quanto vale um jogo não disputado no torneio
+        inteiro — consequência bem maior do que a penalidade de um competidor.
         """
         from src.services.federation_exporters.trf25_records import record_299
 
         parser = self._parser()
-        # `scores` nasce so quando o motor le um torneio; aqui um espiao basta.
+        # `scores` nasce só quando o motor lê um torneio; aqui um espião basta.
         parser.scores = mock.Mock()
         parser.parse_trf_abnormal({}, record_299("", 0.0, -0.5, 0, [4]).rstrip())
 

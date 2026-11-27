@@ -230,10 +230,10 @@ class FederationExportTest(CoreServiceTestCase):
         self.assertIn("052 2026/05/24", content)
         self.assertIn("062 2", content)
         self.assertIn("072 2", content)
-        # `082` e o numero de EQUIPES e nao sai em torneio individual (FED-03):
+        # `082` e o número de EQUIPES e não sai em torneio individual (FED-03):
         # "082 0" descrevia um torneio por equipes com zero equipes.
         self.assertNotIn("082 ", content)
-        # 092 no vocabulario das federacoes, e nao no texto proprietario antigo
+        # 092 no vocabulário das federações, e não no texto proprietário antigo
         # ("Individual: Suico (Standard)").
         self.assertIn("092 Individual: Swiss-System (FIDE-rated)", content)
         self.assertIn("102 Arbitro Chefe", content)
@@ -304,14 +304,14 @@ class FederationExportTest(CoreServiceTestCase):
 
         warnings = self.export_service.validate_chess_results_trf(tournament_id)
 
-        self.assertIn("Federacao FIDE do torneio deve ter 3 letras.", warnings)
+        self.assertIn("Federação FIDE do torneio deve ter 3 letras.", warnings)
         self.assertIn("Torneio FIDE-rated sem FIDE Event-ID.", warnings)
-        self.assertIn("Rodadas ainda nao fechadas: 1.", warnings)
+        self.assertIn("Rodadas ainda não fechadas: 1.", warnings)
         self.assertIn("Rodadas com resultados pendentes/incompletos: 1.", warnings)
-        self.assertIn("Rodadas com data invalida no calendario: 2.", warnings)
-        self.assertTrue(any("FIDE ID numerico" in warning for warning in warnings))
-        self.assertTrue(any("data de nascimento valida" in warning for warning in warnings))
-        self.assertTrue(any("federacao FIDE com 3 letras" in warning for warning in warnings))
+        self.assertIn("Rodadas com data inválida no calendário: 2.", warnings)
+        self.assertTrue(any("FIDE ID numérico" in warning for warning in warnings))
+        self.assertTrue(any("data de nascimento válida" in warning for warning in warnings))
+        self.assertTrue(any("federação FIDE com 3 letras" in warning for warning in warnings))
 
     def test_trf25_export_emits_330_for_double_forfeit_match(self) -> None:
         from src.services.federation_exporters import TRF25Exporter
@@ -383,10 +383,10 @@ class FederationExportTest(CoreServiceTestCase):
         )
         self.assertEqual(line_362[:6], "362 TW")
         self.assertIn(" 3.0", line_362)
-        # Ordem de desempate individual sai da sequencia CONFIGURADA (TBK-04) —
-        # sem configuracao, e o padrao FIDE do projeto. `WON` e nao `WIN`: o
-        # motor sempre contou vitorias no tabuleiro, entao declarar `WIN` no
-        # arquivo enviado a federacao era declarar outro criterio.
+        # Ordem de desempate individual sai da sequência CONFIGURADA (TBK-04) —
+        # sem configuração, e o padrão FIDE do projeto. `WON` e não `WIN`: o
+        # motor sempre contou vitórias no tabuleiro, então declarar `WIN` no
+        # arquivo enviado a federação era declarar outro critério.
         exporter = TRF25Exporter(self.export_service)
         self.assertEqual(
             exporter._tiebreak_codes_212(is_team=False, tournament_id=self.tournament_id),
@@ -421,7 +421,7 @@ class FederationExportTest(CoreServiceTestCase):
         self._create_players(2)
         warnings = trf25.validate(self.tournament_id)
         self.assertEqual(warnings[0], TRF25_SCAFFOLD_WARNING)
-        # Os warnings subsequentes são os do TRF16 herdado (sem federacao,
+        # Os warnings subsequentes são os do TRF16 herdado (sem federação,
         # sem datas, etc) — não devem ser duplicados.
         self.assertEqual(1, sum(1 for w in warnings if w == TRF25_SCAFFOLD_WARNING))
 
@@ -566,8 +566,8 @@ class FederationExportTest(CoreServiceTestCase):
         match = self.db.list_team_matches_for_round(int(round_data["id"]))[0]
         boards = self.db.list_team_boards(int(match["id"]))
         # W.O. consistente: uma equipe vence o match inteiro por forfeit.
-        # Tab. 1 (impar): brancas vencem; tab. 2 (par, cores invertidas): pretas
-        # vencem — ambos os pontos vao para a mesma equipe.
+        # Tab. 1 (ímpar): brancas vencem; tab. 2 (par, cores invertidas): pretas
+        # vencem — ambos os pontos vão para a mesma equipe.
         self.service.update_result(tournament_id, int(boards[0]["id"]), "1F-0F")
         self.service.update_result(tournament_id, int(boards[1]["id"]), "0F-1F")
         self.service.close_round(tournament_id, int(round_data["id"]))
@@ -577,8 +577,8 @@ class FederationExportTest(CoreServiceTestCase):
         exporter.export(tournament_id, output_path)
         lines = output_path.read_text(encoding="utf-8").splitlines()
 
-        # 330 do match forfeitado e indicadores f/F no 802 (col 39 = indice 38;
-        # nao some no rstrip por ser caractere nao-branco).
+        # 330 do match forfeitado e indicadores f/F no 802 (col 39 = índice 38;
+        # não some no rstrip por ser caractere não-branco).
         self.assertTrue(any(line.startswith("330 ") for line in lines))
         markers = sorted(
             line[38] for line in lines if line.startswith("802 ") and len(line) >= 39
@@ -598,7 +598,7 @@ class FederationExportTest(CoreServiceTestCase):
         lines = output_path.read_text(encoding="utf-8").splitlines()
 
         # Resultado normal (sem W.O.): nenhum 330 e nenhum indicador f/F no 802
-        # (a posicao de forfeit fica em branco, somindo no rstrip).
+        # (a posição de forfeit fica em branco, somindo no rstrip).
         self.assertFalse(any(line.startswith("330 ") for line in lines))
         self.assertFalse(
             any(
@@ -611,7 +611,7 @@ class FederationExportTest(CoreServiceTestCase):
         from src.services.federation_exporters import TRF25Exporter
 
         tournament_id, team_ids = self._create_team_tournament(teams_count=2, boards_count=2)
-        # Reserva com rating altissimo → start_rank 1; sem fix, viria como 1o jogador.
+        # Reserva com rating altíssimo → start_rank 1; sem fix, viria como 1o jogador.
         reserve_id = self.db.create_player(
             tournament_id, name="Reserva Forte", rating=3000, club="Clube 1"
         )
@@ -623,7 +623,7 @@ class FederationExportTest(CoreServiceTestCase):
         lines = output_path.read_text(encoding="utf-8").splitlines()
 
         def ranks_of(line: str) -> list[str]:
-            # Jogadores do 310: a partir da col 74 (indice 73), 4 chars, passo 5.
+            # Jogadores do 310: a partir da col 74 (índice 73), 4 chars, passo 5.
             return [
                 line[i:i + 4].strip()
                 for i in range(73, len(line), 5)
@@ -631,7 +631,7 @@ class FederationExportTest(CoreServiceTestCase):
             ]
 
         team310 = [line for line in lines if line.startswith("310 ")]
-        # A equipe da reserva e a unica cujo 310 contem o start-rank 1.
+        # A equipe da reserva e a única cujo 310 contem o start-rank 1.
         target = next(line for line in team310 if "1" in ranks_of(line))
         ranks = ranks_of(target)
         self.assertEqual(len(ranks), 3)         # 2 titulares + 1 reserva
@@ -647,7 +647,7 @@ class FederationExportTest(CoreServiceTestCase):
             {"federation": "BRA"},
             [],
         )
-        # p1 (rating maior) tem rating nacional; p2 nao tem.
+        # p1 (rating maior) tem rating nacional; p2 não tem.
         self.db.create_player(
             self.tournament_id, name="Com Nacional", rating=2000,
             national_rating=1928, cbx_id="55501",
@@ -660,22 +660,22 @@ class FederationExportTest(CoreServiceTestCase):
         lines = output_path.read_text(encoding="utf-8").splitlines()
 
         nat_lines = [line for line in lines if line.startswith("BRA ")]
-        self.assertEqual(len(nat_lines), 1)  # so o jogador com rating nacional
+        self.assertEqual(len(nat_lines), 1)  # só o jogador com rating nacional
         line = nat_lines[0]
         self.assertEqual(line[4:8].strip(), "1")     # start-rank do p1 (maior rating)
         self.assertEqual(line[48:52].strip(), "1928")  # rating nacional
         self.assertIn("55501", line)                  # nº nacional
 
-        # 172 (Encoded Starting Rank Method) e obrigatorio quando ha registros NRS.
+        # 172 (Encoded Starting Rank Method) e obrigatório quando há registros NRS.
         header_172 = [ln for ln in lines if ln.startswith("172 ")]
         self.assertEqual(len(header_172), 1)
-        self.assertEqual(header_172[0][4:7], "BRA")          # federacao (cols 5-7)
-        self.assertEqual(header_172[0][8:13].strip(), "FIDE")  # metodo (cols 9-13)
+        self.assertEqual(header_172[0][4:7], "BRA")          # federação (cols 5-7)
+        self.assertEqual(header_172[0][8:13].strip(), "FIDE")  # método (cols 9-13)
 
     def test_trf25_omits_national_rating_without_federation(self) -> None:
         from src.services.federation_exporters import TRF25Exporter
 
-        # Sem federacao configurada, mesmo com rating nacional nada e emitido.
+        # Sem federação configurada, mesmo com rating nacional nada é emitido.
         self.db.create_player(
             self.tournament_id, name="Com Nacional", rating=2000,
             national_rating=1928, cbx_id="55501",
@@ -688,7 +688,7 @@ class FederationExportTest(CoreServiceTestCase):
         lines = output_path.read_text(encoding="utf-8").splitlines()
 
         self.assertFalse(any("55501" in line for line in lines))
-        # Sem registros NRS, o 172 tambem nao deve aparecer.
+        # Sem registros NRS, o 172 também não deve aparecer.
         self.assertFalse(any(line.startswith("172 ") for line in lines))
 
     def test_trf25_validate_signals_data_complete_when_no_pending(self) -> None:
@@ -700,12 +700,12 @@ class FederationExportTest(CoreServiceTestCase):
         )
 
         exporter = TRF25Exporter(self.export_service)
-        # Sem pendencias herdadas → caveat de formato + nota de prontidao de dados.
+        # Sem pendências herdadas → caveat de formato + nota de prontidão de dados.
         with mock.patch.object(TRF16Exporter, "validate", return_value=[]):
             ready = exporter.validate(self.tournament_id)
         self.assertIn(TRF25_SCAFFOLD_WARNING, ready)
         self.assertIn(TRF25_DATA_COMPLETE_NOTE, ready)
-        # Com pendencia herdada → sem nota de prontidao (so o caveat + a pendencia).
+        # Com pendência herdada → sem nota de prontidão (só o caveat + a pendência).
         with mock.patch.object(
             TRF16Exporter, "validate", return_value=["Torneio sem cidade/local."]
         ):
@@ -779,7 +779,7 @@ class FederationExportTest(CoreServiceTestCase):
         self.assertEqual(by_fide["123456"]["federation_id"], "BRA")
         self.assertEqual(by_fide["123456"]["name"], "Ana Silva")
         self.assertEqual(by_fide["345678"]["federation_id"], "ARG")
-        # Cabecalho: novo torneio herda nome e federacao do TRF.
+        # Cabeçalho: novo torneio herda nome e federação do TRF.
         new_tournament = self.db.get_tournament(result["tournament_id"])
         self.assertEqual(new_tournament["name"], "Torneio teste")
 
@@ -808,7 +808,7 @@ class FederationExportTest(CoreServiceTestCase):
         rounds = self.db.list_rounds(result["tournament_id"])
         self.assertEqual(len(rounds), 1)
         self.assertEqual(rounds[0]["status"], "closed")
-        # A classificacao reconstruida bate com a original (2x1.0 e 2x0.0).
+        # A classificação reconstruida bate com a original (2x1.0 e 2x0.0).
         imported_points = sorted(
             float(item["points"]) for item in self.service.standings(result["tournament_id"])
         )
@@ -949,10 +949,10 @@ class FederationExportTest(CoreServiceTestCase):
 
         warnings = self.export_service.validate_chess_results_trf(tournament_id)
 
-        self.assertIn("TRF16 contem 1 bye(s).", warnings)
+        self.assertIn("TRF16 contém 1 bye(s).", warnings)
         self.assertIn("TRF16 contem 1 resultado(s) por WO.", warnings)
-        self.assertIn("TRF16 contem 1 dupla(s) ausencia(s).", warnings)
-        self.assertIn("TRF16 contem 1 jogador(es) nao emparceirado(s) em rodadas geradas.", warnings)
+        self.assertIn("TRF16 contém 1 dupla(s) ausência(s).", warnings)
+        self.assertIn("TRF16 contém 1 jogador(es) não emparceirado(s) em rodadas geradas.", warnings)
 
     def test_export_chess_results_trf16_validation_report_and_encoding(self) -> None:
         tournament_id = self.db.create_tournament(

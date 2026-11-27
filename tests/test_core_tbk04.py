@@ -115,9 +115,9 @@ class ParametrosNoMotorProprioTest(unittest.TestCase):
     def test_limiar_do_koya_e_configuravel(self) -> None:
         jogador, stats = self._stats()
         jogador["earned_against"] = [(2, 1.0), (3, 0.5), (4, 0.5)]
-        # 4 rodadas: 50% = 2,0 -> adversarios de 4,0 e 3,0 entram.
+        # 4 rodadas: 50% = 2,0 -> adversários de 4,0 e 3,0 entram.
         self.assertEqual(1.5, player_tiebreak_value("koya", jogador, stats, {}, 4))
-        # 90% = 3,6 -> so o de 4,0 entra.
+        # 90% = 3,6 -> só o de 4,0 entra.
         self.assertEqual(
             1.0, player_tiebreak_value("koya", jogador, stats, {"threshold": 90}, 4)
         )

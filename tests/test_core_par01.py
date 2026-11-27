@@ -73,7 +73,7 @@ class TabelaDeBergerTest(unittest.TestCase):
     def test_calendario_tem_n_menos_1_rodadas_e_o_dobro_com_returno(self) -> None:
         self.assertEqual(5, calendar_rounds(6))
         self.assertEqual(10, calendar_rounds(6, double=True))
-        self.assertEqual(5, calendar_rounds(5))  # impar sobe para a tabela de 6
+        self.assertEqual(5, calendar_rounds(5))  # ímpar sobe para a tabela de 6
         self.assertEqual(14, calendar_rounds(7, double=True))
 
     def test_returno_repete_o_turno_com_as_cores_trocadas(self) -> None:
@@ -209,7 +209,7 @@ class CalendarioPersistidoTest(CoreServiceTestCase):
         )
         previa = self.service.preview_next_round(self.tournament_id)
         self.assertTrue(any("W.O." in aviso for aviso in previa["warnings"]))
-        # Menos da metade das partidas jogadas: a regra FIDE de anulacao aparece.
+        # Menos da metade das partidas jogadas: a regra FIDE de anulação aparece.
         self.assertTrue(any("C.05" in aviso for aviso in previa["warnings"]))
 
     def test_inscrito_depois_do_sorteio_fica_fora_e_e_avisado(self) -> None:
@@ -219,7 +219,7 @@ class CalendarioPersistidoTest(CoreServiceTestCase):
             self.tournament_id, name="Atrasado", rating=2500, club="Clube", category="Absoluto"
         )
         previa = self.service.preview_next_round(self.tournament_id)
-        self.assertTrue(any("Fora do calendario" in aviso for aviso in previa["warnings"]))
+        self.assertTrue(any("Fora do calendário" in aviso for aviso in previa["warnings"]))
         mesas = previa["pairings"]
         self.assertNotIn("Atrasado", [mesa["white_name"] for mesa in mesas])
 

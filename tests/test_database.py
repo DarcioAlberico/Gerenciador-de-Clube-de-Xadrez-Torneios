@@ -1,13 +1,13 @@
 """Smoke tests da God Class Database (src/core/database.py).
 
-Rede de seguranca para a extracao incremental de mixins por dominio: exercita
-o CRUD basico de cada dominio num banco temporario e congela a interface
+Rede de segurança para a extração incremental de mixins por domínio: exercita
+o CRUD básico de cada domínio num banco temporário e congela a interface
 publica num snapshot (tests/fixtures/database_public_api.txt). Se a refatoracao
-perder/renomear um metodo da fachada Database ou quebrar um fluxo, estes testes
+perder/renomear um método da fachada Database ou quebrar um fluxo, estes testes
 pegam.
 
-Complementa (nao substitui) os testes de comportamento em test_core_services.py,
-que exercitam a Database indiretamente via os servicos.
+Complementa (não substitui) os testes de comportamento em test_core_services.py,
+que exercitam a Database indiretamente via os serviços.
 """
 from __future__ import annotations
 
@@ -37,12 +37,12 @@ class DatabaseTestCase(unittest.TestCase):
 
 
 class TestDatabasePublicInterface(DatabaseTestCase):
-    """Snapshot da API publica — rede contra perda de metodo na extracao de mixins.
+    """Snapshot da API publica — rede contra perda de método na extração de mixins.
 
-    Para regenerar o snapshot apos uma mudanca INTENCIONAL de interface. O
-    cabecalho de comentario e PRESERVADO de proposito: a versao antiga deste
-    trecho reescrevia o arquivo inteiro e apagava a explicacao de para que ele
-    serve — o teste continuava passando (ele ignora linhas `#`) e ninguem via::
+    Para regenerar o snapshot após uma mudança INTENCIONAL de interface. O
+    cabeçalho de comentário e PRESERVADO de propósito: a versão antiga deste
+    trecho reescrevia o arquivo inteiro e apagava a explicação de para que ele
+    serve — o teste continuava passando (ele ignora linhas `#`) e ninguém via::
 
         from pathlib import Path
         from src.core.database import Database
@@ -66,7 +66,7 @@ class TestDatabasePublicInterface(DatabaseTestCase):
         return names
 
     def test_snapshot_is_substantial(self) -> None:
-        # guarda contra snapshot vazio/corrompido mascarar a verificacao abaixo
+        # guarda contra snapshot vazio/corrompido mascarar a verificação abaixo
         self.assertGreaterEqual(len(self._snapshot()), 250)
 
     def test_public_api_matches_snapshot(self) -> None:
@@ -117,7 +117,7 @@ class TestClubAndPeopleDomain(DatabaseTestCase):
         self.assertIn(club_id, [c["id"] for c in self.db.list_clubs()])
 
     def test_learning_level_crud(self) -> None:
-        # niveis padrao (Iniciante, Basico, ...) sao semeados; usar nome unico
+        # níveis padrão (Iniciante, Básico, ...) são semeados; usar nome único
         level_id = self.db.create_learning_level("Nivel Smoke", description="nivel 1")
         level = self.db.get_learning_level(level_id)
         assert level is not None
@@ -263,7 +263,7 @@ class TestAppSettingsAndAudit(DatabaseTestCase):
     def test_app_settings_roundtrip(self) -> None:
         settings = self.db.get_app_settings()
         self.assertIsInstance(settings, dict)
-        # round-trip nao deve falhar nem perder o tipo
+        # round-trip não deve falhar nem perder o tipo
         self.db.save_app_settings(settings)
         self.assertIsInstance(self.db.get_app_settings(), dict)
 

@@ -131,7 +131,7 @@ class TournamentPlayersView:
     def _build_form(self, body: ctk.CTkFrame, tournament: dict[str, Any] | None) -> None:
         """Coluna do cadastro — ``FormStack``, sem a soma de linhas (F5.4).
 
-        A aritmética que sustentava esta coluna (``indice * 2 + 1`` e depois um
+        A aritmética que sustentava esta coluna (``índice * 2 + 1`` e depois um
         ``linha + 10``) já tinha cobrado o preço uma vez: a versão anterior
         começava os botões em ``+7`` e empilhava três deles **por cima** dos
         seletores do Scheveningen, na mesma célula do grid. Com a pilha, a

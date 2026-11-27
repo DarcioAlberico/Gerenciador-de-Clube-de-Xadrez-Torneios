@@ -70,7 +70,7 @@ class CertificateService:
     def verify_issuance(self, verification_code: str) -> dict[str, Any]:
         issuance = self.db.get_certificate_issuance_by_code(verification_code)
         if not issuance:
-            raise AppError("Codigo de verificacao nao encontrado.")
+            raise AppError("Código de verificação não encontrado.")
         return issuance
 
     def revoke_issuance(self, issuance_id: int, notes: str = "") -> None:
@@ -84,7 +84,7 @@ class CertificateService:
     ) -> Path:
         issuances = self.list_issuances(limit=limit, include_revoked=include_revoked)
         if not issuances:
-            raise AppError("Nao ha diplomas emitidos para exportar.")
+            raise AppError("Não há diplomas emitidos para exportar.")
 
         path = Path(file_path)
         if path.suffix.lower() != ".html":
@@ -97,7 +97,7 @@ class CertificateService:
     def get_template(self, template_id: int) -> dict[str, Any]:
         template = self.db.get_certificate_template(template_id)
         if not template:
-            raise AppError("Modelo de diploma nao encontrado.")
+            raise AppError("Modelo de diploma não encontrado.")
         return template
 
     def create_template(self, data: dict[str, Any]) -> int:
@@ -105,28 +105,28 @@ class CertificateService:
         try:
             template_id = self.db.create_certificate_template(**payload)
         except sqlite3.IntegrityError as exc:
-            raise AppError("Ja existe um modelo de diploma com este nome.") from exc
+            raise AppError("Já existe um modelo de diploma com este nome.") from exc
         logger.info("Modelo de diploma criado: %s", template_id)
         return template_id
 
     def update_template(self, template_id: int, data: dict[str, Any]) -> None:
         existing = self.db.get_certificate_template(template_id)
         if not existing:
-            raise AppError("Modelo de diploma nao encontrado.")
-        # Campos do formulario sobrescrevem; os ausentes (ex.: estilo/marca
-        # d'agua, se o form nao os enviar) herdam do modelo atual.
+            raise AppError("Modelo de diploma não encontrado.")
+        # Campos do formulário sobrescrevem; os ausentes (ex.: estilo/marca
+        # d'água, se o form não os enviar) herdam do modelo atual.
         payload = self._validated_template_payload({**existing, **data})
         try:
             self.db.update_certificate_template(template_id, **payload)
         except sqlite3.IntegrityError as exc:
-            raise AppError("Ja existe um modelo de diploma com este nome.") from exc
+            raise AppError("Já existe um modelo de diploma com este nome.") from exc
         logger.info("Modelo de diploma atualizado: %s", template_id)
 
     def seed_gallery(self, count: int = 50) -> dict[str, int]:
         """Cria a galeria de modelos prontos no banco (idempotente por nome).
 
         Distribui ``count`` modelos pelos 10 estilos x paletas x tipos (ver
-        ``certificates.gallery``); pula os que ja existem pelo nome. Devolve
+        ``certificates.gallery``); pula os que já existem pelo nome. Devolve
         quantos foram criados.
         """
         from src.services.certificates.gallery import build_gallery, model_to_template
@@ -143,10 +143,10 @@ class CertificateService:
         return {"created": created, "total": count}
 
     def preview_template_pdf(self, template_data: dict[str, Any], file_path: str | Path) -> Path:
-        """Gera um diploma de amostra (1 pagina) com os dados do formulario.
+        """Gera um diploma de amostra (1 página) com os dados do formulário.
 
-        Usa um destinatario ficticio com todos os campos preenchidos, para o
-        usuario ver o estilo/marca d'agua antes de exportar de verdade.
+        Usa um destinatário fictício com todos os campos preenchidos, para o
+        usuário ver o estilo/marca d'água antes de exportar de verdade.
         """
         template = self._template_for_export(
             None,
@@ -155,13 +155,13 @@ class CertificateService:
         )
         recipient = {
             "name": "Maria Eduarda Albuquerque",
-            "tournament": "Torneio Aberto de Demonstracao 2026",
+            "tournament": "Torneio Aberto de Demonstração 2026",
             "position": 1, "position_label": "1o",
             "category": "Sub-14", "category_position": 1, "category_position_label": "1o",
             "points": "6,5", "rating": 1820, "club": "Clube de Xadrez Albericus",
             "location": "Teresina-PI", "date_range": "12/06/2026",
             "session": "Aula de Finais de Torre", "event": "Festival de Xadrez do Clube",
-            "class_name": "Turma A", "instructor": "Prof. Ana", "learning_level": "Intermediario",
+            "class_name": "Turma A", "instructor": "Prof. Ana", "learning_level": "Intermediário",
             "verification_code": "ALB-PREVIEW",
         }
         path = Path(file_path)
@@ -174,8 +174,8 @@ class CertificateService:
     def export_art_guide(self, file_path: str | Path, orientation: str = "landscape") -> Path:
         """Exporta o guia de arte A4 (modo imagem): margens + zonas dos campos.
 
-        O usuario desenha o fundo no tamanho indicado e importa como imagem de
-        fundo; no modo 'image_overlay' o gerador sobrepoe os dados nas zonas.
+        O usuário desenha o fundo no tamanho indicado e importa como imagem de
+        fundo; no modo 'image_overlay' o gerador sobrepõe os dados nas zonas.
         """
         try:
             from reportlab.lib.pagesizes import A4, landscape
@@ -278,11 +278,11 @@ class CertificateService:
     ) -> list[dict[str, Any]]:
         tournament = self._individual_tournament(tournament_id)
         if certificate_type not in CERTIFICATE_TYPES:
-            raise AppError("Modelo de diploma invalido.")
+            raise AppError("Modelo de diploma inválido.")
 
         standings = self.pairing_service.standings(tournament_id)
         if not standings:
-            raise AppError("Nao ha jogadores no torneio selecionado.")
+            raise AppError("Não há jogadores no torneio selecionado.")
 
         top_limit = self._parse_top_n(top_n)
         use_category_ranking = by_category or certificate_type == "category_award"
@@ -344,7 +344,7 @@ class CertificateService:
     ) -> list[dict[str, Any]]:
         session = self.db.get_training_session(session_id)
         if not session:
-            raise AppError("Aula/turma nao encontrada.")
+            raise AppError("Aula/turma não encontrada.")
         selected_ids = {int(member_id) for member_id in member_ids} if member_ids is not None else None
         rows = self.db.list_session_attendance(session_id)
         if not rows:
@@ -373,7 +373,7 @@ class CertificateService:
     ) -> list[dict[str, Any]]:
         event = self.db.get_club_event(event_id)
         if not event:
-            raise AppError("Evento nao encontrado.")
+            raise AppError("Evento não encontrado.")
         selected_ids = {int(member_id) for member_id in member_ids} if member_ids is not None else None
         recipients = []
         for member in self.db.list_members(active_only=active_only, club_id=int(event.get("club_id") or 0) or None):
@@ -597,7 +597,7 @@ class CertificateService:
             if self.db.get_certificate_issuance_by_code(code):
                 continue
             return code
-        raise AppError("Nao foi possivel gerar um codigo unico para o diploma.")
+        raise AppError("Não foi possível gerar um código único para o diploma.")
 
     def _record_certificate_issuances(
         self,
@@ -708,7 +708,7 @@ class CertificateService:
 <body>
   <header>
     <h1>Verificador de diplomas Albericus</h1>
-    <p>Consulta local de codigos emitidos pelo gerenciador de clube.</p>
+    <p>Consulta local de códigos emitidos pelo gerenciador de clube.</p>
   </header>
   <main>
     <div class="summary">
@@ -718,19 +718,19 @@ class CertificateService:
       <div><strong>Gerado em</strong><span>{self._escape_html(generated_at)}</span></div>
     </div>
     <section>
-      <input id="search" type="search" placeholder="Buscar por codigo, nome, origem ou modelo">
+      <input id="search" type="search" placeholder="Buscar por código, nome, origem ou modelo">
       <div class="table-wrap">
         <table id="issuances">
           <thead>
             <tr>
-              <th>Codigo</th>
+              <th>Código</th>
               <th>Status</th>
-              <th>Destinatario</th>
+              <th>Destinatário</th>
               <th>Contexto</th>
               <th>Origem</th>
               <th>Tipo</th>
               <th>Modelo</th>
-              <th>Emissao</th>
+              <th>Emissão</th>
             </tr>
           </thead>
           <tbody>{rows}</tbody>
@@ -738,7 +738,7 @@ class CertificateService:
       </div>
     </section>
   </main>
-  <footer>Este arquivo nao substitui validacao institucional; ele reflete o historico local exportado em {self._escape_html(generated_at)}.</footer>
+  <footer>Este arquivo não substitui validação institucional; ele reflete o histórico local exportado em {self._escape_html(generated_at)}.</footer>
   <script>
     const search = document.getElementById('search');
     const rows = Array.from(document.querySelectorAll('#issuances tbody tr'));
@@ -811,12 +811,12 @@ class CertificateService:
                 fallback = dict(template)
                 fallback.update({"id": 0, "active": 1})
                 return fallback
-        raise AppError("Modelo de diploma invalido.")
+        raise AppError("Modelo de diploma inválido.")
 
     def _individual_tournament(self, tournament_id: int) -> dict[str, Any]:
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
-            raise AppError("Selecione um torneio valido.")
+            raise AppError("Selecione um torneio válido.")
         if tournament.get("competition_type") == "team":
             raise AppError("Diplomas para torneios por equipes ficam para uma etapa futura.")
         return tournament
@@ -828,27 +828,27 @@ class CertificateService:
             raise AppError("Informe o nome do modelo.")
         certificate_type = str(data.get("certificate_type", "participation")).strip() or "participation"
         if certificate_type not in CERTIFICATE_TYPES:
-            raise AppError("Tipo de diploma invalido.")
+            raise AppError("Tipo de diploma inválido.")
         orientation = str(data.get("orientation", "landscape")).strip() or "landscape"
         if orientation not in CERTIFICATE_ORIENTATIONS:
-            raise AppError("Orientacao do diploma invalida.")
+            raise AppError("Orientação do diploma inválida.")
         title_template = str(data.get("title_template", "")).strip()
         body_template = str(data.get("body_template", "")).strip()
         if not title_template:
-            raise AppError("Informe o titulo do diploma.")
+            raise AppError("Informe o título do diploma.")
         if not body_template:
             raise AppError("Informe o texto principal do diploma.")
         logo_path = CertificateService._validated_optional_image_path(
             data.get("logo_path", ""),
-            "Arquivo de logo nao encontrado.",
+            "Arquivo de logo não encontrado.",
         )
         background_image_path = CertificateService._validated_optional_image_path(
             data.get("background_image_path", ""),
-            "Imagem de fundo nao encontrada.",
+            "Imagem de fundo não encontrada.",
         )
         secondary_logo_path = CertificateService._validated_optional_image_path(
             data.get("secondary_logo_path", ""),
-            "Arquivo de logo secundario nao encontrado.",
+            "Arquivo de logo secundário não encontrado.",
         )
         return {
             "name": name,
@@ -904,19 +904,19 @@ class CertificateService:
 
         style_preset = str(data.get("style_preset", "classic")).strip() or "classic"
         if style_preset not in STYLE_PRESETS:
-            raise AppError("Estilo de diploma invalido.")
+            raise AppError("Estilo de diploma inválido.")
         template_kind = str(data.get("template_kind", "generated")).strip() or "generated"
         if template_kind not in ("generated", "image_overlay"):
-            raise AppError("Modo de diploma invalido.")
+            raise AppError("Modo de diploma inválido.")
         palette_key = str(data.get("palette_key", "")).strip()
         if palette_key and palette_key not in PALETTES:
-            raise AppError("Paleta de diploma invalida.")
+            raise AppError("Paleta de diploma inválida.")
         watermark_kind = str(data.get("watermark_kind", "")).strip()
         if watermark_kind and watermark_kind not in WATERMARKS:
-            raise AppError("Tipo de marca d'agua invalido.")
+            raise AppError("Tipo de marca d'água inválido.")
         watermark_image_path = CertificateService._validated_optional_image_path(
             data.get("watermark_image_path", ""),
-            "Imagem da marca d'agua nao encontrada.",
+            "Imagem da marca d'água não encontrada.",
         )
         return {
             "style_preset": style_preset,
@@ -928,7 +928,7 @@ class CertificateService:
             "watermark_piece": str(data.get("watermark_piece", "")).strip(),
             "watermark_image_path": watermark_image_path,
             "watermark_opacity": CertificateService._validated_opacity(
-                data.get("watermark_opacity", 0.08), "opacidade da marca d'agua"
+                data.get("watermark_opacity", 0.08), "opacidade da marca d'água"
             ),
             "medal_by_placement": 1 if data.get("medal_by_placement", 1) else 0,
             "field_layout_json": str(data.get("field_layout_json", "")).strip(),
@@ -973,7 +973,7 @@ class CertificateService:
         try:
             size = int(value)
         except (TypeError, ValueError) as exc:
-            raise AppError(f"Tamanho da fonte do {label} invalido.") from exc
+            raise AppError(f"Tamanho da fonte do {label} inválido.") from exc
         if size < minimum or size > maximum:
             raise AppError(f"Tamanho da fonte do {label} deve ficar entre {minimum} e {maximum}.")
         return size
@@ -992,9 +992,9 @@ class CertificateService:
         try:
             top_n = int(value)
         except (TypeError, ValueError) as exc:
-            raise AppError("Informe um limite numerico para o top N.") from exc
+            raise AppError("Informe um limite numérico para o top N.") from exc
         if top_n < 0:
-            raise AppError("O limite do top N nao pode ser negativo.")
+            raise AppError("O limite do top N não pode ser negativo.")
         return top_n
 
     @staticmethod
@@ -1090,7 +1090,7 @@ class CertificateService:
                     str(session.get("session_type") or ""),
                     str(session.get("session_type") or ""),
                 ),
-                "status": ATTENDANCE_STATUSES.get(attendance_status, attendance_status or "Nao lancada"),
+                "status": ATTENDANCE_STATUSES.get(attendance_status, attendance_status or "Não lançada"),
                 "attendance_status": attendance_status,
                 "date": CertificateService._date_label(session.get("session_date")),
             }
@@ -1202,9 +1202,9 @@ class CertificateService:
     ) -> None:
         """Desenha o PDF delegando ao pacote modular ``src.services.certificates``.
 
-        A fachada cuida do I/O (canvas, imagem de marca d'agua); o estilo, o
+        A fachada cuida do I/O (canvas, imagem de marca d'água); o estilo, o
         layout e o traçado vivem no pacote. ``source_title`` segue na assinatura
-        por compatibilidade -- o novo desenho traz o contexto no proprio corpo.
+        por compatibilidade -- o novo desenho traz o contexto no próprio corpo.
         """
         try:
             from dataclasses import replace as dataclass_replace
@@ -1229,15 +1229,15 @@ class CertificateService:
         if kind == "image_overlay":
             overlay_image = CertificateService._load_template_image(
                 template, "background_image_path",
-                "Imagem de fundo nao encontrada.",
-                "Nao foi possivel carregar a imagem de fundo do diploma.",
+                "Imagem de fundo não encontrada.",
+                "Não foi possível carregar a imagem de fundo do diploma.",
                 ImageReader,
             )
         elif str(template.get("watermark_kind") or "") == "image":
             watermark_image = CertificateService._load_template_image(
                 template, "watermark_image_path",
-                "Imagem da marca d'agua nao encontrada.",
-                "Nao foi possivel carregar a imagem da marca d'agua do diploma.",
+                "Imagem da marca d'água não encontrada.",
+                "Não foi possível carregar a imagem da marca d'água do diploma.",
                 ImageReader,
             )
 

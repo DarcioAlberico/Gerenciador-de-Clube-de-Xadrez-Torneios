@@ -42,18 +42,18 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-# Campos canonicos de inscricao usados pelo assistente de importacao com
-# mapeamento de colunas (REG-02) e pelo gerador de formulario padronizado
-# (REG-01). Os sinonimos espelham os aceitos por ``_online_registration_payload``;
-# a primeira chave de cada campo coincide com a chave canonica usada no payload,
-# de modo que mapear uma coluna para ``key`` a torna reconhecivel por ``_pick``.
+# Campos canônicos de inscrição usados pelo assistente de importação com
+# mapeamento de colunas (REG-02) e pelo gerador de formulário padronizado
+# (REG-01). Os sinônimos espelham os aceitos por ``_online_registration_payload``;
+# a primeira chave de cada campo coincide com a chave canônica usada no payload,
+# de modo que mapear uma coluna para ``key`` a torna reconhecível por ``_pick``.
 REGISTRATION_IMPORT_FIELDS: list[dict[str, Any]] = [
     {"key": "name", "label": "Nome completo", "required": True, "type": "text",
      "synonyms": ["name", "nome", "jogador", "nome completo", "nome completo do jogador",
                   "nome do jogador", "nome do atleta", "atleta", "participante", "full name"]},
     {"key": "surname", "label": "Sobrenome", "required": False, "type": "text",
      "synonyms": ["surname", "sobrenome", "last name"]},
-    {"key": "given_name", "label": "Nome proprio", "required": False, "type": "text",
+    {"key": "given_name", "label": "Nome próprio", "required": False, "type": "text",
      "synonyms": ["given_name", "nome proprio", "nome_proprio", "first name", "primeiro nome"]},
     {"key": "birth_date", "label": "Data de nascimento", "required": False, "type": "date",
      "synonyms": ["birth_date", "nascimento", "data nascimento", "data de nascimento",
@@ -80,13 +80,13 @@ REGISTRATION_IMPORT_FIELDS: list[dict[str, Any]] = [
      "synonyms": ["cbx_id", "cbx", "id cbx", "id_cbx", "cbx id"]},
     {"key": "lbx_id", "label": "ID LBX", "required": False, "type": "text",
      "synonyms": ["lbx_id", "lbx", "id lbx", "id_lbx", "lbx id"]},
-    {"key": "federation_id", "label": "ID federacao", "required": False, "type": "text",
+    {"key": "federation_id", "label": "ID federação", "required": False, "type": "text",
      "synonyms": ["federation_id", "id federacao", "id_federacao", "federacao"]},
-    {"key": "title", "label": "Titulo FIDE", "required": False, "type": "text",
+    {"key": "title", "label": "Título FIDE", "required": False, "type": "text",
      "synonyms": ["title", "titulo", "titulo fide"]},
 ]
 
-# Perguntas do formulario de inscricao padronizado (REG-01). Os titulos sao
+# Perguntas do formulário de inscrição padronizado (REG-01). Os títulos são
 # escolhidos para que o CSV de respostas seja reconhecido por
 # ``_online_registration_payload`` sem mapeamento manual.
 REGISTRATION_FORM_QUESTIONS: list[dict[str, Any]] = [
@@ -114,7 +114,7 @@ class ImportService:
     def preview_online_registrations(self, tournament_id: int, file_path: str | Path) -> dict[str, Any]:
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
-            raise AppError("Selecione um torneio valido.")
+            raise AppError("Selecione um torneio válido.")
 
         rows = self._online_registration_rows(tournament_id, file_path)
         summary = {
@@ -162,11 +162,11 @@ class ImportService:
             "player_ids": imported_player_ids,
         }
 
-    # --- REG-02: importacao com mapeamento de colunas ---------------------
+    # --- REG-02: importação com mapeamento de colunas ---------------------
 
     def inspect_source(self, source: str | Path, sample_size: int = 5) -> dict[str, Any]:
-        """Le um arquivo/URL tabular e devolve cabecalhos, amostra e palpite de
-        mapeamento por heuristica para o assistente de importacao."""
+        """Lê um arquivo/URL tabular e devolve cabeçalhos, amostra e palpite de
+        mapeamento por heurística para o assistente de importação."""
         tabular = self._read_tabular(source)
         headers = tabular["headers"]
         sample_rows = [dict(row) for _, row in tabular["rows"][: max(0, int(sample_size))]]
@@ -253,7 +253,7 @@ class ImportService:
     ) -> dict[str, Any]:
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
-            raise AppError("Selecione um torneio valido.")
+            raise AppError("Selecione um torneio válido.")
         name_header = mapping.get("name", "")
         if not name_header:
             raise AppError("Mapeie a coluna do nome do jogador antes de importar.")
@@ -283,7 +283,7 @@ class ImportService:
         )
         return result
 
-    # --- REG-02: perfis de mapeamento reutilizaveis -----------------------
+    # --- REG-02: perfis de mapeamento reutilizáveis -----------------------
 
     def list_mapping_profiles(self) -> dict[str, dict[str, str]]:
         raw = str(self.db.get_app_settings().get("import_mapping_profiles") or "").strip()
@@ -329,9 +329,9 @@ class ImportService:
     def import_trf(self, file_path: str | Path) -> dict[str, Any]:
         """Cria um novo torneio a partir de um arquivo TRF (FIDE/Swiss-Manager).
 
-        Importa cabecalho, arbitros, calendario, jogadores, rodadas e equipes
-        (FED-04). O que o arquivo nao tem — clube, categoria, inscricao — fica
-        vazio; o round-trip promete o que o TRF carrega, e nao mais do que isso.
+        Importa cabeçalho, árbitros, calendário, jogadores, rodadas e equipes
+        (FED-04). O que o arquivo não tem — clube, categoria, inscrição — fica
+        vazio; o round-trip promete o que o TRF carrega, e não mais do que isso.
         """
         path = Path(file_path)
         try:
@@ -341,7 +341,7 @@ class ImportService:
 
         parsed = parse_trf(content)
         if not parsed["players"]:
-            raise AppError("Arquivo TRF sem jogadores reconheciveis (linhas 001).")
+            raise AppError("Arquivo TRF sem jogadores reconhecíveis (linhas 001).")
 
         name = parsed["name"] or f"Torneio importado ({path.stem})"
         rounds_count = parsed["rounds_count"] if parsed["rounds_count"] > 0 else 7
@@ -429,11 +429,11 @@ class ImportService:
         teams: list[dict[str, Any]],
         rank_to_id: dict[int, int],
     ) -> int:
-        """Recria a secao de equipes do TRF (registros 013/310) — FED-04.
+        """Recria a seção de equipes do TRF (registros 013/310) — FED-04.
 
         O tabuleiro sai da ORDEM em que os start-ranks aparecem na linha, que e
         como o TRF declara a ordem de forca da equipe. Jogador que a linha cita e
-        o arquivo nao traz e ignorado: melhor uma equipe menor do que uma equipe
+        o arquivo não traz e ignorado: melhor uma equipe menor do que uma equipe
         com um jogador inventado.
         """
         criadas = 0
@@ -459,7 +459,7 @@ class ImportService:
             result = self._import_player_rows(tournament_id, rows, path)
             logger.info("%s jogadores importados de %s para o torneio %s", result["imported"], path, tournament_id)
             return result
-        raise AppError("Formato nao suportado. Use .csv, .xls ou .xlsx.")
+        raise AppError("Formato não suportado. Use .csv, .xls ou .xlsx.")
 
     def import_members(self, file_path: str | Path) -> dict[str, Any]:
         path = Path(file_path)
@@ -469,7 +469,7 @@ class ImportService:
         elif extension in {".xls", ".xlsx"}:
             rows = self._player_rows_from_spreadsheet(path)
         else:
-            raise AppError("Formato nao suportado. Use .csv, .xls ou .xlsx.")
+            raise AppError("Formato não suportado. Use .csv, .xls ou .xlsx.")
 
         result = self._import_member_rows(rows)
         logger.info("%s membros importados de %s", result["imported"], path)
@@ -528,7 +528,7 @@ class ImportService:
             rating = int(float(rating_text)) if rating_text else 0
         except ValueError:
             rating = 0
-            errors.append("rating invalido")
+            errors.append("rating inválido")
 
         club_id, club_error = self._resolve_club_id(
             self._pick(row, "club_id", "id_clube", "id escola", "id_escola"),
@@ -586,10 +586,10 @@ class ImportService:
             try:
                 club_id = int(raw_id)
             except ValueError:
-                return 1, "id do clube/escola invalido"
+                return 1, "id do clube/escola inválido"
             if self.db.get_club(club_id):
                 return club_id, ""
-            return 1, "clube/escola nao encontrado"
+            return 1, "clube/escola não encontrado"
 
         if raw_name:
             normalized = self._normalize_text(raw_name)
@@ -610,12 +610,12 @@ class ImportService:
             try:
                 class_id = int(raw_id)
             except ValueError:
-                return None, "id da turma invalido"
+                return None, "id da turma inválido"
             class_data = self.db.get_class(class_id)
             if not class_data:
-                return None, "turma nao encontrada"
+                return None, "turma não encontrada"
             if int(class_data["club_id"]) != int(club_id):
-                return None, "turma nao pertence ao clube/escola informado"
+                return None, "turma não pertence ao clube/escola informado"
             return class_id, ""
 
         if raw_name:
@@ -722,7 +722,7 @@ class ImportService:
                 try:
                     rating = int(float(rating_text))
                 except ValueError:
-                    errors.append(f"Linha {line_number}: rating invalido.")
+                    errors.append(f"Linha {line_number}: rating inválido.")
                     continue
             else:
                 rating = max(national_rating, international_rating)
@@ -750,7 +750,7 @@ class ImportService:
         return {"imported": imported, "errors": errors}
 
     def _read_tabular(self, source: str | Path) -> dict[str, Any]:
-        """Le CSV/XLS/XLSX (arquivo ou URL CSV publicada) e devolve
+        """Lê CSV/XLS/XLSX (arquivo ou URL CSV publicada) e devolve
         ``{"headers": [...], "rows": [(linha, {coluna: valor})]}``."""
         source_text = str(source).strip()
         if self._is_url(source_text):
@@ -761,13 +761,13 @@ class ImportService:
             return self._tabular_from_csv_text(path.read_text(encoding="utf-8-sig"))
         if extension in {".xls", ".xlsx"}:
             return self._tabular_from_spreadsheet(path)
-        raise AppError("Formato nao suportado. Use .csv, .xls, .xlsx ou link CSV do Google Sheets.")
+        raise AppError("Formato não suportado. Use .csv, .xls, .xlsx ou link CSV do Google Sheets.")
 
     def _tabular_from_csv_text(self, content: str) -> dict[str, Any]:
         sample = content[:4096]
         reader = csv.DictReader(io.StringIO(content), dialect=self._csv_dialect(sample))
         if not reader.fieldnames:
-            raise AppError("CSV sem cabecalho.")
+            raise AppError("CSV sem cabeçalho.")
         headers = [str(name) for name in reader.fieldnames]
         rows = [(line_number, dict(row)) for line_number, row in enumerate(reader, start=2)]
         return {"headers": headers, "rows": rows}
@@ -779,22 +779,22 @@ class ImportService:
             with urlopen(request, timeout=20) as response:
                 content = response.read().decode("utf-8-sig")
         except Exception as exc:
-            raise AppError(f"Nao foi possivel baixar a planilha: {exc}") from exc
+            raise AppError(f"Não foi possível baixar a planilha: {exc}") from exc
         return self._tabular_from_csv_text(content)
 
     def _tabular_from_spreadsheet(self, path: Path) -> dict[str, Any]:
         try:
             import pandas as pd
         except ImportError as exc:
-            raise AppError("Importacao Excel indisponivel. Instale pandas, openpyxl e xlrd.") from exc
+            raise AppError("Importação Excel indisponível. Instale pandas, openpyxl e xlrd.") from exc
 
         try:
             dataframe = pd.read_excel(path, sheet_name=0, dtype=object)
         except Exception as exc:
-            raise AppError(f"Nao foi possivel ler a planilha: {exc}") from exc
+            raise AppError(f"Não foi possível ler a planilha: {exc}") from exc
 
         if dataframe.columns.empty:
-            raise AppError("Planilha sem cabecalho.")
+            raise AppError("Planilha sem cabeçalho.")
 
         headers = [str(column) for column in dataframe.columns]
         rows: list[tuple[int, dict[str, Any]]] = []
@@ -832,7 +832,7 @@ class ImportService:
             file.seek(0)
             reader = csv.DictReader(file, dialect=self._csv_dialect(sample))
             if not reader.fieldnames:
-                raise AppError("CSV sem cabecalho.")
+                raise AppError("CSV sem cabeçalho.")
                 
             all_members = self.db.list_members()
             fide_map = {str(m.get("fide_id")).strip(): m["id"] for m in all_members if m.get("fide_id")}
@@ -841,7 +841,7 @@ class ImportService:
             for line_number, row in enumerate(reader, start=2):
                 player_id_csv = self._pick(row, "fide_id", "fide", "id_fide", "idnumber", "id", "cbx_id", "cbx", "id_cbx")
                 if not player_id_csv:
-                    errors.append(f"Linha {line_number}: ID (FIDE/CBX) nao encontrado.")
+                    errors.append(f"Linha {line_number}: ID (FIDE/CBX) não encontrado.")
                     skipped += 1
                     continue
                     
@@ -855,7 +855,7 @@ class ImportService:
                 try:
                     rating = int(float(rating_text))
                 except ValueError:
-                    errors.append(f"Linha {line_number}: Rating invalido ({rating_text}).")
+                    errors.append(f"Linha {line_number}: Rating inválido ({rating_text}).")
                     skipped += 1
                     continue
                     
@@ -912,11 +912,11 @@ class ImportService:
                 if self._matches_existing_player(payload, existing_players):
                     status = "duplicate"
                     status_label = "Duplicado"
-                    message = "Ja existe jogador equivalente no torneio"
+                    message = "Já existe jogador equivalente no torneio"
                 elif duplicate_key in seen_keys:
                     status = "duplicate"
                     status_label = "Duplicado"
-                    message = "Inscricao repetida no proprio arquivo"
+                    message = "Inscrição repetida no próprio arquivo"
                 else:
                     seen_keys.add(duplicate_key)
 
@@ -949,7 +949,7 @@ class ImportService:
             return self._player_rows_from_csv(path)
         if extension in {".xls", ".xlsx"}:
             return self._player_rows_from_spreadsheet(path)
-        raise AppError("Formato nao suportado. Use .csv, .xls, .xlsx ou link CSV do Google Sheets.")
+        raise AppError("Formato não suportado. Use .csv, .xls, .xlsx ou link CSV do Google Sheets.")
 
     @staticmethod
     def _is_url(value: str) -> bool:
@@ -1020,7 +1020,7 @@ class ImportService:
             rating = int(float(rating_text)) if rating_text else max(national_rating, international_rating)
         except ValueError:
             rating = 0
-            errors.append("rating invalido")
+            errors.append("rating inválido")
 
         birth_date = self._pick(row, "birth_date", "nascimento", "data nascimento", "data de nascimento")
         sex = self._pick(row, "sex", "sexo", "genero", "genero do jogador", "gênero")

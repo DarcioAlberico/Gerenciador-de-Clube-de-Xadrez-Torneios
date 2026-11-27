@@ -68,14 +68,14 @@ class HistoricoPuroTest(unittest.TestCase):
 
     def test_repetir_o_estado_atual_e_recusado(self) -> None:
         erro = change_error(new_status=STATUS_ABSENT, current_status=STATUS_ABSENT, reason="")
-        self.assertIn("ja esta como", erro)
+        self.assertIn("já está como", erro)
 
     def test_reentrada_de_desistente_exige_motivo(self) -> None:
-        """Voltar quem DESISTIU e decisao arbitral, e vai para a ata."""
+        """Voltar quem DESISTIU e decisão arbitral, e vai para a ata."""
         erro = change_error(
             new_status=STATUS_ACTIVE, current_status=STATUS_WITHDRAWN, reason=""
         )
-        self.assertIn("decisao arbitral", erro)
+        self.assertIn("decisão arbitral", erro)
         self.assertEqual(
             "",
             change_error(
@@ -90,7 +90,7 @@ class HistoricoPuroTest(unittest.TestCase):
 
     def test_estado_inventado_nao_entra_no_historico(self) -> None:
         self.assertIn(
-            "invalido", change_error(new_status="ferias", current_status=STATUS_ACTIVE, reason="")
+            "inválido", change_error(new_status="ferias", current_status=STATUS_ACTIVE, reason="")
         )
 
     def test_as_linhas_do_historico_saem_em_ordem(self) -> None:
@@ -200,7 +200,7 @@ class ParticipacaoNoServicoTest(CoreServiceTestCase):
             self.tournament_id, self.player_ids[0], STATUS_WITHDRAWN, "viagem"
         )
 
-        with self.assertRaisesRegex(AppError, "decisao arbitral"):
+        with self.assertRaisesRegex(AppError, "decisão arbitral"):
             self.service.set_player_participation(
                 self.tournament_id, self.player_ids[0], STATUS_ACTIVE
             )
@@ -209,7 +209,7 @@ class ParticipacaoNoServicoTest(CoreServiceTestCase):
         outro = self.tournament_service.create_tournament(
             {"name": "Outro", "rounds_count": "3", "bye_points": "1"}
         )
-        with self.assertRaisesRegex(AppError, "Jogador nao encontrado"):
+        with self.assertRaisesRegex(AppError, "Jogador não encontrado"):
             self.service.set_player_participation(outro, self.player_ids[0], STATUS_ABSENT)
 
     def test_torneio_sem_mudanca_nao_tem_resumo(self) -> None:
@@ -243,9 +243,9 @@ class AtaEArquivoTest(CoreServiceTestCase):
         self.assertNotIn("Desistências, ausências e reentradas", titulos)
 
     def test_o_trf_separa_nao_pareado_de_forfait(self) -> None:
-        """`Z` = nao pareado (zero ponto); `-` = pareado e nao compareceu.
+        """`Z` = não pareado (zero ponto); `-` = pareado e não compareceu.
 
-        E a distincao que a FIDE faz — e a unica que o arquivo tem. "Desistiu"
+        E a distinção que a FIDE faz — e a única que o arquivo tem. "Desistiu"
         x "faltou" e do regulamento, e sai na ata.
         """
         from src.services.federation_exporters import TRF16Exporter
@@ -266,8 +266,8 @@ class AtaEArquivoTest(CoreServiceTestCase):
         )
 
         # A rodada 2 e gerada SEM o desistente: e ali que o TRF escreve
-        # `0000 - Z` para ele — o exportador so emite celula de rodada que
-        # existe, entao rodada futura nao vira `Z` nenhum.
+        # `0000 - Z` para ele — o exportador só emite célula de rodada que
+        # existe, então rodada futura não vira `Z` nenhum.
         segunda = self.service.generate_next_round(self.tournament_id)
         for mesa in self.db.get_pairings_for_round(int(segunda["id"])):
             if not mesa["is_bye"]:

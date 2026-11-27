@@ -7,7 +7,7 @@ tela em vez de espremer tudo em três camadas.
 
 - [`state.py`](state.py) — dado puro: em que estado está um resultado, que
   resultado a mesa aceita, quantas rodadas o torneio deveria ter, como se lê a
-  prévia e como o projetor pagina;
+  prévia e como o projetor página;
 - [`view.py`](view.py) — o mixin: barra da rodada, tabela de mesas e
   lançamento de resultado, que é o que a tela **é**;
 - [`initial_call.py`](initial_call.py) — a chamada inicial, que é a *outra*

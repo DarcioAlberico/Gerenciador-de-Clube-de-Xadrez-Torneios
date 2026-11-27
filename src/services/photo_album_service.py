@@ -64,7 +64,7 @@ class PhotoAlbumService:
     ) -> bool:
         cfg = config or self.get_config()
         if not cfg.get("host"):
-            raise AppError("Informe o host FTP nas configuracoes.")
+            raise AppError("Informe o host FTP nas configurações.")
         try:
             client = make_ftp_client(cfg, client_factory)
             try:
@@ -74,7 +74,7 @@ class PhotoAlbumService:
             client.quit()
             return True
         except Exception as exc:
-            raise AppError(f"Falha na conexao FTP: {exc}") from exc
+            raise AppError(f"Falha na conexão FTP: {exc}") from exc
 
     def publish_album(
         self,
@@ -89,7 +89,7 @@ class PhotoAlbumService:
             raise AppError("Selecione uma pasta de fotos valida.")
         images = list_images(directory)
         if not images:
-            raise AppError("A pasta nao contem imagens (jpg/png/gif/webp).")
+            raise AppError("A pasta não contem imagens (jpg/png/gif/webp).")
 
         config = self.get_config()
         if not config.get("host"):

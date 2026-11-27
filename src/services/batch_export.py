@@ -24,7 +24,7 @@ BATCH_REPORTS: dict[str, dict[str, Any]] = {
         "team": "both",
     },
     "classificacao": {
-        "label": "Classificacao",
+        "label": "Classificação",
         "method": "export_standings",
         "formats": ("csv", "xlsx", "pdf"),
         "team": "both",
@@ -55,19 +55,19 @@ BATCH_REPORTS: dict[str, dict[str, Any]] = {
         "team": "individual",
     },
     "premiacao": {
-        "label": "Premiacao",
+        "label": "Premiação",
         "method": "export_prize_report",
         "formats": ("csv", "xlsx", "pdf"),
         "team": "individual",
     },
     "estatistica_federacoes": {
-        "label": "Estatistica de federacoes",
+        "label": "Estatística de federações",
         "method": "export_federation_statistics",
         "formats": ("csv", "xlsx", "pdf"),
         "team": "individual",
     },
     "estatistica_partidas": {
-        "label": "Estatistica de partidas",
+        "label": "Estatística de partidas",
         "method": "export_game_statistics",
         "formats": ("csv", "xlsx", "pdf"),
         "team": "individual",
@@ -91,7 +91,7 @@ BATCH_REPORTS: dict[str, dict[str, Any]] = {
         "team": "team",
     },
     "escalacoes_equipes": {
-        "label": "Escalacoes equipes",
+        "label": "Escalações equipes",
         "method": "export_team_lineups",
         "formats": ("csv", "xlsx", "pdf"),
         "team": "team",

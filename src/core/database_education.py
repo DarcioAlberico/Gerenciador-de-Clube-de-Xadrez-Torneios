@@ -1,8 +1,8 @@
-"""Mixin do dominio pedagogico/treinos da Database.
+"""Mixin do domínio pedagogico/treinos da Database.
 
-Turmas, exercicios, listas e sessoes de treino, presencas/attendance.
-Extraido de ``src.core.database`` na decomposicao da God Class em mixins por
-dominio. Comportamento preservado; a fachada ``Database`` herda deste mixin.
+Turmas, exercícios, listas e sessões de treino, presencas/attendance.
+Extraído de ``src.core.database`` na decomposição da God Class em mixins por
+domínio. Comportamento preservado; a fachada ``Database`` herda deste mixin.
 Ver ``_database_base._DatabaseInfra``.
 """
 from __future__ import annotations

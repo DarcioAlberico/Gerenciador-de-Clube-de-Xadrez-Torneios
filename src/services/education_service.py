@@ -38,7 +38,7 @@ class TrainingService:
         payload = self._validated_session_payload(data)
         if session_id:
             if not self.db.get_training_session(session_id):
-                raise AppError("Aula/treino nao encontrado.")
+                raise AppError("Aula/treino não encontrado.")
             self.db.update_training_session(session_id, **payload)
             logger.info("Aula/treino atualizado: %s", session_id)
             return session_id
@@ -49,14 +49,14 @@ class TrainingService:
     def record_attendance(self, session_id: int, rows: list[dict[str, Any]]) -> dict[str, int]:
         session = self.db.get_training_session(session_id)
         if not session:
-            raise AppError("Aula/treino nao encontrado.")
+            raise AppError("Aula/treino não encontrado.")
         saved = 0
         skipped = 0
         for item in rows:
             try:
                 member_id = int(item.get("member_id") or 0)
             except ValueError as exc:
-                raise AppError("Membro invalido na chamada.") from exc
+                raise AppError("Membro inválido na chamada.") from exc
             member = self.db.get_member(member_id)
             if not member:
                 skipped += 1
@@ -66,7 +66,7 @@ class TrainingService:
                 skipped += 1
                 continue
             if status not in ATTENDANCE_STATUSES:
-                raise AppError("Status de presenca invalido.")
+                raise AppError("Status de presença inválido.")
             self.db.save_attendance(
                 session_id=session_id,
                 member_id=member_id,
@@ -84,9 +84,9 @@ class TrainingService:
         end_date: str = "",
     ) -> dict[str, Any]:
         if not self.db.get_member(member_id):
-            raise AppError("Membro nao encontrado.")
-        self._validate_optional_date(start_date, "Data inicial invalida.")
-        self._validate_optional_date(end_date, "Data final invalida.")
+            raise AppError("Membro não encontrado.")
+        self._validate_optional_date(start_date, "Data inicial inválida.")
+        self._validate_optional_date(end_date, "Data final inválida.")
         return self.db.member_attendance_summary(member_id, start_date.strip(), end_date.strip())
 
     def attendance_report(
@@ -96,8 +96,8 @@ class TrainingService:
         club_id: int | None = None,
         member_id: int | None = None,
     ) -> list[dict[str, Any]]:
-        self._validate_optional_date(start_date, "Data inicial invalida.")
-        self._validate_optional_date(end_date, "Data final invalida.")
+        self._validate_optional_date(start_date, "Data inicial inválida.")
+        self._validate_optional_date(end_date, "Data final inválida.")
         return self.db.list_attendance_report(
             start_date=start_date.strip(),
             end_date=end_date.strip(),
@@ -108,55 +108,55 @@ class TrainingService:
     def _validated_session_payload(self, data: dict[str, Any]) -> dict[str, Any]:
         title = str(data.get("title", "")).strip()
         if not title:
-            raise AppError("Informe o titulo da aula/treino.")
+            raise AppError("Informe o título da aula/treino.")
 
         try:
             club_id = int(data.get("club_id") or 1)
         except ValueError as exc:
-            raise AppError("Clube/escola da aula invalido.") from exc
+            raise AppError("Clube/escola da aula inválido.") from exc
         if not self.db.get_club(club_id):
-            raise AppError("Clube/escola da aula nao encontrado.")
+            raise AppError("Clube/escola da aula não encontrado.")
 
         try:
             class_id = int(data.get("class_id") or 0)
         except ValueError as exc:
-            raise AppError("Turma da aula invalida.") from exc
+            raise AppError("Turma da aula inválida.") from exc
         if class_id:
             class_data = self.db.get_class(class_id)
             if not class_data or int(class_data["club_id"]) != club_id:
-                raise AppError("Turma nao pertence ao clube/escola selecionado.")
+                raise AppError("Turma não pertence ao clube/escola selecionado.")
 
         try:
             learning_level_id = int(data.get("learning_level_id") or 0)
         except ValueError as exc:
-            raise AppError("Nivel pedagogico da aula invalido.") from exc
+            raise AppError("Nível pedagógico da aula inválido.") from exc
         if learning_level_id and not self.db.get_learning_level(learning_level_id):
-            raise AppError("Nivel pedagogico da aula nao encontrado.")
+            raise AppError("Nível pedagógico da aula não encontrado.")
 
         try:
             training_list_id = int(data.get("training_list_id") or 0)
         except ValueError as exc:
-            raise AppError("Lista de treino da aula invalida.") from exc
+            raise AppError("Lista de treino da aula inválida.") from exc
         if training_list_id:
             training_list = self.db.get_training_list(training_list_id)
             if not training_list:
-                raise AppError("Lista de treino da aula nao encontrada.")
+                raise AppError("Lista de treino da aula não encontrada.")
             if int(training_list.get("club_id") or 1) != club_id:
-                raise AppError("Lista de treino nao pertence ao clube/escola selecionado.")
+                raise AppError("Lista de treino não pertence ao clube/escola selecionado.")
             list_class_id = int(training_list.get("class_id") or 0)
             if list_class_id and list_class_id != class_id:
-                raise AppError("Lista de treino nao pertence a turma selecionada.")
+                raise AppError("Lista de treino não pertence a turma selecionada.")
 
         session_type = str(data.get("session_type", "aula")).strip() or "aula"
         if session_type not in TRAINING_SESSION_TYPES:
-            raise AppError("Tipo de aula/treino invalido.")
+            raise AppError("Tipo de aula/treino inválido.")
 
         status = str(data.get("status", "planned")).strip() or "planned"
         if status not in TRAINING_SESSION_STATUSES:
-            raise AppError("Status de aula/treino invalido.")
+            raise AppError("Status de aula/treino inválido.")
 
         session_date = str(data.get("session_date", "")).strip()
-        self._validate_optional_date(session_date, "Data da aula invalida.")
+        self._validate_optional_date(session_date, "Data da aula inválida.")
 
         return {
             "club_id": club_id,
@@ -195,7 +195,7 @@ class ExerciseService:
         payload = self._validated_exercise_payload(data)
         if exercise_id:
             if not self.db.get_exercise(exercise_id):
-                raise AppError("Exercicio nao encontrado.")
+                raise AppError("Exercício não encontrado.")
             self.db.update_exercise(exercise_id, **payload)
             logger.info("Exercicio atualizado: %s", exercise_id)
             return exercise_id
@@ -206,7 +206,7 @@ class ExerciseService:
     def toggle_exercise_active(self, exercise_id: int) -> int:
         exercise = self.db.get_exercise(exercise_id)
         if not exercise:
-            raise AppError("Exercicio nao encontrado.")
+            raise AppError("Exercício não encontrado.")
         next_active = 0 if exercise.get("active") else 1
         self.db.set_exercise_active(exercise_id, next_active)
         logger.info("Exercicio %s alterado para active=%s", exercise_id, next_active)
@@ -216,7 +216,7 @@ class ExerciseService:
         payload = self._validated_training_list_payload(data)
         if list_id:
             if not self.db.get_training_list(list_id):
-                raise AppError("Lista de treino nao encontrada.")
+                raise AppError("Lista de treino não encontrada.")
             self.db.update_training_list(list_id, **payload)
             logger.info("Lista de treino atualizada: %s", list_id)
             return list_id
@@ -227,7 +227,7 @@ class ExerciseService:
     def set_training_list_exercises(self, list_id: int, exercise_ids: list[int]) -> None:
         training_list = self.db.get_training_list(list_id)
         if not training_list:
-            raise AppError("Lista de treino nao encontrada.")
+            raise AppError("Lista de treino não encontrada.")
         unique_ids: list[int] = []
         for exercise_id in exercise_ids:
             value = int(exercise_id or 0)
@@ -235,9 +235,9 @@ class ExerciseService:
                 continue
             exercise = self.db.get_exercise(value)
             if not exercise:
-                raise AppError("Exercicio da lista nao encontrado.")
+                raise AppError("Exercício da lista não encontrado.")
             if int(exercise.get("club_id") or 1) != int(training_list.get("club_id") or 1):
-                raise AppError("Exercicio nao pertence ao clube/escola da lista.")
+                raise AppError("Exercício não pertence ao clube/escola da lista.")
             unique_ids.append(value)
         rows = [
             {"exercise_id": exercise_id, "position_order": index}
@@ -269,25 +269,25 @@ class ExerciseService:
     def _validated_exercise_payload(self, data: dict[str, Any]) -> dict[str, Any]:
         title = str(data.get("title", "")).strip()
         if not title:
-            raise AppError("Informe o titulo do exercicio.")
+            raise AppError("Informe o título do exercício.")
 
         try:
             club_id = int(data.get("club_id") or 1)
         except ValueError as exc:
-            raise AppError("Clube/escola do exercicio invalido.") from exc
+            raise AppError("Clube/escola do exercício inválido.") from exc
         if not self.db.get_club(club_id):
-            raise AppError("Clube/escola do exercicio nao encontrado.")
+            raise AppError("Clube/escola do exercício não encontrado.")
 
         try:
             learning_level_id = int(data.get("learning_level_id") or 0)
         except ValueError as exc:
-            raise AppError("Nivel pedagogico do exercicio invalido.") from exc
+            raise AppError("Nível pedagógico do exercício inválido.") from exc
         if learning_level_id and not self.db.get_learning_level(learning_level_id):
-            raise AppError("Nivel pedagogico do exercicio nao encontrado.")
+            raise AppError("Nível pedagógico do exercício não encontrado.")
 
         difficulty = str(data.get("difficulty", "basic")).strip() or "basic"
         if difficulty not in EXERCISE_DIFFICULTIES:
-            raise AppError("Dificuldade do exercicio invalida.")
+            raise AppError("Dificuldade do exercício inválida.")
 
         return {
             "club_id": club_id,
@@ -313,32 +313,32 @@ class ExerciseService:
         try:
             club_id = int(data.get("club_id") or 1)
         except ValueError as exc:
-            raise AppError("Clube/escola da lista invalido.") from exc
+            raise AppError("Clube/escola da lista inválido.") from exc
         if not self.db.get_club(club_id):
-            raise AppError("Clube/escola da lista nao encontrado.")
+            raise AppError("Clube/escola da lista não encontrado.")
 
         try:
             class_id = int(data.get("class_id") or 0)
         except ValueError as exc:
-            raise AppError("Turma da lista invalida.") from exc
+            raise AppError("Turma da lista inválida.") from exc
         if class_id:
             class_data = self.db.get_class(class_id)
             if not class_data or int(class_data["club_id"]) != club_id:
-                raise AppError("Turma nao pertence ao clube/escola selecionado.")
+                raise AppError("Turma não pertence ao clube/escola selecionado.")
 
         try:
             learning_level_id = int(data.get("learning_level_id") or 0)
         except ValueError as exc:
-            raise AppError("Nivel pedagogico da lista invalido.") from exc
+            raise AppError("Nível pedagógico da lista inválido.") from exc
         if learning_level_id and not self.db.get_learning_level(learning_level_id):
-            raise AppError("Nivel pedagogico da lista nao encontrado.")
+            raise AppError("Nível pedagógico da lista não encontrado.")
 
         target_date = str(data.get("target_date", "")).strip()
-        TrainingService._validate_optional_date(target_date, "Data alvo da lista invalida.")
+        TrainingService._validate_optional_date(target_date, "Data alvo da lista inválida.")
 
         status = str(data.get("status", "draft")).strip() or "draft"
         if status not in TRAINING_LIST_STATUSES:
-            raise AppError("Status da lista de treino invalido.")
+            raise AppError("Status da lista de treino inválido.")
 
         return {
             "club_id": club_id,
@@ -355,37 +355,37 @@ class ExerciseService:
         try:
             exercise_id = int(data.get("exercise_id") or 0)
         except ValueError as exc:
-            raise AppError("Exercicio da tentativa invalido.") from exc
+            raise AppError("Exercício da tentativa inválido.") from exc
         if not self.db.get_exercise(exercise_id):
-            raise AppError("Exercicio da tentativa nao encontrado.")
+            raise AppError("Exercício da tentativa não encontrado.")
 
         try:
             member_id = int(data.get("member_id") or 0)
         except ValueError as exc:
-            raise AppError("Aluno da tentativa invalido.") from exc
+            raise AppError("Aluno da tentativa inválido.") from exc
         if not self.db.get_member(member_id):
-            raise AppError("Aluno da tentativa nao encontrado.")
+            raise AppError("Aluno da tentativa não encontrado.")
 
         try:
             list_id = int(data.get("list_id") or 0)
         except ValueError as exc:
-            raise AppError("Lista da tentativa invalida.") from exc
+            raise AppError("Lista da tentativa inválida.") from exc
         if list_id and not self.db.get_training_list(list_id):
-            raise AppError("Lista da tentativa nao encontrada.")
+            raise AppError("Lista da tentativa não encontrada.")
 
         try:
             session_id = int(data.get("session_id") or 0)
         except ValueError as exc:
-            raise AppError("Aula da tentativa invalida.") from exc
+            raise AppError("Aula da tentativa inválida.") from exc
         if session_id and not self.db.get_training_session(session_id):
-            raise AppError("Aula da tentativa nao encontrada.")
+            raise AppError("Aula da tentativa não encontrada.")
 
         attempt_date = str(data.get("attempt_date", "")).strip() or date.today().isoformat()
-        TrainingService._validate_optional_date(attempt_date, "Data da tentativa invalida.")
+        TrainingService._validate_optional_date(attempt_date, "Data da tentativa inválida.")
 
         result = str(data.get("result", "incorrect")).strip() or "incorrect"
         if result not in EXERCISE_ATTEMPT_RESULTS:
-            raise AppError("Resultado da tentativa invalido.")
+            raise AppError("Resultado da tentativa inválido.")
 
         score_value = data.get("score")
         if score_value in (None, ""):
@@ -394,16 +394,16 @@ class ExerciseService:
             try:
                 score = float(str(score_value).replace(",", "."))
             except ValueError as exc:
-                raise AppError("Pontuacao da tentativa invalida.") from exc
+                raise AppError("Pontuação da tentativa inválida.") from exc
         if score < 0 or score > 1:
-            raise AppError("Pontuacao da tentativa deve ficar entre 0 e 1.")
+            raise AppError("Pontuação da tentativa deve ficar entre 0 e 1.")
 
         try:
             time_seconds = int(data.get("time_seconds") or 0)
         except ValueError as exc:
-            raise AppError("Tempo da tentativa invalido.") from exc
+            raise AppError("Tempo da tentativa inválido.") from exc
         if time_seconds < 0:
-            raise AppError("Tempo da tentativa nao pode ser negativo.")
+            raise AppError("Tempo da tentativa não pode ser negativo.")
 
         return {
             "exercise_id": exercise_id,
@@ -426,24 +426,24 @@ class LearningLevelService:
         try:
             level_id = self.db.create_learning_level(**payload)
         except sqlite3.IntegrityError as exc:
-            raise AppError("Ja existe um nivel com este nome.") from exc
+            raise AppError("Já existe um nível com este nome.") from exc
         logger.info("Nivel de aprendizagem criado: %s", level_id)
         return level_id
 
     def update_level(self, learning_level_id: int, data: dict[str, Any]) -> None:
         if not self.db.get_learning_level(learning_level_id):
-            raise AppError("Nivel de aprendizagem nao encontrado.")
+            raise AppError("Nível de aprendizagem não encontrado.")
         payload = self._validated_payload(data)
         try:
             self.db.update_learning_level(learning_level_id, **payload)
         except sqlite3.IntegrityError as exc:
-            raise AppError("Ja existe um nivel com este nome.") from exc
+            raise AppError("Já existe um nível com este nome.") from exc
         logger.info("Nivel de aprendizagem atualizado: %s", learning_level_id)
 
     def toggle_level_active(self, learning_level_id: int) -> int:
         level = self.db.get_learning_level(learning_level_id)
         if not level:
-            raise AppError("Nivel de aprendizagem nao encontrado.")
+            raise AppError("Nível de aprendizagem não encontrado.")
         next_active = 0 if level.get("active") else 1
         self.db.set_learning_level_active(learning_level_id, next_active)
         logger.info("Nivel de aprendizagem %s ativo=%s", learning_level_id, next_active)
@@ -453,13 +453,13 @@ class LearningLevelService:
     def _validated_payload(data: dict[str, Any]) -> dict[str, Any]:
         name = str(data.get("name", "")).strip()
         if not name:
-            raise AppError("Informe o nome do nivel.")
+            raise AppError("Informe o nome do nível.")
         try:
             display_order = int(data.get("display_order") or 0)
         except ValueError as exc:
-            raise AppError("Ordem do nivel invalida.") from exc
+            raise AppError("Ordem do nível inválida.") from exc
         if display_order < 0:
-            raise AppError("A ordem do nivel nao pode ser negativa.")
+            raise AppError("A ordem do nível não pode ser negativa.")
         return {
             "name": name,
             "description": str(data.get("description", "")),
@@ -685,7 +685,7 @@ class LibraryService:
         import chess
         import chess.svg
 
-        # Renderizar Exercicios
+        # Renderizar Exercícios
         for idx, item in enumerate(col_items, 1):
             svg_content = ""
             fen = item.get("fen_pgn", "").strip()

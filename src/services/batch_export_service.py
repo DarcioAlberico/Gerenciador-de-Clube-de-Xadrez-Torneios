@@ -34,7 +34,7 @@ class BatchExportService:
     def _tournament(self, tournament_id: int) -> dict[str, Any]:
         tournament = self.export_service.db.get_tournament(tournament_id)
         if not tournament:
-            raise AppError("Selecione um torneio valido.")
+            raise AppError("Selecione um torneio válido.")
         return tournament
 
     def available_reports(self, tournament_id: int) -> list[dict[str, Any]]:
@@ -60,7 +60,7 @@ class BatchExportService:
         available = set(available_report_keys(is_team))
         requested_formats = [str(fmt).lower().strip() for fmt in formats]
         if not report_keys:
-            raise AppError("Selecione ao menos um relatorio para o lote.")
+            raise AppError("Selecione ao menos um relatório para o lote.")
         if not requested_formats:
             raise AppError("Selecione ao menos um formato para o lote.")
 
@@ -75,14 +75,14 @@ class BatchExportService:
         for key in report_keys:
             spec = BATCH_REPORTS.get(key)
             if spec is None:
-                skipped.append(f"{key}: relatorio desconhecido")
+                skipped.append(f"{key}: relatório desconhecido")
                 continue
             if key not in available:
-                skipped.append(f"{spec['label']}: indisponivel para este tipo de torneio")
+                skipped.append(f"{spec['label']}: indisponível para este tipo de torneio")
                 continue
             valid_formats = [fmt for fmt in requested_formats if fmt in spec["formats"]]
             if not valid_formats:
-                skipped.append(f"{spec['label']}: nenhum formato compativel selecionado")
+                skipped.append(f"{spec['label']}: nenhum formato compatível selecionado")
                 continue
             method = getattr(self.export_service, spec["method"])
             extra_args = tuple(spec.get("extra_args", ()))
@@ -93,7 +93,7 @@ class BatchExportService:
                     generated.append(str(path))
                     if printer_cb is not None and fmt == "pdf":
                         printer_cb(path)
-                except Exception as exc:  # isola: um relatorio ruim nao para o lote
+                except Exception as exc:  # isola: um relatório ruim não para o lote
                     errors.append(f"{spec['label']} ({fmt}): {exc}")
 
         if also_html:

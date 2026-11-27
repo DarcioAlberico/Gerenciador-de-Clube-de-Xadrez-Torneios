@@ -50,7 +50,7 @@ class RoundTripTest(CoreServiceTestCase):
         self.db.save_round_schedule(
             self.tournament_id, [{"round_number": 1, "date": "2026-05-24", "time": "10:00"}]
         )
-        self._create_players(5)  # impar: garante um bye alocado na rodada
+        self._create_players(5)  # ímpar: garante um bye alocado na rodada
         rodada = self.service.generate_next_round(self.tournament_id)
         for pairing in self.db.get_pairings_for_round(int(rodada["id"])):
             if not pairing["is_bye"]:

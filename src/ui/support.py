@@ -179,7 +179,7 @@ def resource_path(relative_path: str) -> Path:
 
 
 MEMBER_TYPE_LABELS = {
-    "socio": "Socio",
+    "socio": "Sócio",
     "aluno": "Aluno",
     "convidado": "Convidado",
     "visitante": "Visitante",
@@ -266,40 +266,40 @@ TOURNAMENT_SCOPE_VALUES = {label: value for value, label in TOURNAMENT_SCOPES.it
 PAIRING_METHOD_VALUES = {label: value for value, label in PAIRING_METHODS.items()}
 
 def _classify_error(error: str | Exception, error_id: str) -> tuple[str, str, bool]:
-    """Classifica um erro em ``(titulo, mensagem, inesperado)`` — puro e testavel.
+    """Classifica um erro em ``(título, mensagem, inesperado)`` — puro e testavel.
 
-    Strings e excecoes de dominio/IO conhecidas sao "recuperaveis"
-    (``inesperado=False``) e viram toast; o resto vira modal com codigo e caminho
+    Strings e exceções de dominio/IO conhecidas são "recuperaveis"
+    (``inesperado=False``) e viram toast; o resto vira modal com código e caminho
     do log. Aceitar ``str`` e proposital: muitas telas chamam ``_show_error`` com
-    uma mensagem pronta (validacao de formulario, regra de negocio)."""
+    uma mensagem pronta (validação de formulário, regra de negócio)."""
     if isinstance(error, str):
         return "Erro", error, False
     if isinstance(error, AppError):
         return "Erro", str(error), False
     if isinstance(error, PermissionError):
         return (
-            "Erro de permissao",
-            f"Sem permissao para acessar o arquivo ou pasta.\n\n{error}",
+            "Erro de permissão",
+            f"Sem permissão para acessar o arquivo ou pasta.\n\n{error}",
             False,
         )
     if isinstance(error, FileNotFoundError):
         return (
-            "Arquivo nao encontrado",
-            f"O arquivo ou pasta informado nao foi encontrado.\n\n{error}",
+            "Arquivo não encontrado",
+            f"O arquivo ou pasta informado não foi encontrado.\n\n{error}",
             False,
         )
     if isinstance(error, OSError):
         return (
             "Erro de arquivo",
-            f"Nao foi possivel acessar o arquivo ou pasta.\n\n{error}",
+            f"Não foi possível acessar o arquivo ou pasta.\n\n{error}",
             False,
         )
     if isinstance(error, ValueError):
-        return "Dados invalidos", str(error), False
+        return "Dados inválidos", str(error), False
     return (
         "Erro inesperado",
         "Ocorreu uma falha inesperada.\n\n"
-        f"Codigo: {error_id}\n"
+        f"Código: {error_id}\n"
         f"Consulte o log em: {current_log_path()}",
         True,
     )
@@ -327,9 +327,9 @@ class ErrorCatchingMixin:
         """Manda o recado pelo canal que o formato pede (F5.7).
 
         Uma linha vira toast, como sempre. Duas viram toast **com Copiar** — o
-        segundo pedaco quase sempre e um caminho ou endereco. Tres ou mais viram
-        relatorio rolavel: um texto desses num toast de 320px que some em 3,5
-        segundos e pior do que o messagebox que a F2.2 aposentou. A regra mora
+        segundo pedaço quase sempre e um caminho ou endereço. Três ou mais viram
+        relatório rolavel: um texto desses num toast de 320px que some em 3,5
+        segundos é pior do que o messagebox que a F2.2 aposentou. A regra mora
         em `feedback.plan_feedback`, pura e testavel sem janela.
         """
         plano = plan_feedback(message, kind)
@@ -359,9 +359,9 @@ class ErrorCatchingMixin:
             logger.warning("Nao foi possivel copiar para a area de transferencia")
 
     def _show_report(self, title: str, body: str, *, kind: str = "info") -> None:
-        """Relatorio que o usuario le com calma e copia: dialogo rolavel (F5.7).
+        """Relatório que o usuário lê com calma e copia: diálogo rolavel (F5.7).
 
-        Use quando o conteudo **e** a entrega — narrativa de desempate, endereco
+        Use quando o conteúdo **e** a entrega — narrativa de desempate, endereço
         do servidor QR, caminho do backup. Mensagens curtas continuam no toast.
         """
         from .components.dialogs import report_dialog
@@ -409,9 +409,9 @@ class ErrorCatchingMixin:
         """Exclui e oferece **Desfazer** no toast (ESPEC_UI_UX §5.1 / P1-6).
 
         ``restore`` recria o registro a partir de um retrato tirado **antes** da
-        exclusao — o id novo pode diferir do original, entao so serve para
-        registros sem dependentes. Em exclusao com cascata passe ``None``: o
-        toast sai sem acao e a confirmacao explicita segue sendo a protecao.
+        exclusão — o id novo pode diferir do original, então só serve para
+        registros sem dependentes. Em exclusão com cascata passe ``None``: o
+        toast sai sem ação e a confirmação explicita segue sendo a proteção.
         """
         delete()
         if refresh is not None:
@@ -499,7 +499,7 @@ def parse_br_date(text: str) -> date | None:
 
 
 class MaskedDateEntry(ctk.CTkEntry):
-    """Campo de data com mascara DD/MM/AAAA, seguindo o tema do app.
+    """Campo de data com máscara DD/MM/AAAA, seguindo o tema do app.
 
     Exibe no formato brasileiro mas faz entrada/saida em ISO (AAAA-MM-DD):
       - ``insert(0, valor)`` aceita ISO (vindo do banco) ou BR e mostra DD/MM/AAAA;
@@ -584,7 +584,7 @@ class MaskedDateEntry(ctk.CTkEntry):
 
     # -- eventos -----------------------------------------------------------
     def _on_key(self, event: Any) -> str | None:
-        if event.state & 0x4:  # Control: nao interfere em copiar/colar/selecionar
+        if event.state & 0x4:  # Control: não interfere em copiar/colar/selecionar
             return None
         if event.keysym in ("Down", "F4"):  # abre o calendario (atalho de date picker)
             self._open_calendar()
@@ -632,7 +632,7 @@ class MaskedDateEntry(ctk.CTkEntry):
                 pass
 
     def _open_calendar(self) -> None:
-        if self._cal_popup is not None:  # ja aberto: alterna (fecha)
+        if self._cal_popup is not None:  # já aberto: alterna (fecha)
             self._close_calendar()
             return
         try:
@@ -713,7 +713,7 @@ class MaskedDateEntry(ctk.CTkEntry):
             logger.debug("Falha ao abrir o calendario do campo de data", exc_info=True)
             self._close_calendar()
 
-    # -- API compativel com CTkEntry --------------------------------------
+    # -- API compatível com CTkEntry --------------------------------------
     def insert(self, index: Any, value: Any) -> None:  # type: ignore[override]
         self._render(_date_digits_from_any(str(value or "")))
 
@@ -737,7 +737,7 @@ class UIBuilderMixin(ErrorCatchingMixin):
     def _make_date_entry(self, parent: Any, width: int = 20) -> MaskedDateEntry:
         """Campo de data brasileiro: DD/MM/AAAA na tela, ISO (AAAA-MM-DD) por baixo.
 
-        Mantem a assinatura antiga; o ``width`` herdado (em caracteres da epoca do
+        Mantém a assinatura antiga; o ``width`` herdado (em caracteres da época do
         tkcalendar) e convertido para pixels com um teto, pois a data cabe em
         ~120-220px. Os call-sites seguem usando get()/insert()/delete() normalmente.
         """

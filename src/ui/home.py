@@ -71,7 +71,7 @@ def build_pendencies(snapshot: HomeSnapshot) -> list[Pendency]:
             Pendency(
                 "sem_torneio",
                 "Nenhum torneio selecionado",
-                "Abra ou crie um torneio para comecar a trabalhar.",
+                "Abra ou crie um torneio para começar a trabalhar.",
                 "tournaments",
                 ATTENTION,
                 action_label="Ver torneios",
@@ -82,8 +82,8 @@ def build_pendencies(snapshot: HomeSnapshot) -> list[Pendency]:
             itens.append(
                 Pendency(
                     "bloqueios",
-                    f"{snapshot.blocking_issues} pendencia(s) de arbitragem bloqueante(s)",
-                    f"A rodada atual de '{snapshot.tournament_name}' nao fecha antes de resolver.",
+                    f"{snapshot.blocking_issues} pendência(s) de arbitragem bloqueante(s)",
+                    f"A rodada atual de '{snapshot.tournament_name}' não fecha antes de resolver.",
                     "arbitration_panel",
                     URGENT,
                     action_label="Resolver",
@@ -93,8 +93,8 @@ def build_pendencies(snapshot: HomeSnapshot) -> list[Pendency]:
             itens.append(
                 Pendency(
                     "qr",
-                    f"{snapshot.qr_pending} resultado(s) por QR aguardando aprovacao",
-                    "Enviados pelas mesas; precisam de conferencia do arbitro.",
+                    f"{snapshot.qr_pending} resultado(s) por QR aguardando aprovação",
+                    "Enviados pelas mesas; precisam de conferência do árbitro.",
                     "arbitration_panel",
                     URGENT,
                     action_label="Conferir",
@@ -105,18 +105,18 @@ def build_pendencies(snapshot: HomeSnapshot) -> list[Pendency]:
             itens.append(
                 Pendency(
                     "resultados",
-                    f"{snapshot.pending_results} {rotulo} a lancar",
+                    f"{snapshot.pending_results} {rotulo} a lançar",
                     f"Rodada aberta de '{snapshot.tournament_name}'.",
                     "pairings",
                     URGENT,
-                    action_label="Lancar",
+                    action_label="Lançar",
                 )
             )
         if snapshot.generated_rounds == 0:
             detalhe = (
                 f"'{snapshot.tournament_name}' tem {snapshot.players_count} jogador(es) inscrito(s)."
                 if snapshot.players_count
-                else f"'{snapshot.tournament_name}' ainda nao tem jogadores inscritos."
+                else f"'{snapshot.tournament_name}' ainda não tem jogadores inscritos."
             )
             itens.append(
                 Pendency(
@@ -132,7 +132,7 @@ def build_pendencies(snapshot: HomeSnapshot) -> list[Pendency]:
             itens.append(
                 Pendency(
                     "torneio_concluido",
-                    "Torneio concluido",
+                    "Torneio concluído",
                     f"Todas as {snapshot.rounds_count} rodadas de '{snapshot.tournament_name}' fecharam.",
                     "certificates",
                     INFO,
@@ -146,7 +146,7 @@ def build_pendencies(snapshot: HomeSnapshot) -> list[Pendency]:
             Pendency(
                 "financeiro",
                 f"{snapshot.defaulters} {rotulo} em atraso",
-                "Cobrancas vencidas e ainda em aberto.",
+                "Cobranças vencidas e ainda em aberto.",
                 "finance",
                 ATTENTION,
                 action_label="Ver financeiro",
@@ -158,7 +158,7 @@ def build_pendencies(snapshot: HomeSnapshot) -> list[Pendency]:
         restantes = len(snapshot.upcoming_events) - 1
         detalhe = f"{data} — {titulo}"
         if restantes > 0:
-            detalhe += f" (+{restantes} no calendario)"
+            detalhe += f" (+{restantes} no calendário)"
         itens.append(
             Pendency("eventos", "Proximo evento", detalhe, "calendar", INFO, action_label="Calendario")
         )

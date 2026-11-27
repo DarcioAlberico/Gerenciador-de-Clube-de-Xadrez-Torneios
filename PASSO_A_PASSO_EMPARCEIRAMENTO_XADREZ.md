@@ -1,61 +1,61 @@
 # Passo a passo detalhado: programa de emparceiramento de xadrez
 
-## Atualizacao do roadmap do Albericus
+## Atualização do roadmap do Albericus
 
-O escopo do Albericus foi ampliado alem do emparceiramento inicial. O programa
-agora tambem funciona como gerenciador de clube, escola ou turma de xadrez,
-com cadastro de membros/alunos, unidades, turmas, aulas, exercicios,
-inventario, eventos, relatorios, ranking interno, backups e gerador de
+O escopo do Albericus foi ampliado além do emparceiramento inicial. O programa
+agora também funciona como gerenciador de clube, escola ou turma de xadrez,
+com cadastro de membros/alunos, unidades, turmas, aulas, exercícios,
+inventário, eventos, relatórios, ranking interno, backups e gerador de
 diplomas/certificados.
 
-As proximas melhorias devem seguir este roteiro incremental:
+As próximas melhorias devem seguir este roteiro incremental:
 
-1. Consulta local/publica de diplomas: exportar uma pagina HTML com busca por
-   codigo, nome, origem e status ativo/revogado.
-2. Area pedagogica: planos de aula, metas por turma, evolucao por nivel e
-   observacoes do professor.
+1. Consulta local/publica de diplomas: exportar uma página HTML com busca por
+   código, nome, origem e status ativo/revogado.
+2. Área pedagógica: planos de aula, metas por turma, evolução por nível e
+   observações do professor.
 3. Mensalidades e financeiro: planos recorrentes, vencimentos, pagamentos,
-   pendencias e recibos simples.
-4. Ranking interno avancado: temporadas, categorias configuraveis, historico de
-   campeoes e filtros por clube/turma.
-5. Comunicacao e portal: pagina HTML do clube/turma, avisos, calendario e
-   comunicados para responsaveis.
-6. Biblioteca de exercicios: temas taticos, niveis, listas de treino e
+   pendências e recibos simples.
+4. Ranking interno avançado: temporadas, categorias configuráveis, histórico de
+   campeões e filtros por clube/turma.
+5. Comunicação e portal: página HTML do clube/turma, avisos, calendário e
+   comunicados para responsáveis.
+6. Biblioteca de exercícios: temas táticos, níveis, listas de treino e
    desempenho por aluno.
-7. Inventario: pecas, tabuleiros, relogios, livros, emprestimos e manutencoes.
-8. Seguranca operacional: perfis de acesso, auditoria de alteracoes e politicas
+7. Inventário: pecas, tabuleiros, relógios, livros, empréstimos e manutenções.
+8. Segurança operacional: perfis de acesso, auditoria de alterações e políticas
    de backup.
 
-Status da primeira etapa: implementada a exportacao de um verificador HTML
-local de diplomas/certificados a partir do historico de codigos emitidos.
+Status da primeira etapa: implementada a exportação de um verificador HTML
+local de diplomas/certificados a partir do histórico de códigos emitidos.
 
-Status da segunda etapa: implementados campos pedagogicos nas aulas/treinos
-para nivel alvo, objetivo, conteudo e tarefa, com migracao automatica dos
-bancos antigos e inclusao desses dados no relatorio de presencas.
+Status da segunda etapa: implementados campos pedagógicos nas aulas/treinos
+para nível alvo, objetivo, conteúdo e tarefa, com migração automática dos
+bancos antigos e inclusão desses dados no relatório de presenças.
 
-Status da terceira etapa: implementada geracao em lote de mensalidades por
-plano, referencia e vencimento, com prevencao de duplicidade, alem de recibos
-simples para lancamentos pagos ou isentos.
+Status da terceira etapa: implementada geração em lote de mensalidades por
+plano, referência e vencimento, com prevenção de duplicidade, além de recibos
+simples para lançamentos pagos ou isentos.
 
 Status da quarta etapa: o ranking interno ganhou filtros por clube/escola,
-turma e periodo de temporada, com relatorios que respeitam esses filtros e
-mantem lideres por categoria.
+turma e período de temporada, com relatórios que respeitam esses filtros e
+mantém lideres por categoria.
 
-Status da quinta etapa: implementado portal HTML estatico para clube/escola ou
-turma, reunindo comunicados, calendario, aulas futuras, ranking interno e
+Status da quinta etapa: implementado portal HTML estático para clube/escola ou
+turma, reunindo comunicados, calendário, aulas futuras, ranking interno e
 torneios recentes.
 
-Status da sexta etapa: implementada biblioteca de exercicios com cadastro por
-tema, nivel e dificuldade, listas de treino por clube/turma, vinculo da lista
-com aulas e base de tentativas por aluno para historico de estudos.
+Status da sexta etapa: implementada biblioteca de exercícios com cadastro por
+tema, nível e dificuldade, listas de treino por clube/turma, vínculo da lista
+com aulas e base de tentativas por aluno para histórico de estudos.
 
-Status da setima etapa: implementado inventario com cadastro de materiais,
-emprestimos para membros, devolucao, manutencoes e calculo automatico de
+Status da sétima etapa: implementado inventário com cadastro de materiais,
+empréstimos para membros, devolução, manutenções e cálculo automático de
 disponibilidade.
 
-Status da oitava etapa: implementada seguranca operacional inicial com perfil
-local de operador, auditoria de backups/configuracoes/restauracoes, retencao
-configuravel de backups e visualizacao da auditoria recente.
+Status da oitava etapa: implementada segurança operacional inicial com perfil
+local de operador, auditoria de backups/configuracoes/restauracoes, retenção
+configurável de backups e visualização da auditoria recente.
 
 Este documento descreve como construir um programa desktop para gerenciar torneios de xadrez, fazer emparceiramentos, registrar resultados, calcular classificação e exportar dados. A proposta usa Python, CustomTkinter para a interface gráfica, SQLite como banco de dados local e módulos de exportação para CSV, Excel e PDF.
 

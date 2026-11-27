@@ -195,7 +195,7 @@ class CoreServiceTestCase(unittest.TestCase):
             )
 
     def _phase_a_fixture(self) -> tuple[dict, list[dict], list[int]]:
-        """Cenario deterministico de 4 jogadores e 3 rodadas.
+        """Cenário determinístico de 4 jogadores e 3 rodadas.
 
         R1: 1>4, 2>3 ; R2: 1>2, 3>4 ; R3: 1=3, 2>4.
         Pontos finais: P1=2.5, P2=2.0, P3=1.5, P4=0.0.
@@ -222,7 +222,7 @@ class CoreServiceTestCase(unittest.TestCase):
 
     @staticmethod
     def _prize_standings() -> list[dict]:
-        # P1 e P2 empatados em pontos (3.0) ocupam as posicoes 1-2.
+        # P1 e P2 empatados em pontos (3.0) ocupam as posições 1-2.
         return [
             {"player_id": 1, "name": "P1", "position": 1, "points": 3.0, "category": "A"},
             {"player_id": 2, "name": "P2", "position": 2, "points": 3.0, "category": "B"},

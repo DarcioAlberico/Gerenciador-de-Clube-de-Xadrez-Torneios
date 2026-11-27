@@ -43,10 +43,10 @@ class RegraTest(unittest.TestCase):
         self.assertEqual({"Classificação"}, acentuadas["classificacao"])
 
     def test_placeholder_nao_e_texto_visivel(self) -> None:
-        """``{codigo}`` é o **nome do parâmetro** que o ``t()`` preenche.
+        """``{código}`` é o **nome do parâmetro** que o ``t()`` preenche.
 
         Acentuá-lo quebra a chamada — e foi o que a primeira versão deste lint
-        tentou fazer, transformando ``t("...", codigo=x)`` em ``{código}``.
+        tentou fazer, transformando ``t("...", código=x)`` em ``{código}``.
         """
         visivel = lint._visivel("Federação {codigo} adicionada.")
         self.assertNotIn("codigo", visivel)
@@ -67,7 +67,7 @@ class RegraTest(unittest.TestCase):
 
     def test_palavra_curta_nao_entra(self) -> None:
         # Menos de quatro letras da falso-positivo demais ("pos", "sao" x "são"
-        # sao casos em que o contexto manda mais que a grafia).
+        # são casos em que o contexto manda mais que a grafia).
         self.assertEqual([], lint._PALAVRA.findall("pos sa e"))
 
 

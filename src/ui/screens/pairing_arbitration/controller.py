@@ -262,16 +262,16 @@ class ArbitrationController:
         reason: str,
     ) -> None:
         if is_team:
-            # Equipes ainda gravam direto: a politica da ARB-04 e do individual
-            # (limite por jogador, ultima rodada, jogador inativo), e inventar
+            # Equipes ainda gravam direto: a política da ARB-04 e do individual
+            # (limite por jogador, última rodada, jogador inativo), e inventar
             # uma regra para equipes que nenhum regulamento pediu seria pior do
-            # que deixar explicito que ela nao existe aqui.
+            # que deixar explicito que ela não existe aqui.
             self.db.add_requested_team_bye(
                 tournament_id, target_id, round_number, bye_type, reason=reason
             )
             return
-        # Individual passa pelo SERVICO (ARB-04): e la que a politica mora, e a
-        # tela nao pode ser o unico lugar que valida — ela pode ser burlada.
+        # Individual passa pelo SERVIÇO (ARB-04): e lá que a política mora, e a
+        # tela não pode ser o único lugar que valida — ela pode ser burlada.
         self.pairing_service.request_bye(
             tournament_id, target_id, round_number, bye_type, reason=reason
         )

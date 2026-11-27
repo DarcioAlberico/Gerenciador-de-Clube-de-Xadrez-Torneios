@@ -91,8 +91,8 @@ class EstadoDoResultadoTest(unittest.TestCase):
         self.assertEqual(STATE_RECORDED, estado)
 
     def test_tabuleiro_de_equipes_nao_passa_por_qr(self) -> None:
-        # O envio por celular e individual; um tabuleiro de equipes so e
-        # lancado pelo arbitro, e por isso o estado dele tem menos casos.
+        # O envio por celular e individual; um tabuleiro de equipes só e
+        # lançado pelo árbitro, e por isso o estado dele tem menos casos.
         self.assertEqual(STATE_EMPTY, team_board_result_state({"id": 1, "result": ""}, set()))
         self.assertEqual(
             STATE_LOCKED, team_board_result_state({"id": 1, "result": ""}, set(), "closed")
@@ -186,7 +186,7 @@ class PreviaDaRodadaTest(unittest.TestCase):
         texto = format_pairing_preview(preview, limit=12)
         self.assertIn("Mesa 1: B1 x P1", texto)
         self.assertIn("... mais 3 item(ns)", texto)
-        self.assertIn("nao gravou rodada", texto)
+        self.assertIn("não gravou rodada", texto)
 
     def test_alertas_entram_entre_colchetes(self) -> None:
         preview = {
@@ -300,7 +300,7 @@ class ChamadaInicialTest(unittest.TestCase):
 
 class AtalhosTest(unittest.TestCase):
     def test_teclado_numerico_tem_a_propria_entrada(self) -> None:
-        # `<KP_1>` nao e `1`: um `if` encadeado esconderia essa dobra.
+        # `<KP_1>` não e `1`: um `if` encadeado esconderia essa dobra.
         self.assertEqual(RESULT_SHORTCUTS["1"], RESULT_SHORTCUTS["<KP_1>"])
         self.assertEqual(RESULT_SHORTCUTS["-"], RESULT_SHORTCUTS["<KP_Subtract>"])
 

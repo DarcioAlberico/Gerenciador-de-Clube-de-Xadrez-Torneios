@@ -4,7 +4,7 @@ from ..support import *
 from ..components import WrapRow, debounce
 
 
-# Sub-mixin de Admin: exercicios e inventario.
+# Sub-mixin de Admin: exercícios e inventário.
 class ExercisesInventoryMixin:
     def show_exercises(self) -> None:
         self._clear_content()
@@ -24,10 +24,10 @@ class ExercisesInventoryMixin:
         selected_exercise_id: dict[str, int | None] = {"value": None}
         selected_list_id: dict[str, int | None] = {"value": None}
         exercise_club_map: dict[str, int] = {}
-        exercise_level_map: dict[str, int | None] = {"Sem nivel": None}
+        exercise_level_map: dict[str, int | None] = {"Sem nível": None}
         list_club_map: dict[str, int] = {}
         list_class_map: dict[str, int | None] = {"Sem turma": None}
-        list_level_map: dict[str, int | None] = {"Sem nivel": None}
+        list_level_map: dict[str, int | None] = {"Sem nível": None}
 
         entries: dict[str, ctk.CTkEntry] = {}
         fields = [
@@ -64,14 +64,14 @@ class ExercisesInventoryMixin:
         exercise_club_option = ctk.CTkOptionMenu(form, values=[""], width=260)
         exercise_club_option.grid(row=option_row + 5, column=0, padx=16, pady=(2, 0), sticky="ew")
 
-        ctk.CTkLabel(form, text="Nível pedagogico").grid(
+        ctk.CTkLabel(form, text="Nível pedagógico").grid(
             row=option_row + 6,
             column=0,
             padx=16,
             pady=(8, 0),
             sticky="w",
         )
-        exercise_level_option = ctk.CTkOptionMenu(form, values=["Sem nivel"], width=260)
+        exercise_level_option = ctk.CTkOptionMenu(form, values=["Sem nível"], width=260)
         exercise_level_option.grid(row=option_row + 7, column=0, padx=16, pady=(2, 0), sticky="ew")
 
         right_panel = ctk.CTkFrame(body, fg_color="transparent")
@@ -81,7 +81,7 @@ class ExercisesInventoryMixin:
         right_panel.grid_rowconfigure(3, weight=1)
         right_panel.grid_rowconfigure(5, weight=1)
 
-        # Faixa que quebra em quantas linhas couberem (continuacao da B-8).
+        # Faixa que quebra em quantas linhas couberem (continuação da B-8).
         controls = WrapRow(right_panel)
         controls.grid(row=0, column=0, sticky="ew", pady=(0, 8))
         search_entry = controls.add(
@@ -135,8 +135,8 @@ class ExercisesInventoryMixin:
         list_form = self._make_panel(right_panel)
         list_form.grid(row=2, column=0, sticky="ew", pady=(0, 10))
         list_form.grid_columnconfigure(0, weight=1)
-        # Seis campos da lista de treino numa linha rigida: era o que segurava
-        # esta tela em 1.272px, depois da faixa de busca (continuacao da B-8).
+        # Seis campos da lista de treino numa linha rígida: era o que segurava
+        # esta tela em 1.272px, depois da faixa de busca (continuação da B-8).
         list_fields = WrapRow(list_form)
         list_fields.grid(row=0, column=0, padx=12, pady=(10, 4), sticky="ew")
         list_name_entry = list_fields.add(
@@ -160,7 +160,7 @@ class ExercisesInventoryMixin:
             ctk.CTkOptionMenu(list_fields.frame, values=["Sem turma"], width=150), width=150
         )
         list_level_option = list_fields.add(
-            ctk.CTkOptionMenu(list_fields.frame, values=["Sem nivel"], width=150), width=150
+            ctk.CTkOptionMenu(list_fields.frame, values=["Sem nível"], width=150), width=150
         )
         list_buttons = ctk.CTkFrame(list_fields.frame, fg_color="transparent")
         list_fields.add(list_buttons, width=160)
@@ -257,7 +257,7 @@ class ExercisesInventoryMixin:
                 values.append(label)
                 exercise_club_map[label] = int(club["id"])
             if not values:
-                values = ["1 - Clube padrao (Clube)"]
+                values = ["1 - Clube padrão (Clube)"]
                 exercise_club_map[values[0]] = 1
             exercise_club_option.configure(values=values)
             chosen = next(
@@ -268,8 +268,8 @@ class ExercisesInventoryMixin:
 
         def load_exercise_level_options(selected_id: int | None = None) -> None:
             exercise_level_map.clear()
-            exercise_level_map["Sem nivel"] = None
-            values = ["Sem nivel"]
+            exercise_level_map["Sem nível"] = None
+            values = ["Sem nível"]
             for level in self.db.list_learning_levels(active_only=True):
                 label = f"{level['id']} - {level['name']}"
                 values.append(label)
@@ -277,7 +277,7 @@ class ExercisesInventoryMixin:
             exercise_level_option.configure(values=values)
             chosen = next(
                 (label for label, level_id in exercise_level_map.items() if level_id == selected_id),
-                "Sem nivel",
+                "Sem nível",
             )
             exercise_level_option.set(chosen)
 
@@ -305,7 +305,7 @@ class ExercisesInventoryMixin:
                 values.append(label)
                 list_club_map[label] = int(club["id"])
             if not values:
-                values = ["1 - Clube padrao (Clube)"]
+                values = ["1 - Clube padrão (Clube)"]
                 list_club_map[values[0]] = 1
             list_club_option.configure(values=values)
             chosen = next((label for label, club_id in list_club_map.items() if club_id == selected_id), values[0])
@@ -314,14 +314,14 @@ class ExercisesInventoryMixin:
 
         def load_list_level_options(selected_id: int | None = None) -> None:
             list_level_map.clear()
-            list_level_map["Sem nivel"] = None
-            values = ["Sem nivel"]
+            list_level_map["Sem nível"] = None
+            values = ["Sem nível"]
             for level in self.db.list_learning_levels(active_only=True):
                 label = f"{level['id']} - {level['name']}"
                 values.append(label)
                 list_level_map[label] = int(level["id"])
             list_level_option.configure(values=values)
-            chosen = next((label for label, level_id in list_level_map.items() if level_id == selected_id), "Sem nivel")
+            chosen = next((label for label, level_id in list_level_map.items() if level_id == selected_id), "Sem nível")
             list_level_option.set(chosen)
 
         def exercise_payload() -> dict[str, Any]:
@@ -381,7 +381,7 @@ class ExercisesInventoryMixin:
                         exercise.get("theme") or "",
                         EXERCISE_DIFFICULTIES.get(exercise["difficulty"], exercise["difficulty"]),
                         exercise.get("learning_level_name") or "",
-                        "Sim" if exercise.get("active") else "Nao",
+                        "Sim" if exercise.get("active") else "Não",
                         exercise["list_usage_count"],
                         exercise["attempt_count"],
                     ),
@@ -517,7 +517,7 @@ class ExercisesInventoryMixin:
             try:
                 exercise_id = selected_exercise_id["value"]
                 if not exercise_id:
-                    raise AppError("Selecione um exercicio.")
+                    raise AppError("Selecione um exercício.")
                 self.exercise_service.toggle_exercise_active(exercise_id)
                 load_exercises()
                 select_exercise_in_tree(exercise_id)
@@ -540,7 +540,7 @@ class ExercisesInventoryMixin:
                 list_id = selected_list_id["value"]
                 exercise = selected_exercise()
                 if not list_id or not exercise:
-                    raise AppError("Selecione uma lista e um exercicio.")
+                    raise AppError("Selecione uma lista e um exercício.")
                 self.exercise_service.add_exercise_to_training_list(list_id, int(exercise["id"]))
                 refresh_all()
                 select_list_in_tree(list_id)
@@ -552,7 +552,7 @@ class ExercisesInventoryMixin:
                 list_id = selected_list_id["value"]
                 selected = list_items_tree.selection()
                 if not list_id or not selected:
-                    raise AppError("Selecione um exercicio da lista.")
+                    raise AppError("Selecione um exercício da lista.")
                 exercise_id = int(list_items_tree.item(selected[0], "values")[1])
                 self.exercise_service.remove_exercise_from_training_list(list_id, exercise_id)
                 refresh_all()
@@ -564,8 +564,8 @@ class ExercisesInventoryMixin:
             load_list_class_options(list_club_map.get(list_club_option.get()), None)
 
         buttons = [
-            ("Novo exercicio", clear_exercise_form),
-            ("Salvar exercicio", save_exercise),
+            ("Novo exercício", clear_exercise_form),
+            ("Salvar exercício", save_exercise),
             ("Ativar/Inativar", toggle_exercise),
         ]
         self._grid_form_buttons(form, buttons, option_row + 8)
@@ -594,7 +594,7 @@ class ExercisesInventoryMixin:
         self._clear_content()
         self._page_title(
             "Inventário",
-            "Controle materiais, emprestimos e manutenções do clube ou escola.",
+            "Controle materiais, empréstimos e manutenções do clube ou escola.",
         )
 
         body = ctk.CTkFrame(self.content, fg_color="transparent")
@@ -617,7 +617,7 @@ class ExercisesInventoryMixin:
             ("name", "Nome"),
             ("quantity_total", "Quantidade"),
             ("storage_location", "Local"),
-            ("acquisition_date", "Aquisicao"),
+            ("acquisition_date", "Aquisição"),
             ("acquisition_value", "Valor"),
             ("notes", "Observações"),
         ]
@@ -672,7 +672,7 @@ class ExercisesInventoryMixin:
             ctk.CTkLabel(card, text=label, text_color=THEME_TEXT_SUB).pack(anchor="w", padx=12, pady=(0, 10))
             summary_labels[key] = value_label
 
-        # Faixa que quebra em quantas linhas couberem (continuacao da B-8).
+        # Faixa que quebra em quantas linhas couberem (continuação da B-8).
         controls = WrapRow(right_panel)
         controls.grid(row=1, column=0, sticky="ew", pady=(0, 8))
         search_entry = controls.add(
@@ -797,7 +797,7 @@ class ExercisesInventoryMixin:
                 "id": "ID",
                 "member": "Membro",
                 "quantity": "Qtd.",
-                "loan": "Saida",
+                "loan": "Saída",
                 "due": "Prev.",
                 "return": "Retorno",
                 "status": "Status",
@@ -843,7 +843,7 @@ class ExercisesInventoryMixin:
                 values.append(label)
                 club_option_map[label] = int(club["id"])
             if not values:
-                values = ["1 - Clube padrao (Clube)"]
+                values = ["1 - Clube padrão (Clube)"]
                 club_option_map[values[0]] = 1
             club_option.configure(values=values)
             chosen = next((label for label, club_id in club_option_map.items() if club_id == selected_id), values[0])
@@ -1107,7 +1107,7 @@ class ExercisesInventoryMixin:
             try:
                 loan_id = selected_loan_id["value"]
                 if not loan_id:
-                    raise AppError("Selecione um emprestimo.")
+                    raise AppError("Selecione um empréstimo.")
                 self.inventory_service.return_loan(loan_id)
                 clear_loan_form()
                 refresh_all()
@@ -1117,7 +1117,7 @@ class ExercisesInventoryMixin:
         def save_maintenance() -> None:
             try:
                 if not selected_item_id["value"]:
-                    raise AppError("Selecione um item para manutencao.")
+                    raise AppError("Selecione um item para manutenção.")
                 maintenance_id = self.inventory_service.save_maintenance(
                     maintenance_payload(),
                     selected_maintenance_id["value"],
@@ -1131,7 +1131,7 @@ class ExercisesInventoryMixin:
             try:
                 maintenance_id = selected_maintenance_id["value"]
                 if not maintenance_id:
-                    raise AppError("Selecione uma manutencao.")
+                    raise AppError("Selecione uma manutenção.")
                 self.inventory_service.close_maintenance(maintenance_id)
                 clear_maintenance_form()
                 refresh_all()

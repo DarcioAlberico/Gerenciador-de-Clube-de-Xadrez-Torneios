@@ -41,7 +41,7 @@ from ..theme import (
 )
 
 # Mesma altura de components/buttons.py (_DEFAULT_HEIGHT): e o alinhamento
-# campo-botao na mesma linha que define a escala, nao um numero solto.
+# campo-botao na mesma linha que define a escala, não um número solto.
 FIELD_HEIGHT = 36
 FIELD_RADIUS = 6
 
@@ -51,8 +51,8 @@ FIELD_RADIUS = 6
 FORM_TEXT_WIDTH = FORM_PANEL_WIDTH - 2 * FORM_PADX
 HINT_WRAP_MIN = 160
 
-# Escala fechada de larguras (ESPEC §4.6). FULL nao e uma largura: e grid com
-# sticky="ew" — use FIELD_MD como minimo e deixe a coluna esticar.
+# Escala fechada de larguras (ESPEC §4.6). FULL não é uma largura: e grid com
+# sticky="ew" — use FIELD_MD como mínimo e deixe a coluna esticar.
 FIELD_SM = 120
 FIELD_MD = 240
 FIELD_LG = 360
@@ -61,13 +61,13 @@ FIELD_LG = 360
 # ---------------------------------------------------------------------------
 # Estados do campo (F5.3 / P3-4): repouso, foco, erro, aviso, desabilitado.
 #
-# Antes existiam TRES implementacoes locais de "pintar a borda de vermelho"
+# Antes existiam TRÊS implementações locais de "pintar a borda de vermelho"
 # (MaskedDateEntry, Config. do app, Config. do torneio), nenhuma com mensagem
-# sob o campo; foco visivel nao existia (zero bindings de <FocusIn> no app) e
-# campo desabilitado era indistinguivel do habilitado, porque o CTkEntry so
-# esmaece o texto — nao tem `text_color_disabled` nem muda o fundo.
+# sob o campo; foco visível não existia (zero bindings de <FocusIn> no app) e
+# campo desabilitado era indistinguível do habilitado, porque o CTkEntry só
+# esmaece o texto — não tem `text_color_disabled` nem muda o fundo.
 #
-# A precedencia e uma so, e mora em _apply_field_state: erro > aviso > foco >
+# A precedência e uma só, e mora em _apply_field_state: erro > aviso > foco >
 # repouso. Sem isso, focar um campo em erro apagaria o erro.
 # ---------------------------------------------------------------------------
 _STATE_ATTR = "_albericus_field_state"
@@ -84,8 +84,8 @@ def _apply_field_state(widget: Any) -> None:
         return
     raw = estado["raw_configure"]
     if estado["disabled"]:
-        # Sem fundo proprio o campo vira um contorno chapado sobre o painel:
-        # some a afordancia de "da para digitar aqui", que e o ponto.
+        # Sem fundo próprio o campo vira um contorno chapado sobre o painel:
+        # some a afordancia de "da para digitar aqui", que é o ponto.
         visual = {"border_color": THEME_FIELD_BORDER, "fg_color": THEME_PANEL_BG, "border_width": 1}
     elif estado["error"]:
         visual = {"border_color": THEME_DANGER, "fg_color": THEME_FIELD_BG, "border_width": 2}
@@ -99,7 +99,7 @@ def _apply_field_state(widget: Any) -> None:
         try:
             raw(**{opcao: valor})
         except (ValueError, TypeError):
-            continue  # opcao inexistente nesta classe (ex.: border_width no select)
+            continue  # opção inexistente nesta classe (ex.: border_width no select)
 
 
 def _update_hint(widget: Any) -> None:
@@ -119,10 +119,10 @@ def _update_hint(widget: Any) -> None:
 def attach_field_states(widget: Any) -> Any:
     """Liga anel de foco e API de erro/aviso/desabilitado ao campo. Idempotente.
 
-    O ``configure`` da instancia e embrulhado para que ``state="disabled"``
+    O ``configure`` da instância e embrulhado para que ``state="disabled"``
     vindo de qualquer lugar — inclusive das ~36 chamadas cruas que ainda
     existem nas telas — passe pela mesma pintura. Sem isso, "desabilitado
-    distinto" so valeria para quem soubesse chamar o helper novo.
+    distinto" só valeria para quem soubesse chamar o helper novo.
     """
     if _field_state(widget) is not None:
         return widget
@@ -156,8 +156,8 @@ def attach_field_states(widget: Any) -> Any:
         _apply_field_state(widget)
 
     # O bind vai no widget Tk de DENTRO: no CTkEntry o foco chega ao tk.Entry
-    # interno, nao ao frame CTk (mesma pegadinha documentada na B-4). Num
-    # select ou numa caixa de selecao nao ha `_entry`: quem recebe o foco e o
+    # interno, não ao frame CTk (mesma pegadinha documentada na B-4). Num
+    # select ou numa caixa de seleção não há `_entry`: quem recebe o foco e o
     # canvas, e e nele que o `_focusable` da F5.10 liga o `takefocus`.
     alvo = (
         getattr(widget, "_entry", None)
@@ -177,18 +177,18 @@ def attach_field_states(widget: Any) -> Any:
 # ---------------------------------------------------------------------------
 # Teclado (F5.10 / P3-13)
 #
-# O achado do catalogo dizia "ordem de Tab = ordem de criacao". Medindo, o
-# problema era outro e maior: **select e caixa de selecao nao entram na ordem
+# O achado do catálogo dizia "ordem de Tab = ordem de criacao". Medindo, o
+# problema era outro e maior: **select e caixa de seleção não entram na ordem
 # de Tab de jeito nenhum**. O `tk_focusNext` visita `Entry` e `Text` e pula o
-# resto — e no customtkinter TODO botao, select e checkbox e um frame com um
-# canvas dentro, invisivel para a travessia.
+# resto — e no customtkinter TODO botão, select e checkbox e um frame com um
+# canvas dentro, invisível para a travessia.
 #
-# Consequencia pratica: um formulario de sete selects (a aba "Regras" da
-# Config. do torneio) nao tinha um unico ponto de parada do teclado. Nao havia
-# ordem errada; nao havia ordem.
+# Consequência pratica: um formulário de sete selects (a aba "Regras" da
+# Config. do torneio) não tinha um único ponto de parada do teclado. Não havia
+# ordem errada; não havia ordem.
 #
-# `takefocus=False` em botao secundario, que o catalogo pedia, **nao e
-# necessario**: eles ja sao pulados. Foi verificado, nao suposto.
+# `takefocus=False` em botão secundário, que o catálogo pedia, **não e
+# necessário**: eles já são pulados. Foi verificado, não suposto.
 # ---------------------------------------------------------------------------
 def _focusable(widget: Any) -> Any:
     """Coloca o widget na ordem de Tab e devolve o alvo Tk que recebe o foco."""
@@ -211,7 +211,7 @@ def _bind_keys(alvo: Any, mapa: dict[str, Callable[[Any], Any]]) -> None:
 
 
 def keyboard_select(campo: Any) -> Any:
-    """Torna um ``CTkOptionMenu`` operavel só com o teclado.
+    """Torna um ``CTkOptionMenu`` operável só com o teclado.
 
     ``Espaço``/``Enter``/``Alt+Baixo`` abrem a lista; ``↑``/``↓`` trocam o
     valor sem abrir, que é o gesto rápido de quem está preenchendo um

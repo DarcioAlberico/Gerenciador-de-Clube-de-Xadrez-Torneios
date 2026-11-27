@@ -181,8 +181,8 @@ class ProjectorWindow:
         )
         self.lbl_pagina.pack(side="left", padx=(15, 10))
 
-        # Saida explicita: o projetor abre maximizado e, em tela cheia, some com
-        # a barra de titulo — sem este botao a unica saida era adivinhar o Esc.
+        # Saída explicita: o projetor abre maximizado e, em tela cheia, some com
+        # a barra de título — sem este botão a única saída era adivinhar o Esc.
         ctk.CTkButton(
             self.controles,
             text=t("projector.exit"),

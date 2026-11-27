@@ -81,10 +81,10 @@ class ClockIntegrationService:
     def record_plugin_event(self, plugin_id: str, raw_event: dict[str, Any]) -> dict[str, Any]:
         settings = self.db.get_app_settings()
         if str(settings.get("device_integrations_enabled") or "0") not in {"1", "true", "True", "sim"}:
-            return {"status": "ignored", "reason": "Integracoes de dispositivos desativadas."}
+            return {"status": "ignored", "reason": "Integrações de dispositivos desativadas."}
         plugin = self._plugins.get(plugin_id)
         if not plugin:
-            raise AppError("Plugin de dispositivo nao registrado.")
+            raise AppError("Plugin de dispositivo não registrado.")
         event = plugin.normalize_event(raw_event)
         return self._record_event(
             tournament_id=int(event["tournament_id"]),
@@ -122,11 +122,11 @@ class ClockIntegrationService:
         for event in events:
             event_type = str(event.get("event_type") or "")
             if event_type == "flag_fall":
-                alerts.append(self._alert(event, "Queda de seta registrada. Conferir a mesa antes de lancar resultado."))
+                alerts.append(self._alert(event, "Queda de seta registrada. Conferir a mesa antes de lançar resultado."))
             elif event_type == "absence":
-                alerts.append(self._alert(event, "Ausencia registrada. Confirmar regra de WO antes de lancar resultado."))
+                alerts.append(self._alert(event, "Ausência registrada. Confirmar regra de WO antes de lançar resultado."))
             elif event_type == "time_warning" and int(event.get("seconds_remaining") or 999999) <= 60:
-                alerts.append(self._alert(event, "Jogador com menos de 60 segundos informado pelo relogio."))
+                alerts.append(self._alert(event, "Jogador com menos de 60 segundos informado pelo relógio."))
         return alerts
 
     def queue_notification(
@@ -141,11 +141,11 @@ class ClockIntegrationService:
         recipient = recipient.strip()
         message = message.strip()
         if channel not in NOTIFICATION_CHANNELS:
-            raise AppError("Canal de notificacao invalido.")
+            raise AppError("Canal de notificação inválido.")
         if not recipient:
-            raise AppError("Informe o destinatario da notificacao.")
+            raise AppError("Informe o destinatário da notificação.")
         if not message:
-            raise AppError("Informe a mensagem da notificacao.")
+            raise AppError("Informe a mensagem da notificação.")
         settings = self.db.get_app_settings()
         if str(settings.get("notifications_enabled") or "0") not in {"1", "true", "True", "sim"}:
             self.db.create_audit_event(
@@ -154,7 +154,7 @@ class ClockIntegrationService:
                 entity_type="notification",
                 after={"channel": channel, "recipient": recipient, "reason": "disabled"},
             )
-            return {"status": "skipped", "reason": "Notificacoes desativadas."}
+            return {"status": "skipped", "reason": "Notificações desativadas."}
         self.db.create_audit_event(
             action="notification_queued",
             tournament_id=tournament_id,
@@ -185,29 +185,29 @@ class ClockIntegrationService:
         occurred_at: str = "",
     ) -> dict[str, Any]:
         if event_type not in CLOCK_EVENT_TYPES:
-            raise AppError("Tipo de evento de relogio invalido.")
+            raise AppError("Tipo de evento de relógio inválido.")
         if side not in {"", "white", "black"}:
-            raise AppError("Lado do evento de relogio invalido.")
+            raise AppError("Lado do evento de relógio inválido.")
         if seconds_remaining is not None and int(seconds_remaining) < 0:
-            raise AppError("Segundos restantes nao podem ser negativos.")
+            raise AppError("Segundos restantes não podem ser negativos.")
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
-            raise AppError("Selecione um torneio valido.")
+            raise AppError("Selecione um torneio válido.")
         if pairing_id:
             pairing = self.db.get_pairing(pairing_id)
             if not pairing or int(pairing["tournament_id"]) != int(tournament_id):
-                raise AppError("Mesa nao encontrada para o torneio selecionado.")
+                raise AppError("Mesa não encontrada para o torneio selecionado.")
             if player_id and int(player_id) not in {
                 int(pairing.get("white_player_id") or 0),
                 int(pairing.get("black_player_id") or 0),
             }:
-                raise AppError("Jogador nao pertence a mesa informada.")
+                raise AppError("Jogador não pertence a mesa informada.")
             round_id = int(pairing["round_id"])
             board_number = int(pairing.get("board_number") or board_number or 0)
         elif player_id:
             player = self.db.get_player(player_id)
             if not player or int(player["tournament_id"]) != int(tournament_id):
-                raise AppError("Jogador nao pertence ao torneio selecionado.")
+                raise AppError("Jogador não pertence ao torneio selecionado.")
 
         event_id = self.db.create_clock_event(
             tournament_id=tournament_id,
@@ -256,5 +256,5 @@ class ClockIntegrationService:
             "event_type": event["event_type"],
             "round_id": event.get("round_id"),
             "pairing_id": event.get("pairing_id"),
-            "recommendation": "Apenas alerta; o arbitro deve decidir e registrar o resultado manualmente.",
+            "recommendation": "Apenas alerta; o árbitro deve decidir e registrar o resultado manualmente.",
         }

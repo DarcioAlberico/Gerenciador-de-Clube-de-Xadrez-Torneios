@@ -91,7 +91,7 @@ class TournamentSetupTest(CoreServiceTestCase):
         self.assertEqual(player["prize_tags"], "Feminino; Melhor Local")
 
     def test_invalid_competition_type_is_rejected(self) -> None:
-        with self.assertRaisesRegex(AppError, "Formato do torneio invalido"):
+        with self.assertRaisesRegex(AppError, "Formato do torneio inválido"):
             self.tournament_service.create_tournament(
                 {
                     "name": "Formato invalido",
@@ -109,8 +109,8 @@ class TournamentSetupTest(CoreServiceTestCase):
         self.service.close_round(self.tournament_id, first_round["id"])
 
         # ARB-01: a rodada fechada agora recusa por DOIS motivos independentes —
-        # falta de motivo e falta de permissao. Este teste cobra o segundo, entao
-        # o motivo vem preenchido e a recusa que sobra e a da permissao.
+        # falta de motivo e falta de permissão. Este teste cobra o segundo, então
+        # o motivo vem preenchido e a recusa que sobra e a da permissão.
         with self.assertRaises(AppError):
             self.service.update_result(
                 self.tournament_id, pairing["id"], "0-1", "Sumula trocada pelo arbitro"
@@ -141,10 +141,10 @@ class TournamentSetupTest(CoreServiceTestCase):
         self.assertEqual(self.db.get_pairing(pairing["id"])["result"], "0-1")
 
     def test_closed_result_edit_requires_a_reason(self) -> None:
-        """ARB-01: permissao nao dispensa o registro do porque.
+        """ARB-01: permissão não dispensa o registro do porque.
 
-        O par deste teste com o de cima: la a permissao falta e o motivo esta; aqui
-        a permissao esta (interruptor global ligado) e o motivo falta.
+        O par deste teste com o de cima: lá a permissão falta e o motivo esta; aqui
+        a permissão esta (interruptor global ligado) e o motivo falta.
         """
         self._create_players(2)
         first_round = self.service.generate_next_round(self.tournament_id)
@@ -210,8 +210,8 @@ class TournamentSetupTest(CoreServiceTestCase):
         self.assertEqual(settings["fide_event_id"], "123456")
         self.assertEqual(settings["initial_order"], "international_then_national")
         self.assertEqual(settings["tournament_profile"], "club")
-        # ORG-04: `allow_public_registration` e `calculate_performance` sairam —
-        # eram opcoes visiveis que nao faziam nada.
+        # ORG-04: `allow_public_registration` e `calculate_performance` saíram —
+        # eram opções visíveis que não faziam nada.
         self.assertEqual(settings["hide_standings"], 1)
         self.assertEqual(settings["late_entry_points"], 0.5)
         self.assertEqual(settings["rating_fee_fide"], 2.5)
@@ -580,7 +580,7 @@ class TournamentSetupTest(CoreServiceTestCase):
         group_b = self.db.list_players(children[1], active_only=False)
         self.assertEqual(len(group_a), 3)
         self.assertEqual(len(group_b), 3)
-        # Grupo A reune os tres maiores ratings (divisao por ranking).
+        # Grupo A reúne os três maiores ratings (divisão por ranking).
         self.assertGreaterEqual(
             min(int(player["rating"]) for player in group_a),
             max(int(player["rating"]) for player in group_b),

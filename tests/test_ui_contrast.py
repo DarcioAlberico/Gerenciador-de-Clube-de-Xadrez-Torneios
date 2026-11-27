@@ -189,7 +189,7 @@ class TemasCuradosTest(unittest.TestCase):
 class AltoContrasteTest(unittest.TestCase):
     def tearDown(self) -> None:
         # O preset mexe em tokens globais (mutados no lugar): sem devolver o
-        # padrão, o proximo teste do arquivo herdaria o preto puro.
+        # padrão, o próximo teste do arquivo herdaria o preto puro.
         apply_bg_preset("slate")
 
     def test_existe_e_esta_registrado(self) -> None:

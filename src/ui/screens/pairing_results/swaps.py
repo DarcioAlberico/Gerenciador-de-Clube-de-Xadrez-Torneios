@@ -69,7 +69,7 @@ class BoardSwapActions:
 
             players = host.db.list_players(host.current_tournament_id, active_only=True)
             if not players:
-                raise AppError("Nao ha jogadores ativos para trocar.")
+                raise AppError("Não há jogadores ativos para trocar.")
 
             player_options = [
                 f"{player['id']} - {player_pairing_name(player)} ({player['rating']})"
@@ -80,9 +80,9 @@ class BoardSwapActions:
             if not pairing["is_bye"]:
                 slot_options.append("Pretas")
 
-            # `host`, nao `self`: `self` aqui e o objeto de acoes, nao a janela.
-            # O `Dialog` e um CTkToplevel — com um pai que nao e widget ele nem
-            # abre. Mesmo defeito que a extracao da B-6 achou no `qr.py`.
+            # `host`, não `self`: `self` aqui e o objeto de ações, não a janela.
+            # O `Dialog` e um CTkToplevel — com um pai que não é widget ele nem
+            # abre. Mesmo defeito que a extração da B-6 achou no `qr.py`.
             dialog = Dialog(host, "Trocar jogador", size=(460, 320), resizable=False)
             pilha = FormStack(dialog)
             pilha.section(
@@ -125,7 +125,7 @@ class BoardSwapActions:
 
             players = host.db.list_players(host.current_tournament_id, active_only=True)
             if not players:
-                raise AppError("Nao ha jogadores ativos para trocar.")
+                raise AppError("Não há jogadores ativos para trocar.")
 
             player_options = []
             player_map: dict[str, int] = {}

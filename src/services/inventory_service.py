@@ -39,7 +39,7 @@ class InventoryService:
         payload = self._validated_item_payload(data, item_id=item_id)
         if item_id:
             if not self.db.get_inventory_item(item_id):
-                raise AppError("Item de inventario nao encontrado.")
+                raise AppError("Item de inventário não encontrado.")
             self.db.update_inventory_item(item_id, **payload)
             logger.info("Item de inventario atualizado: %s", item_id)
             return item_id
@@ -50,10 +50,10 @@ class InventoryService:
     def toggle_item_active(self, item_id: int) -> int:
         item = self.db.get_inventory_item(item_id)
         if not item:
-            raise AppError("Item de inventario nao encontrado.")
+            raise AppError("Item de inventário não encontrado.")
         next_active = 0 if item.get("active") else 1
         if not next_active and int(item.get("borrowed_quantity") or 0) > 0:
-            raise AppError("Nao inative item com emprestimos em aberto.")
+            raise AppError("Não inative item com empréstimos em aberto.")
         self.db.set_inventory_item_active(item_id, next_active)
         logger.info("Item de inventario %s alterado para active=%s", item_id, next_active)
         return next_active
@@ -62,7 +62,7 @@ class InventoryService:
         payload = self._validated_loan_payload(data, loan_id=loan_id)
         if loan_id:
             if not self.db.get_inventory_loan(loan_id):
-                raise AppError("Emprestimo nao encontrado.")
+                raise AppError("Empréstimo não encontrado.")
             self.db.update_inventory_loan(loan_id, **payload)
             logger.info("Emprestimo atualizado: %s", loan_id)
             return loan_id
@@ -73,7 +73,7 @@ class InventoryService:
     def return_loan(self, loan_id: int, return_date: str = "") -> None:
         loan = self.db.get_inventory_loan(loan_id)
         if not loan:
-            raise AppError("Emprestimo nao encontrado.")
+            raise AppError("Empréstimo não encontrado.")
         if loan.get("status") == "returned":
             return
         payload = dict(loan)
@@ -85,7 +85,7 @@ class InventoryService:
         payload = self._validated_maintenance_payload(data)
         if maintenance_id:
             if not self.db.get_inventory_maintenance(maintenance_id):
-                raise AppError("Manutencao nao encontrada.")
+                raise AppError("Manutenção não encontrada.")
             self.db.update_inventory_maintenance(maintenance_id, **payload)
             logger.info("Manutencao atualizada: %s", maintenance_id)
             return maintenance_id
@@ -96,7 +96,7 @@ class InventoryService:
     def close_maintenance(self, maintenance_id: int, resolved_date: str = "") -> None:
         maintenance = self.db.get_inventory_maintenance(maintenance_id)
         if not maintenance:
-            raise AppError("Manutencao nao encontrada.")
+            raise AppError("Manutenção não encontrada.")
         payload = dict(maintenance)
         payload["status"] = "done"
         payload["resolved_date"] = resolved_date.strip() or date.today().isoformat()
@@ -140,35 +140,35 @@ class InventoryService:
         try:
             club_id = int(data.get("club_id") or 1)
         except ValueError as exc:
-            raise AppError("Clube/escola do item invalido.") from exc
+            raise AppError("Clube/escola do item inválido.") from exc
         if not self.db.get_club(club_id):
-            raise AppError("Clube/escola do item nao encontrado.")
+            raise AppError("Clube/escola do item não encontrado.")
 
         item_type = str(data.get("item_type", "other")).strip() or "other"
         if item_type not in INVENTORY_ITEM_TYPES:
-            raise AppError("Tipo de item invalido.")
+            raise AppError("Tipo de item inválido.")
 
         condition_status = str(data.get("condition_status", "good")).strip() or "good"
         if condition_status not in INVENTORY_CONDITIONS:
-            raise AppError("Estado do item invalido.")
+            raise AppError("Estado do item inválido.")
 
         try:
             quantity_total = int(data.get("quantity_total") or 1)
         except ValueError as exc:
-            raise AppError("Quantidade do item invalida.") from exc
+            raise AppError("Quantidade do item inválida.") from exc
         if quantity_total <= 0:
             raise AppError("Quantidade do item deve ser maior que zero.")
 
         borrowed_quantity = self.db.inventory_item_open_loan_quantity(item_id) if item_id else 0
         if quantity_total < borrowed_quantity:
-            raise AppError("Quantidade total nao pode ficar abaixo dos emprestimos em aberto.")
+            raise AppError("Quantidade total não pode ficar abaixo dos empréstimos em aberto.")
 
         acquisition_date = str(data.get("acquisition_date", "")).strip()
-        self._validate_optional_date(acquisition_date, "Data de aquisicao invalida.")
+        self._validate_optional_date(acquisition_date, "Data de aquisição inválida.")
 
-        acquisition_value = self._parse_money(data.get("acquisition_value"), "Valor de aquisicao invalido.")
+        acquisition_value = self._parse_money(data.get("acquisition_value"), "Valor de aquisição inválido.")
         if acquisition_value < 0:
-            raise AppError("Valor de aquisicao nao pode ser negativo.")
+            raise AppError("Valor de aquisição não pode ser negativo.")
 
         return {
             "club_id": club_id,
@@ -188,37 +188,37 @@ class InventoryService:
         try:
             item_id = int(data.get("item_id") or 0)
         except ValueError as exc:
-            raise AppError("Item do emprestimo invalido.") from exc
+            raise AppError("Item do empréstimo inválido.") from exc
         item = self.db.get_inventory_item(item_id)
         if not item:
-            raise AppError("Item do emprestimo nao encontrado.")
+            raise AppError("Item do empréstimo não encontrado.")
         if not item.get("active"):
-            raise AppError("Item inativo nao pode ser emprestado.")
+            raise AppError("Item inativo não pode ser emprestado.")
 
         try:
             member_id = int(data.get("member_id") or 0)
         except ValueError as exc:
-            raise AppError("Membro do emprestimo invalido.") from exc
+            raise AppError("Membro do empréstimo inválido.") from exc
         if not self.db.get_member(member_id):
-            raise AppError("Membro do emprestimo nao encontrado.")
+            raise AppError("Membro do empréstimo não encontrado.")
 
         try:
             quantity = int(data.get("quantity") or 1)
         except ValueError as exc:
-            raise AppError("Quantidade do emprestimo invalida.") from exc
+            raise AppError("Quantidade do empréstimo inválida.") from exc
         if quantity <= 0:
-            raise AppError("Quantidade do emprestimo deve ser maior que zero.")
+            raise AppError("Quantidade do empréstimo deve ser maior que zero.")
 
         status = str(data.get("status", "open")).strip() or "open"
         if status not in INVENTORY_LOAN_STATUSES:
-            raise AppError("Status do emprestimo invalido.")
+            raise AppError("Status do empréstimo inválido.")
 
         loan_date = str(data.get("loan_date", "")).strip() or date.today().isoformat()
         due_date = str(data.get("due_date", "")).strip()
         return_date = str(data.get("return_date", "")).strip()
-        self._validate_optional_date(loan_date, "Data do emprestimo invalida.")
-        self._validate_optional_date(due_date, "Data prevista de devolucao invalida.")
-        self._validate_optional_date(return_date, "Data de devolucao invalida.")
+        self._validate_optional_date(loan_date, "Data do empréstimo inválida.")
+        self._validate_optional_date(due_date, "Data prevista de devolução inválida.")
+        self._validate_optional_date(return_date, "Data de devolução inválida.")
 
         if status == "returned" and not return_date:
             return_date = date.today().isoformat()
@@ -229,7 +229,7 @@ class InventoryService:
             borrowed_other = self.db.inventory_item_open_loan_quantity(item_id, exclude_loan_id=loan_id)
             available = int(item.get("quantity_total") or 0) - borrowed_other
             if quantity > available:
-                raise AppError("Quantidade indisponivel para emprestimo.")
+                raise AppError("Quantidade indisponível para empréstimo.")
 
         return {
             "item_id": item_id,
@@ -246,30 +246,30 @@ class InventoryService:
         try:
             item_id = int(data.get("item_id") or 0)
         except ValueError as exc:
-            raise AppError("Item da manutencao invalido.") from exc
+            raise AppError("Item da manutenção inválido.") from exc
         if not self.db.get_inventory_item(item_id):
-            raise AppError("Item da manutencao nao encontrado.")
+            raise AppError("Item da manutenção não encontrado.")
 
         description = str(data.get("description", "")).strip()
         if not description:
-            raise AppError("Informe a descricao da manutencao.")
+            raise AppError("Informe a descrição da manutenção.")
 
         status = str(data.get("status", "open")).strip() or "open"
         if status not in INVENTORY_MAINTENANCE_STATUSES:
-            raise AppError("Status da manutencao invalido.")
+            raise AppError("Status da manutenção inválido.")
 
         opened_date = str(data.get("opened_date", "")).strip() or date.today().isoformat()
         resolved_date = str(data.get("resolved_date", "")).strip()
-        self._validate_optional_date(opened_date, "Data de abertura invalida.")
-        self._validate_optional_date(resolved_date, "Data de conclusao invalida.")
+        self._validate_optional_date(opened_date, "Data de abertura inválida.")
+        self._validate_optional_date(resolved_date, "Data de conclusão inválida.")
         if status == "done" and not resolved_date:
             resolved_date = date.today().isoformat()
         if status in {"open", "in_progress"}:
             resolved_date = ""
 
-        cost = self._parse_money(data.get("cost"), "Custo da manutencao invalido.")
+        cost = self._parse_money(data.get("cost"), "Custo da manutenção inválido.")
         if cost < 0:
-            raise AppError("Custo da manutencao nao pode ser negativo.")
+            raise AppError("Custo da manutenção não pode ser negativo.")
 
         return {
             "item_id": item_id,

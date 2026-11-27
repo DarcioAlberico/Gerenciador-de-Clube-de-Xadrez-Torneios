@@ -62,15 +62,15 @@ def theme_pairs(accent: str, bg: str, frame: str, face: int) -> list[ContrastPai
     accent_color = ACCENT_PRESETS[accent]["d" if face == DARK else "l"]
     # A tinta sobre o accent e calculada em apply_accent_preset; a auditoria
     # refaz a mesma conta em vez de ler o token, que reflete o preset aplicado
-    # no processo — auditar o estado global so saberia auditar o tema aberto.
+    # no processo — auditar o estado global só saberia auditar o tema aberto.
     on_accent = best_ink(accent_color)
     app_bg = BG_COLOR_PRESETS[bg]["app"][face]
     statusbar = BG_COLOR_PRESETS[bg]["statusbar"][face]
     panel = FRAME_BG_PRESETS[frame]["panel"][face]
 
-    # O preset de fundo PODE trazer a cor do texto (hoje so o de alto
+    # O preset de fundo PODE trazer a cor do texto (hoje só o de alto
     # contraste, ver apply_bg_preset). Ler o token global aqui faria a
-    # auditoria medir um texto que aquele tema nao usa.
+    # auditoria medir um texto que aquele tema não usa.
     preset_bg = BG_COLOR_PRESETS[bg]
     text_main = preset_bg.get("text", tuple(THEME_TEXT_MAIN))[face]
     text_sub = preset_bg.get("sub", tuple(THEME_TEXT_SUB))[face]
@@ -106,18 +106,18 @@ def theme_pairs(accent: str, bg: str, frame: str, face: int) -> list[ContrastPai
 
     # --- Campos de entrada (F5.1 / P3-2) ---------------------------------- #
     # Antes da F5.1 o auditor tinha ZERO pares de campo — por isso a borda de
-    # fabrica a 2.74:1 nunca apareceu no relatorio. A paleta e derivada do
-    # painel pela mesma funcao pura que o preset usa: auditor e tema nao podem
-    # divergir. O rotulo do seletor (accent) ja e coberto pelo par do botao
-    # primario, pois desde a F5.1 o corpo do OptionMenu E o accent.
+    # fabrica a 2.74:1 nunca apareceu no relatório. A paleta e derivada do
+    # painel pela mesma função pura que o preset usa: auditor e tema não podem
+    # divergir. O rótulo do seletor (accent) já é coberto pelo par do botão
+    # primário, pois desde a F5.1 o corpo do OptionMenu E o accent.
     campo = field_palette(panel)
     pares += [
         ContrastPair(
             "borda do campo sobre painel", campo["border"], panel, AA_UI_COMPONENT, COMPONENT
         ),
         ContrastPair("texto do campo sobre o campo", campo["text"], campo["bg"], kind=SURFACE),
-        # Placeholder e texto de apoio efemero: cobra AA, mas nao entra na
-        # familia SURFACE — exigir AAA dele no alto contraste o tornaria tao
+        # Placeholder e texto de apoio efêmero: cobra AA, mas não entra na
+        # família SURFACE — exigir AAA dele no alto contraste o tornaria tão
         # escuro quanto o texto real, e a dica pararia de parecer dica.
         ContrastPair("placeholder sobre o campo", campo["placeholder"], campo["bg"], kind=FILL),
     ]

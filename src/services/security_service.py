@@ -68,7 +68,7 @@ class SecurityService:
     def create_user(self, username: str, password_raw: str, role: str) -> None:
         self.require_permission("settings_write")
         if not username.strip():
-            raise AppError("Informe o nome de usuario.")
+            raise AppError("Informe o nome de usuário.")
         if not password_raw:
             raise AppError("Informe a senha.")
         pw_hash = self._hash_password(password_raw)
@@ -199,9 +199,9 @@ class SecurityService:
         try:
             retention_count = int(data.get("backup_retention_count") or 10)
         except ValueError as exc:
-            raise AppError("Retencao de backups invalida.") from exc
+            raise AppError("Retenção de backups inválida.") from exc
         if retention_count < 1 or retention_count > 999:
-            raise AppError("Retencao de backups deve ficar entre 1 e 999.")
+            raise AppError("Retenção de backups deve ficar entre 1 e 999.")
         payload = {
             "backup_retention_count": str(retention_count),
         }
@@ -209,7 +209,7 @@ class SecurityService:
         self.audit(
             "settings_saved",
             entity_type="app_settings",
-            description="Configuracoes de seguranca operacional atualizadas.",
+            description="Configurações de segurança operacional atualizadas.",
             metadata=payload,
         )
         return payload
@@ -242,8 +242,8 @@ class SecurityService:
         start_date: str = "",
         end_date: str = "",
     ) -> list[dict[str, Any]]:
-        self._validate_optional_date(start_date, "Data inicial da auditoria invalida.")
-        self._validate_optional_date(end_date, "Data final da auditoria invalida.")
+        self._validate_optional_date(start_date, "Data inicial da auditoria inválida.")
+        self._validate_optional_date(end_date, "Data final da auditoria inválida.")
         return self.db.list_audit_logs(
             limit=limit,
             action=action,
@@ -257,8 +257,8 @@ class SecurityService:
         path = self.db.backup(reason)
         deleted = self.enforce_backup_retention()
 
-        # db.backup() ja copiou para a nuvem (caminho unico, sem duplicar). Aqui
-        # so lemos o resultado para auditar e reportar.
+        # db.backup() já copiou para a nuvem (caminho único, sem duplicar). Aqui
+        # só lemos o resultado para auditar e reportar.
         cloud_result = self.db.last_cloud_backup or {"status": "not_configured", "path": ""}
         cloud_status = cloud_result.get("status", "not_configured")
         cloud_path = cloud_result.get("path", "")
@@ -303,7 +303,7 @@ class SecurityService:
             self.audit(
                 "backup_retention_applied",
                 entity_type="backup",
-                description=f"Retencao aplicada: {len(deleted)} backup(s) removido(s).",
+                description=f"Retenção aplicada: {len(deleted)} backup(s) removido(s).",
                 metadata={"keep_count": keep_count, "deleted": [str(item) for item in deleted]},
             )
         return deleted

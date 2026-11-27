@@ -41,7 +41,7 @@ class TemaPropagaTest(unittest.TestCase):
         self.assertIs(theme.THEME_PANEL_BG, support.THEME_PANEL_BG)
 
     def test_trocar_accent_alcanca_quem_importou_antes(self) -> None:
-        # simula o `from ..support import *` que as telas fazem na importacao
+        # simula o `from ..support import *` que as telas fazem na importação
         token_importado = support.THEME_ACCENT
         theme.apply_accent_preset("emerald")
         esperado = theme.ACCENT_PRESETS["emerald"]
@@ -96,7 +96,7 @@ class TemaPropagaTest(unittest.TestCase):
 
         theme.on_theme_change(explode)
         theme.on_theme_change(lambda: ok.append("segundo"))
-        theme.apply_accent_preset("teal")  # nao pode levantar
+        theme.apply_accent_preset("teal")  # não pode levantar
         self.assertEqual(["segundo"], ok, "o listener seguinte ainda roda")
         teal = theme.ACCENT_PRESETS["teal"]
         self.assertEqual([teal["l"], teal["d"]], list(theme.THEME_ACCENT))

@@ -1,9 +1,9 @@
-"""Mixin de sincronizacao, auditoria e dados de apoio da Database.
+"""Mixin de sincronização, auditoria e dados de apoio da Database.
 
-Logs de auditoria, dispositivos, fila de sync (outbox), eventos de relogio,
+Logs de auditoria, dispositivos, fila de sync (outbox), eventos de relógio,
 snapshots de pareamento/classificacao, componentes de tiebreak, tokens
-publicos e submissoes de resultado. Extraido de ``src.core.database`` na
-decomposicao da God Class. Ver ``_database_base._DatabaseInfra``.
+públicos e submissões de resultado. Extraído de ``src.core.database`` na
+decomposição da God Class. Ver ``_database_base._DatabaseInfra``.
 """
 from __future__ import annotations
 
@@ -123,7 +123,7 @@ class SyncAuditMixin(_DatabaseInfra):
     ) -> dict[str, Any]:
         safe_device_id = device_id.strip()
         if not safe_device_id:
-            raise ValueError("device_id obrigatorio")
+            raise ValueError("device_id obrigatório")
         safe_status = status.strip() or "authorized"
         safe_role = role.strip() or "assistant"
         now = self.now()
@@ -623,11 +623,11 @@ class SyncAuditMixin(_DatabaseInfra):
         round_id: int,
         reason: str,
     ) -> str:
-        """Move o retrato vigente da rodada para o historico (ARB-01).
+        """Move o retrato vigente da rodada para o histórico (ARB-01).
 
-        Devolve o hash do retrato arquivado, ou ``""`` quando nao havia retrato.
+        Devolve o hash do retrato arquivado, ou ``""`` quando não havia retrato.
         Quem chama grava o novo em seguida — e o hash devolvido e o que entra no
-        `before` do evento de auditoria, para a comparacao ficar registrada.
+        `before` do evento de auditoria, para a comparação ficar registrada.
         """
         with self.connect() as connection:
             row = connection.execute(
@@ -675,7 +675,7 @@ class SyncAuditMixin(_DatabaseInfra):
             ).fetchall()
             return self.rows_to_dicts(rows)
 
-    # ---- Desbloqueio pontual de correcao (ARB-01) ----------------------- #
+    # ---- Desbloqueio pontual de correção (ARB-01) ----------------------- #
 
     def create_correction_unlock(
         self,

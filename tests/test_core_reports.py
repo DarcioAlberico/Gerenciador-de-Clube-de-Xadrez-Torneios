@@ -130,9 +130,9 @@ class AccessExportTest(unittest.TestCase):
         )
         result = self.export_service.export_access(tournament_id, self.temp_dir.name)
         self.assertIn("Jogadores", result["tables"])
-        # Fronteira ASCII deliberada (B-7): as exportacoes para gente ganharam
+        # Fronteira ASCII deliberada (B-7): as exportações para gente ganharam
         # acento, mas o pacote Access vira nome de coluna de CSV lido por driver
-        # ODBC com schema.ini. Aqui acento e risco de importacao, nao polimento.
+        # ODBC com schema.ini. Aqui acento e risco de importação, não polimento.
         self.assertIn("Classificacao", result["tables"])
         self.assertTrue(result["csv_paths"])
         self.assertTrue(Path(result["schema_ini"]).exists())
@@ -172,7 +172,7 @@ class BatchExportPhaseJTest(unittest.TestCase):
             ["csv", "xlsx"],
             dest,
         )
-        # classificacao+jogadores × csv+xlsx = 4 arquivos; equipes é só de equipes -> ignorado.
+        # classificação+jogadores × csv+xlsx = 4 arquivos; equipes é só de equipes -> ignorado.
         self.assertEqual(4, result["count"])
         self.assertEqual(4, len(result["generated"]))
         self.assertTrue(all(os.path.exists(path) for path in result["generated"]))
@@ -273,7 +273,7 @@ class ReportsTest(CoreServiceTestCase):
         summary = {row[0]: row[1] for row in sections[0][2]}
         distribution = {row[0]: row[1] for row in sections[1][2]}
 
-        self.assertEqual(summary["Partidas jogadas (tabuleiro)"], 3)  # WO nao conta
+        self.assertEqual(summary["Partidas jogadas (tabuleiro)"], 3)  # WO não conta
         self.assertEqual(summary["WO / forfait"], 1)
         self.assertEqual(summary["Byes"], 0)
         self.assertEqual(summary["Total de pareamentos fechados"], 4)
@@ -313,8 +313,8 @@ class ReportsTest(CoreServiceTestCase):
             headers,
             [
                 "Pos", "Nome", "Categoria", "Categoria idade", "Categoria rating",
-                "Tags premiacao", "Pts", "Buchholz", "Buchholz M", "SB",
-                "Vitorias", "Performance", "Rating", "Clube",
+                "Tags premiação", "Pts", "Buchholz", "Buchholz M", "SB",
+                "Vitórias", "Performance", "Rating", "Clube",
             ],
         )
         self.assertEqual(len(rows), 4)
@@ -332,7 +332,7 @@ class ReportsTest(CoreServiceTestCase):
         self._create_players(2)
         self.list_layout_service.save_columns(self.tournament_id, ["position", "name"], "standings")
         self.list_layout_service.reset(self.tournament_id, "standings")
-        # Apos reset, a classificacao volta a usar as colunas padrao.
+        # Após reset, a classificação volta a usar as colunas padrão.
         _title, headers, _rows = self.export_service._standings_section(self.tournament_id)
         self.assertEqual(len(headers), 14)
 
@@ -760,11 +760,11 @@ class ReportsTest(CoreServiceTestCase):
             for template in self.certificate_service.list_templates(active_only=True)
         }
         expected_templates = {
-            "Xadrez classico - Participacao",
+            "Xadrez clássico - Participação",
             "Xadrez escolar - Membro aluno",
-            "Xadrez premium - Premiacao geral",
-            "Tabuleiro sutil - Premiacao por categoria",
-            "Pecas marca d'agua - Ranking interno",
+            "Xadrez premium - Premiação geral",
+            "Tabuleiro sutil - Premiação por categoria",
+            "Peças marca d'água - Ranking interno",
         }
         self.assertTrue(expected_templates.issubset(templates_by_name))
 
@@ -777,18 +777,18 @@ class ReportsTest(CoreServiceTestCase):
         participation_result = self.certificate_service.export_tournament_certificates(
             self.tournament_id,
             participation_path,
-            template_id=int(templates_by_name["Xadrez classico - Participacao"]["id"]),
+            template_id=int(templates_by_name["Xadrez clássico - Participação"]["id"]),
         )
         overall_result = self.certificate_service.export_tournament_certificates(
             self.tournament_id,
             overall_path,
-            template_id=int(templates_by_name["Xadrez premium - Premiacao geral"]["id"]),
+            template_id=int(templates_by_name["Xadrez premium - Premiação geral"]["id"]),
             top_n=1,
         )
         category_result = self.certificate_service.export_tournament_certificates(
             self.tournament_id,
             category_path,
-            template_id=int(templates_by_name["Tabuleiro sutil - Premiacao por categoria"]["id"]),
+            template_id=int(templates_by_name["Tabuleiro sutil - Premiação por categoria"]["id"]),
             top_n=1,
         )
         member_result = self.certificate_service.export_member_certificates(
@@ -798,7 +798,7 @@ class ReportsTest(CoreServiceTestCase):
         )
         ranking_result = self.certificate_service.export_ranking_certificates(
             ranking_path,
-            template_id=int(templates_by_name["Pecas marca d'agua - Ranking interno"]["id"]),
+            template_id=int(templates_by_name["Peças marca d'água - Ranking interno"]["id"]),
             top_n=1,
         )
 

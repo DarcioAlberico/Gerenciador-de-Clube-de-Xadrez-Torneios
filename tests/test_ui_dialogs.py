@@ -107,9 +107,9 @@ class DialogsTest(unittest.TestCase):
         return abertos[-1]
 
     def _quando_abrir(self, acao, delay: int = 250) -> None:
-        """Agenda ``acao(dialogo)`` para rodar com o modal já na tela.
+        """Agenda ``ação(diálogo)`` para rodar com o modal já na tela.
 
-        Se ``acao`` levantar, o erro é guardado e o diálogo é fechado à força —
+        Se ``ação`` levantar, o erro é guardado e o diálogo é fechado à força —
         senão o teste ficaria pendurado no ``wait_window`` e o motivo real (um
         botão que mudou de nome, um ``cget`` sem suporte) sumiria no stderr.
         """
@@ -231,7 +231,7 @@ class DialogsTest(unittest.TestCase):
 
         def acao(dialog: ctk.CTkToplevel) -> None:
             visto["texto"] = dialog.corpo.get("1.0", "end").strip()
-            # O cget do CTkTextbox nao repassa 'state'; pergunta-se ao Text interno.
+            # O cget do CTkTextbox não repassa 'state'; pergunta-se ao Text interno.
             visto["estado"] = str(dialog.corpo._textbox.cget("state"))
             _find_button(dialog, "Fechar").invoke()
 
@@ -392,12 +392,12 @@ class TamanhoEPosicaoTest(unittest.TestCase):
         self.assertEqual((420, 320), fitted_size((420, 320), scale=1.0, screen=(1920, 1080)))
 
     def test_nunca_encolhe_abaixo_do_piso_de_legibilidade(self) -> None:
-        # Tela minuscula: e melhor o modal vazar um pouco do que virar faixa.
+        # Tela minúscula: e melhor o modal vazar um pouco do que virar faixa.
         self.assertEqual(MIN_SIZE, fitted_size((900, 700), scale=4.0, screen=(320, 240)))
 
     def test_modal_sobre_janela_na_borda_nao_sai_da_tela(self) -> None:
         # Centralizar sobre uma janela encostada na borda jogaria metade do
-        # modal para fora — e a metade que sai e sempre a de baixo, a dos botoes.
+        # modal para fora — e a metade que sai e sempre a de baixo, a dos botões.
         x, y = centered_position((600, 400), owner=(1300, 700, 600, 400), screen=(1366, 768))
         self.assertLessEqual(x + 600, 1366)
         self.assertLessEqual(y + 400, 768)
@@ -442,22 +442,22 @@ class DialogCanonicoTest(unittest.TestCase):
         release_dead_ctk_windows()
 
     def test_escape_fecha_o_dialogo(self) -> None:
-        # ~16 dos 21 dialogos ad-hoc nao tinham este binding (P3-10).
+        # ~16 dos 21 diálogos ad-hoc não tinham este binding (P3-10).
         dialogo = Dialog(self.root, "Teste", size=(400, 300))
-        # O Tk **nao entrega evento de teclado a janela ainda nao mapeada**, e
-        # um `update()` solto nao garante o mapeamento: sozinho o teste passa,
-        # na suite inteira (maquina ocupada) falha. `wait_visibility()` seria a
+        # O Tk **não entrega evento de teclado a janela ainda não mapeada**, e
+        # um `update()` solto não garante o mapeamento: sozinho o teste passa,
+        # na suite inteira (máquina ocupada) falha. `wait_visibility()` seria a
         # espera certa, mas **bloqueia para sempre** se o gerenciador de
-        # janelas nao mapear — trocar uma falha intermitente por um travamento
-        # e pior. Dai a espera limitada.
+        # janelas não mapear — trocar uma falha intermitente por um travamento
+        # e pior. Daí a espera limitada.
         for _ in range(50):
             if dialogo.winfo_ismapped():
                 break
             dialogo.update()
-        # Ate dez tentativas: com varias janelas abertas na mesma sessao de
+        # Até dez tentativas: com várias janelas abertas na mesma sessão de
         # testes o primeiro Esc as vezes chega antes de o foco assentar, e o Tk
-        # o descarta em silencio. Repetir e barato e limitado — `wait_visibility`
-        # ou um laco sem teto trocariam a intermitencia por travamento.
+        # o descarta em silêncio. Repetir e barato e limitado — `wait_visibility`
+        # ou um laço sem teto trocariam a intermitência por travamento.
         for _ in range(10):
             if not dialogo.winfo_exists():
                 break

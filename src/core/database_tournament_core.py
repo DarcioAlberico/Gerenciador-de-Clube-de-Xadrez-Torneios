@@ -1,9 +1,9 @@
-"""Mixin do nucleo de torneios da Database.
+"""Mixin do núcleo de torneios da Database.
 
-Torneios e configuracoes, premios, layouts de relatorio, agenda de rodadas,
+Torneios e configurações, prêmios, layouts de relatório, agenda de rodadas,
 ratings oficiais, jogadores, equipes, tabuleiros/escalacoes, ajustes de pontos,
-byes e proibicoes, rodadas e pareamentos. Extraido de ``src.core.database`` na
-decomposicao da God Class. Ver ``_database_base._DatabaseInfra``.
+byes e proibições, rodadas e pareamentos. Extraído de ``src.core.database`` na
+decomposição da God Class. Ver ``_database_base._DatabaseInfra``.
 """
 from __future__ import annotations
 
@@ -19,22 +19,22 @@ from .categories import competition_category_payload, reference_year
 
 
 def default_pairing_system() -> str:
-    """Motor de pareamento padrao para novos torneios.
+    """Motor de pareamento padrão para novos torneios.
 
-    Producao usa o Gacrux (motor FIDE oficial). Lido em runtime para que os
-    testes possam forcar o motor proprio via ALBERICUS_DEFAULT_PAIRING_SYSTEM
-    (ver tests/conftest.py) — suite rapida e deterministica, sem subprocesso.
+    Produção usa o Gacrux (motor FIDE oficial). Lido em runtime para que os
+    testes possam forçar o motor próprio via ALBERICUS_DEFAULT_PAIRING_SYSTEM
+    (ver tests/conftest.py) — suite rápida e determinística, sem subprocesso.
     """
     return os.environ.get("ALBERICUS_DEFAULT_PAIRING_SYSTEM", "gacrux_swiss")
 
 
 def default_tiebreak_engine() -> str:
-    """Motor de desempate/classificacao padrao para novos torneios.
+    """Motor de desempate/classificacao padrão para novos torneios.
 
-    Producao usa o Gacrux (motor FIDE oficial, tiebreakchecker.py). Lido em
-    runtime para que os testes possam forcar o motor proprio via
-    ALBERICUS_DEFAULT_TIEBREAK_ENGINE (ver tests/conftest.py) — suite rapida e
-    deterministica, sem subprocesso.
+    Produção usa o Gacrux (motor FIDE oficial, tiebreakchecker.py). Lido em
+    runtime para que os testes possam forçar o motor próprio via
+    ALBERICUS_DEFAULT_TIEBREAK_ENGINE (ver tests/conftest.py) — suite rápida e
+    determinística, sem subprocesso.
     """
     return os.environ.get("ALBERICUS_DEFAULT_TIEBREAK_ENGINE", "gacrux")
 
@@ -149,7 +149,7 @@ class TournamentCoreMixin(_DatabaseInfra):
                 (source_tournament_id,),
             ).fetchone()
             if not source:
-                raise ValueError("Torneio de origem nao encontrado.")
+                raise ValueError("Torneio de origem não encontrado.")
 
             cursor = connection.execute(
                 """
@@ -333,11 +333,11 @@ class TournamentCoreMixin(_DatabaseInfra):
             connection.execute("DELETE FROM tournaments WHERE id = ?", (tournament_id,))
 
     def list_tournaments(self, include_archived: bool = False) -> list[dict[str, Any]]:
-        """Torneios do sistema. Arquivado FICA DE FORA por padrao (ORG-04).
+        """Torneios do sistema. Arquivado FICA DE FORA por padrão (ORG-04).
 
-        A opcao "Arquivado" existia na tela e nao arquivava nada — o torneio
+        A opção "Arquivado" existia na tela e não arquivava nada — o torneio
         continuava na lista igual aos outros. Quem precisa dos arquivados pede
-        explicitamente, que e o que o filtro da tela de torneios faz.
+        explicitamente, que é o que o filtro da tela de torneios faz.
         """
         filtro = "" if include_archived else "WHERE COALESCE(s.archived, 0) = 0"
         with self.connect() as connection:
@@ -402,10 +402,10 @@ class TournamentCoreMixin(_DatabaseInfra):
     def set_free_mode(self, tournament_id: int, enabled: bool) -> None:
         """Marca/desmarca o torneio como Modo Livre (fluxo 'Torneio | Modo Livre').
 
-        Fonte unica de verdade do Modo Livre: as ferramentas pedagogicas
-        (re-emparceiramento livre, entrada tardia flexivel) e o indicador de
-        modo passam a depender desta marca, nao mais do perfil 'free' -- que e
-        o default de qualquer torneio e por isso nao distingue o modo.
+        Fonte única de verdade do Modo Livre: as ferramentas pedagógicas
+        (re-emparceiramento livre, entrada tardia flexível) e o indicador de
+        modo passam a depender desta marca, não mais do perfil 'free' -- que e
+        o default de qualquer torneio e por isso não distingue o modo.
         """
         with self.connect() as connection:
             self._ensure_tournament_settings(connection, tournament_id)
@@ -549,9 +549,9 @@ class TournamentCoreMixin(_DatabaseInfra):
     def list_tournament_categories(self, tournament_id: int) -> list[dict[str, Any]]:
         """Categorias cadastradas do torneio, na ordem configurada.
 
-        Lista VAZIA e resposta legitima e significa "use o conjunto padrao" —
+        Lista VAZIA e resposta legítima e significa "use o conjunto padrao" —
         e assim que um torneio anterior ao ORG-01 continua se comportando como
-        antes sem ter treze linhas semeadas que ninguem pediu.
+        antes sem ter treze linhas semeadas que ninguém pediu.
         """
         with self.connect() as connection:
             rows = connection.execute(
@@ -1000,7 +1000,7 @@ class TournamentCoreMixin(_DatabaseInfra):
             conditions.append("op.cbx_id = ?")
             params.append(cbx_id.strip())
         if lbx_id:
-            # A lista LBX guarda o ID_No (registro proprio) em external_id.
+            # A lista LBX guarda o ID_No (registro próprio) em external_id.
             conditions.append("(op.source = 'LBX' AND op.external_id = ?)")
             params.append(lbx_id.strip())
         if not conditions:
@@ -1081,8 +1081,8 @@ class TournamentCoreMixin(_DatabaseInfra):
             rating = pick_int("rating")
             national_rating = pick_int("national_rating")
             international_rating = pick_int("international_rating")
-            # Ratings por ritmo (FED-07): a lista oficial ja trazia os tres e o
-            # jogador do torneio so recebia um.
+            # Ratings por ritmo (FED-07): a lista oficial já trazia os três e o
+            # jogador do torneio só recebia um.
             rapid_rating = pick_int("rapid_rating")
             blitz_rating = pick_int("blitz_rating")
             games_played = pick_int("games_played")
@@ -1173,7 +1173,7 @@ class TournamentCoreMixin(_DatabaseInfra):
             member = dict(member_row) if member_row else {}
 
         # Categorias do torneio (ORG-01). Sem linha cadastrada, o motor usa o
-        # conjunto padrao — e o torneio anterior ao ORG-01 continua igual.
+        # conjunto padrão — e o torneio anterior ao ORG-01 continua igual.
         category_rows = connection.execute(
             """
             SELECT *
@@ -1562,16 +1562,16 @@ class TournamentCoreMixin(_DatabaseInfra):
                 (team_id,),
             ).fetchone()
             if not team:
-                raise ValueError("Equipe nao encontrada.")
+                raise ValueError("Equipe não encontrada.")
 
             player = connection.execute(
                 "SELECT tournament_id FROM players WHERE id = ?",
                 (player_id,),
             ).fetchone()
             if not player:
-                raise ValueError("Jogador nao encontrado.")
+                raise ValueError("Jogador não encontrado.")
             if int(team["tournament_id"]) != int(player["tournament_id"]):
-                raise ValueError("Jogador nao pertence ao torneio da equipe.")
+                raise ValueError("Jogador não pertence ao torneio da equipe.")
 
             cursor = connection.execute(
                 """
@@ -2031,10 +2031,10 @@ class TournamentCoreMixin(_DatabaseInfra):
         """Resultados de tabuleiro do torneio, com a equipe de CADA cor (TBK-05).
 
         O board count precisa saber quem pontuou em cada tabuleiro, e a equipe
-        vem do elenco do jogador, nao do lado do confronto: tabuleiros pares tem
-        as cores invertidas e um jogador pode ter sido substituido. E a mesma
+        vem do elenco do jogador, não do lado do confronto: tabuleiros pares tem
+        as cores invertidas e um jogador pode ter sido substituído. E a mesma
         regra que `team_match_result` usa para somar os game points — se aqui
-        fosse por paridade, a soma por tabuleiro poderia nao fechar com o total
+        fosse por paridade, a soma por tabuleiro poderia não fechar com o total
         do confronto.
         """
         status_filter = "AND r.status = 'closed'" if closed_only else ""
@@ -2591,10 +2591,10 @@ class TournamentCoreMixin(_DatabaseInfra):
             )
 
     def list_round_robin_numbers(self, tournament_id: int) -> dict[int, int]:
-        """Numeros de rodizio ja atribuidos: `{player_id: numero}` (PAR-01).
+        """Números de rodízio já atribuídos: `{player_id: numero}` (PAR-01).
 
-        Vazio quando o calendario ainda nao foi sorteado — e e assim que o
-        servico sabe que precisa sortear.
+        Vazio quando o calendário ainda não foi sorteado — e e assim que o
+        serviço sabe que precisa sortear.
         """
         with self.connect() as connection:
             rows = connection.execute(
@@ -2613,13 +2613,13 @@ class TournamentCoreMixin(_DatabaseInfra):
         tournament_id: int,
         numbers_by_player: dict[int, int],
     ) -> None:
-        """Grava o calendario do rodizio, substituindo o que houver.
+        """Grava o calendário do rodízio, substituindo o que houver.
 
         Substituir e intencional: refazer o sorteio antes da primeira rodada e
-        legitimo (chegou mais gente, o sorteio publico foi outro). Hoje so o
-        proprio pareamento chama, na primeira rodada; se um dia houver tela de
-        sorteio, quem tera de barrar o refazer com rodada ja jogada e o SERVICO —
-        a regra e dele, nao do banco.
+        legítimo (chegou mais gente, o sorteio publico foi outro). Hoje só o
+        próprio pareamento chama, na primeira rodada; se um dia houver tela de
+        sorteio, quem terá de barrar o refazer com rodada já jogada e o SERVIÇO —
+        a regra e dele, não do banco.
         """
         now = self.now()
         with self.connect() as connection:
@@ -3020,9 +3020,9 @@ class TournamentCoreMixin(_DatabaseInfra):
     def update_pairing_result(self, pairing_id: int, result: str) -> None:
         """Grava o resultado da mesa e encerra o adiamento (ARB-02).
 
-        Resultado lancado E a resolucao do adiamento: deixar a marca de pe
+        Resultado lançado E a resolução do adiamento: deixar a marca de pe
         significaria a mesa aparecer como adiada com placar preenchido, que e
-        um estado que nao existe no salao.
+        um estado que não existe no salão.
         """
         with self.connect() as connection:
             connection.execute(

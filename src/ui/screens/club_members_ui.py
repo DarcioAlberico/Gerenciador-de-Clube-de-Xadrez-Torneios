@@ -4,7 +4,7 @@ from ..support import *
 from ..components import Dialog, actions_bar, danger_button, debounce
 
 
-# Verde da marca WhatsApp: nao acompanha o tema — e identidade de terceiro.
+# Verde da marca WhatsApp: não acompanha o tema — e identidade de terceiro.
 WHATSAPP_VERDE = "#25D366"
 WHATSAPP_VERDE_HOVER = "#128C7E"
 
@@ -14,7 +14,7 @@ class ClubMembersMixin:
         self._clear_content()
         self._page_title(
             "Membros",
-            "Cadastre socios, alunos, visitantes e convidados do clube.",
+            "Cadastre sócios, alunos, visitantes e convidados do clube.",
         )
 
         body = ctk.CTkFrame(self.content, fg_color="transparent")
@@ -43,7 +43,7 @@ class ClubMembersMixin:
             font=ctk.CTkFont(size=SIZE_PAGE_SUBTITLE, weight="bold")
         )
         financial_alert_label.grid(row=0, column=0, columnspan=2, padx=16, pady=(10, 0), sticky="ew")
-        financial_alert_label.grid_remove()  # Oculta por padrao
+        financial_alert_label.grid_remove()  # Oculta por padrão
 
         entries: dict[str, Any] = {}
         fields = [
@@ -97,14 +97,14 @@ class ClubMembersMixin:
             pady=(8, 0),
             sticky="w",
         )
-        learning_level_option = ctk.CTkOptionMenu(form, values=["Sem nivel"], width=250)
+        learning_level_option = ctk.CTkOptionMenu(form, values=["Sem nível"], width=250)
         learning_level_option.grid(row=option_row + 9, column=0, padx=16, pady=(2, 0), sticky="ew")
 
         selected_member_id: dict[str, int | None] = {"value": None}
         club_option_map: dict[str, int] = {}
         class_option_map: dict[str, int | None] = {"Sem turma": None}
         class_filter_map: dict[str, int] = {}
-        learning_level_option_map: dict[str, int | None] = {"Sem nivel": None}
+        learning_level_option_map: dict[str, int | None] = {"Sem nível": None}
         learning_level_filter_map: dict[str, int] = {}
 
         # Frequência Tab
@@ -342,7 +342,7 @@ class ClubMembersMixin:
                 rapid_entry.delete(0, "end")
                 rapid_entry.insert(0, str(rapid_max))
                 self._show_info(
-                    f"Sincronizacao concluida!\nBlitz: {blitz_max} | Rapid: {rapid_max}\n"
+                    f"Sincronização concluída!\nBlitz: {blitz_max} | Rapid: {rapid_max}\n"
                     "(Clique em Salvar para persistir)"
                 )
 
@@ -370,7 +370,7 @@ class ClubMembersMixin:
                 return
             num = "".join(filter(str.isdigit, phone.get()))
             if not num:
-                self._show_warning("Membro nao possui telefone válido.")
+                self._show_warning("Membro não possui telefone válido.")
                 return
             if not num.startswith("55"):
                 num = "55" + num
@@ -383,7 +383,7 @@ class ClubMembersMixin:
                 return
             email = email_field.get().strip()
             if not email:
-                self._show_warning("Membro nao possui email.")
+                self._show_warning("Membro não possui email.")
                 return
             import webbrowser
             webbrowser.open(f"mailto:{email}")
@@ -445,7 +445,7 @@ class ClubMembersMixin:
 
         learning_level_filter = ctk.CTkOptionMenu(
             controls,
-            values=["Todos niveis"],
+            values=["Todos níveis"],
             width=170,
         )
         learning_level_filter.grid(row=4, column=0, columnspan=2, pady=(8, 0), sticky="ew")
@@ -557,7 +557,7 @@ class ClubMembersMixin:
                 values.append(label)
                 club_option_map[label] = int(club["id"])
             if not values:
-                values = ["1 - Clube padrao (Clube)"]
+                values = ["1 - Clube padrão (Clube)"]
                 club_option_map[values[0]] = 1
             club_option.configure(values=values)
             chosen = next(
@@ -608,8 +608,8 @@ class ClubMembersMixin:
 
         def load_learning_level_options(selected_id: int | None = None) -> None:
             learning_level_option_map.clear()
-            learning_level_option_map["Sem nivel"] = None
-            values = ["Sem nivel"]
+            learning_level_option_map["Sem nível"] = None
+            values = ["Sem nível"]
             for level in self.db.list_learning_levels(active_only=True):
                 label = f"{level['id']} - {level['name']}"
                 values.append(label)
@@ -617,20 +617,20 @@ class ClubMembersMixin:
             learning_level_option.configure(values=values)
             chosen = next(
                 (label for label, level_id in learning_level_option_map.items() if level_id == selected_id),
-                "Sem nivel",
+                "Sem nível",
             )
             learning_level_option.set(chosen)
 
         def load_learning_level_filter_options() -> None:
             learning_level_filter_map.clear()
-            values = ["Todos niveis"]
+            values = ["Todos níveis"]
             for level in self.db.list_learning_levels(active_only=True):
                 label = f"{level['id']} - {level['name']}"
                 values.append(label)
                 learning_level_filter_map[label] = int(level["id"])
             current_filter = learning_level_filter.get()
             learning_level_filter.configure(values=values)
-            learning_level_filter.set(current_filter if current_filter in values else "Todos niveis")
+            learning_level_filter.set(current_filter if current_filter in values else "Todos níveis")
 
         def on_club_option_change(_value: str) -> None:
             load_class_options(club_option_map.get(club_option.get()), None)
@@ -676,7 +676,7 @@ class ClubMembersMixin:
                 return
             results = self.member_service.tournament_results(member_id, tournament_id)
             if not results:
-                self._show_warning("Este membro ainda nao possui resultados neste torneio.")
+                self._show_warning("Este membro ainda não possui resultados neste torneio.")
                 return
             lines = []
             for result in results:
@@ -731,7 +731,7 @@ class ClubMembersMixin:
                 if class_value != "Todas turmas" and member.get("active_class_id") != class_filter_map.get(class_value):
                     continue
                 if (
-                    learning_level_value != "Todos niveis"
+                    learning_level_value != "Todos níveis"
                     and member.get("learning_level_id") != learning_level_filter_map.get(learning_level_value)
                 ):
                     continue
@@ -803,7 +803,7 @@ class ClubMembersMixin:
                     raise AppError("Selecione um membro.")
                 history = self.internal_rating_service.member_rating_history(int(member["id"]))
                 if not history:
-                    self._show_warning("Este membro ainda nao possui histórico de rating interno.")
+                    self._show_warning("Este membro ainda não possui histórico de rating interno.")
                     return
                 lines = []
                 for item in history:
@@ -856,8 +856,8 @@ class ClubMembersMixin:
                 member_id = int(member["id"])
                 self._run_background(
                     lambda: self.export_service.export_member_evolution(member_id, path),
-                    lambda _result: self._show_info(f"Relatorio exportado:\n{path}"),
-                    "Exportando evolucao do membro...",
+                    lambda _result: self._show_info(f"Relatório exportado:\n{path}"),
+                    "Exportando evolução do membro...",
                 )
             except Exception as exc:
                 self._show_error(exc)
@@ -957,7 +957,7 @@ class ClubMembersMixin:
                 try:
                     result = self.import_service.import_rating_list_csv(file_path, rating_type)
                     msg = (
-                        f"Importacao de rating ({rating_type.upper()}) concluida.\n"
+                        f"Importação de rating ({rating_type.upper()}) concluída.\n"
                         f"Membros atualizados: {result['updated']}\n"
                         f"Linhas ignoradas: {result['skipped']}\n"
                         f"Erros encontrados: {len(result['errors'])}"
@@ -1045,7 +1045,7 @@ class ClubMembersMixin:
             ("Atualizar", update_member),
             ("Ativar/Inativar", toggle_member),
             ("Hist. rating", show_rating_history),
-            ("Exportar evolucao", export_evolution),
+            ("Exportar evolução", export_evolution),
             ("Modelo CSV/Excel", export_member_import_template),
             ("Importar CSV/Excel", import_members),
             ("Importar Ratings", import_ratings),

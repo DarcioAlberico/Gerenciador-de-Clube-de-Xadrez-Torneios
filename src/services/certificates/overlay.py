@@ -40,5 +40,5 @@ def render_overlay(surface: DrawingSurface, palette: Palette, content: Certifica
                          font="Times-Italic", size=11, fill=palette.ink, anchor="middle")
     if content.verification_code:
         surface.text(zones.content_right, zones.margin + 0.4 * CM,
-                     f"Codigo {content.verification_code}", font="Helvetica", size=8,
+                     f"Código {content.verification_code}", font="Helvetica", size=8,
                      fill=palette.muted, anchor="end")

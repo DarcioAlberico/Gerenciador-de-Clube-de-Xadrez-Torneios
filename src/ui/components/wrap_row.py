@@ -185,7 +185,7 @@ class WrapRow:
     def relayout(self) -> None:
         """Re-``grid``a os itens, se e só se o arranjo mudou."""
         larguras = self._real_widths()
-        # Sem `reserve` aqui: `available()` ja desconta margem e deslocamento.
+        # Sem `reserve` aqui: `available()` já desconta margem e deslocamento.
         arranjo = wrap_positions(larguras, self.available(), self._pad)
         if arranjo == self._arranjo:
             return

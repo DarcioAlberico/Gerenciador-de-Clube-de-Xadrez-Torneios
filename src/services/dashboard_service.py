@@ -137,10 +137,10 @@ class CommunicationService:
         envio bem-sucedido em `communication_logs`.
 
         O publico vem de `list_members` (filtros `active_only`/`club_id`/
-        `class_id`) e pode ser refinado por `member_type`. Membros sem e-mail sao
+        `class_id`) e pode ser refinado por `member_type`. Membros sem e-mail são
         contados em `skipped_no_email` e nunca contam como falha de envio. Devolve
         um resumo com `sent_count`, `failed_count`, `skipped_no_email`,
-        `recipients_total` e a lista `failed` (motivo por destinatario)."""
+        `recipients_total` e a lista `failed` (motivo por destinatário)."""
         subject = (subject or "").strip()
         body = (body or "").strip()
         if not subject or not body:
@@ -185,9 +185,9 @@ class CommunicationService:
         }
 
     # --- Mensagens agendadas ---------------------------------------------
-    # Atencao: num desktop offline, mensagens agendadas so disparam enquanto o
-    # app estiver aberto. A fila e persistida; o despacho roda na inicializacao
-    # e em um tick periodico (ver app._dispatch_scheduled_messages_once).
+    # Atenção: num desktop offline, mensagens agendadas só disparam enquanto o
+    # app estiver aberto. A fila e persistida; o despacho roda na inicialização
+    # e em um tick periódico (ver app._dispatch_scheduled_messages_once).
 
     _AUDIENCE_KINDS = {"all_active", "class", "member_type"}
 
@@ -199,7 +199,7 @@ class CommunicationService:
                 return datetime.strptime(text, fmt).strftime("%Y-%m-%d %H:%M:%S")
             except ValueError:
                 continue
-        raise ValueError("Data/hora invalida. Use o formato AAAA-MM-DD HH:MM.")
+        raise ValueError("Data/hora inválida. Use o formato AAAA-MM-DD HH:MM.")
 
     def schedule_email(
         self,
@@ -212,8 +212,8 @@ class CommunicationService:
         club_id: int | None = None,
     ) -> int:
         """Enfileira um e-mail em massa para disparo futuro. O envio em si
-        acontece quando `dispatch_due_scheduled_messages` roda (na inicializacao
-        e no tick periodico do app)."""
+        acontece quando `dispatch_due_scheduled_messages` roda (na inicialização
+        e no tick periódico do app)."""
         subject = (subject or "").strip()
         body = (body or "").strip()
         if not subject or not body:
@@ -251,9 +251,9 @@ class CommunicationService:
     def dispatch_due_scheduled_messages(
         self, message_service: Any, now: str | None = None
     ) -> list[dict[str, Any]]:
-        """Envia as mensagens pendentes cujo horario ja chegou (`scheduled_at <=
+        """Envia as mensagens pendentes cujo horário já chegou (`scheduled_at <=
         now`). Cada mensagem e marcada como `sent` (com resumo) ou `failed` (com
-        erro); uma falha numa mensagem nao impede as demais."""
+        erro); uma falha numa mensagem não impede as demais."""
         now = now or self.db.now()
         due = self.db._fetch_all(
             "SELECT * FROM scheduled_messages "

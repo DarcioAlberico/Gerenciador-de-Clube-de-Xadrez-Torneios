@@ -20,7 +20,7 @@ CBX = "cbx"
 
 BASE_LABELS = {FIDE: "FIDE", CBX: "CBX"}
 
-_FIDE_SOURCE = "FIDE Handbook B.02, edicao em vigor desde 2024"
+_FIDE_SOURCE = "FIDE Handbook B.02, edição em vigor desde 2024"
 _CBX_SOURCE = "forma do B.02 com valores a CONFERIR no regulamento da CBX"
 
 

@@ -32,14 +32,14 @@ class QrResultActions:
             if not pairing_id:
                 raise AppError("Selecione uma mesa.")
             if getattr(host, "pairing_team_mode", False):
-                raise AppError("QR de resultado por tabuleiro de equipes sera tratado na fase de equipes avancadas.")
+                raise AppError("QR de resultado por tabuleiro de equipes será tratado na fase de equipes avançadas.")
             payload = host.qr_result_service.result_url_for_pairing(int(host.current_tournament_id), int(pairing_id))
-            # Relatorio, nao confirmacao: o endereco e a entrega, e precisa ser
+            # Relatório, não confirmação: o endereço e a entrega, e precisa ser
             # copiado para chegar ao celular do jogador (F5.7).
             host._show_report(
                 "Link para envio por QR",
                 f"{payload['url']}\n\n"
-                "O resultado enviado fica pendente ate aprovacao do arbitro.",
+                "O resultado enviado fica pendente até aprovação do árbitro.",
             )
         except Exception as exc:
             host._show_error(exc)
@@ -53,7 +53,7 @@ class QrResultActions:
             host.db.save_app_settings({"local_result_server_url": url})
             host._show_report(
                 "Servidor QR ativo",
-                f"{url}\n\nUse este endereco na mesma rede local.",
+                f"{url}\n\nUse este endereço na mesma rede local.",
             )
         except Exception as exc:
             host._show_error(exc)

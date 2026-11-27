@@ -61,11 +61,11 @@ RATING_REGULATION_FIELDS = [
 class TournamentSettingsMixin:
     @staticmethod
     def _settings_tab(tabview: ctk.CTkTabview, name: str) -> ctk.CTkScrollableFrame:
-        """Cria uma aba rolavel no tabview e devolve o painel de conteudo.
+        """Cria uma aba rolavel no tabview e devolve o painel de conteúdo.
 
-        A pilha de formulario da aba nasce junto (``FormStack``): quem tem o
-        painel na mao alcanca a mesma pilha por ``form_of`` — dois contadores
-        de linha sobre o mesmo grid e como o formulario se desalinha calado.
+        A pilha de formulário da aba nasce junto (``FormStack``): quem tem o
+        painel na mão alcança a mesma pilha por ``form_of`` — dois contadores
+        de linha sobre o mesmo grid e como o formulário se desalinha calado.
         """
         tab = tabview.add(name)
         tab.grid_columnconfigure(0, weight=1)
@@ -84,12 +84,12 @@ class TournamentSettingsMixin:
         section: bool = False,
         help_text: str = "",
     ) -> Any:
-        """Empilha (rotulo + ajuda + widget) numa coluna — hoje via ``FormStack``.
+        """Empilha (rótulo + ajuda + widget) numa coluna — hoje via ``FormStack``.
 
-        A F5.4 promoveu este metodo a componente
+        A F5.4 promoveu este método a componente
         ([`components/form.py`](../components/form.py)); o que sobrou aqui e a
-        ponte para os call-sites que empilham editores proprios (sequencia de
-        desempates, premiacao, colunas), que nao sao campos de entrada.
+        ponte para os call-sites que empilham editores próprios (sequência de
+        desempates, premiação, colunas), que não são campos de entrada.
         """
         pilha = form_of(panel)
         if section:
@@ -103,7 +103,7 @@ class TournamentSettingsMixin:
 
         tournament = self.db.get_tournament(self.current_tournament_id)
         if not tournament:
-            self._show_error(AppError("Selecione um torneio valido."))
+            self._show_error(AppError("Selecione um torneio válido."))
             return
         settings = self.db.get_tournament_settings(self.current_tournament_id) or {}
 
@@ -135,9 +135,9 @@ class TournamentSettingsMixin:
         # ------------------------------------------------------------------ #
         # Aba 1 - Dados gerais
         # ------------------------------------------------------------------ #
-        # Onze campos seguidos viravam uma coluna corrida de rotulos, sem onde
-        # o olho descansar (P3-12). Sao tres perguntas diferentes — que torneio
-        # e este, quando acontece, quem ele alcanca — e agora sao tres secoes.
+        # Onze campos seguidos viravam uma coluna corrida de rótulos, sem onde
+        # o olho descansar (P3-12). São três perguntas diferentes — que torneio
+        # e este, quando acontece, quem ele alcança — e agora são três secoes.
         tournament_entries: dict[str, Any] = {}
         general_sections: list[tuple[str, list[tuple[str, str, str]]]] = [
             (
@@ -184,11 +184,11 @@ class TournamentSettingsMixin:
         tournament_club_values = []
         for club in self.db.list_clubs(active_only=True):
             kind = CLUB_KIND_LABELS.get(club.get("kind", "club"), club.get("kind", ""))
-            label = f"{club['id']} - {club['name'] or 'Clube padrao'} ({kind})"
+            label = f"{club['id']} - {club['name'] or 'Clube padrão'} ({kind})"
             tournament_club_values.append(label)
             tournament_club_map[label] = int(club["id"])
         if not tournament_club_values:
-            tournament_club_values = ["1 - Clube padrao (Clube)"]
+            tournament_club_values = ["1 - Clube padrão (Clube)"]
             tournament_club_map[tournament_club_values[0]] = 1
         tournament_club_option = form_general.select("Clube/Escola", tournament_club_values)
         selected_tournament_club = next(
@@ -243,7 +243,7 @@ class TournamentSettingsMixin:
         # ------------------------------------------------------------------ #
         # Dezesseis campos numa coluna so: quatro secoes, porque quem preenche
         # "Taxa rating CBX" nao esta na mesma tarefa de quem preenche "FIDE
-        # Event-ID" — e a exportacao oficial cobra os tres primeiros grupos.
+        # Event-ID" — e a exportação oficial cobra os três primeiros grupos.
         setting_entries: dict[str, Any] = {}
         official_sections: list[tuple[str, list[tuple[str, str, str]]]] = [
             (
@@ -374,16 +374,16 @@ class TournamentSettingsMixin:
             )
         )
 
-        # Pontuacao/criterios por equipes (campos textuais + menus). A secao
-        # inteira so vale para o formato "Equipes" — e por isso ela e uma
-        # secao, e nao um bloco de campos perdido no meio das regras gerais.
+        # Pontuacao/criterios por equipes (campos textuais + menus). A seção
+        # inteira só vale para o formato "Equipes" — e por isso ela é uma
+        # seção, e não um bloco de campos perdido no meio das regras gerais.
         form_rules.section(
             "Por equipes",
             help_text="Vale apenas quando o Formato (aba “Dados gerais”) é “Equipes”.",
         )
-        # Politica de bye SOLICITADO (ARB-04). Vazio ou 0 = sem limite, que e o
-        # comportamento de sempre. Fica antes da secao de equipes porque vale
-        # para o individual, que e onde o bye solicitado existe.
+        # Política de bye SOLICITADO (ARB-04). Vazio ou 0 = sem limite, que é o
+        # comportamento de sempre. Fica antes da seção de equipes porque vale
+        # para o individual, que é onde o bye solicitado existe.
         # A linha de apoio quebra à mão: `note()` monta um CTkLabel sem
         # `wraplength`, então um texto longo numa linha só alarga o painel e
         # empurra os controles para fora da janela nos tamanhos suportados —
@@ -453,13 +453,13 @@ class TournamentSettingsMixin:
             # impar). O bye SOLICITADO — o jogador avisando que faltaria — tem
             # politica propria (ARB-04) e nao passa por aqui.
             "disable_bye": "Desativar bye alocado (PAB)",
-            # So tem efeito no formato "Schuring (Todos contra todos)": o
-            # calendario roda duas vezes, com as cores invertidas na volta.
+            # Só tem efeito no formato "Schuring (Todos contra todos)": o
+            # calendário roda duas vezes, com as cores invertidas na volta.
             "round_robin_double": "Returno no todos contra todos (turno e returno)",
-            # So tem efeito no formato "Mata-mata": os dois perdedores da
+            # Só tem efeito no formato "Mata-mata": os dois perdedores da
             # semifinal jogam pelo 3o lugar, na mesma rodada da final.
             "knockout_third_place": "Disputa de 3o lugar no mata-mata",
-            "hide_standings": "Ocultar classificacao",
+            "hide_standings": "Ocultar classificação",
             "tiebreak_strict": "Falhar em vez de degradar (motor de desempate)",
             "archived": "Arquivado",
         }
@@ -491,7 +491,7 @@ class TournamentSettingsMixin:
         custom_labels = [
             ("rounds", "Rodadas aceleradas"),
             ("bonus", "Bônus por jogador"),
-            ("upper", "Fracao do topo (0-1)"),
+            ("upper", "Fração do topo (0-1)"),
         ]
         for column, (key, label) in enumerate(custom_labels):
             custom_frame.grid_columnconfigure(column, weight=1)
@@ -511,8 +511,8 @@ class TournamentSettingsMixin:
         acceleration_option.configure(command=lambda _value: refresh_accel_state())
         refresh_accel_state()
 
-        # Sequencia salva -> codigos + parametros por criterio (TBK-04). Antes so
-        # os codigos chegavam ao editor, e por isso o corte configurado sumia ao
+        # Sequência salva -> códigos + parâmetros por critério (TBK-04). Antes só
+        # os códigos chegavam ao editor, e por isso o corte configurado sumia ao
         # reabrir a tela.
         sequencia_individual = parse_player_tiebreak_sequence(settings.get("tiebreak_sequence"))
         initial_tiebreak_codes = [item["code"] for item in sequencia_individual]
@@ -551,7 +551,7 @@ class TournamentSettingsMixin:
             help_text="Ordem dos critérios para a classificação por equipes (vazio = match points, game points, Buchholz, vitórias).",
         )
 
-        # Campos especificos de equipes ficam habilitados apenas quando o
+        # Campos específicos de equipes ficam habilitados apenas quando o
         # Formato (aba "Dados gerais") e "Equipes".
         team_only_widgets = [
             setting_entries["team_boards_count"],
@@ -577,7 +577,7 @@ class TournamentSettingsMixin:
         refresh_team_fields_state()
 
         # ------------------------------------------------------------------ #
-        # Aba 4 - Premiacao
+        # Aba 4 - Premiação
         # ------------------------------------------------------------------ #
         form_prizes = form_of(tab_prizes)
         form_prizes.section("Resumo")
@@ -626,9 +626,9 @@ class TournamentSettingsMixin:
             category_editor,
             label="Categorias do torneio",
             section=True,
-            # Linhas curtas de proposito: rotulo longo puxa a largura minima da
-            # tela inteira (B-8), e foi assim que esta secao estourou a janela
-            # de 800px na primeira versao.
+            # Linhas curtas de propósito: rótulo longo puxa a largura mínima da
+            # tela inteira (B-8), e foi assim que esta seção estourou a janela
+            # de 800px na primeira versão.
             help_text=(
                 "Sem linhas, valem as faixas padrão.\n"
                 "Idade: 'Até' é inclusivo (Sub-12 aceita 12).\n"
@@ -660,7 +660,7 @@ class TournamentSettingsMixin:
         )
 
         # ------------------------------------------------------------------ #
-        # Aba 5 - Classificacao e agenda
+        # Aba 5 - Classificação e agenda
         # ------------------------------------------------------------------ #
         standings_layout = self.list_layout_service.get_columns(self.current_tournament_id, "standings")
         columns_editor = ColumnLayoutEditor(
@@ -722,10 +722,10 @@ class TournamentSettingsMixin:
         ctk.CTkLabel(schedule_panel, text="Hora").grid(row=1, column=2, padx=6, sticky="w")
         ctk.CTkLabel(schedule_panel, text="Folga").grid(row=1, column=3, padx=6, sticky="w")
 
-        # ORG-03: local e ritmo por rodada vao numa SEGUNDA linha, e nao em mais
-        # duas colunas. Seis colunas nao cabem na janela de 800px que o
-        # `test_ui_layout` cobre — e o que estoura nao e a agenda, e o editor de
-        # colunas ao lado, empurrado pela largura que a agenda impoe a aba (B-8).
+        # ORG-03: local e ritmo por rodada vão numa SEGUNDA linha, e não em mais
+        # duas colunas. Seis colunas não cabem na janela de 800px que o
+        # `test_ui_layout` cobre — e o que estoura não é a agenda, e o editor de
+        # colunas ao lado, empurrado pela largura que a agenda impõe a aba (B-8).
         schedule_entries: dict[int, dict[str, Any]] = {}
         for indice, item in enumerate(existing_schedule):
             round_number = int(item["round_number"])
@@ -791,15 +791,15 @@ class TournamentSettingsMixin:
         self._disable_if_unauthorized(btn_auto, "tournament_write")
 
         # ------------------------------------------------------------------ #
-        # Coleta dos campos e persistencia
+        # Coleta dos campos e persistência
         # ------------------------------------------------------------------ #
         def profile_payloads() -> tuple[dict[str, Any], dict[str, Any], list[dict[str, Any]]]:
             tournament_payload = {key: entry.get() for key, entry in tournament_entries.items()}
             settings_payload = {key: entry.get() for key, entry in setting_entries.items()}
 
-            # Validacao client-side: destaca o campo invalido antes de persistir.
-            # Estado de campo unico desde a F5.3 — esta tela guardava a terceira
-            # copia da mesma ideia (borda salva a mao, sem mensagem no campo).
+            # Validação client-side: destaca o campo inválido antes de persistir.
+            # Estado de campo único desde a F5.3 — esta tela guardava a terceira
+            # copia da mesma ideia (borda salva à mão, sem mensagem no campo).
             def _reset_border(entry: Any) -> None:
                 clear_field_error(entry)
 
@@ -823,12 +823,12 @@ class TournamentSettingsMixin:
             if not rounds_raw.isdigit() or int(rounds_raw) < 1:
                 _flag_invalid(
                     tournament_entries["rounds_count"],
-                    "Informe um numero de rodadas inteiro maior ou igual a 1.",
+                    "Informe um número de rodadas inteiro maior ou igual a 1.",
                 )
 
-            # Alerta nao-bloqueante: no Suico, rounds_count > (jogadores ativos - 1)
-            # forcaria repeticao de adversario na rodada excedente. Apenas avisa
-            # (borda amarela + toast) e deixa salvar: o arbitro pode ainda estar
+            # Alerta não-bloqueante: no Suíço, rounds_count > (jogadores ativos - 1)
+            # forcaria repetição de adversário na rodada excedente. Apenas avisa
+            # (borda amarela + toast) e deixa salvar: o árbitro pode ainda estar
             # cadastrando jogadores, ou usar outro formato de pareamento.
             _pairing_method = pairing_by_label.get(pairing_option.get(), "swiss")
             _n_active = len(self.db.list_players(self.current_tournament_id, active_only=True))
@@ -836,12 +836,12 @@ class TournamentSettingsMixin:
             if _pairing_method == "swiss" and _n_active >= 2 and _rounds_int > _n_active - 1:
                 set_field_warning(
                     tournament_entries["rounds_count"],
-                    f"Maximo sem repeticao: {_n_active - 1} rodada(s).",
+                    f"Máximo sem repetição: {_n_active - 1} rodada(s).",
                 )
                 self._show_toast(
-                    f"Aviso: {_n_active} jogador(es) ativo(s). O maximo sem repeticao de "
-                    f"adversario e {_n_active - 1} rodada(s); com {_rounds_int}, a ultima "
-                    f"rodada pode nao fechar.",
+                    f"Aviso: {_n_active} jogador(es) ativo(s). O máximo sem repetição de "
+                    f"adversário e {_n_active - 1} rodada(s); com {_rounds_int}, a última "
+                    f"rodada pode não fechar.",
                     kind="warning",
                     duration_ms=6000,
                 )
@@ -854,7 +854,7 @@ class TournamentSettingsMixin:
                 except ValueError:
                     _flag_invalid(
                         tournament_entries["bye_points"],
-                        "Pontos do bye deve ser um numero maior ou igual a zero.",
+                        "Pontos do bye deve ser um número maior ou igual a zero.",
                     )
 
             start_date = _parse_date(tournament_payload.get("start_date", ""))
@@ -862,7 +862,7 @@ class TournamentSettingsMixin:
             if start_date and end_date and start_date > end_date:
                 _flag_invalid(
                     tournament_entries["end_date"],
-                    "A data final nao pode ser anterior a data inicial.",
+                    "A data final não pode ser anterior a data inicial.",
                 )
             scope = TOURNAMENT_SCOPE_VALUES[scope_option.get()]
             tournament_payload["scope"] = scope
@@ -911,13 +911,13 @@ class TournamentSettingsMixin:
                     bonus = float(accel_custom_entries["bonus"].get() or 0.0)
                     upper = float(accel_custom_entries["upper"].get() or 0.0)
                 except (TypeError, ValueError):
-                    raise AppError("Aceleracao personalizada: use numeros validos em rodadas, bonus e fracao do topo.")
+                    raise AppError("Aceleração personalizada: use números válidos em rodadas, bônus e fração do topo.")
                 if rounds < 1:
-                    raise AppError("Aceleracao personalizada: informe ao menos 1 rodada acelerada.")
+                    raise AppError("Aceleração personalizada: informe ao menos 1 rodada acelerada.")
                 if bonus <= 0:
-                    raise AppError("Aceleracao personalizada: o bonus por jogador deve ser maior que zero.")
+                    raise AppError("Aceleração personalizada: o bônus por jogador deve ser maior que zero.")
                 if not 0 < upper <= 1:
-                    raise AppError("Aceleracao personalizada: a fracao do topo deve estar entre 0 (exclusivo) e 1.")
+                    raise AppError("Aceleração personalizada: a fração do topo deve estar entre 0 (exclusivo) e 1.")
                 settings_payload["acceleration_method"] = f"custom:rounds={rounds};bonus={bonus};upper={upper}"
             else:
                 settings_payload["acceleration_method"] = accel_key
@@ -998,7 +998,7 @@ class TournamentSettingsMixin:
                 tournament_payload, settings_payload, schedule_payload = profile_payloads()
                 new_name = self._ask_string(
                     "Salvar como novo torneio",
-                    "Nome do novo torneio (em branco usa o nome do formulario):",
+                    "Nome do novo torneio (em branco usa o nome do formulário):",
                 )
                 if new_name is None:
                     return
@@ -1016,14 +1016,14 @@ class TournamentSettingsMixin:
                 self._show_error(exc)
 
         # ------------------------------------------------------------------ #
-        # Rodape fixo de acoes (visivel em todas as abas)
+        # Rodapé fixo de ações (visível em todas as abas)
         # ------------------------------------------------------------------ #
         actions = ctk.CTkFrame(container, fg_color="transparent")
         actions.grid(row=1, column=0, pady=(10, 0), sticky="e")
         btn_save_config = ctk.CTkButton(actions, text="Salvar", command=save_settings)
         btn_save_config.pack(side="right", padx=(8, 0))
         # Enter em qualquer campo de qualquer aba salva (F5.10). As cinco abas
-        # compartilham um unico rodape de acoes, entao a acao primaria e a
+        # compartilham um único rodapé de ações, então a ação primária e a
         # mesma para todas — e cada pilha liga o Enter dos seus campos a ela.
         for pilha in (form_general, form_official, form_rules, form_prizes, form_of(tab_reports)):
             pilha.submit(save_settings)

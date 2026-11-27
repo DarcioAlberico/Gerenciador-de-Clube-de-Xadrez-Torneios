@@ -125,26 +125,26 @@ THEME_APP_BG       = ColorToken("#F8FAFC", "#0B0F19")
 THEME_PANEL_BG     = ColorToken("#FFFFFF", "#1E293B")
 THEME_TEXT_MAIN    = ColorToken("#0F172A", "#F1F5F9")
 # Escurecido na face clara pela auditoria da B-2: #64748B dava 4.33:1 sobre os
-# paineis mais claros (forest, sepia) — reprovava AA por pouco, justamente no
-# texto de ajuda, que e onde o usuario menos consegue "chutar" o que esta escrito.
+# painéis mais claros (forest, sepia) — reprovava AA por pouco, justamente no
+# texto de ajuda, que é onde o usuário menos consegue "chutar" o que esta escrito.
 THEME_TEXT_SUB     = ColorToken("#526070", "#94A3B8")
 THEME_STATUSBAR_BG = ColorToken("#E2E8F0", "#0F172A")
 THEME_TREE_BG      = ColorToken("#FFFFFF", "#1E293B")
 THEME_TREE_FG      = ColorToken("#0F172A", "#F1F5F9")
 THEME_ACCENT        = ColorToken("#2563EB", "#38BDF8")
-# Texto POR CIMA do accent (botao primario, toast, faixa de marca do login).
-# Valor inicial so para o caso de ninguem aplicar preset; apply_accent_preset
+# Texto POR CIMA do accent (botão primário, toast, faixa de marca do login).
+# Valor inicial só para o caso de ninguém aplicar preset; apply_accent_preset
 # recalcula com best_ink — ver a nota sobre tinta calculada, mais abaixo.
 THEME_ON_ACCENT     = ColorToken("#FFFFFF", "#0B0F19")
 # Perigo e sucesso escurecidos na face clara (B-2): com os valores 500 do
-# Tailwind, texto branco por cima ficava em 3.7:1 — o botao de excluir era o
-# menos legivel da tela, que e o oposto do que ele precisa ser.
+# Tailwind, texto branco por cima ficava em 3.7:1 — o botão de excluir era o
+# menos legível da tela, que é o oposto do que ele precisa ser.
 THEME_DANGER        = ColorToken("#C81E1E", "#F87171")
 THEME_DANGER_HOVER  = ColorToken("#B91C1C", "#DC2626")
 THEME_INFO          = ColorToken("#047857", "#34D399")
 THEME_SUCCESS       = ColorToken("#047857", "#34D399")
 THEME_SUCCESS_HOVER = ColorToken("#065F46", "#10B981")
-# Aviso em dois papeis: PREENCHIMENTO (fundo de toast) e TEXTO sobre painel.
+# Aviso em dois papéis: PREENCHIMENTO (fundo de toast) e TEXTO sobre painel.
 THEME_WARNING       = ColorToken("#D97706", "#FBBF24")
 THEME_WARNING_HOVER = ColorToken("#B45309", "#F59E0B")
 # Aviso COMO TEXTO precisa ser mais escuro que o aviso como preenchimento:
@@ -157,11 +157,11 @@ THEME_NEUTRAL_HOVER = ColorToken("#475569", "#334155")
 # Tinta sobre preenchimento — CALCULADA, nunca escolhida a mao (B-2 / P2-11).
 #
 # A auditoria mostrou que o texto branco cravado reprovava em massa: sobre o
-# ambar do toast de aviso dava 3.19:1, e o rotulo padrao do customtkinter
-# (#DCE4EE) sobre o accent amarelo dava 1.30:1 — praticamente invisivel.
-# best_ink escolhe entre tinta clara e escura pela razao de contraste, entao
-# botao amarelo nasce com texto escuro e botao indigo com texto claro sem que
-# ninguem precise manter uma tabela de excecoes.
+# âmbar do toast de aviso dava 3.19:1, e o rótulo padrão do customtkinter
+# (#DCE4EE) sobre o accent amarelo dava 1.30:1 — praticamente invisível.
+# best_ink escolhe entre tinta clara e escura pela razão de contraste, então
+# botão amarelo nasce com texto escuro e botão indigo com texto claro sem que
+# ninguém precise manter uma tabela de exceções.
 # ---------------------------------------------------------------------------
 def _ink_token(fill: ColorToken) -> ColorToken:
     """Par de tintas legiveis sobre as duas faces de ``fill``."""
@@ -173,7 +173,7 @@ THEME_ON_SUCCESS = _ink_token(THEME_SUCCESS)
 THEME_ON_WARNING = _ink_token(THEME_WARNING)
 
 # ---------------------------------------------------------------------------
-# Tabelas (ttk.Treeview). O ttk NAO aceita par (claro, escuro): a cor tem de ser
+# Tabelas (ttk.Treeview). O ttk NÃO aceita par (claro, escuro): a cor tem de ser
 # resolvida com pick() no momento de configurar o estilo. Estes tokens existem
 # porque antes as tabelas eram pintadas com valores fixos de modo escuro — no
 # tema claro a tabela ficava escura no meio da tela clara.
@@ -181,18 +181,18 @@ THEME_ON_WARNING = _ink_token(THEME_WARNING)
 THEME_TREE_ODD        = ColorToken("#FFFFFF", "#1E293B")
 THEME_TREE_EVEN       = ColorToken("#F1F5F9", "#172032")
 THEME_TREE_HEADING    = ColorToken("#CBD5E1", "#0F172A")
-# Selecao escurecida na face clara (B-2): o azul 500 dava 3.68:1 com texto
+# Seleção escurecida na face clara (B-2): o azul 500 dava 3.68:1 com texto
 # branco. A linha selecionada e a que o operador esta lendo para digitar o
-# resultado — ela nao pode ser a menos legivel da tabela.
+# resultado — ela não pode ser a menos legível da tabela.
 THEME_TREE_SELECTED   = ColorToken("#1D4ED8", "#334155")
 THEME_TREE_SELECTED_FG = ColorToken("#FFFFFF", "#F1F5F9")
 
 # Estado de um resultado na tabela de rodadas: (texto, fundo). Fundo None herda
-# a zebra. Semantica, nao decoracao — e por isso que mora aqui e nao na tela.
+# a zebra. Semântica, não decoração — e por isso que mora aqui e não na tela.
 # Os cinzas "apagados" (vazio/anulado/bye) foram os piores achados da B-2:
 # #94A3B8 sobre linha clara dava 2.34:1. Um estado discreto continua discreto
-# em #5C6B80 — o que ele nao pode e ser ilegivel, porque "anulado" e "bye"
-# mudam o que o arbitro faz com aquela mesa.
+# em #5C6B80 — o que ele não pode e ser ilegível, porque "anulado" e "bye"
+# mudam o que o árbitro faz com aquela mesa.
 RESULT_STATE_COLORS: dict[str, tuple[ColorToken, ColorToken | None]] = {
     "vazio":         (ColorToken("#5A6678", "#94A3B8"), None),
     "registrado":    (ColorToken("#047857", "#86EFAC"), None),
@@ -203,7 +203,7 @@ RESULT_STATE_COLORS: dict[str, tuple[ColorToken, ColorToken | None]] = {
     "anulado":       (ColorToken("#5C6B80", "#8A97A8"), None),
 }
 
-# Resultado lancado (vitoria/empate/bye) — usado nas tags da mesma tabela.
+# Resultado lançado (vitoria/empate/bye) — usado nas tags da mesma tabela.
 THEME_RESULT_WIN  = ColorToken("#B45309", "#FACC15")
 THEME_RESULT_DRAW = ColorToken("#5A6678", "#94A3B8")
 THEME_RESULT_BYE  = ColorToken("#5C6B80", "#8A97A8")
@@ -212,22 +212,22 @@ THEME_RESULT_BYE  = ColorToken("#5C6B80", "#8A97A8")
 # Campos de entrada (F5.1 / P3-1, P3-2 — ESPEC_UI_UX §4.6).
 #
 # Antes da F5.1 os campos usavam as cores de FABRICA do customtkinter: fundo
-# #F9F9FA/#343638 e borda #979DA2/#565B5E, que nao acompanham preset nenhum —
+# #F9F9FA/#343638 e borda #979DA2/#565B5E, que não acompanham preset nenhum —
 # a borda dava 2.74:1 sobre painel claro (reprova os 3:1 de componente) e o
-# campo sumia nos paineis sepia/floresta (1.04:1). Aqui as cores sao DERIVADAS
-# do painel por field_palette(): um preset de painel novo ja nasce com campos
+# campo sumia nos painéis sepia/floresta (1.04:1). Aqui as cores são DERIVADAS
+# do painel por field_palette(): um preset de painel novo já nasce com campos
 # coerentes, sem tabela para manter.
 #
-# Tintas do campo (par fixo): as mesmas do texto padrao do app.
+# Tintas do campo (par fixo): as mesmas do texto padrão do app.
 _FIELD_INK_DARK = "#0F172A"
 _FIELD_INK_LIGHT = "#F1F5F9"
 
 
 def _least_mix(base: str, ink: str, over: str, minimum: float) -> str:
-    """A menor mistura de ``ink`` em ``base`` que alcanca ``minimum`` sobre ``over``.
+    """A menor mistura de ``ink`` em ``base`` que alcança ``minimum`` sobre ``over``.
 
-    Procurada, nao escolhida: e o que garante o limite por construcao para
-    qualquer painel — inclusive os que ainda nao existem. A margem de 0.05
+    Procurada, não escolhida: e o que garante o limite por construção para
+    qualquer painel — inclusive os que ainda não existem. A margem de 0.05
     evita a beirada do arredondamento em duas casas usado pelo auditor.
     """
     for passo in range(5, 101, 5):
@@ -242,7 +242,7 @@ def field_palette(panel: str) -> dict[str, str]:
 
     Regras (ESPEC_UI_UX §4.6):
 
-    - ``bg``: proximo do painel, deslocado para a direcao clara da face — em
+    - ``bg``: próximo do painel, deslocado para a direção clara da face — em
       painel tingido (sepia, floresta) o campo conserva a temperatura em vez do
       cinza-azulado de fabrica;
     - ``border``: >= 3:1 sobre o painel (AA de componente de interface);
@@ -270,18 +270,18 @@ THEME_FIELD_BG     = ColorToken(*_campos_iniciais["bg"])
 THEME_FIELD_BORDER = ColorToken(*_campos_iniciais["border"])
 THEME_FIELD_TEXT   = ColorToken(*_campos_iniciais["text"])
 THEME_PLACEHOLDER  = ColorToken(*_campos_iniciais["placeholder"])
-# Foco = accent, erro = perigo: ALIASES do mesmo objeto, de proposito — quando
+# Foco = accent, erro = perigo: ALIASES do mesmo objeto, de propósito — quando
 # apply_accent_preset muta THEME_ACCENT, o anel de foco acompanha sozinho.
 THEME_FIELD_BORDER_FOCUS = THEME_ACCENT
 THEME_FIELD_BORDER_ERROR = THEME_DANGER
 
 
 def pick(token: Any, mode: str | None = None) -> str:
-    """Resolve um par ``(claro, escuro)`` para a aparencia atual.
+    """Resolve um par ``(claro, escuro)`` para a aparência atual.
 
-    Serve para quem so aceita **uma** cor: ``ttk.Style``, tags de ``Treeview``,
-    widgets Tk puros. Aceita tambem uma string, e devolve ela mesma — assim o
-    chamador nao precisa saber se recebeu token ou cor literal.
+    Serve para quem só aceita **uma** cor: ``ttk.Style``, tags de ``Treeview``,
+    widgets Tk puros. Aceita também uma string, e devolve ela mesma — assim o
+    chamador não precisa saber se recebeu token ou cor literal.
     """
     if isinstance(token, str):
         return token
@@ -293,26 +293,26 @@ def pick(token: Any, mode: str | None = None) -> str:
 # Cada preset: light (modo claro), dark (modo escuro), hover_l, hover_d
 # ---------------------------------------------------------------------------
 # A face CLARA usa a faixa 600/700; a ESCURA, a faixa 300/400 (B-2 / P2-11).
-# Nao e capricho de paleta: os tons 500 nascem para viver sobre fundo escuro, e
-# sobre painel claro nenhum deles alcancava os 3:1 que um componente de
-# interface precisa — nem mesmo o azul padrao (2.99:1). Com a faixa escura, os
-# quinze presets passam como componente E como preenchimento de botao.
+# Não é capricho de paleta: os tons 500 nascem para viver sobre fundo escuro, e
+# sobre painel claro nenhum deles alcançava os 3:1 que um componente de
+# interface precisa — nem mesmo o azul padrão (2.99:1). Com a faixa escura, os
+# quinze presets passam como componente E como preenchimento de botão.
 ACCENT_PRESETS: dict[str, dict[str, str]] = {
     "blue":      {"label": "Azul",          "l": "#2563EB", "d": "#38BDF8", "hl": "#1D4ED8", "hd": "#0EA5E9"},
-    "indigo":    {"label": "Indigo",         "l": "#4F46E5", "d": "#818CF8", "hl": "#4338CA", "hd": "#6366F1"},
+    "indigo":    {"label": "Índigo",         "l": "#4F46E5", "d": "#818CF8", "hl": "#4338CA", "hd": "#6366F1"},
     "violet":    {"label": "Violeta",        "l": "#7C3AED", "d": "#A78BFA", "hl": "#6D28D9", "hd": "#8B5CF6"},
     "purple":    {"label": "Roxo",           "l": "#9333EA", "d": "#C084FC", "hl": "#7E22CE", "hd": "#A855F7"},
     "pink":      {"label": "Rosa",           "l": "#DB2777", "d": "#F472B6", "hl": "#BE185D", "hd": "#EC4899"},
     "rose":      {"label": "Rosa Choque",    "l": "#E11D48", "d": "#FB7185", "hl": "#BE123C", "hd": "#F43F5E"},
     "red":       {"label": "Vermelho",       "l": "#DC2626", "d": "#F87171", "hl": "#B91C1C", "hd": "#EF4444"},
     "orange":    {"label": "Laranja",        "l": "#C2410C", "d": "#FB923C", "hl": "#9A3412", "hd": "#F97316"},
-    "amber":     {"label": "Ambar",          "l": "#B45309", "d": "#FBBF24", "hl": "#92400E", "hd": "#F59E0B"},
+    "amber":     {"label": "Âmbar",          "l": "#B45309", "d": "#FBBF24", "hl": "#92400E", "hd": "#F59E0B"},
     "yellow":    {"label": "Amarelo",        "l": "#A16207", "d": "#FACC15", "hl": "#854D0E", "hd": "#EAB308"},
     "lime":      {"label": "Lima",           "l": "#4D7C0F", "d": "#A3E635", "hl": "#3F6212", "hd": "#84CC16"},
     "emerald":   {"label": "Esmeralda",      "l": "#047857", "d": "#34D399", "hl": "#065F46", "hd": "#059669"},
-    "teal":      {"label": "Verde-Agua",     "l": "#0F766E", "d": "#2DD4BF", "hl": "#115E59", "hd": "#14B8A6"},
+    "teal":      {"label": "Verde-Água",     "l": "#0F766E", "d": "#2DD4BF", "hl": "#115E59", "hd": "#14B8A6"},
     "cyan":      {"label": "Ciano",          "l": "#0E7490", "d": "#22D3EE", "hl": "#155E75", "hd": "#06B6D4"},
-    "sky":       {"label": "Ceu",            "l": "#0369A1", "d": "#38BDF8", "hl": "#075985", "hd": "#0EA5E9"},
+    "sky":       {"label": "Céu",            "l": "#0369A1", "d": "#38BDF8", "hl": "#075985", "hd": "#0EA5E9"},
 }
 ACCENT_PRESET_LABELS: dict[str, str] = {k: v["label"] for k, v in ACCENT_PRESETS.items()}
 
@@ -332,7 +332,7 @@ BG_COLOR_PRESETS: dict[str, dict[str, tuple[str, str]]] = {
     "rose_bg":    {"app": ("#FFF1F2", "#1A0510"), "statusbar": ("#FECDD3", "#14040D")},
     "teal_bg":    {"app": ("#F0FDFA", "#042018"), "statusbar": ("#CCFBF1", "#031510")},
     "indigo_bg":  {"app": ("#EEF2FF", "#0E0B27"), "statusbar": ("#E0E7FF", "#09071E")},
-    # Alto contraste (B-2 / ESPEC §6). Unico preset que tambem troca o TEXTO:
+    # Alto contraste (B-2 / ESPEC §6). Único preset que também troca o TEXTO:
     # o ganho de acessibilidade mora justamente no cinza de apoio, que nos
     # outros temas fica em ~6:1 e aqui sobe para AAA. Ver _TEXT_DEFAULTS.
     "contrast":   {
@@ -351,10 +351,10 @@ BG_COLOR_PRESET_LABELS: dict[str, str] = {
     "midnight":   "Meia-Noite",
     "forest":     "Floresta",
     "amethyst":   "Ametista",
-    "sepia":      "Sepia",
+    "sepia":      "Sépia",
     "rose_bg":    "Rosa",
-    "teal_bg":    "Verde-Agua",
-    "indigo_bg":  "Indigo",
+    "teal_bg":    "Verde-Água",
+    "indigo_bg":  "Índigo",
     "contrast":   "Alto Contraste",
 }
 # Alias de compatibilidade (settings antigos usavam 'bg_preset')
@@ -362,7 +362,7 @@ BG_PRESETS = BG_COLOR_PRESETS
 BG_PRESET_LABELS = BG_COLOR_PRESET_LABELS
 
 # ---------------------------------------------------------------------------
-# Presets de Cor de Fundo dos Frames (cards, paineis, dialogs)
+# Presets de Cor de Fundo dos Frames (cards, painéis, dialogs)
 # ---------------------------------------------------------------------------
 FRAME_BG_PRESETS: dict[str, dict[str, tuple[str, str]]] = {
     "slate":      {"panel": ("#FFFFFF", "#1E293B"), "tree": ("#FFFFFF", "#1E293B")},
@@ -378,7 +378,7 @@ FRAME_BG_PRESETS: dict[str, dict[str, tuple[str, str]]] = {
     "teal_f":     {"panel": ("#CCFBF1", "#0A2A24"), "tree": ("#CCFBF1", "#0A2A24")},
     "indigo_f":   {"panel": ("#E0E7FF", "#1A1A3A"), "tree": ("#E0E7FF", "#1A1A3A")},
     # Painel levemente destacado do fundo: em alto contraste a estrutura da
-    # tela nao pode depender so de sombra, que e o que some quando o usuario
+    # tela não pode depender só de sombra, que é o que some quando o usuário
     # aumenta o contraste do sistema operacional.
     "contrast":   {"panel": ("#EFEFEF", "#141414"), "tree": ("#FFFFFF", "#000000")},
 }
@@ -391,24 +391,24 @@ FRAME_BG_PRESET_LABELS: dict[str, str] = {
     "midnight":   "Meia-Noite",
     "forest":     "Floresta",
     "amethyst":   "Ametista",
-    "sepia":      "Sepia",
+    "sepia":      "Sépia",
     "rose_f":     "Rosa",
-    "teal_f":     "Verde-Agua",
-    "indigo_f":   "Indigo",
+    "teal_f":     "Verde-Água",
+    "indigo_f":   "Índigo",
     "contrast":   "Alto Contraste",
 }
 
 # ---------------------------------------------------------------------------
 # Temas curados — combinacoes prontas (destaque + fundo + frame) equilibradas
-# e com contraste testado. Selecionar um aplica os tres presets de uma vez;
-# o modo "Personalizado" mantem os tres dropdowns avancados.
+# e com contraste testado. Selecionar um aplica os três presets de uma vez;
+# o modo "Personalizado" mantém os três dropdowns avançados.
 # ---------------------------------------------------------------------------
 CURATED_THEMES: dict[str, dict[str, Any]] = {
-    "slate_blue":      {"label": "Ardosia & Azul",        "accent": "blue",    "bg": "slate",  "frame": "slate",  "appearance": "Light", "recommended": True},
-    "graphite_indigo": {"label": "Grafite & Indigo",      "accent": "indigo",  "bg": "zinc",   "frame": "slate",  "appearance": "Light"},
-    "navy_amber":      {"label": "Marinho & Ambar",       "accent": "amber",   "bg": "navy",   "frame": "navy",   "appearance": "Dark"},
+    "slate_blue":      {"label": "Ardósia & Azul",        "accent": "blue",    "bg": "slate",  "frame": "slate",  "appearance": "Light", "recommended": True},
+    "graphite_indigo": {"label": "Grafite & Índigo",      "accent": "indigo",  "bg": "zinc",   "frame": "slate",  "appearance": "Light"},
+    "navy_amber":      {"label": "Marinho & Âmbar",       "accent": "amber",   "bg": "navy",   "frame": "navy",   "appearance": "Dark"},
     "carbon_cyan":     {"label": "Carbono & Ciano",       "accent": "cyan",    "bg": "carbon", "frame": "carbon", "appearance": "Dark"},
-    "sepia_wood":      {"label": "Sepia & Madeira",       "accent": "amber",   "bg": "sepia",  "frame": "sepia",  "appearance": "Light"},
+    "sepia_wood":      {"label": "Sépia & Madeira",       "accent": "amber",   "bg": "sepia",  "frame": "sepia",  "appearance": "Light"},
     "forest_emerald":  {"label": "Floresta & Esmeralda",  "accent": "emerald", "bg": "forest", "frame": "forest", "appearance": "Light"},
     "alto_contraste":  {"label": "Alto Contraste",        "accent": "blue",    "bg": "contrast", "frame": "contrast", "appearance": "Light"},
 }
@@ -431,8 +431,8 @@ def curated_theme_swatches(theme_key: str) -> dict[str, str]:
         "statusbar": bg["statusbar"][face],
         "panel":     frame["panel"][face],
         "accent":    accent["d"] if face else accent["l"],
-        # O preset pode trazer o proprio texto (alto contraste): o cartao tem de
-        # mostrar o tema que sera aplicado, nao o texto do tema em vigor.
+        # O preset pode trazer o próprio texto (alto contraste): o cartão tem de
+        # mostrar o tema que será aplicado, não o texto do tema em vigor.
         "text":      bg.get("text", tuple(THEME_TEXT_MAIN))[face],
         "sub":       bg.get("sub", tuple(THEME_TEXT_SUB))[face],
     }
@@ -454,13 +454,13 @@ def apply_accent_preset(preset_key: str) -> None:
     preset = ACCENT_PRESETS.get(preset_key, ACCENT_PRESETS["blue"])
     l_color, d_color = preset["l"], preset["d"]
     hl_color, hd_color = preset["hl"], preset["hd"]
-    # Tinta do rotulo calculada a partir do proprio accent (B-2). O padrao do
+    # Tinta do rótulo calculada a partir do próprio accent (B-2). O padrão do
     # customtkinter e um cinza-claro fixo (#DCE4EE) que sobre o accent amarelo
-    # dava 1.30:1 — texto que so existe no codigo, nao na tela.
+    # dava 1.30:1 — texto que só existe no código, não na tela.
     on_light, on_dark = best_ink(l_color), best_ink(d_color)
     THEME_ON_ACCENT.set(on_light, on_dark)
 
-    # Patch no ThemeManager — afeta todos os widgets criados apos esta chamada
+    # Patch no ThemeManager — afeta todos os widgets criados após esta chamada
     try:
         import customtkinter as ctk
         tm = ctk.ThemeManager.theme
@@ -473,7 +473,7 @@ def apply_accent_preset(preset_key: str) -> None:
             "CTkProgressBar":    {"progress_color": [l_color, d_color]},
             # F5.1 / P3-1: antes so a "setinha" (button_color) acompanhava o
             # accent — o CORPO do OptionMenu ficava no azul de fabrica em 141
-            # widgets. Agora corpo e rotulo seguem o accent, com tinta calculada.
+            # widgets. Agora corpo e rótulo seguem o accent, com tinta calculada.
             "CTkOptionMenu":     {"fg_color": [l_color, d_color], "button_color": [hl_color, hd_color], "button_hover_color": [hl_color, hd_color], "text_color": [on_light, on_dark]},
             "CTkComboBox":       {"button_color": [l_color, d_color], "button_hover_color": [hl_color, hd_color]},
             "CTkSegmentedButton":{"selected_color": [l_color, d_color], "selected_hover_color": [hl_color, hd_color]},
@@ -489,7 +489,7 @@ def apply_accent_preset(preset_key: str) -> None:
 
 
 # Cor de texto de todos os presets menos o de alto contraste. Guardada aqui
-# para que sair do alto contraste seja tao simples quanto entrar — sem isso, o
+# para que sair do alto contraste seja tão simples quanto entrar — sem isso, o
 # preto puro ficaria grudado no tema seguinte.
 _TEXT_DEFAULTS = {"text": ("#0F172A", "#F1F5F9"), "sub": ("#526070", "#94A3B8")}
 
@@ -509,13 +509,13 @@ def apply_bg_preset(preset_key: str) -> None:
 
 
 def _patch_field_defaults() -> None:
-    """Leva os tokens de campo aos padroes do ThemeManager (F5.1 / P3-1).
+    """Leva os tokens de campo aos padrões do ThemeManager (F5.1 / P3-1).
 
     Sem isto os campos nascem com as cores de fabrica do customtkinter e nunca
-    acompanham preset nenhum. Com o padrao patchado, campos novos ja nascem
+    acompanham preset nenhum. Com o padrão patchado, campos novos já nascem
     certos e o restyle.py repinta os existentes na troca de tema — a
-    infraestrutura ja sabia reestilizar CTkEntry/CTkTextbox e rodava a vazio
-    porque o padrao nunca mudava.
+    infraestrutura já sabia reestilizar CTkEntry/CTkTextbox e rodava a vazio
+    porque o padrão nunca mudava.
     """
     try:
         import customtkinter as ctk
@@ -547,7 +547,7 @@ def _patch_field_defaults() -> None:
 def apply_frame_bg_preset(preset_key: str) -> None:
     """Atualiza THEME_PANEL_BG e THEME_TREE_BG para o preset de fundo dos frames.
 
-    Os tokens de campo (THEME_FIELD_*) sao derivados AQUI, porque o campo vive
+    Os tokens de campo (THEME_FIELD_*) são derivados AQUI, porque o campo vive
     sobre o painel: trocar o painel e o que muda o que "coerente" significa.
     """
     preset = FRAME_BG_PRESETS.get(preset_key, FRAME_BG_PRESETS["slate"])

@@ -17,7 +17,7 @@ from typing import Iterable
 
 
 def to_ascii(text: str) -> str:
-    """Remove acentos preservando a letra base ("Classificação" → "Classificacao").
+    """Remove acentos preservando a letra base ("Classificação" → "Classificação").
 
     Decomposição NFKD separa a letra do acento; descartar os combinantes deixa a
     letra. Caractere sem equivalente ASCII (um emoji, por exemplo) some — o que

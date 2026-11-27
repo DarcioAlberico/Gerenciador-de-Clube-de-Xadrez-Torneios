@@ -178,7 +178,7 @@ class DesistentesTest(unittest.TestCase):
         nomes = [item["name"] for item in resultado["allocations"]]
         self.assertEqual(["Duda", "Ana"], nomes)
         self.assertEqual(1, resultado["excluded_withdrawn"])
-        # Ana sobe para o 2o premio, que era do desistente.
+        # Ana sobe para o 2o prêmio, que era do desistente.
         self.assertEqual(300.0, {i["name"]: i["gross"] for i in resultado["allocations"]}["Ana"])
 
     def test_jogador_inativo_tambem_conta_como_fora(self) -> None:
@@ -223,7 +223,7 @@ class EditalRealTest(unittest.TestCase):
         self.assertEqual(1000.0, por_nome["Marina"])
         # Tiago fica com o 3o geral e o Sub-14.
         self.assertEqual(600.0, por_nome["Tiago"])
-        # Helena nao ganha: e a 2a do Feminino e o 2o do Sub-14.
+        # Helena não ganha: e a 2a do Feminino e o 2o do Sub-14.
         self.assertNotIn("Helena", por_nome)
 
         # A bolsa anunciada e 1000+600+400+300+200 = 2500.

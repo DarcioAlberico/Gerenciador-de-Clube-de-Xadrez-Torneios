@@ -36,14 +36,14 @@ class RitmoVerticalTest(unittest.TestCase):
     """A parte pura: quanto respiro cada tipo de linha recebe."""
 
     def test_primeira_linha_nao_ganha_respiro_de_cima(self) -> None:
-        # Margem dupla no topo e o defeito classico de empilhar sem olhar a
-        # posicao: o painel ja tem a sua, somar a do campo dobraria so ali.
+        # Margem dupla no topo e o defeito clássico de empilhar sem olhar a
+        # posição: o painel já tem a sua, somar a do campo dobraria só ali.
         topo, _base = row_padding("field", first=True)
         self.assertEqual(0, topo)
 
     def test_secao_abre_mais_que_campo(self) -> None:
-        # E essa diferenca — nao regua, nao cor — que faz o grupo ser lido
-        # como grupo. Se as duas fossem iguais, a secao viraria so um rotulo
+        # E essa diferença — não régua, não cor — que faz o grupo ser lido
+        # como grupo. Se as duas fossem iguais, a seção viraria só um rótulo
         # em negrito no meio da coluna.
         topo_secao, _ = row_padding("section")
         topo_campo, _ = row_padding("field")
@@ -73,8 +73,8 @@ class SecoesDeJogadoresTest(unittest.TestCase):
     """O agrupamento do cadastro é dado puro — e precisa cobrir tudo."""
 
     def test_secoes_cobrem_exatamente_os_campos_do_cadastro(self) -> None:
-        # Campo fora de secao seria campo que some da tela: a montagem
-        # percorre as SECOES, nao a lista de campos.
+        # Campo fora de seção seria campo que some da tela: a montagem
+        # percorre as SECOES, não a lista de campos.
         agrupados = [chave for _titulo, campos in PLAYER_SECTIONS for chave in campos]
         self.assertEqual(sorted(PLAYER_FIELDS), sorted(agrupados))
         self.assertEqual(len(agrupados), len(set(agrupados)), "campo repetido em duas secoes")
@@ -123,8 +123,8 @@ class FormStackTest(unittest.TestCase):
     def setUp(self) -> None:
         self.painel = ctk.CTkFrame(self.root)
         # Mapeado de verdade: o Tk **descarta evento de teclado destinado a
-        # widget nao mapeado**, e os testes de teclado abaixo dependem de o
-        # evento chegar. Mesma familia da pegadinha de foco da B-4.
+        # widget não mapeado**, e os testes de teclado abaixo dependem de o
+        # evento chegar. Mesma família da pegadinha de foco da B-4.
         self.painel.pack(fill="both", expand=True)
         self.root.update()
         self.addCleanup(self.painel.destroy)
@@ -137,9 +137,9 @@ class FormStackTest(unittest.TestCase):
         self.root.update()
 
     def test_linhas_avancam_sozinhas_e_nao_se_sobrepoem(self) -> None:
-        # O bug que a aritmetica manual causou de verdade na tela de
-        # Jogadores: tres botoes empilhados POR CIMA dos seletores, na mesma
-        # celula, porque a soma de linhas errou por tres.
+        # O bug que a aritmética manual causou de verdade na tela de
+        # Jogadores: três botões empilhados POR CIMA dos seletores, na mesma
+        # célula, porque a soma de linhas errou por três.
         pilha = FormStack(self.painel)
         pilha.section("Grupo")
         a = pilha.text("Campo A", placeholder="a")
@@ -164,8 +164,8 @@ class FormStackTest(unittest.TestCase):
         self.assertGreater(_topo(titulo), _topo(campo.master))
 
     def test_form_of_devolve_a_mesma_pilha(self) -> None:
-        # Duas pilhas sobre o mesmo grid e como o formulario se desalinha
-        # calado: cada uma acha que a proxima linha e a 0.
+        # Duas pilhas sobre o mesmo grid e como o formulário se desalinha
+        # calado: cada uma acha que a próxima linha e a 0.
         pilha = FormStack(self.painel)
         self.assertIs(pilha, form_of(self.painel))
         pilha.text("Campo", placeholder="x")
@@ -195,14 +195,14 @@ class FormStackTest(unittest.TestCase):
 
     def test_select_entra_na_ordem_de_tab(self) -> None:
         """O buraco real do P3-13, medido: o ``tk_focusNext`` visita ``Entry`` e
-        ``Text`` e **pula** select e caixa de selecao. Uma aba de sete selects
-        nao tinha um unico ponto de parada do teclado."""
+        ``Text`` e **pula** select e caixa de seleção. Uma aba de sete selects
+        não tinha um único ponto de parada do teclado."""
         pilha = FormStack(self.painel)
         seletor = pilha.select("Escopo", ["A", "B"])
         self.assertEqual("1", str(seletor._canvas.cget("takefocus")))
 
     def test_setas_trocam_o_valor_do_select_e_avisam_o_comando(self) -> None:
-        # Trocar na tela sem disparar o `command` deixaria o formulario
+        # Trocar na tela sem disparar o `command` deixaria o formulário
         # mostrando um valor e guardando outro.
         avisos: list[str] = []
         pilha = FormStack(self.painel)
@@ -238,8 +238,8 @@ class FormStackTest(unittest.TestCase):
         self.assertEqual(["salvou"], disparos)
 
     def test_submit_alcanca_tambem_os_campos_criados_depois(self) -> None:
-        # Um formulario e montado em partes; exigir que `submit` fosse a ultima
-        # chamada seria a ordem implicita que a F5.4 tirou do caminho.
+        # Um formulário e montado em partes; exigir que `submit` fosse a última
+        # chamada seria a ordem implícita que a F5.4 tirou do caminho.
         disparos: list[str] = []
         pilha = FormStack(self.painel)
         pilha.submit(lambda: disparos.append("salvou"))

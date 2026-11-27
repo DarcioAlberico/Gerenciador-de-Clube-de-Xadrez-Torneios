@@ -87,8 +87,8 @@ def _parse_team_line(line: str, code: str) -> dict[str, Any] | None:
     """Equipe do registro 013 (legado) ou 310 (TRF25): nome + start-ranks.
 
     O 013 traz o nome em largura fixa e os start-ranks de 4 em 4 a partir da
-    coluna 37; o 310 tem o nome deslocado (o registro comeca com o TPN). Sem
-    nome nao ha equipe — e a linha e ignorada em vez de virar "Equipe vazia".
+    coluna 37; o 310 tem o nome deslocado (o registro começa com o TPN). Sem
+    nome não há equipe — e a linha e ignorada em vez de virar "Equipe vazia".
     """
     inicio_nome, inicio_ranks = (4, 36) if code == "013" else (8, 40)
     nome = line[inicio_nome:inicio_ranks].strip()
@@ -176,8 +176,8 @@ def parse_trf(content: str) -> dict[str, Any]:
         "time_control": header.get("time_control", ""),
         "rounds_count": max(rounds_count, len(round_dates)),
         "players": players,
-        # Tudo abaixo era LIDO e jogado fora (FED-04): o arquivo trazia arbitro,
-        # calendario e equipes, e a importacao criava um torneio sem nada disso.
+        # Tudo abaixo era LIDO e jogado fora (FED-04): o arquivo trazia árbitro,
+        # calendário e equipes, e a importação criava um torneio sem nada disso.
         "chief_arbiter": header.get("chief_arbiter", ""),
         "deputy_arbiters": deputies,
         "round_dates": round_dates,

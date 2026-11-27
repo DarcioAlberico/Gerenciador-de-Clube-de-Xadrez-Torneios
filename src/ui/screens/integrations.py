@@ -451,8 +451,8 @@ class IntegrationPagesMixin:
 
         ctk.CTkLabel(
             parent,
-            text="Publique um album de fotos do torneio em um servidor FTP (passo opcional, offline-first). "
-            "A senha e guardada protegida (DPAPI) e nunca exibida.",
+            text="Publique um álbum de fotos do torneio em um servidor FTP (passo opcional, offline-first). "
+            "A senha é guardada protegida (DPAPI) e nunca exibida.",
             text_color=THEME_TEXT_SUB,
             anchor="w",
             justify="left",
@@ -514,8 +514,8 @@ class IntegrationPagesMixin:
                 self.photo_album_service.save_config(current_config())
                 self._run_background(
                     lambda: self.photo_album_service.test_connection(),
-                    lambda _ok: self._show_info("Conexao FTP bem-sucedida."),
-                    "Testando conexao FTP...",
+                    lambda _ok: self._show_info("Conexão FTP bem-sucedida."),
+                    "Testando conexão FTP...",
                 )
             except Exception as exc:
                 self._show_error(exc)
@@ -539,7 +539,7 @@ class IntegrationPagesMixin:
                 self._run_background(
                     lambda: self.photo_album_service.publish_album(directory),
                     show_result,
-                    "Publicando album por FTP...",
+                    "Publicando álbum por FTP...",
                 )
             except Exception as exc:
                 self._show_error(exc)
@@ -547,7 +547,7 @@ class IntegrationPagesMixin:
         actions = ctk.CTkFrame(panel, fg_color="transparent")
         actions.grid(row=len(fields) + 1, column=1, padx=(0, 16), pady=(10, 12), sticky="w")
         ctk.CTkButton(actions, text="Salvar config", command=save_config, width=130).pack(side="left", padx=(0, 8))
-        ctk.CTkButton(actions, text="Testar conexao", command=test_connection, width=140).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(actions, text="Testar conexão", command=test_connection, width=140).pack(side="left", padx=(0, 8))
         ctk.CTkButton(actions, text="Publicar pasta...", command=publish_album, width=150).pack(side="left")
 
     def _show_json_detail(self, title: str, payload: dict[str, Any]) -> None:

@@ -66,7 +66,7 @@ class Catalog:
         return set(self._entries)
 
     def get(self, key: str, **params: Any) -> str:
-        """Texto da chave, com ``{parametros}`` aplicados.
+        """Texto da chave, com ``{parâmetros}`` aplicados.
 
         Parâmetro faltando **não** derruba a tela: devolve o texto cru, que ao
         menos comunica alguma coisa, e registra o erro. Um rótulo com

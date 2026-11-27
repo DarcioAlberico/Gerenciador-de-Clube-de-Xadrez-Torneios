@@ -53,7 +53,7 @@ class TorneioTest(unittest.TestCase):
 
     def test_singular_no_titulo(self) -> None:
         itens = build_pendencies(self.base(pending_results=1))
-        self.assertIn("1 resultado a lancar", itens[0].title)
+        self.assertIn("1 resultado a lançar", itens[0].title)
 
     def test_bloqueio_de_arbitragem_e_urgente(self) -> None:
         itens = build_pendencies(self.base(blocking_issues=2))

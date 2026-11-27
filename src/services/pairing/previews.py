@@ -50,17 +50,17 @@ def individual_preview_payload(
             code = str(pairing.get("result") or "").strip().upper()
             if code in {"F", "H", "Z"}:
                 alerts.append("Bye solicitado")
-                explanation.append(f"Bye solicitado pelo arbitro (tipo {code}).")
+                explanation.append(f"Bye solicitado pelo árbitro (tipo {code}).")
             else:
                 alerts.append("Bye")
-                explanation.append("Jogador recebeu bye por numero impar de participantes ativos.")
+                explanation.append("Jogador recebeu bye por número ímpar de participantes ativos.")
         elif black_id is not None:
             white_score = float(standings.get(white_id, {}).get("points", 0.0) or 0.0)
             black_score = float(standings.get(black_id, {}).get("points", 0.0) or 0.0)
             if abs(white_score - black_score) > 1.0:
                 alerts.append("Scoregroup distante")
             explanation.append(
-                "Pareado por pontuacao e criterios do metodo configurado; "
+                "Pareado por pontuação e critérios do método configurado; "
                 f"placares atuais {white_score:g} x {black_score:g}."
             )
 
@@ -104,9 +104,9 @@ def _diagnostic_alert(diagnostic: dict[str, Any]) -> str:
     title = str(diagnostic.get("title") or "Alerta de pareamento")
     avoidable = diagnostic.get("avoidable")
     if avoidable is True:
-        return f"{title} evitavel"
+        return f"{title} evitável"
     if avoidable is False:
-        return f"{title} inevitavel"
+        return f"{title} inevitável"
     return title
 
 
@@ -131,10 +131,10 @@ def team_preview_payload(
             code = str(match.get("result") or "").strip().upper()
             if code in {"F", "H", "Z"}:
                 alerts.append("Bye solicitado")
-                explanation.append(f"Bye solicitado pelo arbitro (tipo {code}).")
+                explanation.append(f"Bye solicitado pelo árbitro (tipo {code}).")
             else:
                 alerts.append("Bye da equipe")
-                explanation.append("Equipe recebeu bye por numero impar de equipes ativas.")
+                explanation.append("Equipe recebeu bye por número ímpar de equipes ativas.")
         elif black_team_id is not None:
             if frozenset((white_team_id, black_team_id)) in played_pairs:
                 alerts.append("Confronto repetido")

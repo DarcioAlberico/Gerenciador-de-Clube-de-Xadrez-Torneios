@@ -44,7 +44,7 @@ class LocalResultServer:
         def submit_result(token: str = Form(...), result: str = Form(...), submitter: str = Form("")) -> str:
             try:
                 self.qr_result_service.submit_result(token, result, submitter)
-                message = "Resultado enviado. Aguarde aprovacao do arbitro."
+                message = "Resultado enviado. Aguarde aprovação do árbitro."
             except Exception as exc:
                 message = f"Envio recusado: {exc}"
             return self._result_response_html(message)
@@ -58,7 +58,7 @@ class LocalResultServer:
         @app.get("/portal/{tournament_id}", response_class=HTMLResponse)
         def live_portal(tournament_id: int, mode: str = "") -> str:
             if self._export_service is None:
-                return "<!doctype html><html><body><h1>Portal indisponivel</h1></body></html>"
+                return "<!doctype html><html><body><h1>Portal indisponível</h1></body></html>"
             return self._export_service.live_portal_html(tournament_id, mode=mode or self._portal_mode)
 
         @app.get("/api/tournaments/{tournament_id}/public")
@@ -101,7 +101,7 @@ class LocalResultServer:
             f"<input type='hidden' name='token' value='{safe_token}'>"
             f"<select name='result'>{options}</select>"
             "<input name='submitter' placeholder='Nome de quem enviou'>"
-            "<button type='submit'>Enviar para aprovacao</button>"
+            "<button type='submit'>Enviar para aprovação</button>"
             "</form></body></html>"
         )
 

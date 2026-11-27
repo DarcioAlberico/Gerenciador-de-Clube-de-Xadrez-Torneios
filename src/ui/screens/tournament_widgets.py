@@ -264,9 +264,9 @@ class PrizeEditor(ctk.CTkFrame):
 
         header = ctk.CTkFrame(self, fg_color="transparent")
         header.grid(row=0, column=0, sticky="w", pady=(0, 2))
-        # "Soma" e a politica POR PREMIO (ORG-02): marcada, o premio acumula
-        # com os demais mesmo quando a politica do torneio e "apenas o maior".
-        columns = [("Tipo", 100), ("Premio", 150), ("Categoria", 110), ("De", 42), ("Ate", 42), ("Valor", 80), ("Soma", 46), ("", 36)]
+        # "Soma" e a política POR PRÊMIO (ORG-02): marcada, o prêmio acumula
+        # com os demais mesmo quando a política do torneio e "apenas o maior".
+        columns = [("Tipo", 100), ("Prêmio", 150), ("Categoria", 110), ("De", 42), ("Até", 42), ("Valor", 80), ("Soma", 46), ("", 36)]
         for index, (text, width) in enumerate(columns):
             ctk.CTkLabel(header, text=text, width=width, anchor="w").grid(row=0, column=index, padx=2, sticky="w")
 
@@ -305,7 +305,7 @@ class PrizeEditor(ctk.CTkFrame):
                  "cumulative": cumulative}
             )
 
-        ctk.CTkButton(self, text="Adicionar premio", width=160, command=self._add).grid(
+        ctk.CTkButton(self, text="Adicionar prêmio", width=160, command=self._add).grid(
             row=len(self._data) + 1, column=0, sticky="w", pady=(6, 0)
         )
 
@@ -435,14 +435,14 @@ class ColumnLayoutEditor(ctk.CTkFrame):
 
 
 class CategoryEditor(ctk.CTkFrame):
-    """Editor de categorias do torneio em linhas dinamicas (ORG-01).
+    """Editor de categorias do torneio em linhas dinâmicas (ORG-01).
 
     Cada linha e uma categoria do edital: nome, tipo, faixa e se ela premia.
     `get_rows()` devolve o que o TournamentService persiste.
 
-    O campo de faixa muda de significado conforme o tipo, e o rotulo diz qual:
-    em idade o maximo e INCLUSIVO ("Sub-12" aceita quem completa 12) e em rating
-    e EXCLUSIVO ("Sub-1400" recusa 1400). E como o edital e escrito.
+    O campo de faixa muda de significado conforme o tipo, e o rótulo diz qual:
+    em idade o máximo e INCLUSIVO ("Sub-12" aceita quem completa 12) e em rating
+    é EXCLUSIVO ("Sub-1400" recusa 1400). E como o edital e escrito.
     """
 
     KIND_LABELS = {
@@ -518,14 +518,14 @@ class CategoryEditor(ctk.CTkFrame):
 
         header = ctk.CTkFrame(self, fg_color="transparent")
         header.grid(row=0, column=0, sticky="w", pady=(0, 2))
-        # Larguras apertadas de proposito: a tela de configuracao e testada em
-        # 800px (test_ui_layout) e a primeira versao desta linha estourava a
-        # janela em 99px — oito colunas folgadas nao cabem ali.
+        # Larguras apertadas de propósito: a tela de configuração e testada em
+        # 800px (test_ui_layout) e a primeira versão desta linha estourava a
+        # janela em 99px — oito colunas folgadas não cabem ali.
         columns = [
             ("Categoria", 130),
             ("Tipo", 90),
             ("De", 46),
-            ("Ate", 46),
+            ("Até", 46),
             ("Sexo", 96),
             ("Marca", 86),
             ("Premia", 50),
@@ -582,9 +582,9 @@ class CategoryEditor(ctk.CTkFrame):
         ).grid(row=0, column=1)
 
     def _load_defaults(self) -> None:
-        """Preenche com o conjunto padrao — ponto de partida para editar.
+        """Preenche com o conjunto padrão — ponto de partida para editar.
 
-        Torneio sem linha nenhuma ja se comporta pelo padrao; este botao existe
+        Torneio sem linha nenhuma já se comporta pelo padrão; este botão existe
         para quem quer ver as faixas e mexer em duas, em vez de digitar treze.
         """
         from src.services.categories import default_categories

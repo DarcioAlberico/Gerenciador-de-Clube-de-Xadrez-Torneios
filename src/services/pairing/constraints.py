@@ -58,20 +58,20 @@ def topscorer_ids(
 ) -> set[int]:
     """Quem e "topscorer" na rodada a ser pareada (FIDE C.04.3, A.7).
 
-    Topscorer e quem tem MAIS de 50% do maximo possivel — e o conceito so existe
-    na ULTIMA rodada do torneio. Ele importa por causa do C.3, o unico criterio
-    de cor ABSOLUTO: dois NAO-topscorers com a mesma preferencia absoluta de cor
-    nao podem se enfrentar. Dois topscorers podem — e e exatamente o que a ultima
-    rodada costuma exigir, quando os dois lideres precisam se enfrentar e ambos
+    Topscorer e quem tem MAIS de 50% do máximo possível — e o conceito só existe
+    na ÚLTIMA rodada do torneio. Ele importa por causa do C.3, o único critério
+    de cor ABSOLUTO: dois NÃO-topscorers com a mesma preferência absoluta de cor
+    não podem se enfrentar. Dois topscorers podem — e é exatamente o que a última
+    rodada costuma exigir, quando os dois líderes precisam se enfrentar e ambos
     devem a mesma cor.
 
-    Sem isso, o motor proprio tratava a cor como absoluta para todo mundo e podia
+    Sem isso, o motor próprio tratava a cor como absoluta para todo mundo e podia
     recusar (ou piorar) o pareamento que decide o torneio. O motor FIDE (Gacrux),
-    que hoje e o padrao, ja aplica o C.3 corretamente.
+    que hoje e o padrão, já aplica o C.3 corretamente.
     """
     if rounds_total <= 0 or int(round_number) != int(rounds_total):
         return set()
-    # Na rodada R cada jogador disputou R-1 partidas: o maximo possivel e R-1.
+    # Na rodada R cada jogador disputou R-1 partidas: o máximo possível e R-1.
     limite = (int(round_number) - 1) / 2.0
     return {
         int(player_id)
@@ -81,10 +81,10 @@ def topscorer_ids(
 
 
 def color_preference(player_id: int, histories: dict[int, list[str]]) -> ColorPreference:
-    """Perfil de preferencia de cor no estilo BBP/FIDE Dutch.
+    """Perfil de preferência de cor no estilo BBP/FIDE Dutch.
 
-    ``due_color`` e a cor que melhora o historico do jogador; ``strength`` indica
-    se a preferencia e absoluta, forte, leve ou inexistente.
+    ``due_color`` e a cor que melhora o histórico do jogador; ``strength`` indica
+    se a preferência e absoluta, forte, leve ou inexistente.
     """
     history = [item for item in histories.get(int(player_id), []) if item in {"W", "B"}]
     if not history:
@@ -139,11 +139,11 @@ def select_rating_for_order(
 ) -> int:
     """Rating correspondente a uma ordem inicial (``initial_order``).
 
-    Fonte unica da regra, compartilhada pelo seeding de pareamento e pela
-    importacao de ratings oficiais. ``default`` cobre as ordens sem regra
-    especifica ("rating"/"manual"/desconhecida): o seeding usa o proprio
-    ``rating`` do jogador (``default=None``); a importacao oficial passa o
-    melhor rating disponivel. Os demais ramos sao identicos para ambos.
+    Fonte única da regra, compartilhada pelo seeding de pareamento e pela
+    importação de ratings oficiais. ``default`` cobre as ordens sem regra
+    específica ("rating"/"manual"/desconhecida): o seeding usa o próprio
+    ``rating`` do jogador (``default=None``); a importação oficial passa o
+    melhor rating disponível. Os demais ramos são idênticos para ambos.
     """
     if initial_order == "national_rating":
         return national or rating
@@ -372,10 +372,10 @@ def pair_penalty(
         color_penalty = assignment_color_penalty(player_id, "B", histories)
         color_penalty += assignment_color_penalty(opponent_id, "W", histories)
 
-    # C.3 (FIDE C.04.3) e criterio ABSOLUTO, e nao vale entre dois topscorers
-    # (A.7) — quem trata essa excecao e a busca estrita (`search_dutch_pairing`),
+    # C.3 (FIDE C.04.3) e critério ABSOLUTO, e não vale entre dois topscorers
+    # (A.7) — quem trata essa exceção e a busca estrita (`search_dutch_pairing`),
     # que decide o que PODE ser pareado. Aqui e custo de QUALIDADE (C11): a
-    # violacao de cor continua cara para todos, topscorer ou nao, senao o motor
+    # violação de cor continua cara para todos, topscorer ou não, senão o motor
     # deixaria de EVITA-LA quando havia alternativa.
     return penalty + hard_violations * COLOR_HARD_VIOLATION_PENALTY + color_penalty
 
@@ -394,9 +394,9 @@ def team_pair_penalty(
 ) -> float:
     """Custo de um confronto por equipes.
 
-    `float_histories` traz a penalidade de FLOAT REPETIDO, que o individual ja
+    `float_histories` traz a penalidade de FLOAT REPETIDO, que o individual já
     tinha e aqui faltava (PAR-04): sem ela, a mesma equipe podia descer de grupo
-    rodada apos rodada sem que o motor preferisse outra.
+    rodada após rodada sem que o motor preferisse outra.
     """
     team_id = int(team["id"])
     opponent_id = int(opponent["id"])

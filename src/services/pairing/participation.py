@@ -56,7 +56,7 @@ def status_error(status: Any) -> str:
     """``""`` quando o estado existe. Estado inventado nao entra no historico."""
     if str(status or "").strip() not in PARTICIPATION_STATUSES:
         return (
-            "Estado de participacao invalido. Use: "
+            "Estado de participação inválido. Use: "
             + ", ".join(sorted(PARTICIPATION_STATUSES))
             + "."
         )
@@ -74,14 +74,14 @@ def change_error(
     if erro:
         return erro
     if str(new_status).strip() == str(current_status or STATUS_ACTIVE).strip():
-        return f"O jogador ja esta como \"{PARTICIPATION_STATUSES[new_status]}\"."
+        return f"O jogador já está como \"{PARTICIPATION_STATUSES[new_status]}\"."
     if (
         str(new_status).strip() == STATUS_ACTIVE
         and str(current_status or "").strip() in REENTRY_NEEDS_REASON
         and not clean_reason(reason)
     ):
         return (
-            "A reentrada de um jogador que DESISTIU e decisao arbitral: descreva o "
+            "A reentrada de um jogador que DESISTIU é decisão arbitral: descreva o "
             "motivo, que vai para a ata e para a auditoria."
         )
     return ""

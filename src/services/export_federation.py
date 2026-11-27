@@ -225,7 +225,7 @@ class FederationReportsMixin:
         # para gente, que passaram a ser acentuados — mas aqui viram nome de
         # coluna de CSV lido por driver ODBC com schema.ini, e acento ali é
         # risco de importação, não polimento. Em vez de manter duas listas de
-        # cabeçalhos (que divergem no primeiro descuido), a lista é uma só e a
+        # cabeçalhos (que divergem no primeiro descuido), a lista é uma só é a
         # dobra acontece aqui, no ponto de entrega que exige ASCII.
         tables: dict[str, tuple[list[str], list[list[Any]]]] = {}
         _, player_headers, player_rows = self._players_section(tournament_id)
@@ -317,8 +317,8 @@ class FederationReportsMixin:
         if cards:
             try:
                 if tournament.get("competition_type") == "team":
-                    # Em equipes os tabuleiros ficam em team_boards (nao na tabela pairings):
-                    # o total de cartoes = soma dos tabuleiros dos confrontos sem bye.
+                    # Em equipes os tabuleiros ficam em team_boards (não na tabela pairings):
+                    # o total de cartões = soma dos tabuleiros dos confrontos sem bye.
                     total_boards = sum(
                         len(self.db.list_team_boards(int(match["id"])))
                         for match in self.db.list_team_matches_for_round(round_id)
@@ -356,7 +356,7 @@ class FederationReportsMixin:
         """Poster/diploma do podio (PDF A4): top 3 + campeoes por categoria."""
         path = Path(file_path)
         if path.suffix.lower() != ".pdf":
-            raise AppError("Poster do podio deve ser exportado em PDF.")
+            raise AppError("Pôster do pódio deve ser exportado em PDF.")
         self._write_podium_poster_pdf(path, self._podium_data(tournament_id))
         logger.info("Poster do podio gerado: %s", path)
 
@@ -429,7 +429,7 @@ class FederationReportsMixin:
             f"Auditoria do torneio - {tournament['name']}",
             [
                 "Data/hora",
-                "Acao",
+                "Ação",
                 "Entidade",
                 "ID entidade",
                 "Rodada ID",
@@ -577,7 +577,7 @@ class FederationReportsMixin:
         if ano:
             # A FIDE publica APENAS o ano na lista de rating, e o TRF aceita
             # `YYYY` no campo de nascimento (FED-05). Completar com 01/01
-            # inventaria um aniversario que ninguem informou.
+            # inventaria um aniversário que ninguém informou.
             return ano if long_year else ano[2:]
         parsed: datetime | None = None
         for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%Y.%m.%d", "%d/%m/%Y", "%d. %m. %Y", "%d.%m.%Y"):
@@ -595,7 +595,7 @@ class FederationReportsMixin:
         """`"1985"` quando o dado e so o ano (inclusive `1985-00-00`); senao `""`.
 
         `YYYY-00-00` aparece em base importada de outros programas, que usam o
-        zero para dizer "mes e dia desconhecidos" — e a mesma informacao.
+        zero para dizer "mes e dia desconhecidos" — e a mesma informação.
         """
         raw = str(value or "").strip()
         if len(raw) == 4 and raw.isdigit():
@@ -609,11 +609,11 @@ class FederationReportsMixin:
 
     @classmethod
     def _trf_date_is_valid(cls, value: Any) -> bool:
-        """Data que o TRF aceita: `YYYY/MM/DD` completa, ou so o ano.
+        """Data que o TRF aceita: `YYYY/MM/DD` completa, ou só o ano.
 
-        Ano-so era tratado como data QUEBRADA, e como a lista da FIDE nao publica
+        Ano-so era tratado como data QUEBRADA, e como a lista da FIDE não publica
         outra coisa, todo jogador importado dela envenenava o arquivo com um aviso
-        de nascimento invalido (FED-05).
+        de nascimento inválido (FED-05).
         """
         raw = str(value or "").strip()
         if not raw:
@@ -661,18 +661,18 @@ class FederationReportsMixin:
         """Letra TRF do lado pedido. `Z` para mesa sem resultado.
 
         As letras saem do registro de resultados (ARB-02): era uma escada de
-        `if` que precisava crescer a cada codigo novo, e a `W`/`D`/`L` — partida
-        disputada e nao ratavel — teria passado despercebida em metade dos
+        `if` que precisava crescer a cada código novo, e a `W`/`D`/`L` — partida
+        disputada e não ratavel — teria passado despercebida em metade dos
         lugares que perguntam a mesma coisa de outro jeito.
         """
         if is_bye:
             return "U"
         letras = trf_letters(result)
         if letras is None:
-            # Mesa PAREADA e ainda sem resultado sai em BRANCO, e nao como `Z`
+            # Mesa PAREADA e ainda sem resultado sai em BRANCO, e não como `Z`
             # (FED-03): `Z` e "ausencia conhecida, zero ponto" — dizer isso de um
             # jogo que ainda vai acontecer e mentir sobre o torneio. O modo
-            # submissao recusa o arquivo com celula em branco.
+            # submissão recusa o arquivo com célula em branco.
             return " " if not str(result or "").strip() else "Z"
         return letras[0] if is_white else letras[1]
 
@@ -681,10 +681,10 @@ class FederationReportsMixin:
         return f"{code} {FederationReportsMixin._trf_clean(value)}\r\n"
 
     def _trf_tournament_type(self, tournament: Mapping[str, Any], settings: Mapping[str, Any]) -> str:
-        """Registro 092 no vocabulario das federacoes (FED-03).
+        """Registro 092 no vocabulário das federações (FED-03).
 
-        Era texto proprietario ("Individual: Suico (Standard)"), montado com o
-        campo `system` do torneio — que o usuario escreve a mao. Quem recebe o
+        Era texto proprietário ("Individual: Suico (Standard)"), montado com o
+        campo `system` do torneio — que o usuário escreve à mão. Quem recebe o
         arquivo espera os termos do Swiss-Manager/Chess-Results.
         """
         return _trf16_tournament_type_text(
@@ -707,9 +707,9 @@ class FederationReportsMixin:
     def _referee_fide_id(self, tournament_id: int, name: str) -> str:
         """FIDE ID do arbitro pelo nome; `""` quando ele nao esta no cadastro.
 
-        Os arbitros vem de dois lugares — a lista de arbitros do torneio (que tem
-        FIDE ID) e os campos de texto das configuracoes (que nao tem). Casar pelo
-        nome e o unico vinculo que existe hoje.
+        Os árbitros vem de dois lugares — a lista de árbitros do torneio (que tem
+        FIDE ID) e os campos de texto das configurações (que não tem). Casar pelo
+        nome e o único vínculo que existe hoje.
         """
         alvo = str(name or "").strip().casefold()
         if not alvo:
@@ -852,11 +852,11 @@ class FederationReportsMixin:
         )
         for round_number in range(1, round_count + 1):
             line += self._trf_round_cell(player_id, player_id_to_start_rank, pairings_by_round.get(round_number, []))
-        # O `rstrip` nao pode comer a ULTIMA celula: quando ela e uma mesa ainda
-        # sem resultado (`   2 w  `), o corte leva junto a posicao do resultado e
-        # a celula some para quem le por coluna — inclusive para o motor FIDE
-        # (FED-03). Por isso a linha e cortada e depois recomposta ate o fim do
-        # campo de resultado da ultima rodada.
+        # O `rstrip` não pode comer a ÚLTIMA célula: quando ela é uma mesa ainda
+        # sem resultado (`   2 w  `), o corte leva junto a posição do resultado e
+        # a célula some para quem lê por coluna — inclusive para o motor FIDE
+        # (FED-03). Por isso a linha e cortada e depois recomposta até o fim do
+        # campo de resultado da última rodada.
         line = line.rstrip()
         if round_count:
             minimo = TRF_CELLS_START + (round_count - 1) * TRF_CELL_WIDTH + TRF_CELL_RESULT + 1

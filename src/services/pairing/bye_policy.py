@@ -58,9 +58,9 @@ class ByePolicy:
         partes = []
         if self.max_requested_byes:
             plural = "" if self.max_requested_byes == 1 else "s"
-            partes.append(f"maximo de {self.max_requested_byes} bye{plural} por jogador")
+            partes.append(f"máximo de {self.max_requested_byes} bye{plural} por jogador")
         if self.last_requested_bye_round:
-            partes.append(f"ultima rodada permitida: {self.last_requested_bye_round}")
+            partes.append(f"última rodada permitida: {self.last_requested_bye_round}")
         return "; ".join(partes)
 
 
@@ -90,33 +90,33 @@ def request_error(
     corrigir o tipo de um bye existente esbarraria no limite).
     """
     if str(bye_type or "").strip().upper() not in REQUESTED_BYE_POINTS:
-        return "Tipo de bye invalido (use F, H ou Z)."
+        return "Tipo de bye inválido (use F, H ou Z)."
     if round_number <= 0:
         return "Informe a rodada do bye."
     if rounds_count and round_number > rounds_count:
         return (
-            f"O torneio tem {rounds_count} rodada(s): nao existe rodada {round_number}."
+            f"O torneio tem {rounds_count} rodada(s): não existe rodada {round_number}."
         )
     if not player_active:
         return (
-            "Jogador inativo nao recebe bye solicitado. Reative o jogador antes de "
-            "registrar o pedido — senao o bye seria descartado na geracao da rodada, "
+            "Jogador inativo não recebe bye solicitado. Reative o jogador antes de "
+            "registrar o pedido — senão o bye seria descartado na geração da rodada, "
             "sem aviso."
         )
     if round_status == "closed":
         return (
-            f"A rodada {round_number} ja foi fechada. Um bye so vale antes de a rodada "
-            "ser gerada; para mexer no que ja aconteceu, use a correcao com motivo."
+            f"A rodada {round_number} já foi fechada. Um bye só vale antes de a rodada "
+            "ser gerada; para mexer no que já aconteceu, use a correção com motivo."
         )
     if round_status is not None:
         return (
-            f"A rodada {round_number} ja foi gerada, e o pareamento dela ja esta feito. "
-            "O bye precisa ser registrado ANTES de gerar a rodada, senao ele e aceito "
+            f"A rodada {round_number} já foi gerada, e o pareamento dela já está feito. "
+            "O bye precisa ser registrado ANTES de gerar a rodada, senão ele é aceito "
             "e nunca aplicado."
         )
     if policy.last_requested_bye_round and round_number > policy.last_requested_bye_round:
         return (
-            f"O regulamento do torneio aceita bye solicitado ate a rodada "
+            f"O regulamento do torneio aceita bye solicitado até a rodada "
             f"{policy.last_requested_bye_round}."
         )
     if policy.max_requested_byes:
@@ -125,7 +125,7 @@ def request_error(
         if conta and usados >= policy.max_requested_byes:
             plural = "" if policy.max_requested_byes == 1 else "s"
             return (
-                f"O jogador ja usou {usados} de {policy.max_requested_byes} bye{plural} "
+                f"O jogador já usou {usados} de {policy.max_requested_byes} bye{plural} "
                 "permitido(s) no torneio."
             )
     return ""
@@ -157,7 +157,7 @@ def discarded_warning(discarded: Sequence[Mapping[str, Any]]) -> str:
     quantos = len(nomes)
     plural = "bye solicitado foi descartado" if quantos == 1 else "byes solicitados foram descartados"
     return (
-        f"{quantos} {plural} nesta rodada porque o jogador esta inativo: "
+        f"{quantos} {plural} nesta rodada porque o jogador está inativo: "
         + ", ".join(nomes)
         + "."
     )

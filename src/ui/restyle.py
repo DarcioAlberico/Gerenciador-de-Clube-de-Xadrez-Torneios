@@ -108,7 +108,7 @@ def restyle(widget: Any, previous_defaults: dict[str, dict[str, Any]] | None = N
             try:
                 mudancas[opcao] = _resolve(atual, opcao, previous, cls)
             except Exception:
-                continue  # opcao inexistente nesta versao do customtkinter
+                continue  # opção inexistente nesta versão do customtkinter
         if not mudancas:
             continue
         try:

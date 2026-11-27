@@ -42,17 +42,17 @@ class TRF16Exporter:
         *,
         submission: bool = False,
     ) -> list[str]:
-        """Gera o TRF16. `submission=True` recusa arquivo com pendencia critica.
+        """Gera o TRF16. `submission=True` recusa arquivo com pendência crítica.
 
-        No modo normal o arquivo sai com avisos — e o que o arbitro usa durante o
-        evento. No modo submissao ele NAO sai: resultado pendente, FIDE ID
-        repetido ou mesa que nao confere entre as duas linhas 001 viram uma lista
-        de pendencias, porque a federacao recusaria o arquivo depois do envio
+        No modo normal o arquivo sai com avisos — e o que o árbitro usa durante o
+        evento. No modo submissão ele NÃO sai: resultado pendente, FIDE ID
+        repetido ou mesa que não confere entre as duas linhas 001 viram uma lista
+        de pendências, porque a federação recusaria o arquivo depois do envio
         (FED-03).
         """
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
-            raise AppError("Selecione um torneio valido.")
+            raise AppError("Selecione um torneio válido.")
 
         settings = self.db.get_tournament_settings(tournament_id) or {}
         warnings = self.validate(tournament_id)
@@ -97,7 +97,7 @@ class TRF16Exporter:
             linha("062", str(len(players))),
             linha("072", str(sum(1 for player in players if service._trf_rating(player) > 0))),
         ]
-        # `082` e o numero de EQUIPES: em torneio individual saia "082 0", que
+        # `082` e o número de EQUIPES: em torneio individual saia "082 0", que
         # descreve um torneio por equipes com zero equipes (FED-03).
         if is_team_tournament:
             linhas.append(linha("082", str(len(teams))))
@@ -112,8 +112,8 @@ class TRF16Exporter:
         )
         linhas.append(linha("122", tournament.get("time_control", "")))
         linhas.append(linha("142", str(declared_rounds)))
-        # Extensoes do dialeto TRF16 (FED-03): quem le TRF16 espera `XXR`, e nao
-        # o `142`, que e registro TRF25.
+        # Extensões do dialeto TRF16 (FED-03): quem lê TRF16 espera `XXR`, e não
+        # o `142`, que é registro TRF25.
         linhas.append(f"{record_xxr(declared_rounds)}\r\n")
         linhas.append(
             f"{record_xxc(initial_color(pairings_by_round.get(1, []), player_id_to_start_rank))}\r\n"
@@ -148,11 +148,11 @@ class TRF16Exporter:
 
     @staticmethod
     def _file_problems(content: str, players: list[dict[str, Any]]) -> list[str]:
-        """Pendencias que so o ARQUIVO PRONTO revela (FED-03).
+        """Pendências que só o ARQUIVO PRONTO revela (FED-03).
 
         Reciprocidade entre as duas linhas 001 de cada mesa, resultado pendente e
-        FIDE ID repetido: as tres coisas que fazem a federacao recusar a
-        submissao depois do envio.
+        FIDE ID repetido: as três coisas que fazem a federação recusar a
+        submissão depois do envio.
         """
         linhas = content.splitlines()
         return [
@@ -166,9 +166,9 @@ class TRF16Exporter:
         players: list[dict[str, Any]],
         settings: dict[str, Any],
     ) -> str | None:
-        """Registro 250 — aceleracao de pareamento, individual (§5.1).
+        """Registro 250 — aceleração de pareamento, individual (§5.1).
 
-        Emite so para esquemas que somam bonus de verdade (classico/custom). O
+        Emite só para esquemas que somam bônus de verdade (classico/custom). O
         spec vem da coluna `acceleration_method`: `bonus` por jogador nas rodadas
         `1..round_count`, aplicado ao topo `upper_fraction` do campo — exatamente
         o que o motor aplica em `pairing/acceleration.py`.
@@ -192,7 +192,7 @@ class TRF16Exporter:
     def validate(self, tournament_id: int) -> list[str]:
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
-            raise AppError("Selecione um torneio valido.")
+            raise AppError("Selecione um torneio válido.")
 
         settings = self.db.get_tournament_settings(tournament_id) or {}
         players = self.db.list_players(tournament_id, active_only=False)
@@ -208,32 +208,32 @@ class TRF16Exporter:
 
         required_tournament_fields = [
             ("location", "cidade/local"),
-            ("start_date", "data de inicio"),
-            ("end_date", "data de termino"),
+            ("start_date", "data de início"),
+            ("end_date", "data de término"),
             ("time_control", "ritmo de jogo"),
         ]
         for field, label in required_tournament_fields:
             if not str(tournament.get(field) or "").strip():
                 warnings.append(f"Torneio sem {label}.")
         if not str(settings.get("federation") or "").strip():
-            warnings.append("Torneio sem federacao FIDE.")
+            warnings.append("Torneio sem federação FIDE.")
         elif not self.export_service._trf_valid_federation_code(settings.get("federation")):
-            warnings.append("Federacao FIDE do torneio deve ter 3 letras.")
+            warnings.append("Federação FIDE do torneio deve ter 3 letras.")
         if str(settings.get("tournament_profile") or "").strip() == "fide" and not str(
             settings.get("fide_event_id") or ""
         ).strip():
             warnings.append("Torneio FIDE-rated sem FIDE Event-ID.")
         if not self.export_service._trf_chief_arbiter(tournament_id, settings):
-            warnings.append("Torneio sem arbitro-chefe.")
+            warnings.append("Torneio sem árbitro-chefe.")
         if not rounds:
-            warnings.append("Torneio sem rodadas geradas; jogadores serao exportados sem resultados.")
+            warnings.append("Torneio sem rodadas geradas; jogadores serão exportados sem resultados.")
         open_rounds = [
             str(round_data["number"])
             for round_data in rounds
             if str(round_data.get("status") or "") != "closed"
         ]
         if open_rounds:
-            warnings.append(f"Rodadas ainda nao fechadas: {', '.join(open_rounds)}.")
+            warnings.append(f"Rodadas ainda não fechadas: {', '.join(open_rounds)}.")
         pending_rounds = self.export_service._trf_pending_result_rounds(tournament, rounds)
         if pending_rounds:
             warnings.append(f"Rodadas com resultados pendentes/incompletos: {', '.join(pending_rounds)}.")
@@ -251,18 +251,18 @@ class TRF16Exporter:
             if not schedule.get(round_number)
         ]
         if missing_round_dates:
-            warnings.append(f"Rodadas sem data no calendario: {', '.join(missing_round_dates)}.")
+            warnings.append(f"Rodadas sem data no calendário: {', '.join(missing_round_dates)}.")
         invalid_round_dates = [
             str(round_number)
             for round_number, date_value in schedule.items()
             if date_value and not self.export_service._trf_date_is_valid(date_value)
         ]
         if invalid_round_dates:
-            warnings.append(f"Rodadas com data invalida no calendario: {', '.join(invalid_round_dates)}.")
-        for field, label in [("start_date", "data de inicio"), ("end_date", "data de termino")]:
+            warnings.append(f"Rodadas com data inválida no calendário: {', '.join(invalid_round_dates)}.")
+        for field, label in [("start_date", "data de início"), ("end_date", "data de término")]:
             date_value = str(tournament.get(field) or "").strip()
             if date_value and not self.export_service._trf_date_is_valid(date_value):
-                warnings.append(f"Torneio com {label} invalida.")
+                warnings.append(f"Torneio com {label} inválida.")
 
         missing_fide = []
         missing_birth = []
@@ -292,27 +292,27 @@ class TRF16Exporter:
 
         warnings.extend(self.export_service._trf_missing_field_warnings("FIDE ID", missing_fide))
         warnings.extend(self.export_service._trf_missing_field_warnings("data de nascimento", missing_birth))
-        warnings.extend(self.export_service._trf_missing_field_warnings("federacao", missing_federation))
+        warnings.extend(self.export_service._trf_missing_field_warnings("federação", missing_federation))
         warnings.extend(self.export_service._trf_missing_field_warnings("rating FIDE", missing_rating))
-        warnings.extend(self.export_service._trf_missing_field_warnings("FIDE ID numerico", invalid_fide))
-        warnings.extend(self.export_service._trf_missing_field_warnings("data de nascimento valida", invalid_birth))
-        warnings.extend(self.export_service._trf_missing_field_warnings("federacao FIDE com 3 letras", invalid_federation))
+        warnings.extend(self.export_service._trf_missing_field_warnings("FIDE ID numérico", invalid_fide))
+        warnings.extend(self.export_service._trf_missing_field_warnings("data de nascimento válida", invalid_birth))
+        warnings.extend(self.export_service._trf_missing_field_warnings("federação FIDE com 3 letras", invalid_federation))
         return warnings
 
     def validation_report_rows(self, tournament_id: int) -> list[list[object]]:
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
-            raise AppError("Selecione um torneio valido.")
+            raise AppError("Selecione um torneio válido.")
         rounds = self.db.list_rounds(tournament_id)
         summary = self.result_summary(tournament_id, tournament, rounds)
         rows: list[list[object]] = [
             ["Resumo", "Partidas jogadas", summary["played"]],
             ["Resumo", "Byes", summary["byes"]],
             ["Resumo", "WO", summary["forfeits"]],
-            ["Resumo", "Dupla ausencia", summary["double_absences"]],
-            ["Resumo", "Nao emparceirados", summary["unpaired"]],
+            ["Resumo", "Dupla ausência", summary["double_absences"]],
+            ["Resumo", "Não emparceirados", summary["unpaired"]],
         ]
-        rows.extend(["Pendencia", warning, ""] for warning in self.validate(tournament_id))
+        rows.extend(["Pendência", warning, ""] for warning in self.validate(tournament_id))
         return rows
 
     def _result_status_warnings(
@@ -324,13 +324,13 @@ class TRF16Exporter:
         summary = self.result_summary(tournament_id, tournament, rounds)
         warnings: list[str] = []
         if summary["byes"]:
-            warnings.append(f"TRF16 contem {summary['byes']} bye(s).")
+            warnings.append(f"TRF16 contém {summary['byes']} bye(s).")
         if summary["forfeits"]:
             warnings.append(f"TRF16 contem {summary['forfeits']} resultado(s) por WO.")
         if summary["double_absences"]:
-            warnings.append(f"TRF16 contem {summary['double_absences']} dupla(s) ausencia(s).")
+            warnings.append(f"TRF16 contém {summary['double_absences']} dupla(s) ausência(s).")
         if summary["unpaired"]:
-            warnings.append(f"TRF16 contem {summary['unpaired']} jogador(es) nao emparceirado(s) em rodadas geradas.")
+            warnings.append(f"TRF16 contém {summary['unpaired']} jogador(es) não emparceirado(s) em rodadas geradas.")
         return warnings
 
     def result_summary(
@@ -380,9 +380,9 @@ class TRF16Exporter:
         if is_bye:
             summary["byes"] += 1
             return
-        # Resultado por decisao do arbitro conta como PARTIDA JOGADA (ARB-02):
-        # a mesa aconteceu, so nao e ratavel. Somar com o W.O. diria ao arbitro
-        # que houve uma ausencia que nao houve.
+        # Resultado por decisão do árbitro conta como PARTIDA JOGADA (ARB-02):
+        # a mesa aconteceu, só não é ratavel. Somar com o W.O. diria ao árbitro
+        # que houve uma ausência que não houve.
         if is_played_result(result):
             summary["played"] += 1
         elif result in {"1F-0F", "0F-1F"}:

@@ -19,7 +19,7 @@ código, e misturar as duas coisas faria o lint brigar com a convenção.
 
 Uso:
     python scripts/check_ui_accents.py            # reprova o que estiver torto
-    python scripts/check_ui_accents.py --lista    # so lista os suspeitos
+    python scripts/check_ui_accents.py --lista    # só lista os suspeitos
 """
 from __future__ import annotations
 
@@ -34,8 +34,8 @@ RAIZ = Path(__file__).resolve().parents[1]
 UI = RAIZ / "src" / "ui"
 CATALOGO = RAIZ / "i18n" / "pt_BR.json"
 
-# Atributos cujo valor vai para a tela. `title=` entra porque e o titulo da
-# janela; `tip=` porque o tooltip e texto tanto quanto o rotulo.
+# Atributos cujo valor vai para a tela. `title=` entra porque é o título da
+# janela; `tip=` porque o tooltip e texto tanto quanto o rótulo.
 ATRIBUTOS_VISIVEIS = {
     "text",
     "label",
@@ -52,11 +52,11 @@ ATRIBUTOS_VISIVEIS = {
     "close_text",
 }
 
-# Texto visivel tambem chega por argumento POSICIONAL, e foi por ai que a
-# primeira versao deste lint deixou passar a tela de Configuracoes do app
-# inteira: `_page_title("Configurações do aplicativo", "Ajuste preferencias
-# locais...")` nao tem nenhum `text=`. Aqui ficam as funcoes de UI cujo
-# posicional e texto — nome da funcao -> indices dos argumentos.
+# Texto visível também chega por argumento POSICIONAL, e foi por ai que a
+# primeira versão deste lint deixou passar a tela de Configurações do app
+# inteira: `_page_title("Configurações do aplicativo", "Ajuste preferências
+# locais...")` nao tem nenhum `text=`. Aqui ficam as funções de UI cujo
+# posicional e texto — nome da função -> índices dos argumentos.
 POSICIONAIS_VISIVEIS = {
     "_page_title": (0, 1),
     "_section_title": (1,),
@@ -74,7 +74,7 @@ POSICIONAIS_VISIVEIS = {
     "labeled_field": (1,),
     "_show_info": (0,),
     "_show_warning": (0,),
-    "_show_error": (),  # recebe excecao, nao texto
+    "_show_error": (),  # recebe exceção, não texto
     "_show_report": (0, 1),
     "_show_toast": (0,),
     "confirm_dialog": (1, 2),
@@ -88,12 +88,12 @@ POSICIONAIS_VISIVEIS = {
     "close_button": (1,),
 }
 
-# Tabela de campos: `[("address", "Endereco"), ...]` — o rotulo so vira `text=`
-# muitas linhas depois, dentro do laco que monta o formulario. Reconhecida pela
+# Tabela de campos: `[("address", "Endereco"), ...]` — o rótulo só vira `text=`
+# muitas linhas depois, dentro do laço que monta o formulário. Reconhecida pela
 # forma: primeiro elemento com cara de CHAVE (`^[a-z][a-z0-9_]*$`) e segundo com
-# cara de ROTULO (tem espaco ou comeca com maiuscula). Restrito assim de
-# proposito: uma lista de nomes de icone ("calendario", "integracoes") nao passa
-# no teste do rotulo, e o app e ASCII no codigo — o lint nao pode brigar com
+# cara de RÓTULO (tem espaço ou começa com maiúscula). Restrito assim de
+# propósito: uma lista de nomes de ícone ("calendario", "integracoes") não passa
+# no teste do rótulo, e o app e ASCII no código — o lint não pode brigar com
 # isso.
 _CHAVE_DE_CAMPO = re.compile(r"^[a-z][a-z0-9_]*$")
 
@@ -102,14 +102,14 @@ def _parece_rotulo(texto: str) -> bool:
     return bool(texto) and (" " in texto or texto[0].isupper())
 
 
-# Cabecalho de tabela chega como DICIONARIO (`{"action": "Acao"}`) no terceiro
+# Cabeçalho de tabela chega como DICIONÁRIO (`{"action": "Acao"}`) no terceiro
 # posicional do `_make_tree`. Sem isto, "Acao" e "Descricao" passavam batido —
-# e cabecalho de coluna e dos textos mais lidos da tela.
+# e cabeçalho de coluna e dos textos mais lidos da tela.
 DICIONARIOS_VISIVEIS = {"_make_tree": (2,)}
 
-# Palavras em que **as duas grafias existem** em portugues, e por isso a
-# auto-consistencia nao decide: "esta mesa" x "esta pronto", "eu publico" x
-# "publico alvo". Cada entrada e uma decisao, nao uma isencao preguicosa.
+# Palavras em que **as duas grafias existem** em português, e por isso a
+# auto-consistencia não decide: "esta mesa" x "esta pronto", "eu publico" x
+# "publico alvo". Cada entrada e uma decisão, não uma isenção preguiçosa.
 HOMOGRAFOS = {
     "esta",  # demonstrativo x verbo estar
     "publico",  # verbo publicar x adjetivo/substantivo
@@ -118,7 +118,7 @@ HOMOGRAFOS = {
     "pratica",  # verbo praticar x substantivo pratica
     "secretaria",  # cargo x lugar
     "sabia",  # verbo saber x adjetivo sabia
-    "critica",  # verbo criticar x substantivo critica
+    "critica",  # verbo criticar x substantivo crítica
     "analise",  # verbo analisar (imperativo) x substantivo analise
     "medico",  # raro, mas o par existe
     "fabrica",  # verbo fabricar x substantivo fabrica
@@ -126,9 +126,9 @@ HOMOGRAFOS = {
 
 _PALAVRA = re.compile(r"[A-Za-zÀ-ÿ]{4,}")
 
-# `{codigo}` num texto do catalogo NAO e palavra visivel: e o **nome do
-# parametro** que o `t(chave, codigo=...)` preenche. Acentuar ali quebra a
-# chamada — e foi exatamente o que a primeira versao deste lint tentou fazer.
+# `{codigo}` num texto do catálogo NÃO é palavra visível: e o **nome do
+# parâmetro** que o `t(chave, codigo=...)` preenche. Acentuar ali quebra a
+# chamada — e foi exatamente o que a primeira versão deste lint tentou fazer.
 _PLACEHOLDER = re.compile(r"\{[^{}]*\}")
 
 
@@ -263,10 +263,10 @@ def main() -> int:
 
     problemas = checar_acentos()
     if problemas:
-        print("Acentuacao de textos visiveis:\n")
+        print("Acentuação de textos visíveis:\n")
         for problema in problemas:
             print(f"  {problema}")
-        print(f"\n{len(problemas)} ocorrencia(s).")
+        print(f"\n{len(problemas)} ocorrência(s).")
         return 1
     print(f"Acentuacao OK ({len(textos)} textos visiveis conferidos).")
     return 0

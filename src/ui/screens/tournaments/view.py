@@ -144,8 +144,8 @@ class TournamentListView:
 
         btn_create = primary_button(form, "Criar torneio", self._create)
         # Enter em qualquer campo cria o torneio (F5.10): preencher nome, Tab,
-        # local, Tab, data... e Enter era o unico gesto que faltava para o
-        # formulario inteiro caber no teclado.
+        # local, Tab, data... e Enter era o único gesto que faltava para o
+        # formulário inteiro caber no teclado.
         pilha.submit(self._create)
         pilha.place(btn_create, "section")
         host._disable_if_unauthorized(btn_create, "tournament_write")

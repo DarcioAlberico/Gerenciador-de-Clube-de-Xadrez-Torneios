@@ -32,9 +32,9 @@ class SettingsReportsMixin:
         club_values = list(club_map.keys())
         class_map: dict[str, int | None] = {"Todas turmas": None}
 
-        # Sete seletores em quatro colunas fixas exigiam 1.296px de janela (so
+        # Sete seletores em quatro colunas fixas exigiam 1.296px de janela (só
         # o painel de cima). A faixa quebra em quantas colunas couberem
-        # (continuacao da B-8); os campos mantem a ordem de leitura.
+        # (continuação da B-8); os campos mantém a ordem de leitura.
         fields = WrapRow(panel, pad=16)
         fields.grid(row=0, column=0, padx=16, pady=(16, 8), sticky="ew")
         report_option = fields.add_field(
@@ -44,10 +44,10 @@ class SettingsReportsMixin:
                 values=[
                     "Geral do clube",
                     "Membro individual",
-                    "Torneios por periodo",
-                    "Presencas por periodo",
-                    "Financeiro por periodo",
-                    "Eventos por periodo",
+                    "Torneios por período",
+                    "Presenças por período",
+                    "Financeiro por período",
+                    "Eventos por período",
                     "Ranking interno",
                     "Portal do clube/turma",
                     "Pacote administrativo",
@@ -67,7 +67,7 @@ class SettingsReportsMixin:
             width=220,
         )
         start_entry = fields.add_field(
-            "Inicio",
+            "Início",
             lambda parent: ctk.CTkEntry(parent, placeholder_text="AAAA-MM-DD", width=130),
             width=130,
         )
@@ -90,7 +90,7 @@ class SettingsReportsMixin:
 
         help_label = ctk.CTkLabel(
             panel,
-            text="Use datas no formato ISO para filtrar torneios, presencas, financeiro ou eventos por período.",
+            text="Use datas no formato ISO para filtrar torneios, presenças, financeiro ou eventos por período.",
             text_color=THEME_TEXT_SUB,
             wraplength=760,
             justify="left",
@@ -125,10 +125,10 @@ class SettingsReportsMixin:
             date_state = (
                 "normal"
                 if report in {
-                    "Torneios por periodo",
-                    "Presencas por periodo",
-                    "Financeiro por periodo",
-                    "Eventos por periodo",
+                    "Torneios por período",
+                    "Presenças por período",
+                    "Financeiro por período",
+                    "Eventos por período",
                     "Pacote administrativo",
                 }
                 else "disabled"
@@ -143,10 +143,10 @@ class SettingsReportsMixin:
                 return f"{safe_member_name}_relatorio.{extension}"
             names = {
                 "Geral do clube": "clube_relatorio",
-                "Torneios por periodo": "torneios_periodo",
-                "Presencas por periodo": "presencas_periodo",
-                "Financeiro por periodo": "financeiro_periodo",
-                "Eventos por periodo": "eventos_periodo",
+                "Torneios por período": "torneios_periodo",
+                "Presenças por período": "presencas_periodo",
+                "Financeiro por período": "financeiro_periodo",
+                "Eventos por período": "eventos_periodo",
                 "Ranking interno": "ranking_interno",
                 "Portal do clube/turma": "portal_clube",
                 "Pacote administrativo": "pacote_administrativo",
@@ -206,25 +206,25 @@ class SettingsReportsMixin:
                         if not member_id:
                             raise AppError("Selecione um membro.")
                         self.export_service.export_member_report(member_id, path)
-                    elif report == "Torneios por periodo":
+                    elif report == "Torneios por período":
                         self.export_service.export_tournaments_period_report(path, start_date, end_date)
-                    elif report == "Presencas por periodo":
+                    elif report == "Presenças por período":
                         self.export_service.export_attendance_report(path, start_date, end_date)
-                    elif report == "Financeiro por periodo":
+                    elif report == "Financeiro por período":
                         self.export_service.export_financial_report(path, start_date, end_date)
-                    elif report == "Eventos por periodo":
+                    elif report == "Eventos por período":
                         self.export_service.export_events_report(path, start_date, end_date)
                     elif report == "Ranking interno":
                         self.export_service.export_internal_ranking_report(path)
                     elif report == "Pacote administrativo":
                         self.export_service.export_administrative_package(path, start_date, end_date)
                     else:
-                        raise AppError("Tipo de relatorio invalido.")
+                        raise AppError("Tipo de relatório inválido.")
 
                 self._run_background(
                     write_report,
-                    lambda _result: self._show_info(f"Relatorio exportado:\n{path}"),
-                    "Gerando relatorio...",
+                    lambda _result: self._show_info(f"Relatório exportado:\n{path}"),
+                    "Gerando relatório...",
                 )
             except Exception as exc:
                 self._show_error(exc)
@@ -284,33 +284,33 @@ class SettingsReportsMixin:
             "Taxas de rating",
             "Rating FIDE",
             "Premiação",
-            "Estatistica de federacoes",
-            "Estatistica de partidas",
+            "Estatística de federações",
+            "Estatística de partidas",
             "Fichas individuais",
             "Normas FIDE",
             "Certificado IT3 (norma)",
-            "Formulario de arbitro (IA/FA)",
+            "Formulário de árbitro (IA/FA)",
             "Ata final",
-            "Podio (poster)",
+            "Pódio (pôster)",
             "Desempates",
-            "Rodada especifica",
+            "Rodada específica",
             "Boletim da rodada",
             "Todas as rodadas",
             "Jogadores",
             "Site HTML",
-            "JSON publico",
+            "JSON público",
             "Access (banco)",
             "Chess-Results (TRF16)",
-            # Mesmo arquivo, com as validacoes criticas BLOQUEANDO (FED-03): e o
-            # que se envia para a federacao, e nao o que se usa durante o evento.
-            "Chess-Results (TRF16 submissao)",
+            # Mesmo arquivo, com as validações críticas BLOQUEANDO (FED-03): e o
+            # que se envia para a federação, e não o que se usa durante o evento.
+            "Chess-Results (TRF16 submissão)",
             "TRF FIDE",
-            "Pendencias TRF",
+            "Pendências TRF",
             "PGN (Partidas)",
         ]
         if tournament and tournament.get("competition_type") == "team":
             report_values.insert(5, "Equipes")
-            report_values.insert(6, "Escalacoes equipes")
+            report_values.insert(6, "Escalações equipes")
 
         ctk.CTkLabel(panel, text="Relatório").grid(row=0, column=0, padx=16, pady=(16, 4), sticky="w")
         report_option = ctk.CTkOptionMenu(
@@ -343,7 +343,7 @@ class SettingsReportsMixin:
         )
 
         def update_round_state(_value: str | None = None) -> None:
-            if report_option.get() in ("Rodada especifica", "Boletim da rodada") and export_round_map:
+            if report_option.get() in ("Rodada específica", "Boletim da rodada") and export_round_map:
                 round_option.configure(state="normal")
             else:
                 round_option.configure(state="disabled")
@@ -356,7 +356,7 @@ class SettingsReportsMixin:
             format_option.configure(values=formats)
             if format_option.get() not in formats:
                 format_option.set(formats[0])
-            if report_option.get() in ("Site HTML", "JSON publico", "Access (banco)", "Podio (poster)", "Certificado IT3 (norma)", "Chess-Results (TRF16)", "Chess-Results (TRF16 submissao)", "TRF FIDE", "PGN (Partidas)"):
+            if report_option.get() in ("Site HTML", "JSON público", "Access (banco)", "Pódio (pôster)", "Certificado IT3 (norma)", "Chess-Results (TRF16)", "Chess-Results (TRF16 submissão)", "TRF FIDE", "PGN (Partidas)"):
                 format_option.configure(state="disabled")
             else:
                 format_option.configure(state="normal")
@@ -374,29 +374,29 @@ class SettingsReportsMixin:
                 "Taxas de rating": f"{safe_name}_taxas_rating",
                 "Rating FIDE": f"{safe_name}_rating_fide",
                 "Premiação": f"{safe_name}_premiacao",
-                "Estatistica de federacoes": f"{safe_name}_estatistica_federacoes",
-                "Estatistica de partidas": f"{safe_name}_estatistica_partidas",
+                "Estatística de federações": f"{safe_name}_estatistica_federacoes",
+                "Estatística de partidas": f"{safe_name}_estatistica_partidas",
                 "Fichas individuais": f"{safe_name}_fichas",
                 "Normas FIDE": f"{safe_name}_normas_fide",
                 "Certificado IT3 (norma)": f"{safe_name}_it3",
-                "Formulario de arbitro (IA/FA)": f"{safe_name}_arbitro_ia_fa",
+                "Formulário de árbitro (IA/FA)": f"{safe_name}_arbitro_ia_fa",
                 "Ata final": f"{safe_name}_ata_final",
-                "Podio (poster)": f"{safe_name}_podio",
+                "Pódio (pôster)": f"{safe_name}_podio",
                 "Desempates": f"{safe_name}_desempates",
-                "Rodada especifica": f"{safe_name}_rodada",
+                "Rodada específica": f"{safe_name}_rodada",
                 "Boletim da rodada": f"{safe_name}_boletim",
                 "Todas as rodadas": f"{safe_name}_rodadas",
                 "Jogadores": f"{safe_name}_jogadores",
                 "Equipes": f"{safe_name}_equipes",
-                "Escalacoes equipes": f"{safe_name}_escalacoes_equipes",
-                "JSON publico": f"{safe_name}_publico",
+                "Escalações equipes": f"{safe_name}_escalacoes_equipes",
+                "JSON público": f"{safe_name}_publico",
                 "Chess-Results (TRF16)": f"{safe_name}_chess_results_trf16",
-                "Chess-Results (TRF16 submissao)": f"{safe_name}_trf16_submissao",
+                "Chess-Results (TRF16 submissão)": f"{safe_name}_trf16_submissao",
                 "TRF FIDE": f"{safe_name}_fide",
-                "Pendencias TRF": f"{safe_name}_pendencias_trf",
+                "Pendências TRF": f"{safe_name}_pendencias_trf",
                 "PGN (Partidas)": f"{safe_name}_partidas",
             }
-            if report in ("Rodada especifica", "Boletim da rodada") and round_option.get() in export_round_map:
+            if report in ("Rodada específica", "Boletim da rodada") and round_option.get() in export_round_map:
                 round_number = round_option.get().split(" ", maxsplit=2)[1]
                 suffix = "boletim" if report == "Boletim da rodada" else "rodada"
                 names[report] = f"{safe_name}_{suffix}_{round_number}"
@@ -408,8 +408,8 @@ class SettingsReportsMixin:
             text_color=THEME_TEXT_SUB,
             justify="left",
             anchor="w",
-            # Antes 980: o rotulo sozinho pedia quase mil pixels e puxava a
-            # largura minima da tela junto (B-8).
+            # Antes 980: o rótulo sozinho pedia quase mil pixels e puxava a
+            # largura mínima da tela junto (B-8).
             wraplength=620,
         )
         trf_warning_label.grid(row=4, column=0, columnspan=3, padx=16, pady=(0, 16), sticky="ew")
@@ -423,25 +423,25 @@ class SettingsReportsMixin:
                 warnings = self.export_service.validate_chess_results_trf(tournament_id)
                 if warnings:
                     warning_text = "\n".join(f"- {item}" for item in warnings)
-                    set_trf_validation_text(f"TRF pode ser gerado, mas ha avisos:\n\n{warning_text}")
+                    set_trf_validation_text(f"TRF pode ser gerado, mas há avisos:\n\n{warning_text}")
                     return
                 set_trf_validation_text("TRF validado. Nenhum aviso encontrado.")
             except Exception as exc:
-                set_trf_validation_text(f"TRF nao pode ser gerado:\n\n{exc}")
+                set_trf_validation_text(f"TRF não pode ser gerado:\n\n{exc}")
                 self._show_error(exc)
 
         def export() -> None:
             try:
                 report = report_option.get()
                 extension = format_option.get()
-                if report in ("Chess-Results (TRF16)", "Chess-Results (TRF16 submissao)", "TRF FIDE"):
+                if report in ("Chess-Results (TRF16)", "Chess-Results (TRF16 submissão)", "TRF FIDE"):
                     extension = "trf"
-                elif report == "JSON publico":
+                elif report == "JSON público":
                     extension = "json"
                 elif report == "PGN (Partidas)":
                     extension = "pgn"
-                elif report in ("Podio (poster)", "Certificado IT3 (norma)"):
-                    # O IT3 e formulario da FIDE: so faz sentido em PDF.
+                elif report in ("Pódio (pôster)", "Certificado IT3 (norma)"):
+                    # O IT3 e formulário da FIDE: só faz sentido em PDF.
                     extension = "pdf"
                 tournament_id = int(self.current_tournament_id)
                 if report == "Site HTML":
@@ -476,8 +476,8 @@ class SettingsReportsMixin:
                             message += f"\n\nBanco .accdb real: {result['accdb']}"
                         else:
                             message += (
-                                "\n\n(.accdb real indisponivel: instale o driver Microsoft Access "
-                                "para gerar o banco nativo; o pacote CSV ja e importavel.)"
+                                "\n\n(.accdb real indisponível: instale o driver Microsoft Access "
+                                "para gerar o banco nativo; o pacote CSV já é importável.)"
                             )
                         self._show_info(message)
 
@@ -519,9 +519,9 @@ class SettingsReportsMixin:
                         self.export_service.export_fide_rating_report(tournament_id, path, "fide")
                     elif report == "Premiação":
                         self.export_service.export_prize_report(tournament_id, path)
-                    elif report == "Estatistica de federacoes":
+                    elif report == "Estatística de federações":
                         self.export_service.export_federation_statistics(tournament_id, path)
-                    elif report == "Estatistica de partidas":
+                    elif report == "Estatística de partidas":
                         self.export_service.export_game_statistics(tournament_id, path)
                     elif report == "Fichas individuais":
                         self.export_service.export_player_cards(tournament_id, path)
@@ -529,15 +529,15 @@ class SettingsReportsMixin:
                         self.export_service.export_norm_report(tournament_id, path)
                     elif report == "Certificado IT3 (norma)":
                         self.export_service.export_it3_certificate(tournament_id, path)
-                    elif report == "Formulario de arbitro (IA/FA)":
+                    elif report == "Formulário de árbitro (IA/FA)":
                         self.export_service.export_arbiter_norm_report(tournament_id, path)
                     elif report == "Ata final":
                         self.export_service.export_tournament_minutes(tournament_id, path)
-                    elif report == "Podio (poster)":
+                    elif report == "Pódio (pôster)":
                         self.export_service.export_podium(tournament_id, path)
                     elif report == "Desempates":
                         self.export_service.export_tiebreak_report(tournament_id, path)
-                    elif report == "Rodada especifica":
+                    elif report == "Rodada específica":
                         if not round_id:
                             raise AppError("Selecione uma rodada para exportar.")
                         self.export_service.export_pairings(round_id, path)
@@ -551,24 +551,24 @@ class SettingsReportsMixin:
                         self.export_service.export_players(tournament_id, path)
                     elif report == "Equipes":
                         self.export_service.export_teams(tournament_id, path)
-                    elif report == "Escalacoes equipes":
+                    elif report == "Escalações equipes":
                         self.export_service.export_team_lineups(tournament_id, path)
-                    elif report == "JSON publico":
+                    elif report == "JSON público":
                         self.export_service.export_public_json(tournament_id, path)
                     elif report == "Chess-Results (TRF16)":
                         return self.export_service.export_chess_results_trf(tournament_id, path)
-                    elif report == "Chess-Results (TRF16 submissao)":
+                    elif report == "Chess-Results (TRF16 submissão)":
                         return self.export_service.export_chess_results_trf(
                             tournament_id, path, submission=True
                         )
                     elif report == "TRF FIDE":
                         return self.export_service.export_chess_results_trf25(tournament_id, path)
-                    elif report == "Pendencias TRF":
+                    elif report == "Pendências TRF":
                         self.export_service.export_chess_results_trf_validation_report(tournament_id, path)
                     elif report == "PGN (Partidas)":
                         self.export_service.export_pgn(tournament_id, path)
                     else:
-                        raise AppError("Tipo de relatorio invalido.")
+                        raise AppError("Tipo de relatório inválido.")
                     return None
 
                 def show_export_success(result: object) -> None:
@@ -583,15 +583,15 @@ class SettingsReportsMixin:
                 self._run_background(
                     write_export,
                     show_export_success,
-                    "Gerando exportacao...",
+                    "Gerando exportação...",
                 )
             except Exception as exc:
                 self._show_error(exc)
 
-        # As tres acoes em LINHA PROPRIA, e nao ao lado dos tres seletores
-        # (B-8). Em uma linha so, a tela pedia 1.360px de janela e era ela que
-        # obrigava a sidebar a sumir em telas medias — todas as outras cabem em
-        # 1.200px. Empilhar corta ~500px de exigencia horizontal e nao custa
+        # As três ações em LINHA PRÓPRIA, e não ao lado dos três seletores
+        # (B-8). Em uma linha só, a tela pedia 1.360px de janela e era ela que
+        # obrigava a sidebar a sumir em telas médias — todas as outras cabem em
+        # 1.200px. Empilhar corta ~500px de exigência horizontal e não custa
         # nada em altura, que aqui sobra.
         actions = ctk.CTkFrame(panel, fg_color="transparent")
         actions.grid(row=2, column=0, columnspan=3, padx=16, pady=(0, 12), sticky="w")
@@ -700,7 +700,7 @@ class SettingsReportsMixin:
 
         options_frame = ctk.CTkFrame(dialog, fg_color="transparent")
         options_frame.grid(row=3, column=0, padx=16, pady=(0, 8), sticky="ew")
-        html_switch = ctk.CTkSwitch(options_frame, text="Tambem gerar site HTML", onvalue="1", offvalue="0")
+        html_switch = ctk.CTkSwitch(options_frame, text="Também gerar site HTML", onvalue="1", offvalue="0")
         html_switch.deselect()
         html_switch.pack(side="left", padx=(0, 16))
         printer_switch = ctk.CTkSwitch(options_frame, text="Enviar PDFs para impressora", onvalue="1", offvalue="0")

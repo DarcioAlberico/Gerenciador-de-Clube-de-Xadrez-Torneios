@@ -1,8 +1,8 @@
 """DDL do schema do banco de dados Albericus.
 
-Constantes com o SQL de criacao de tabelas e indices, extraidas de
-``database.py`` para reduzir o tamanho daquele modulo. A orquestracao
-(verificacao de versao de schema, migracoes e criacao de indices)
+Constantes com o SQL de criação de tabelas e índices, extraídas de
+``database.py`` para reduzir o tamanho daquele módulo. A orquestração
+(verificação de versão de schema, migrações e criação de índices)
 permanece em :meth:`Database.initialize`.
 """
 
