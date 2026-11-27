@@ -180,8 +180,8 @@ Use esta seção impressa durante o evento.
 
 ## 9. Limites conhecidos
 
-- Aceleracao Baku continua desabilitada enquanto nao houver formula aplicavel
-  publicada.
+- Aceleração de Baku (FIDE C.04.7) vale só para torneio individual com
+  pontuação padrão; no torneio por equipes ela ainda não é aplicada.
 - O envio federativo e manual enquanto não houver API pública utilizável.
 - Eventos de relógio não definem resultado automaticamente.
 - QR de resultado por tabuleiro de equipes ainda não é tratado.

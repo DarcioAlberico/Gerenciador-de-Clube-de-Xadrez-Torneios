@@ -31,8 +31,8 @@ código passou a ser dado, e o que era silêncio passou a ser aviso.
 
 **O que falta depende de fonte externa**, não de decisão do projeto: o
 regulamento de rating e o formato do arquivo de submissão da CBX (não
-publicados), a formula de aceleracao de Baku (nao publicada pela FIDE), relogio
-de hardware e app nativo. A proxima entrega deve sair de um **teste piloto
+publicados), relógio de hardware e app nativo. A aceleração de Baku saiu desta
+lista: a regra está no FIDE Handbook (C.04.7) e foi implementada (RGS-30). A próxima entrega deve sair de um **teste piloto
 presencial** ou de um requisito trazido por torneio real.
 
 ## Funcionalidades implementadas
@@ -402,12 +402,13 @@ emparceiramento ou os resultados já existentes:
 
 - **Notificações em massa/agendadas:** disparo de avisos de rodada e cobrança a
   partir do `MessageService` (hoje o envio e manual, um a um).
-- **Plugin de relogio de hardware real:** a interface de plugins ja existe (so o
-  registro manual esta implementado); um plugin especifico entra sob demanda.
-- **Aceleracao de Baku (TRF25):** guardada ate a FIDE publicar a formula
-  oficial; o exportador emite aviso em vez de um valor potencialmente enganoso.
-- **Submissao automatica a federacao:** fora de escopo enquanto nao houver API
-  publica utilizavel; o fluxo atual gera o arquivo TRF para upload manual.
+- **Plugin de relógio de hardware real:** a interface de plugins já existe (só o
+  registro manual está implementado); um plugin especifico entra sob demanda.
+- **Aceleração de Baku por equipes:** o Baku individual (FIDE C.04.7) esta
+  implementado no pareamento e no TRF (registro 250 e sufixo `_BAKU`); o
+  pareamento por equipes ainda não aplica aceleração.
+- **Submissão automática a federação:** fora de escopo enquanto não houver API
+  publica utilizável; o fluxo atual gera o arquivo TRF para upload manual.
 
 ## Instalar com uv
 
@@ -459,7 +460,17 @@ uv sync --extra dev
 .\scripts\check_quality.ps1
 ```
 
-O script compila os modulos, roda `ruff`, `mypy` e a suite de testes.
+O script compila os módulos, roda `ruff`, `mypy` e a suite de testes.
+
+Ferramentas de qualidade do código (ub-mode):
+
+```bash
+uv run --extra dev coverage run -m pytest tests/test_x.py
+uv run --extra dev coverage json -o coverage.json
+uv run --extra dev python scripts/crap.py coverage.json src/services/x.py   # CRAP por função; meta < 10
+uv run --extra dev python scripts/dry.py src/services/x.py                  # funções duplicadas; meta < 0,8
+uv run --extra dev python scripts/mutate.py src/services/x.py -- tests/test_x.py  # teste de mutação
+```
 
 ## Limpeza de artefatos
 
@@ -975,9 +986,29 @@ conversa do PDF.
 - A tela `Clube` passa a permitir criar, editar, ativar/inativar unidades e cadastrar turmas da unidade selecionada.
 - A tela `Membros` passa a salvar e filtrar por clube/escola e turma.
 - Torneios podem ser avulsos, vinculados a uma unidade ou vinculados a uma turma.
-- A inscricao automatica usa todos os membros ativos no torneio avulso, os membros da unidade no torneio de clube/escola e apenas os alunos da turma no torneio de turma.
-- Relatorios passam a incluir clube/escola e turma, permitindo acompanhar alunos por unidade.
-- A migracao preserva os dados existentes vinculando registros antigos ao clube padrao `id = 1`.
+- A inscrição automática usa todos os membros ativos no torneio avulso, os membros da unidade no torneio de clube/escola e apenas os alunos da turma no torneio de turma.
+- Relatórios passam a incluir clube/escola e turma, permitindo acompanhar alunos por unidade.
+- A migração preserva os dados existentes vinculando registros antigos ao clube padrão `id = 1`.
+
+### Modo Amistoso (escolar)
+
+O "Modo Amistoso" é o que o app chama de **Modo Livre** (menu "Torneio | Livre"). É para eventos casuais, escolares ou treinos. Revisão completa em `ROADMAP_REVISAO_MODO_AMISTOSO.md` e `ESPEC_REVISAO_MODO_AMISTOSO.md`.
+
+O que o modo faz:
+
+- **Cria o torneio em um passo.** O professor informa nome, rodadas e, se quiser, a turma: os alunos ativos dela já entram. O preset grava 0,5 ponto por rodada perdida.
+- **Aceita aluno que chega depois.** Ele pode jogar já na rodada em andamento (ela é refeita com ele) ou esperar a próxima. Começa com 0,5 ou zero por rodada perdida, pelo mesmo plano do assistente "Entrada tardia…".
+- **Refaz a rodada aberta com quem está presente** ("Re-emparceirar"). Apagar e gerar de novo é um passo só: se a geração falha, a rodada original continua lá. Com resultado anotado ou envio por QR pendente, o professor diz o motivo, e tudo fica na auditoria.
+- **Oferece mais uma rodada** quando as rodadas acabaram e sobrou tempo.
+- **Imprime súmula sem W.O. automático por atraso**, quando o torneio não tem tolerância configurada.
+- **Liga e desliga em Configurações → Avançado**, com auditoria.
+
+O que o modo não faz:
+
+- Não troca o motor: o emparceiramento continua o holandês (Gacrux).
+- Não vale rating FIDE nem CBX. O perfil FIDE-rated é recusado, e o TRF16 em modo submissão também. O arquivo de trabalho sai com aviso.
+- Rating interno do clube: antes de o torneio amistoso contar, o app pergunta ("Contar no rating" ou "Não contar").
+- O rating interno do clube continua contando, com aviso (decisão pendente D2).
 
 ### Gerador de diplomas - Etapa 1 implementada
 

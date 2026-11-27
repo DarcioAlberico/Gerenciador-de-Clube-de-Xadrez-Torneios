@@ -68,11 +68,15 @@ Não há item de conformidade pendente por decisão própria. O que sobrou depen
 de **fonte externa** e está listado em "Baixa prioridade inicial" e na seção
 "Fora de Escopo" da `ESPEC_PAINEL_ARBITRO.md`:
 
-- **regulamento de rating da CBX** — nao publicado em formato legivel; o perfil
-  ja e editavel na tela e sai marcado como NAO conferido;
-- **arquivo de submissao da CBX** — formato nao publicado;
-- **aceleracao de Baku** — formula nao publicada pela FIDE;
-- relogio de hardware, app nativo e submissao automatica a federacao.
+- **regulamento de rating da CBX** — não publicado em formato legível; o perfil
+  já é editável na tela e sai marcado como NÃO conferido;
+- **arquivo de submissão da CBX** — formato não publicado;
+- ~~**aceleração de Baku** — formula não publicada pela FIDE~~ **corrigido
+  (RGS-30):** a fórmula **está** publicada no FIDE Handbook — Baku Acceleration
+  Method, C.04.5.1 até 2025, renumerado para C.04.7 a partir de 01/02/2026.
+  Não é bloqueio externo: foi implementado em 2026-11-26 (detalhe em
+  "Bloqueado por fonte externa" abaixo);
+- relógio de hardware, app nativo e submissão automática a federação.
 
 A próxima entrega deve partir de um **teste piloto presencial** ou de um
 requisito novo trazido por torneio real.
@@ -623,14 +627,87 @@ abaixo e registro; o que sobra sem risco depende de fonte externa.
 Não iniciar sem o documento ou o equipamento; o código já está preparado onde
 fazia sentido preparar.
 
-- **Regulamento de rating da CBX** — o site expoe so a busca de rating e o
-  Caderno de Regulamento de Torneios nao traz a formula. O perfil de rating ja e
-  editavel em `Config. torneio -> Oficial` e sai marcado como NAO conferido.
-- **Arquivo de submissao da CBX** — formato aceito nao publicado.
-- **Aceleracao de Baku** — formula nao publicada pela FIDE; o exportador emite
-  aviso (`BAKU_NOT_IMPLEMENTED`).
-- **Submissao automatica para federacao** — sem API publica utilizavel.
-- **Relogio de hardware** — a interface de plugins existe; falta equipamento
+- **Regulamento de rating da CBX** — o site expõe só a busca de rating e o
+  Caderno de Regulamento de Torneios não traz a formula. O perfil de rating já e
+  editável em `Config. torneio -> Oficial` e sai marcado como NÃO conferido.
+- **Arquivo de submissão da CBX** — formato aceito não publicado.
+- ~~**Aceleração de Baku** — formula não publicada pela FIDE~~ — **errado,
+  corrigido pelo RGS-30 (2026-11-26).** A regra está no FIDE Handbook desde a
+  aprovação de 2016 (Baku Acceleration Method; C.04.5.1 nas edições até 2025,
+  C.04.7 "FIDE-approved Accelerated Systems" a partir de 01/02/2026). Em resumo:
+  - só vale com pontuação padrão (vitória = 2 empates; na redação de 2026 os
+    pontos virtuais são "os pontos de uma vitória");
+  - antes da R1 a lista ordenada é dividida em **GA** (a primeira metade,
+    arredondada para cima até o par mais próximo: `2 × ⌈N/4⌉`) e **GB** (o
+    resto); com entrada tardia, o último jogador do GA continua o mesmo (o GA
+    pode ficar ímpar);
+  - só o GA recebe pontos virtuais (VP), que entram apenas no **score de
+    pareamento** (grupos de pontuação), nunca na classificação;
+  - redação vigente: são aceleradas a primeira metade das rodadas (arredondada
+    para cima); VP = 1 na primeira metade (arredondada para cima) das rodadas
+    aceleradas e 0,5 no resto; depois, zero. Exemplo do Handbook: 9 rodadas →
+    5 aceleradas, VP 1 nas R1–R3 e 0,5 nas R4–R5. A redação antiga (Manual do
+    Árbitro 2022) fixava VP 1 nas R1–R3 e 0,5 nas R4–R5 para qualquer número
+    de rodadas — coincide com a nova só em 9 (e 10) rodadas.
+
+  **Redação conferida (2026-11-26)** no texto do Handbook,
+  https://handbook.fide.com/chapter/C0407202602 — C.04.7 "FIDE-approved
+  Accelerated Systems", aprovado pelo Conselho em 28/10/2025, aplicado desde
+  01/02/2026. Confere com o resumo acima: 1.1 vitória = dois empates e
+  derrota = zero; 1.2 GA = "the first half of the participants, rounded up to
+  the nearest even number" (`2 × ⌈N/4⌉`, que é também o número do último do
+  GA); 1.3 com entrada tardia o último do GA continua o mesmo, o GA pode ficar
+  ímpar e o número dele pode mudar; 1.4.1 aceleradas = primeira metade das
+  rodadas, para cima; 1.4.2–1.4.3 VP = pontos de uma vitória na primeira
+  metade das aceleradas e metade disso no resto, GB nunca recebe; 1.4.4
+  exemplos de 9 rodadas (VP 1 nas R1–R3, 0,5 nas R4–R5) e de 11 rodadas por
+  equipes (VP 2 nas R1–R3, 1 nas R4–R6); 1.5 score de pareamento = pontos +
+  VP. O `ts2json.add_accelerated` do Gacrux usa a mesma conta.
+
+  **Estado do código — FEITO (RGS-30, 2026-11-26):**
+  - `pairing/acceleration.py`: `baku_virtual_points` (função pura: N inicial,
+    total de rodadas, rodada, número de pareamento, entrantes tardios acima do
+    último do GA; recusa com `AppError` pontuação fora do 1.1),
+    `baku_initial_field`, `baku_accelerated_player_ids` e
+    `baku_acceleration_blocks`. `BAKU_NOT_IMPLEMENTED` saiu.
+  - Pareamento: `PairingService._baku_acceleration` monta o GA sobre a lista de
+    antes da R1 (`standings_cut.players_as_of_round(…, 1)`), e o plano da rodada
+    (quem, quanto) vai ao Gacrux pelo registro 250 (VP 1 e 0,5 são
+    representáveis) e ao motor próprio por `standings_with_virtual_points`. O
+    VP nunca entra na classificação.
+  - TRF25: 250 em blocos (VP 1 nas rodadas de VP inteiro, 0,5 nas restantes,
+    competidores 1 até o último do GA) e sufixo `_BAKU` no 192 do Suíço
+    individual. Rótulo: "Baku (FIDE C.04.7)".
+  - Testes: `tests/test_rgs30_baku.py` (exemplo do Handbook, 11 rodadas,
+    entrada tardia, recusa de pontuação, 250/192 e o Gacrux real separando GA
+    de GB na R1).
+
+  **Comparação com o bbpPairings v6.0.0 (2026-11-26).** Não há `--baku` na
+  linha de comando; o bbp liga Baku pelo 192 `FIDE_DUTCH_2025_BAKU`
+  (`trf.cpp`, `applyBakuAcceleration`). Duas diferenças:
+  - o bbp usa GA = ⌈N/2⌉, não `2 × ⌈N/4⌉`; diverge do Handbook (1.2, "rounded
+    up to the nearest even number") quando N deixa resto 1 ou 2 por 4 (N = 9,
+    10, 13…). Nesses campos a R1 do Albericus difere da do bbp, e o Albericus
+    segue o Handbook;
+  - com N múltiplo de 4 ou resto 3, a R1 e as rodadas aceleradas batem até que
+    a história conte: a partir da R3/R4 o Gacrux diverge do bbp (15, 16 e 20
+    jogadores). **Causa:** `GacruxEngine._adjust_trf_for_pairing` apaga todo
+    250 do exportador e escreve só o da rodada pareada, então o Gacrux calcula
+    os floats das rodadas passadas sem o VP. Com o 250 de cada rodada já
+    acelerada no arquivo (experimento), as três séries ficaram idênticas ao
+    bbp em todas as rodadas. O defeito vale também para a clássica (Haley).
+
+  **Corrigido no mesmo dia:** `GacruxEngine._past_acceleration_records` põe
+  no arquivo do pareamento e do `check_round` o 250 de cada rodada acelerada
+  já disputada (plano de `_round_acceleration`), para Baku e clássica; o
+  `test_r3_e_r4_iguais_ao_bbp` (16 jogadores) fixa as R1–R4 do bbp. O TRF16
+  emite o 250 de Baku pelos mesmos `baku_acceleration_blocks` (o TRF25 herda).
+  README e Manual Operacional atualizados.
+
+  **Pendência:** Baku por equipes não é aplicado pelo pareamento de equipes (o
+  192 de equipes fica sem `_BAKU`).
+- **Submissão automática para federação** — sem API pública utilizável.
+- **Relógio de hardware** — a interface de plugins existe; falta equipamento
   alvo.
 
 ### Baixa prioridade inicial
