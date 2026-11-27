@@ -191,4 +191,6 @@ Seis commits montados com índice temporário, sem tocar a árvore de trabalho; 
 | `docs(rgs)` | Spec, roadmap e notas da RGS; README e manuais | — |
 | `docs(rg2)` | Esta spec, este roadmap, a reprodução dos achados | — |
 
+**`.exe` do commit `docs(rg2)`:** `build.bat` verde; `Albericus.exe --self-test` = 0, 5 de 5 passos. Rodada mais lenta pelo Gacrux: **1,37 s** com a máquina livre (1,71 s com a suíte rodando junto). A RGS mediu ≈ 0,55 s antes do RGS-16, que acrescentou a verificação holandesa — hoje são duas chamadas de subprocesso por rodada, ≈ 0,7 s cada. O corte da D1 da RGS ("onedir se passar de 1 s por chamada") ainda não foi atingido, mas a folga é pequena: reavaliar onefile × onedir se a verificação crescer. O executável anterior (11/11) foi guardado antes do build.
+
 **Achados no caminho:** (1) a lista CBX `.xls` está versionada como **texto** (o `autocrlf` mexe nos bytes dela) — ficou fora do `.gitattributes` e entra no RG2-41; (2) o gate de acentos antigo tinha um falso positivo ("Grava" × "gravá-lo"), corrigido no gate novo — por isso as linhas com "gravá" vão no commit `fix(rgs)`, não no de acentos.
