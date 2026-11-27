@@ -16,6 +16,28 @@ from .pairing_results import PairingResultsMixin
 from .player_actions import PlayerActions
 
 
+def split_future_entrants(
+    standings: list[dict[str, Any]],
+    entry_rounds: dict[int, int],
+    rounds_started: int,
+) -> tuple[list[dict[str, Any]], dict[int, list[dict[str, Any]]]]:
+    """Separa quem entra numa rodada que ainda não começou (RG2-06).
+
+    Só a tela faz este corte: ``standings()`` continua com todos, porque TRF,
+    tabela cruzada, certificados, site e rating leem dele. Devolve a lista
+    principal, na ordem recebida, e ``{rodada de entrada: [jogadores]}``.
+    """
+    principais: list[dict[str, Any]] = []
+    futuros: dict[int, list[dict[str, Any]]] = {}
+    for item in standings:
+        entrada = int(entry_rounds.get(int(item["player_id"]), 0) or 0)
+        if entrada > rounds_started:
+            futuros.setdefault(entrada, []).append(item)
+        else:
+            principais.append(item)
+    return principais, dict(sorted(futuros.items()))
+
+
 class PairingPagesMixin(ArbitrationPagesMixin, PairingResultsMixin):
     def show_standings(self) -> None:
         if not self._require_tournament():
@@ -382,8 +404,22 @@ class PairingPagesMixin(ArbitrationPagesMixin, PairingResultsMixin):
             carregadas = self._standings_or_empty(
                 lambda: self.pairing_service.standings(self.current_tournament_id)
             )
-            for item in carregadas:
-                if category != "Todas" and item["category"] != category:
+            tid = int(self.current_tournament_id)
+            principais, futuros = split_future_entrants(
+                [item for item in carregadas if category == "Todas" or item["category"] == category],
+                {
+                    int(jogador["id"]): int(jogador.get("entry_round") or 0)
+                    for jogador in self.db.list_players(tid, active_only=False)
+                },
+                len(self.db.list_rounds(tid)),
+            )
+            linhas: list[dict[str, Any] | str] = list(principais)
+            for rodada, entrantes in futuros.items():
+                linhas.append(f"Entram na rodada {rodada}")
+                linhas.extend(entrantes)
+            for item in linhas:
+                if isinstance(item, str):
+                    tree.insert("", "end", values=("", item, *[""] * 12))
                     continue
                 visible.append(item)
                 row_id = tree.insert(

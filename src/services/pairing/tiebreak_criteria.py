@@ -17,6 +17,7 @@ no registro.
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass
 from typing import Any
 
@@ -349,3 +350,17 @@ def serialize_tiebreak_sequence(sequence: list[dict[str, Any]]) -> str:
         [{"code": item["code"], "params": item.get("params", {})} for item in sequence],
         ensure_ascii=False,
     )
+
+
+def unranked_last_rank(rank: Any) -> float:
+    """Chave de ordenação do rank do motor FIDE: ausente vai depois de todos.
+
+    RG2-06: o rank ausente valia 0 (``rank or 0``) e punha quem o motor não
+    ranqueou — o entrante tardio, fora do TRF das rodadas fechadas — à frente
+    do 1º colocado. Vale para jogadores e equipes.
+    """
+    try:
+        value = int(rank)
+    except (TypeError, ValueError):
+        return math.inf
+    return float(value) if value >= 1 else math.inf

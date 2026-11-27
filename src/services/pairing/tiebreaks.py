@@ -10,6 +10,7 @@ Aqui só se calcula o individual.
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Mapping
 
 from src.services.constants import (
@@ -21,10 +22,13 @@ from src.services.constants import (
 from src.services.fide_rating import fide_performance
 from src.services.pairing.point_adjustments import AdjustmentTotal, adjustment_note
 from src.services.pairing.tiebreak_criteria import (
+    unranked_last_rank,
     DEFAULT_PLAYER_TIEBREAKS,
     PLAYER_TIEBREAKS,
     criterion_param,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _as_float(value: Any) -> float:
@@ -460,11 +464,21 @@ def order_player_standings(
     """
     if any("_gacrux_rank" in item for item in stats.values()):
         adjusted = any(float(item.get("adjustment_points") or 0.0) for item in stats.values())
+        # RG2-06: quem o motor não ranqueou (o entrante tardio, fora do TRF das
+        # rodadas fechadas) entra pelos pontos, depois de todos os ranqueados
+        # com a mesma soma. Antes o rank ausente valia 0 e ia à frente do 1º.
+        unranked = [item for item in stats.values() if not item.get("_gacrux_rank")]
+        if unranked:
+            logger.info(
+                "Classificação: %d jogador(es) sem colocação do motor FIDE, ordenados pelos pontos: %s",
+                len(unranked),
+                [item.get("player_id") for item in unranked],
+            )
 
         def gacrux_key(item: dict[str, Any]) -> tuple[Any, ...]:
-            head = (-float(item.get("points", 0.0) or 0.0),) if adjusted else ()
+            head = (-float(item.get("points", 0.0) or 0.0),) if adjusted or unranked else ()
             return head + (
-                int(item.get("_gacrux_rank") or 0),
+                unranked_last_rank(item.get("_gacrux_rank")),
                 -float(item.get("rating", 0) or 0),
                 str(item.get("name", "")).casefold(),
             )

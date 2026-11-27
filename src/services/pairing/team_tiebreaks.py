@@ -23,6 +23,7 @@ from typing import Any, Mapping
 from src.services.constants import RESULT_POINTS
 from src.services.pairing.point_adjustments import AdjustmentTotal, adjustment_note
 from src.services.pairing.tiebreak_criteria import (
+    unranked_last_rank,
     DEFAULT_TEAM_TIEBREAKS,
     TEAM_TIEBREAKS,
     criterion_param,
@@ -465,10 +466,14 @@ def calculate_team_standings(
     plain_codes = [code for code, _params in codes]
     if any("_gacrux_rank" in item for item in stats.values()):
         prefix = _adjusted_team_prefix(plain_codes, stats)
+        # RG2-06: equipe sem rank do motor entra pelo critério primário, depois
+        # das ranqueadas com o mesmo valor — antes o rank ausente valia 0.
+        if not prefix and any(not item.get("_gacrux_rank") for item in stats.values()):
+            prefix = plain_codes[:1]
         ordered_stats = sorted(
             stats.values(),
             key=lambda item: tuple(-team_ordering_value(item, code) for code in prefix)
-            + (int(item.get("_gacrux_rank") or 0), str(item["name"]).casefold()),
+            + (unranked_last_rank(item.get("_gacrux_rank")), str(item["name"]).casefold()),
         )
     else:
         ordered_stats = sorted(
