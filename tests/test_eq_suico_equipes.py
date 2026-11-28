@@ -20,6 +20,7 @@ import pytest
 
 from src.core.database import Database
 from src.services.pairing import histories, team_swiss
+from src.services.pairing.round_search import NoLegalPairingError
 from tests.support.core_service_base import CoreServiceTestCase
 
 
@@ -345,8 +346,10 @@ class ConfrontoNaoJogadoServicoTest(_TorneioDeEquipes):
 
         tid, team_ids = self._dois_times_r1(parcial)
         self.assertEqual({frozenset(team_ids)}, self.service._team_played_pairs(tid))
-        previa = self.service.preview_next_round(tid)
-        self.assertIn("Confronto repetido", previa["matches"][0]["alerts"])
+        # Duas equipes que já jogaram: desde o RG2-07b a repetição não é
+        # pareada (nem na prévia, que antes a mostrava com o alerta).
+        with self.assertRaises(NoLegalPairingError):
+            self.service.preview_next_round(tid)
 
 
 # --------------------------------------------------------------------------- #
@@ -676,14 +679,19 @@ class ByeSolicitadoDeEquipeTest(unittest.TestCase):
 
 class ByeSolicitadoDeEquipeServicoTest(_TorneioDeEquipes):
     def test_equipe_que_pediu_bye_h_ainda_pode_receber_o_bye_alocado(self) -> None:
-        """3 equipes; a 3ª pede H na R1 e as outras empatam. Na R2, todas com 1
-        ponto de match, o bye alocado vai para a de maior TPN — a 3ª."""
-        tid, equipes = self._create_team_tournament(teams_count=3, boards_count=2)
-        self.db.add_requested_team_bye(tid, equipes[2], 1, "H")
+        """5 equipes; a 5ª pede H na R1 e as outras empatam. Na R2, todas com 1
+        ponto de match, o bye alocado vai para a de maior TPN — a 5ª.
+
+        Eram 3 equipes: com a 3ª no bye da R2, a 1ª e a 2ª se enfrentavam de
+        novo — a expectativa só valia porque o motor repetia confronto. Desde o
+        RG2-07b a repetição é proibida; com 5 equipes o resto pareia sem repetir.
+        """
+        tid, equipes = self._create_team_tournament(teams_count=5, boards_count=2)
+        self.db.add_requested_team_bye(tid, equipes[4], 1, "H")
         self._jogar_rodada(tid, lambda board: "1/2-1/2")
         previa = self.service.preview_next_round(tid)
         bye = next(m for m in previa["matches"] if m.get("is_bye"))
-        self.assertEqual(equipes[2], int(bye["white_team_id"]))
+        self.assertEqual(equipes[4], int(bye["white_team_id"]))
 
 
 # --------------------------------------------------------------------------- #

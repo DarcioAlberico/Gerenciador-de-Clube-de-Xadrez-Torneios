@@ -478,6 +478,10 @@ class FreeTournamentMixin:
         """Recusa do Gacrux no modo: nada mudou; pergunta se vai pelo motor reserva."""
         from ..components.dialogs import confirm_dialog
 
+        if not getattr(exc, "offers_reserve", True):
+            # Sem pareamento legal (RG2-22): o reserva também não teria saída.
+            self._show_error(exc)
+            return False
         return bool(
             confirm_dialog(
                 self,

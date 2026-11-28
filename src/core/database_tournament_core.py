@@ -152,6 +152,14 @@ class TournamentCoreMixin(_DatabaseInfra):
                 (status, tournament_id),
             )
 
+    def end_tournament_at_round(self, tournament_id: int, rounds_count: int) -> None:
+        """Encerra o torneio com ``rounds_count`` rodadas (RG2-22): total e status juntos."""
+        with self.connect() as connection:
+            connection.execute(
+                "UPDATE tournaments SET rounds_count = ?, status = 'finished' WHERE id = ?",
+                (int(rounds_count), int(tournament_id)),
+            )
+
     def update_tournament_details(
         self,
         tournament_id: int,

@@ -9,6 +9,7 @@ from src.services.constants import AppError
 from src.services.pairing.constraints import (
     INITIAL_COLOR,
     choose_bye_player,
+    player_pair_cost,
     choose_colors,
     color_hard_violation,
     greedy_player_pairs,
@@ -19,6 +20,7 @@ from src.services.pairing.constraints import (
     rank_by_player_id,
     seeding_key,
 )
+from src.services.pairing.round_search import bracket_pairing, enforce_absolute, score_group_pairs, search_bracket
 
 
 def _initial_order_key(player: dict[str, Any], settings: dict[str, Any] | None) -> tuple[Any, ...]:
@@ -185,6 +187,36 @@ def knockout_pairings(
     return pairings
 
 
+def colors_admissible(
+    histories: dict[int, list[str]],
+    choose: Any,
+    topscorers: frozenset[int] | set[int] = frozenset(),
+) -> Any:
+    """Regra C.3 da busca estrita: o par só vale se alguma orientação respeita a cor.
+
+    ``choose(a, b)`` dá a orientação preferida; se ela fere a cor absoluta de
+    alguém, tenta-se a outra. Entre dois ``topscorers`` (A.7, última rodada) a
+    cor volta a ser critério de qualidade e o par não é recusado.
+    """
+
+    def admissible(first: dict[str, Any], second: dict[str, Any]) -> bool:
+        first_id, second_id = first["id"], second["id"]
+        if first_id in topscorers and second_id in topscorers:
+            return True
+        white_id, _black_id = choose(first, second)
+        first_color = "W" if white_id == first_id else "B"
+        second_color = "W" if white_id == second_id else "B"
+        if is_color_valid_fide(first_id, first_color, histories) and is_color_valid_fide(
+            second_id, second_color, histories
+        ):
+            return True
+        return is_color_valid_fide(
+            first_id, "B" if first_color == "W" else "W", histories
+        ) and is_color_valid_fide(second_id, "B" if second_color == "W" else "W", histories)
+
+    return admissible
+
+
 def search_dutch_pairing(
     pairable: list[dict[str, Any]],
     histories: dict[int, list[str]],
@@ -197,53 +229,15 @@ def search_dutch_pairing(
     `topscorers` são os jogadores que a A.7 tira do C.3 na última rodada: entre
     dois deles a cor volta a ser critério de QUALIDADE, e o par deixa de ser
     recusado aqui. Sem isso, a rodada que decide o torneio podia não juntar os
-    dois líderes só porque ambos deviam a mesma cor.
+    dois líderes só porque ambos deviam a mesma cor. A busca é a do motor único
+    (`round_search.search_bracket`, RG2-07b).
     """
-    if not pairable:
-        return []
-
-    half = len(pairable) // 2
-    s1 = pairable[:half]
-    s2 = pairable[half:]
-
-    def solve(
-        s1_idx: int,
-        available_s2: list[dict[str, Any]],
-        current_pairs: list[tuple[dict[str, Any], dict[str, Any]]],
-    ) -> list[tuple[dict[str, Any], dict[str, Any]]] | None:
-        if s1_idx == len(s1):
-            return current_pairs
-
-        p1 = s1[s1_idx]
-        for index, p2 in enumerate(available_s2):
-            if frozenset((p1["id"], p2["id"])) in played_pairs:
-                continue
-
-            if strict_colors and not (p1["id"] in topscorers and p2["id"] in topscorers):
-                white_id, _black_id = choose_colors(p1, p2, histories)
-                p1_color = "W" if white_id == p1["id"] else "B"
-                p2_color = "W" if white_id == p2["id"] else "B"
-
-                if not is_color_valid_fide(p1["id"], p1_color, histories) or not is_color_valid_fide(
-                    p2["id"], p2_color, histories
-                ):
-                    p1_color_rev = "B" if p1_color == "W" else "W"
-                    p2_color_rev = "B" if p2_color == "W" else "W"
-                    if not is_color_valid_fide(p1["id"], p1_color_rev, histories) or not is_color_valid_fide(
-                        p2["id"], p2_color_rev, histories
-                    ):
-                        continue
-
-            next_pairs = solve(
-                s1_idx + 1,
-                available_s2[:index] + available_s2[index + 1:],
-                current_pairs + [(p1, p2)],
-            )
-            if next_pairs is not None:
-                return next_pairs
-        return None
-
-    return solve(0, s2, [])
+    admissible = (
+        colors_admissible(histories, lambda a, b: choose_colors(a, b, histories), topscorers)
+        if strict_colors
+        else None
+    )
+    return search_bracket(pairable, played_pairs, admissible)
 
 
 def dutch_bracket_pairing(
@@ -260,64 +254,26 @@ def dutch_bracket_pairing(
     score_diff_penalty: int,
     topscorers: frozenset[int] | set[int] = frozenset(),
 ) -> tuple[list[tuple[dict[str, Any], dict[str, Any]]], list[dict[str, Any]]]:
-    n = len(group)
+    """Grupo de pontuação do motor de jogadores — passes do motor único (RG2-07b)."""
+    penalties = {
+        "repeat_pairing_penalty": repeat_pairing_penalty,
+        "score_group_float_penalty": score_group_float_penalty,
+        "score_diff_penalty": score_diff_penalty,
+        "topscorers": topscorers,
+    }
 
-    for num_floaters in range(n % 2, n + 1, 2):
-        if num_floaters == n:
-            break
-        pairable = group[:-num_floaters] if num_floaters else group
-        floaters = group[-num_floaters:] if num_floaters else []
-        best_pairs = search_dutch_pairing(
-            pairable, histories, played_pairs, strict_colors=True, topscorers=topscorers
+    def solve(pairable: list[dict[str, Any]]) -> list[tuple[dict[str, Any], dict[str, Any]]]:
+        pairer = optimal_player_pairs if len(pairable) <= max_exhaustive_pairing_players else beam_player_pairs
+        return pairer(
+            pairable, standings, histories, float_histories, played_pairs, rank_by_player_id, **penalties
         )
-        if best_pairs is not None:
-            return best_pairs, floaters
 
-    for num_floaters in range(n % 2, n + 1, 2):
-        if num_floaters == n:
-            break
-        pairable = group[:-num_floaters] if num_floaters else group
-        floaters = group[-num_floaters:] if num_floaters else []
-        best_pairs = search_dutch_pairing(pairable, histories, played_pairs, strict_colors=False)
-        if best_pairs is not None:
-            return best_pairs, floaters
-
-    for num_floaters in range(n % 2, n + 1, 2):
-        if num_floaters == n:
-            break
-        pairable = group[:-num_floaters] if num_floaters else group
-        floaters = group[-num_floaters:] if num_floaters else []
-        if len(pairable) <= max_exhaustive_pairing_players:
-            best_pairs = optimal_player_pairs(
-                pairable,
-                standings,
-                histories,
-                float_histories,
-                played_pairs,
-                rank_by_player_id,
-                repeat_pairing_penalty=repeat_pairing_penalty,
-                score_group_float_penalty=score_group_float_penalty,
-                score_diff_penalty=score_diff_penalty,
-                topscorers=topscorers,
-            )
-        else:
-            best_pairs = beam_player_pairs(
-                pairable,
-                standings,
-                histories,
-                float_histories,
-                played_pairs,
-                rank_by_player_id,
-                repeat_pairing_penalty=repeat_pairing_penalty,
-                score_group_float_penalty=score_group_float_penalty,
-                score_diff_penalty=score_diff_penalty,
-                topscorers=topscorers,
-            )
-
-        if all(frozenset((p1["id"], p2["id"])) not in played_pairs for p1, p2 in best_pairs):
-            return best_pairs, floaters
-
-    return [], group
+    return bracket_pairing(
+        group,
+        played_pairs,
+        admissible=colors_admissible(histories, lambda a, b: choose_colors(a, b, histories), topscorers),
+        solve=solve,
+    )
 
 
 def score_groups(players: list[dict[str, Any]], standings: dict[int, dict[str, Any]]) -> list[list[dict[str, Any]]]:
@@ -911,6 +867,8 @@ def swiss_pairings(
     pairings: list[dict[str, Any]] = []
     board = 1
 
+    field = list(pending)
+    bye_player: dict[str, Any] | None = None
     if len(pending) % 2 == 1:
         bye_player = choose_bye_player_with_pairing_quality(
             pending,
@@ -927,30 +885,16 @@ def swiss_pairings(
             topscorers=topscorers,
         )
         pending.remove(bye_player)
-        pairings.append(
-            {
-                "board_number": 9999,
-                "white_player_id": bye_player["id"],
-                "black_player_id": None,
-                "result": "BYE",
-                "is_bye": 1,
-            }
-        )
 
-    player_pairs: list[tuple[dict[str, Any], dict[str, Any]]] = []
-    floaters: list[dict[str, Any]] = []
+    pair_kwargs = {
+        "repeat_pairing_penalty": repeat_pairing_penalty,
+        "score_group_float_penalty": score_group_float_penalty,
+        "score_diff_penalty": score_diff_penalty,
+        "topscorers": topscorers,
+    }
 
-    for group in score_groups(pending, standings):
-        group.extend(floaters)
-        floaters = []
-        # Os floaters que descem têm pontuação maior que os nativos do grupo;
-        # reordenamos para que entrem pelo topo (como o pareamento por equipes
-        # já faz). Sem isto eles caem no fim da lista e voltam a flutuar a cada
-        # grupo, despencando até o fundo da tabela e gerando diferenças de
-        # pontuação evitáveis (violação do downfloat mínimo FIDE C.04).
-        group = sorted(group, key=lambda player: pairing_order_key(player, standings))
-
-        group_pairs, group_floaters = dutch_bracket_pairing(
+    def bracket(group: list[dict[str, Any]]) -> tuple[list[tuple[dict[str, Any], dict[str, Any]]], list[dict[str, Any]]]:
+        return dutch_bracket_pairing(
             group,
             standings,
             histories,
@@ -958,42 +902,21 @@ def swiss_pairings(
             played_pairs,
             ranks,
             max_exhaustive_pairing_players=max_exhaustive_pairing_players,
-            repeat_pairing_penalty=repeat_pairing_penalty,
-            score_group_float_penalty=score_group_float_penalty,
-            score_diff_penalty=score_diff_penalty,
-            topscorers=topscorers,
+            **pair_kwargs,
         )
-        player_pairs.extend(group_pairs)
-        floaters.extend(group_floaters)
 
-    if floaters:
-        pairing_kwargs = {
-            "repeat_pairing_penalty": repeat_pairing_penalty,
-            "score_group_float_penalty": score_group_float_penalty,
-            "score_diff_penalty": score_diff_penalty,
-            "topscorers": topscorers,
-        }
-        if len(floaters) <= max_exhaustive_pairing_players:
-            leftover_pairs = optimal_player_pairs(
-                floaters,
-                standings,
-                histories,
-                float_histories,
-                played_pairs,
-                ranks,
-                **pairing_kwargs,
-            )
-        else:
-            leftover_pairs = beam_player_pairs(
-                floaters,
-                standings,
-                histories,
-                float_histories,
-                played_pairs,
-                ranks,
-                **pairing_kwargs,
-            )
-        player_pairs.extend(leftover_pairs)
+    def leftover(floaters: list[dict[str, Any]]) -> list[tuple[dict[str, Any], dict[str, Any]]]:
+        pairer = optimal_player_pairs if len(floaters) <= max_exhaustive_pairing_players else beam_player_pairs
+        return pairer(floaters, standings, histories, float_histories, played_pairs, ranks, **pair_kwargs)
+
+    # Grupos de pontuação de cima para baixo, pelo motor único (RG2-07b).
+    player_pairs = score_group_pairs(
+        pending,
+        score_of=lambda player: float(standings.get(player["id"], {}).get("points", 0.0) or 0.0),
+        order_key=lambda player: pairing_order_key(player, standings),
+        bracket=bracket,
+        leftover=leftover,
+    )
 
     # Salvaguarda global para critérios absolutos FIDE. O pareamento por bracket
     # pode fechar grupos superiores cedo demais e empurrar o fundo da tabela para
@@ -1135,6 +1058,45 @@ def swiss_pairings(
             )
             if rematched_pairs and rematched_quality < current_quality:
                 player_pairs = rematched_pairs
+
+    # RG2-07b: confronto repetido ou 2º PAB que as buscas acima deixaram passar
+    # vão à busca exata do motor único, com o bye como nó; sem pareamento legal,
+    # a rodada é recusada em vez de repetir.
+    bye_order = {
+        int(player["id"]): index
+        for index, player in enumerate(
+            sorted(
+                field,
+                key=lambda player: (
+                    float(standings.get(player["id"], {}).get("points", 0.0) or 0.0),
+                    int(player["rating"] or 0),
+                    str(player.get("name") or "").casefold(),
+                ),
+            )
+        )
+    }
+    player_pairs, bye_player = enforce_absolute(
+        player_pairs,
+        bye_player,
+        field,
+        played_pairs,
+        bye_player_ids,
+        pair_cost=player_pair_cost(standings, histories, float_histories, played_pairs, ranks, **pair_kwargs),
+        bye_cost=lambda player: float(standings.get(player["id"], {}).get("points", 0.0) or 0.0)
+        * score_diff_penalty
+        + bye_order[int(player["id"])],
+        competitor_label="os jogadores",
+    )
+    if bye_player is not None:
+        pairings.append(
+            {
+                "board_number": 9999,
+                "white_player_id": bye_player["id"],
+                "black_player_id": None,
+                "result": "BYE",
+                "is_bye": 1,
+            }
+        )
 
     player_pairs = sorted(
         player_pairs,

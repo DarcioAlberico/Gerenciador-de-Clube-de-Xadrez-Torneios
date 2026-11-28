@@ -53,11 +53,46 @@ class GacruxRefusal(AppError):
     """
 
     refusal = "o Gacrux recusou a rodada"
+    # O motor reserva é saída para esta recusa? Não quando não existe pareamento
+    # legal nenhum (RG2-22): o reserva também não teria.
+    offers_reserve = True
 
     def __init__(self, round_number: int | None, details: list[str], message: str) -> None:
         self.round_number = None if round_number is None else int(round_number)
         self.details = list(details)
-        super().__init__(f"{message}\n\nÉ possível parear esta rodada com o {RESERVE_ENGINE_LABEL}.")
+        if self.offers_reserve:
+            message = f"{message}\n\nÉ possível parear esta rodada com o {RESERVE_ENGINE_LABEL}."
+        super().__init__(message)
+
+
+# Marca que o motor vendorizado (`gacrux/pairing.py`) põe na falha de
+# viabilidade; o teste do RG2-22 confere que os dois textos continuam iguais.
+NO_LEGAL_PAIRING_TAG = "GACRUX-SEM-PAREAMENTO-LEGAL"
+
+
+class GacruxNoLegalPairing(GacruxRefusal):
+    """Não existe pareamento que respeite os critérios absolutos (RG2-22).
+
+    Antes era um ``AppError`` com o stderr do Gacrux — o árbitro lia um
+    traceback, e pedir o motor reserva dava o mesmo traceback. O reserva não é
+    oferecido: a saída é encerrar o torneio ou rever as ausências.
+    """
+
+    refusal = "não existe pareamento legal"
+    offers_reserve = False
+
+    def __init__(self, round_number: int | None, details: list[str]) -> None:
+        rodada = f"Rodada {round_number}: n" if round_number is not None else "N"
+        super().__init__(
+            round_number,
+            details,
+            f"{rodada}ão existe pareamento que respeite os critérios absolutos da FIDE "
+            "(C.04.1): ninguém joga duas vezes contra o mesmo adversário e ninguém "
+            "recebe um segundo bye."
+            + "".join(f"\n- {item}" for item in details)
+            + "\n\nO motor reserva também não teria saída. Você pode encerrar o torneio "
+            "aqui ou rever as ausências (quem está ausente ou retirado) e gerar de novo.",
+        )
 
 
 class GacruxScoreMismatch(GacruxRefusal):
@@ -284,6 +319,9 @@ class GacruxEngine:
 
             if result.returncode != 0:
                 error_msg = result.stderr.strip() or result.stdout.strip() or "Erro desconhecido"
+                if NO_LEGAL_PAIRING_TAG in error_msg:
+                    logger.warning("Gacrux sem pareamento legal na rodada %s: %s", round_number, error_msg)
+                    raise GacruxNoLegalPairing(round_number, [])
                 raise AppError(f"Erro no emparceiramento Gacrux: {error_msg}")
 
             if not output_path.exists():

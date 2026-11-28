@@ -92,7 +92,9 @@ class ArbitrationPhasesTest(CoreServiceTestCase):
 
         corrected_dashboard = self.service.arbitration_dashboard(self.tournament_id)
         self.assertEqual(1, corrected_dashboard["metrics"]["corrections"])
-        self.assertTrue(corrected_dashboard["metrics"]["can_preview_next_round"])
+        # Com 2 jogadores que já se enfrentaram não existe R2 legal: desde o
+        # RG2-07b a prévia recusa em vez de mostrar a repetição.
+        self.assertFalse(corrected_dashboard["metrics"]["can_preview_next_round"])
 
     def test_phase2_arbitration_dashboard_respects_pending_items_limit(self) -> None:
         self._create_players(24)
