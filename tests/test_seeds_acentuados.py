@@ -95,7 +95,8 @@ class BancoNovoTest(_Base):
 
 class MigracaoV59Test(_Base):
     def test_versao_do_esquema(self) -> None:
-        self.assertEqual(59, Database.SCHEMA_VERSION)
+        # A v59 existe e vem antes das seguintes (v60: sexo do membro, RG2-47).
+        self.assertGreaterEqual(Database.SCHEMA_VERSION, 59)
 
     def test_padrao_antigo_vira_acentuado_e_edicao_do_usuario_fica(self) -> None:
         _envelhecer(self.db)
@@ -128,7 +129,7 @@ class MigracaoV59Test(_Base):
         self.assertEqual("Organização", evento["signature_left"])
         self.assertEqual("Coordenacao geral", evento["signature_right"])
         with closing(sqlite3.connect(migrado.db_path)) as conexao:
-            self.assertEqual(59, conexao.execute("PRAGMA user_version").fetchone()[0])
+            self.assertEqual(Database.SCHEMA_VERSION, conexao.execute("PRAGMA user_version").fetchone()[0])
 
     def test_referencias_continuam_ligadas(self) -> None:
         _envelhecer(self.db)
