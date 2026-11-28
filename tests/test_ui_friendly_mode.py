@@ -25,6 +25,7 @@ from tests.support.ctk_cleanup import (
     create_tk_window,
     release_dead_ctk_windows,
 )
+from tests.support.login import entrar_como_admin
 
 pytestmark = pytest.mark.gui
 
@@ -50,7 +51,7 @@ class _Base(unittest.TestCase):
         except TclError as exc:
             self.temp_dir.cleanup()
             self.skipTest(f"Tk indisponivel: {exc}")
-        self.app.security_service.login("admin", "admin")
+        entrar_como_admin(self.app.security_service)
         if hasattr(self.app, "login_frame"):
             self.app.login_frame.destroy()
             self.app._build_menu()

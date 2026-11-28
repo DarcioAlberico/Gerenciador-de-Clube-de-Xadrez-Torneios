@@ -178,7 +178,8 @@ RG2-32 (falhas silenciosas, forma fixa da justificativa), RG2-40 (concorrência)
 | −1 | **feita** em 2026-11-27 (D7 aprovada pelo dono), branch `fix/rgs-fase0-exe` — ver abaixo |
 | 0 | **código feito** em 2026-11-27, branch `fix/rg2-fase0-hotfix` — falta a revisão da nota pelo árbitro (F0.9) e o `.exe` — ver abaixo |
 | 1 | **código feito** em 2026-11-28, branch `fix/rg2-fase1` (empilhada na Fase 0) — D3 decidida pelo dono; suíte completa verde (2 testes da v59 ajustados para não fixar a versão final), gate estático verde, `.exe` com `--self-test` = 0 — ver abaixo |
-| 2–6 | não iniciadas |
+| 2 | **código feito** em 2026-11-28, branch `fix/rg2-fase2` (empilhada na Fase 1) — D4 e D5 decididas pelo dono; gate estático verde, `.exe` com `--self-test` = 0; suíte completa: 9 testes presos ao contrato antigo, ajustados em `4f4acd9` — ver abaixo |
+| 3–6 | não iniciadas |
 
 ### Fase −1 (2026-11-27)
 
@@ -231,3 +232,17 @@ Um commit por item, teste vermelho antes de cada correção; cada commit foi tes
 | F1.10 | RG2-34 | `update_member(member_id, **changes)` parcial | Desativar e depois editar o telefone preservam Lichess, ratings online e o motivo de saída | — |
 
 **Achado fora da spec:** "Importar lista de rating" na tela de membros nunca atualiza ninguém — `members` não tem `fide_id`/`cbx_id`, o mapa sai vazio — e lê "1.850" como 1. Candidato a item próprio.
+
+### Fase 2 (2026-11-28)
+
+Um commit por item, teste vermelho antes de cada correção. **D4** e **D5** decididas pelo dono em 2026-11-28: portal na rede local quando publicado (só público, só o publicado; privado só nesta máquina); sincronização sai inteira.
+
+| Passo | Item | Entrega | Prova | Desvio da spec |
+|---|---|---|---|---|
+| F2.1 | RG2-43 | `src/core/operator.py`; `Database.set_operator`/`current_operator` é a única fonte; a auditoria lê dele ("sistema" sem login); `_current_user` do `SecurityService` virou propriedade sobre o banco; o avanço de eliminatória grava o operador | Árbitro logado → evento com `arb`/`arbiter`; `app_settings` ignorado | — |
+| F2.4 | RG2-38 | Sai `SyncService`, a fila na auditoria, os dispositivos, as abas, as pendências "sync"; migração **v61** apaga `sync_outbox`/`devices` e as chaves | Nenhum símbolo de sync em `src`, `tests`, `scripts` (fora a história das migrações); cópia do banco real: as 416 linhas somem, `integrity_check` ok | Feito **antes** do F2.2: tirar a sincronização encolheu o que o F2.2 precisava proteger. Os interruptores do relógio foram para a barra do topo; apareceu e foi corrigido um estouro de 52 px do formulário do relógio, antes escondido |
+| F2.2 | RG2-04 | `src/services/permissions.py` (`@requires`, lendo o operador do banco; recusa em `audit_logs`); `@requires` nos 113 métodos que gravam (varredura por AST); `delete_records` só em torneio, lançamento e patrocinador; a tela deixou de gravar direto (ajustes, proibições, byes de equipe, jogadores, planos — 13 chamadas) | Viewer não lança resultado, não adia, não aprova QR, não exclui torneio nem lançamento, não dá ajuste; árbitro exclui rodada e não o torneio; varreduras de serviço e de tela | Isentos com motivo: largura de coluna, a própria auditoria, envio público do QR, cache do relatório de desempate. Ajuste e trilha agora gravam juntos (antes a tela engolia a falha da auditoria). `save_app_settings` segue liberado na tela |
+| F2.3 | RG2-37 | Banco novo cria o admin **sem senha**; "Definir senha do administrador" e "Trocar senha" na tela de login; sem `strip`; papel validado; espera crescente depois de 3 erros (sem travar a tela) e falha auditada | Banco novo não entra com admin/admin; banco migrado entra com a senha que tinha; " abc " entra; testes de tela do login | O marcador do primeiro acesso é a senha vazia, sem coluna nova |
+| F2.5 | RG2-19 + 45 | `build_app`; só o torneio publicado (404); modo fixo (o `?mode=` só vale nesta máquina; privado → 403 na rede); `no-store` e `X-Frame-Options`; QR com o IP da rede, escolhido quando há mais de um | Aceite da espec com `TestClient` de IP da rede; QR da súmula com o IP | — |
+
+**Correção no caminho:** o F2.1 pôs `_operator_name` entre o `@atomic` e o avanço de eliminatória, que perdeu a transação; a varredura do RG2-25 pegou (`78d5f08`).

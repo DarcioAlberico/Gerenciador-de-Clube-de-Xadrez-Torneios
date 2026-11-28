@@ -20,6 +20,7 @@ from datetime import date
 from typing import Any
 
 from src.services.constants import AppError
+from src.services.permissions import requires
 
 FRIENDLY_MODE_LABEL = "Modo Livre"
 OFFICIAL_MODE_LABEL = "Modo Oficial"
@@ -167,6 +168,7 @@ class FriendlyModeService:
     def __init__(self, db: Any) -> None:
         self.db = db
 
+    @requires("tournament_write")
     def create(
         self,
         name: str,
@@ -216,6 +218,7 @@ class FriendlyModeService:
     def _settings(self, tournament_id: int) -> dict[str, Any]:
         return dict(self.db.get_tournament_settings(int(tournament_id)) or {})
 
+    @requires("tournament_write")
     def set_enabled(self, tournament_id: int, enabled: bool, actor: str = "") -> bool:
         """Liga ou desliga o modo num torneio que já existe (MA-07), com auditoria.
 
@@ -244,6 +247,7 @@ class FriendlyModeService:
             )
         return True
 
+    @requires("tournament_write")
     def add_round(self, tournament_id: int, actor: str = "") -> int:
         """Mais uma rodada no torneio amistoso (MA-09). Devolve o novo total."""
         require_friendly(self._settings(tournament_id), "Mais uma rodada")
@@ -267,6 +271,7 @@ class FriendlyModeService:
             )
         return total
 
+    @requires("tournament_write")
     def late_entry(
         self,
         tournament_id: int,

@@ -68,6 +68,8 @@ class ReconciliacaoNaAberturaTest(unittest.TestCase):
         self.temp_dir.cleanup()
 
     def _entrar(self) -> None:
+        # RG2-37: banco novo nasce com o admin sem senha; o primeiro acesso a define.
+        self.app.security_service.set_first_password("admin", "admin")
         self.app.username_entry.insert(0, "admin")
         self.app.password_entry.insert(0, "admin")
         botao = next(

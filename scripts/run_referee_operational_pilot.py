@@ -116,7 +116,6 @@ def blocked_network() -> Iterator[None]:
         mock.patch.object(socket.socket, "connect", deny_network),
         mock.patch("urllib.request.urlopen", side_effect=deny_network),
         mock.patch("src.services.export_service.urlopen", side_effect=deny_network),
-        mock.patch("src.services.sync_service.urlopen", side_effect=deny_network),
     ):
         yield
 

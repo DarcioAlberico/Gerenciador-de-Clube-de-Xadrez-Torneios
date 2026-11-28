@@ -72,7 +72,6 @@ class ArbitrationIssuesView:
         cartoes = [
             (t("arbitration.issues.card.total"), metrics["total"]),
             (t("arbitration.issues.card.qr"), metrics["qr_pending"]),
-            (t("arbitration.issues.card.sync"), metrics["sync_conflicts"]),
             (t("arbitration.issues.card.clock"), metrics["clock_alerts"]),
             (t("arbitration.issues.card.tiebreak"), metrics["tiebreak_alerts"]),
             (t("arbitration.issues.card.correction"), metrics["correction_alerts"]),

@@ -33,6 +33,7 @@ from src.services.tournament_configuration import (
 )
 from src.ui.app import AlbericusApp
 from tests.support.ctk_cleanup import cancel_pending_callbacks, create_tk_window, release_dead_ctk_windows
+from tests.support.login import entrar_como_admin
 from tests.test_rgs08_09_configuracao import _eventos, _retrato
 
 pytestmark = pytest.mark.gui
@@ -67,7 +68,7 @@ class _TelaDeConfiguracoes(unittest.TestCase):
             return self.resposta_do_dialogo
 
         self.app._confirm_configuration = dialogo
-        self.app.security_service.login("admin", "admin")
+        entrar_como_admin(self.app.security_service)
         if hasattr(self.app, "login_frame"):
             self.app.login_frame.destroy()
             self.app._build_menu()

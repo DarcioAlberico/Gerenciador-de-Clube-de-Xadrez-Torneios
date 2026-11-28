@@ -156,15 +156,11 @@ class ArbitrationController:
         if erro:
             raise self._app_error(erro)
         payload = form.payload()
-        payload["id"] = self.db.add_point_adjustment(tournament_id, **payload)
         # Desde a TBK-01 o ajuste MOVE a classificação. Um lançamento que muda o
-        # pódio precisa de trilha: sem isto, o registro do "por quê" vivia só na
-        # tabela do painel, que o próprio árbitro pode apagar.
-        self._audit(
-            "point_adjustment_added",
-            tournament_id,
-            f"Ajuste de pontos lançado: {self._adjustment_digest(payload)}",
-            payload,
+        # pódio precisa de trilha — e de permissão (RG2-04): os dois moram no
+        # serviço, que grava ajuste e auditoria juntos.
+        self.pairing_service.add_point_adjustment(
+            tournament_id, payload, f"Ajuste de pontos lançado: {self._adjustment_digest(payload)}"
         )
         logger.info("Ajuste de pontos lancado no torneio %s", tournament_id)
 
@@ -179,30 +175,16 @@ class ArbitrationController:
         sempre auditada, é mais segura que duas com uma delas muda.
         """
         registro = self.find_adjustment(tournament_id, adjustment_id) or {"id": adjustment_id}
-        self.db.delete_point_adjustment(int(adjustment_id))
-        self._audit(
-            "point_adjustment_removed",
-            tournament_id,
+        self.pairing_service.delete_point_adjustment(
+            tournament_id, int(adjustment_id), registro,
             f"Ajuste de pontos excluído: {self._adjustment_digest(registro)}",
-            registro,
         )
 
     def restore_adjustment(self, tournament_id: int, record: dict[str, Any]) -> None:
-        self.db.add_point_adjustment(
-            tournament_id,
-            round_number=int(record.get("round_number") or 0),
-            player_id=record.get("player_id"),
-            team_id=record.get("team_id"),
-            aat_type=str(record.get("aat_type") or ""),
-            match_points=float(record.get("match_points") or 0.0),
-            game_points=float(record.get("game_points") or 0.0),
-            reason=str(record.get("reason") or ""),
-        )
-        self._audit(
-            "point_adjustment_restored",
-            tournament_id,
+        self.pairing_service.add_point_adjustment(
+            tournament_id, record,
             f"Ajuste de pontos restaurado: {self._adjustment_digest(record)}",
-            record,
+            restored=True,
         )
 
     # ---- Byes solicitados (TRF25) ----------------------------------------- #
@@ -237,8 +219,8 @@ class ArbitrationController:
 
     def delete_bye(self, tournament_id: int, bye_id: int, is_team: bool, reason: str = "") -> None:
         if is_team:
-            # Equipes não têm política de bye (ver `_add_bye`): exclusão direta.
-            self.db.delete_requested_team_bye(int(bye_id))
+            # Equipes não têm política de bye (ver `_add_bye`): só a permissão.
+            self.pairing_service.delete_requested_team_bye(int(bye_id))
         else:
             # RG2-05: a regra (rodada já gerada recusa; motivo; auditoria) mora
             # no serviço — a tela apagava direto e o saldo zerava.
@@ -269,7 +251,7 @@ class ArbitrationController:
             # (limite por jogador, última rodada, jogador inativo), e inventar
             # uma regra para equipes que nenhum regulamento pediu seria pior do
             # que deixar explicito que ela não existe aqui.
-            self.db.add_requested_team_bye(
+            self.pairing_service.add_requested_team_bye(
                 tournament_id, target_id, round_number, bye_type, reason=reason
             )
             return
@@ -305,10 +287,7 @@ class ArbitrationController:
         return self._by_id(self.list_prohibitions(tournament_id, is_team), prohibition_id)
 
     def delete_prohibition(self, prohibition_id: int, is_team: bool) -> None:
-        if is_team:
-            self.db.delete_prohibited_team_pairing(int(prohibition_id))
-        else:
-            self.db.delete_prohibited_pairing(int(prohibition_id))
+        self.pairing_service.delete_prohibited_pairing(int(prohibition_id), is_team=is_team)
 
     def restore_prohibition(
         self, tournament_id: int, record: dict[str, Any], is_team: bool
@@ -335,10 +314,9 @@ class ArbitrationController:
         target_b_id: int,
         payload: dict[str, Any],
     ) -> None:
-        adicionar = (
-            self.db.add_prohibited_team_pairing if is_team else self.db.add_prohibited_pairing
+        self.pairing_service.add_prohibited_pairing(
+            tournament_id, target_a_id, target_b_id, is_team=is_team, **payload
         )
-        adicionar(tournament_id, target_a_id, target_b_id, **payload)
 
     # ---- Apoio ------------------------------------------------------------ #
 
@@ -367,38 +345,3 @@ class ArbitrationController:
             reason=str(record.get("reason") or ""),
         )
         return f"{alvo} — {describe_entry(entrada)}"
-
-    def _audit(
-        self,
-        action: str,
-        tournament_id: int,
-        description: str,
-        record: dict[str, Any],
-    ) -> None:
-        """Evento na trilha do torneio — a mesma de ``round_generated``.
-
-        Vai para `audit_events` (e não para o log de segurança) porque é onde o
-        `export_tournament_audit` procura: assim o motivo escrito pelo árbitro
-        sai no relatório de auditoria com operador, data e hora.
-
-        Falha de auditoria não desfaz o que o árbitro já decidiu — o lançamento
-        está gravado, e derrubar a tela por causa da trilha trocaria um problema
-        de registro por um de operação em pleno salão. Vai para o log.
-        """
-        campos = ("round_number", "player_id", "team_id", "aat_type",
-                  "match_points", "game_points")
-        metadata: dict[str, Any] = {"summary": description}
-        metadata.update(
-            {campo: record[campo] for campo in campos if record.get(campo) is not None}
-        )
-        try:
-            self.db.create_audit_event(
-                action=action,
-                tournament_id=int(tournament_id),
-                entity_type="point_adjustment",
-                entity_id=int(record.get("id") or 0) or None,
-                reason=str(record.get("reason") or "").strip(),
-                metadata=metadata,
-            )
-        except Exception:  # pragma: no cover - trilha nunca bloqueia a decisão
-            logger.exception("Falha ao registrar auditoria de %s", action)

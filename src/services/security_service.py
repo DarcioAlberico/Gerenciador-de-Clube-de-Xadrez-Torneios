@@ -12,10 +12,14 @@ import sqlite3
 import unicodedata
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
+from time import monotonic
 from typing import Any, Mapping, TYPE_CHECKING
 
 from src.domain.dates import is_iso_date
 from src.core.database import BASE_DIR, DEFAULT_CERTIFICATE_TEMPLATES, Database
+from src.core.operator import SYSTEM_ACTOR, Operator
+from src.config.permissions import ROLE_PERMISSIONS
+from src.services.permissions import has_permission, require_permission
 from src.services.constants import *
 
 if TYPE_CHECKING:
@@ -40,19 +44,56 @@ class SecurityService:
 
     def __init__(self, db: Database) -> None:
         self.db = db
-        self._current_user: dict[str, str] | None = None
+        # usuário → (erros seguidos, quando foi o último). Na memória: a espera
+        # é contra quem está na frente da tela agora (RG2-37).
+        self._login_failures: dict[str, tuple[int, float]] = {}
+
+    @property
+    def _current_user(self) -> dict[str, str] | None:
+        """O usuário logado, lido do operador do banco — a única fonte (RG2-43)."""
+        operator = self.db.current_operator()
+        if operator is None:
+            return None
+        return {"id": str(operator.user_id), "username": operator.name, "role": operator.role}
+
+    @_current_user.setter
+    def _current_user(self, user: Mapping[str, Any] | None) -> None:
+        self.db.set_operator(
+            None
+            if not user
+            else Operator(user_id=int(user.get("id") or 0), name=str(user["username"]), role=str(user["role"]))
+        )
+
+    # Erros seguidos antes da primeira espera, e o teto da espera (RG2-37).
+    _LOGIN_FREE_FAILURES = 3
+    _LOGIN_MAX_WAIT_SECONDS = 300
 
     def login(self, username: str, password_raw: str) -> bool:
+        """Entra com a senha **como foi digitada** (sem ``strip``, RG2-37).
+
+        Depois de 3 erros seguidos o mesmo usuário espera 5 s, depois 10, 20…
+        até 5 min — sem travar a tela: o login só devolve ``False`` e
+        ``login_wait_seconds`` diz quanto falta. Todo erro vai para a auditoria
+        (sem a senha). Senha vazia no banco (primeiro acesso) nunca entra.
+        """
+        if self.login_wait_seconds(username):
+            self.audit("login_failed", description=f"Login de {username} recusado: aguardando após erros seguidos.")
+            return False
         with self.db.connect() as conn:
             cursor = conn.execute("SELECT id, username, role, password_hash FROM users WHERE username = ?", (username,))
             row = cursor.fetchone()
-            if not row or not self._verify_password(password_raw, str(row["password_hash"] or "")):
+            stored = str(row["password_hash"] or "") if row else ""
+            if not row or not stored or not self._verify_password(password_raw, stored):
+                falhas = self._login_failures.get(username, (0, 0.0))[0] + 1
+                self._login_failures[username] = (falhas, monotonic())
+                self.audit("login_failed", description=f"Falha de login para {username} ({falhas} seguida(s)).")
                 return False
-            if self._needs_password_rehash(str(row["password_hash"] or "")):
+            if self._needs_password_rehash(stored):
                 conn.execute(
                     "UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?",
                     (self._hash_password(password_raw), self.db.now(), row["id"]),
                 )
+            self._login_failures.pop(username, None)
             self._current_user = {
                 "id": str(row["id"]),
                 "username": row["username"],
@@ -60,6 +101,60 @@ class SecurityService:
             }
         self.audit("login", description=f"Usuário {username} fez login.")
         return True
+
+    def login_wait_seconds(self, username: str) -> int:
+        """Quantos segundos o usuário ainda espera antes de tentar de novo (0 = pode)."""
+        falhas, ultima = self._login_failures.get(username, (0, 0.0))
+        if falhas < self._LOGIN_FREE_FAILURES:
+            return 0
+        janela = min(5 * 2 ** (falhas - self._LOGIN_FREE_FAILURES), self._LOGIN_MAX_WAIT_SECONDS)
+        return max(0, math.ceil(janela - (monotonic() - ultima)))
+
+    def needs_first_password(self) -> bool:
+        """Há usuário sem senha — o administrador de um banco novo (RG2-37)."""
+        with self.db.connect() as conn:
+            return bool(conn.execute("SELECT COUNT(*) FROM users WHERE password_hash = ''").fetchone()[0])
+
+    def set_first_password(self, username: str, password_raw: str) -> None:
+        """Define a senha do primeiro acesso. Só vale para usuário ainda sem senha.
+
+        Sem permissão: é o fluxo que vem antes do primeiro login. O que o
+        protege é só aceitar quem ainda não tem senha.
+        """
+        if not password_raw:
+            raise AppError("Informe a senha.")
+        with self.db.connect() as conn:
+            row = conn.execute("SELECT id, password_hash FROM users WHERE username = ?", (username,)).fetchone()
+            if not row:
+                raise AppError("Usuário não encontrado.")
+            if str(row["password_hash"] or ""):
+                raise AppError("A senha deste usuário já foi definida. Use \"Trocar senha\".")
+            conn.execute(
+                "UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?",
+                (self._hash_password(password_raw), self.db.now(), row["id"]),
+            )
+        self.audit("first_password_set", entity_id=int(row["id"]), description=f"Senha do primeiro acesso definida para {username}.")
+
+    def change_password(self, username: str, current_raw: str, new_raw: str) -> None:
+        """Troca a própria senha na tela de login: confere a atual primeiro."""
+        if not new_raw:
+            raise AppError("Informe a nova senha.")
+        if self.login_wait_seconds(username):
+            raise AppError(f"Aguarde {self.login_wait_seconds(username)} s para tentar de novo.")
+        with self.db.connect() as conn:
+            row = conn.execute("SELECT id, password_hash FROM users WHERE username = ?", (username,)).fetchone()
+            stored = str(row["password_hash"] or "") if row else ""
+            if not row or not stored or not self._verify_password(current_raw, stored):
+                falhas = self._login_failures.get(username, (0, 0.0))[0] + 1
+                self._login_failures[username] = (falhas, monotonic())
+                self.audit("login_failed", description=f"Troca de senha recusada para {username} (senha atual).")
+                raise AppError("Usuário ou senha atual não conferem.")
+            conn.execute(
+                "UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?",
+                (self._hash_password(new_raw), self.db.now(), row["id"]),
+            )
+        self._login_failures.pop(username, None)
+        self.audit("password_updated", entity_id=int(row["id"]), description=f"Senha trocada por {username}.")
 
     def list_users(self) -> list[dict[str, Any]]:
         with self.db.connect() as conn:
@@ -72,6 +167,8 @@ class SecurityService:
             raise AppError("Informe o nome de usuário.")
         if not password_raw:
             raise AppError("Informe a senha.")
+        if role not in ROLE_PERMISSIONS:
+            raise AppError(f"Papel desconhecido: {role}. Use um de: {', '.join(ROLE_PERMISSIONS)}.")
         pw_hash = self._hash_password(password_raw)
         now = self.db.now()
         try:
@@ -123,37 +220,25 @@ class SecurityService:
             return 0
 
     def current_operator(self) -> dict[str, str]:
-        if self._current_user:
-            role = self._current_user["role"]
-            name = self._current_user["username"]
-            return {"name": name, "role": role, "role_label": OPERATOR_ROLES.get(role, role)}
-            
-        settings = self.db.get_app_settings()
-        role = str(settings.get("operator_role") or "admin")
-        if role not in OPERATOR_ROLES:
-            role = "admin"
-        name = str(settings.get("operator_name") or "").strip() or OPERATOR_ROLES[role]
-        return {"name": name, "role": role, "role_label": OPERATOR_ROLES[role]}
+        """O operador do banco (RG2-43). Sem login é o sistema, com permissão total:
+        só os fluxos sem tela (migração, autoteste, testes de serviço) chegam aqui
+        sem login — o app abre na tela de login."""
+        operator = self.db.current_operator()
+        if operator is None:
+            return {"name": SYSTEM_ACTOR, "role": "admin", "role_label": "Sistema"}
+        return {
+            "name": operator.name,
+            "role": operator.role,
+            "role_label": OPERATOR_ROLES.get(operator.role, operator.role),
+        }
 
     def has_permission(self, action: str) -> bool:
-        """Verifica se o operador atual tem a permissão solicitada."""
-        from src.config.permissions import get_permissions_for_role
-        operator = self.current_operator()
-        role = operator["role"]
-        # admin has everything
-        if role == "admin":
-            return True
-        perms = get_permissions_for_role(role)
-        return action in perms
+        """Se o operador do banco tem a permissão — a regra mora em ``permissions`` (RG2-04)."""
+        return has_permission(self.db, action)
 
     def require_permission(self, action: str) -> None:
-        """Lança erro e audita caso o usuário não tenha permissão."""
-        if not self.has_permission(action):
-            self.audit(
-                action="permission_denied", 
-                description=f"Acesso negado para ação: {action}"
-            )
-            raise AppError("Permissão negada para realizar esta ação.")
+        """Recusa (e audita a recusa) — a mesma regra dos serviços (RG2-04)."""
+        require_permission(self.db, action)
 
     @classmethod
     def _hash_password(cls, password_raw: str) -> str:
@@ -171,6 +256,8 @@ class SecurityService:
 
     @classmethod
     def _verify_password(cls, password_raw: str, stored_hash: str) -> bool:
+        if not stored_hash:
+            return False  # primeiro acesso: senha ainda não definida (RG2-37)
         parts = stored_hash.split("$")
         if len(parts) == 4 and parts[0] == cls._PASSWORD_ALGORITHM:
             try:

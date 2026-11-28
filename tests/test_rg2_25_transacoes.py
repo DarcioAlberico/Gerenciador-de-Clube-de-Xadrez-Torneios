@@ -29,12 +29,10 @@ VERBO = re.compile(
     r"assign|cancel)_"
 )
 NAO_CONTA = {"backup", "backup_before"}
-ISENTOS = {
-    "sync_service.py::SyncService.sync_pending": (
-        "rede entre as gravações: cada item da fila marca o próprio status ao voltar do servidor, "
-        "e uma transação seguraria o banco durante o envio"
-    ),
-}
+# Método que não pode ficar numa transação (rede entre gravações, por exemplo),
+# com o motivo. A lista só encolhe. (O envio da sincronização era o único; saiu
+# com ela, RG2-38.)
+ISENTOS: dict[str, str] = {}
 
 
 def _e_transacao(no: ast.With) -> bool:

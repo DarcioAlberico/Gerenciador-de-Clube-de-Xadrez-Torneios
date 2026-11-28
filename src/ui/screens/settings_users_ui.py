@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from ..support import *
 from ..components import Dialog, FormStack, actions_bar
-from src.domain.numbers import NumberError, parse_decimal_br
 
 
 class SettingsUsersMixin:
@@ -101,34 +100,21 @@ class SettingsUsersMixin:
             active_var.set(bool(plan["active"]))
 
         def save():
-            # RG2-46: "1.500" é R$ 1.500,00 — a mesma leitura do serviço de finanças.
+            # Pelo serviço de finanças (RG2-04): a permissão e a leitura do valor
+            # ("1.500" é R$ 1.500,00, RG2-46) moram lá.
             try:
-                amount = round(parse_decimal_br(amount_entry.get()) or 0.0, 2)
-            except NumberError as exc:
-                self._show_error(f"Valor inválido: {exc}")
-                return
-
-            name = name_entry.get().strip()
-            if not name:
-                self._show_error("Nome é obrigatório.")
-                return
-
-            if plan:
-                self.db.update_membership_plan(
-                    plan["id"],
-                    name=name,
-                    amount=amount,
-                    billing_cycle=cycle_var.get(),
-                    active=int(active_var.get()),
-                    notes=""
+                self.finance_service.save_plan(
+                    {
+                        "name": name_entry.get(),
+                        "amount": amount_entry.get(),
+                        "billing_cycle": cycle_var.get(),
+                        "active": int(active_var.get()) if plan else 1,
+                    },
+                    plan_id=int(plan["id"]) if plan else None,
                 )
-            else:
-                self.db.create_membership_plan(
-                    name=name,
-                    amount=amount,
-                    billing_cycle=cycle_var.get(),
-                    notes=""
-                )
+            except Exception as exc:
+                self._show_error(exc)
+                return
             self._load_plans()
             dlg.close()
 

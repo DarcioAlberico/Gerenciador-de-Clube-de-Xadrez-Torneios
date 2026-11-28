@@ -304,12 +304,18 @@ class ControladorTest(unittest.TestCase):
         self.assertEqual([], banco.criados, "nada pode ter sido gravado")
 
     def test_criar_grava_o_payload_do_formulario(self) -> None:
+        """Pelo serviço (RG2-04): é lá que mora a permissão. A tela não grava direto."""
         banco = BancoFalso()
-        ctrl, _, _ = controlador(banco)
+        ctrl, _, pareamento = controlador(banco)
+        pareamento.create_player = lambda torneio, **payload: pareamento.chamadas.append(
+            ("create_player", (torneio,), payload)
+        ) or 99
         self.assertEqual(99, ctrl.create(1, PlayerForm(name="Ana", rating="1800"), 0.5))
-        self.assertEqual(1, banco.criados[0]["tournament_id"])
-        self.assertEqual(1800, banco.criados[0]["rating"])
-        self.assertEqual(0.5, banco.criados[0]["starting_points"])
+        self.assertEqual([], banco.criados)
+        ((nome, args, payload),) = pareamento.chamadas
+        self.assertEqual(("create_player", (1,)), (nome, args))
+        self.assertEqual(1800, payload["rating"])
+        self.assertEqual(0.5, payload["starting_points"])
 
     def test_atualizar_jogador_que_sumiu_vira_recado(self) -> None:
         ctrl, _, _ = controlador(BancoFalso())
@@ -318,9 +324,10 @@ class ControladorTest(unittest.TestCase):
 
     def test_grupo_scheveningen_e_saneado_antes_de_gravar(self) -> None:
         banco = BancoFalso()
-        ctrl, _, _ = controlador(banco)
+        ctrl, _, pareamento = controlador(banco)
         ctrl.set_scheveningen_group(1, "z")
-        self.assertEqual([(1, "")], banco.grupos)
+        self.assertEqual([], banco.grupos, "pelo serviço (RG2-04)")
+        self.assertEqual([("set_player_scheveningen_group", (1, ""), {})], pareamento.chamadas)
 
     def test_inscrever_sem_membro_disponivel_vira_recado(self) -> None:
         ctrl, socios, _ = controlador(BancoFalso())

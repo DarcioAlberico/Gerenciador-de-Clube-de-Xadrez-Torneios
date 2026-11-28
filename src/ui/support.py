@@ -85,7 +85,6 @@ from src.core.services import (
     QRResultService,
     RefereeService,
     SecurityService,
-    SyncService,
     TeamService,
     TournamentService,
     TrainingService,

@@ -17,6 +17,7 @@ from src.core.database import BASE_DIR, DEFAULT_CERTIFICATE_TEMPLATES, Database
 from src.services.constants import *
 from src.services.categories import normalized_sex
 from src.services.transactions import atomic
+from src.services.permissions import requires
 
 if TYPE_CHECKING:
     from src.services.club_service import ClubService
@@ -38,12 +39,14 @@ class GuardianService:
     def __init__(self, db: Database) -> None:
         self.db = db
 
+    @requires("member_write")
     def create_guardian(self, data: dict[str, Any]) -> int:
         payload = self._validated_payload(data)
         guardian_id = self.db.create_guardian(**payload)
         logger.info("Responsavel criado: %s", guardian_id)
         return guardian_id
 
+    @requires("member_write")
     def update_guardian(self, guardian_id: int, data: dict[str, Any]) -> None:
         if not self.db.get_guardian(guardian_id):
             raise AppError("Responsável não encontrado.")
@@ -51,6 +54,7 @@ class GuardianService:
         self.db.update_guardian(guardian_id, **payload)
         logger.info("Responsavel atualizado: %s", guardian_id)
 
+    @requires("member_write")
     def toggle_guardian_active(self, guardian_id: int) -> int:
         guardian = self.db.get_guardian(guardian_id)
         if not guardian:
@@ -140,6 +144,7 @@ class MemberService:
     def __init__(self, db: Database) -> None:
         self.db = db
 
+    @requires("member_write")
     @atomic
     def create_member(self, data: dict[str, Any]) -> int:
         payload = self._validated_payload(data)
@@ -150,6 +155,7 @@ class MemberService:
         logger.info("Membro criado: %s", member_id)
         return member_id
 
+    @requires("member_write")
     @atomic
     def update_member(self, member_id: int, data: dict[str, Any]) -> None:
         if not self.db.get_member(member_id):
@@ -160,6 +166,7 @@ class MemberService:
         self.db.set_member_active_class(member_id, class_id)
         logger.info("Membro atualizado: %s", member_id)
 
+    @requires("member_write")
     def toggle_member_status(self, member_id: int) -> str:
         member = self.db.get_member(member_id)
         if not member:
@@ -169,6 +176,7 @@ class MemberService:
         logger.info("Status do membro %s alterado para %s", member_id, next_status)
         return next_status
 
+    @requires("member_write")
     def deactivate_member(self, member_id: int, reason: str, date: str, notes: str = "") -> None:
         member = self.db.get_member(member_id)
         if not member:
@@ -184,24 +192,29 @@ class MemberService:
         )
         logger.info("Membro desativado: %s (Motivo: %s)", member_id, reason)
 
+    @requires("member_write")
     def register_presence(self, member_id: int, presence_date: str, event_type: str, notes: str = "") -> int:
         return self.db.create_member_presence(member_id, presence_date, event_type, notes)
 
     def list_presences(self, member_id: int) -> list[dict[str, Any]]:
         return self.db.list_member_presences(member_id)
 
+    @requires("member_write")
     def remove_presence(self, presence_id: int) -> None:
         self.db.delete_member_presence(presence_id)
 
+    @requires("member_write")
     def add_title(self, member_id: int, title_name: str, date_earned: str, issuer: str, notes: str = "") -> int:
         return self.db.create_member_title(member_id, title_name, date_earned, issuer, notes)
 
     def list_titles(self, member_id: int) -> list[dict[str, Any]]:
         return self.db.list_member_titles(member_id)
 
+    @requires("member_write")
     def remove_title(self, title_id: int) -> None:
         self.db.delete_member_title(title_id)
 
+    @requires("tournament_write")
     def register_member_in_tournament(
         self,
         tournament_id: int,
@@ -248,6 +261,7 @@ class MemberService:
             return TOURNAMENT_SCOPES["club"]
         return TOURNAMENT_SCOPES["standalone"]
 
+    @requires("tournament_write")
     @atomic
     def register_active_members_in_tournament(
         self,

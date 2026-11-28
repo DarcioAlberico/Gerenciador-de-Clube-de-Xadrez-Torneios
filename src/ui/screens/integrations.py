@@ -5,7 +5,7 @@ import tkinter as tk
 from typing import Any
 
 from ..support import *
-from ..components import Dialog, FormStack, actions_bar, report_dialog
+from ..components import report_dialog
 from src.services.clock_integration_service import CLOCK_EVENT_TYPES
 
 
@@ -14,7 +14,7 @@ class IntegrationPagesMixin:
         self._clear_content()
         self._page_title(
             "Integrações Operacionais",
-            "Monitore sincronização, dispositivos e eventos auxiliares de relógio/ausência.",
+            "Eventos de relógio e ausência, e publicação do álbum de fotos.",
         )
 
         body = ctk.CTkFrame(self.content, fg_color="transparent")
@@ -26,81 +26,30 @@ class IntegrationPagesMixin:
         toolbar.grid(row=0, column=0, sticky="ew", pady=(0, 12))
         toolbar.grid_columnconfigure(8, weight=1)
 
-        pending_label = ctk.CTkLabel(toolbar, text="")
-        pending_label.grid(row=0, column=0, padx=(0, 16), sticky="w")
-        devices_label = ctk.CTkLabel(toolbar, text="")
-        devices_label.grid(row=0, column=1, padx=(0, 16), sticky="w")
         events_label = ctk.CTkLabel(toolbar, text="")
-        events_label.grid(row=0, column=2, padx=(0, 16), sticky="w")
+        events_label.grid(row=0, column=0, padx=(0, 16), sticky="w")
 
         ctk.CTkButton(toolbar, text="Atualizar", width=120, command=lambda: load_all()).grid(
-            row=0, column=6, padx=(8, 0), sticky="e"
-        )
-        ctk.CTkButton(toolbar, text="Sincronizar pendentes", width=170, command=lambda: sync_pending()).grid(
             row=0, column=7, padx=(8, 0), sticky="e"
         )
 
+        # RG2-38 (D5): a sincronização com dispositivos saiu inteira — fila,
+        # dispositivos e servidor. Ficam o relógio/ausência e o álbum.
         tabs = ctk.CTkTabview(body)
         tabs.grid(row=1, column=0, sticky="nsew")
-        sync_tab = tabs.add("Sincronização")
-        devices_tab = tabs.add("Dispositivos")
         clock_tab = tabs.add("Relógio/Ausência")
         album_tab = tabs.add("Álbum/FTP")
-        for tab in (sync_tab, devices_tab, clock_tab, album_tab):
+        for tab in (clock_tab, album_tab):
             tab.grid_columnconfigure(0, weight=1)
             tab.grid_rowconfigure(1, weight=1)
 
-        sync_tree, sync_url_entry, sync_enabled_var, devices_enabled_var, notifications_enabled_var = (
-            self._build_sync_tab(sync_tab)
-        )
-        devices_tree = self._build_devices_tab(devices_tab)
         clock_tree, pairing_option, event_option, side_option, seconds_entry, note_entry = self._build_clock_tab(clock_tab)
         self._build_ftp_tab(album_tab)
 
+        devices_enabled_var = tk.StringVar(value="0")
+        notifications_enabled_var = tk.StringVar(value="0")
         pairing_option_map: dict[str, int | None] = {"Sem mesa vinculada": None}
-        sync_cache: dict[str, dict[str, Any]] = {}
-        device_cache: dict[str, dict[str, Any]] = {}
         clock_cache: dict[str, dict[str, Any]] = {}
-
-        def load_sync() -> None:
-            sync_tree.delete(*sync_tree.get_children())
-            sync_cache.clear()
-            for row in self.db.list_sync_outbox(status="", limit=500):
-                sync_cache[str(row["id"])] = row
-                sync_tree.insert(
-                    "",
-                    "end",
-                    iid=str(row["id"]),
-                    values=(
-                        row["id"],
-                        row["status"],
-                        row["action"],
-                        row.get("tournament_id") or "",
-                        row.get("round_id") or "",
-                        row.get("attempts") or 0,
-                        row.get("last_error") or "",
-                        row.get("created_at") or "",
-                    ),
-                )
-
-        def load_devices() -> None:
-            devices_tree.delete(*devices_tree.get_children())
-            device_cache.clear()
-            for row in self.sync_service.list_devices():
-                device_cache[str(row["device_id"])] = row
-                devices_tree.insert(
-                    "",
-                    "end",
-                    iid=str(row["device_id"]),
-                    values=(
-                        row["device_id"],
-                        row["name"],
-                        row["role"],
-                        row["status"],
-                        row.get("last_seen_at") or "",
-                        row.get("updated_at") or "",
-                    ),
-                )
 
         def load_pairings() -> None:
             pairing_option_map.clear()
@@ -143,30 +92,21 @@ class IntegrationPagesMixin:
                 )
 
         def load_metrics() -> None:
-            pending = len(self.db.list_sync_outbox(status="pending", limit=5000))
-            devices = len(self.sync_service.list_devices())
             events = (
                 len(self.clock_integration_service.list_clock_events(int(self.current_tournament_id), limit=5000))
                 if self.current_tournament_id
                 else 0
             )
-            pending_label.configure(text=f"Pendentes: {pending}")
-            devices_label.configure(text=f"Dispositivos: {devices}")
             events_label.configure(text=f"Eventos: {events}")
 
         def load_all() -> None:
             load_settings()
             load_pairings()
-            load_sync()
-            load_devices()
             load_clock()
             load_metrics()
 
         def load_settings() -> None:
             settings = self.db.get_app_settings()
-            sync_url_entry.delete(0, "end")
-            sync_url_entry.insert(0, str(settings.get("sync_server_url") or ""))
-            sync_enabled_var.set("1" if str(settings.get("sync_enabled") or "0") in {"1", "true", "True", "sim"} else "0")
             devices_enabled_var.set(
                 "1"
                 if str(settings.get("device_integrations_enabled") or "0") in {"1", "true", "True", "sim"}
@@ -179,66 +119,11 @@ class IntegrationPagesMixin:
         def save_settings() -> None:
             self.db.save_app_settings(
                 {
-                    "sync_server_url": sync_url_entry.get().strip(),
-                    "sync_enabled": sync_enabled_var.get(),
                     "device_integrations_enabled": devices_enabled_var.get(),
                     "notifications_enabled": notifications_enabled_var.get(),
                 }
             )
             self._show_toast("Configurações de integração salvas.", kind="success")
-
-        def sync_pending() -> None:
-            try:
-                if sync_enabled_var.get() != "1":
-                    raise AppError("Habilite a sincronização antes de enviar eventos.")
-                server_url = sync_url_entry.get().strip()
-                if not server_url:
-                    raise AppError("Informe a URL do servidor de sincronização.")
-                self.db.save_app_settings({"sync_server_url": server_url, "sync_enabled": "1"})
-                summary = self.sync_service.sync_pending(server_url=server_url)
-                self._show_info(
-                    "Sincronização concluída:\n"
-                    f"Enviados: {summary['sent']}\n"
-                    f"Sincronizados: {summary['synced']}\n"
-                    f"Rejeitados: {summary['rejected']}\n"
-                    f"Falhas: {summary['failed']}"
-                )
-                load_all()
-            except Exception as exc:
-                self._show_error(exc)
-
-        def register_device() -> None:
-            dialog = Dialog(self, "Autorizar dispositivo", size=(440, 320))
-            pilha = FormStack(dialog)
-            pilha.section("Dispositivo")
-            name_entry = pilha.text("Nome", placeholder="Ex.: Tablet da mesa 1")
-            role_option = pilha.select("Perfil", ["assistant", "desktop", "viewer"])
-            device_entry = pilha.text("ID do dispositivo", placeholder="Opcional")
-
-            def save() -> None:
-                try:
-                    self.sync_service.register_device(
-                        name_entry.get().strip() or "Dispositivo",
-                        role=role_option.get(),
-                        device_id=device_entry.get().strip(),
-                    )
-                    dialog.close()
-                    load_all()
-                except Exception as exc:
-                    self._show_error(exc)
-
-            actions_bar(dialog, primary=("Autorizar", save), close_text="Cancelar")
-
-        def revoke_selected_device() -> None:
-            selected = devices_tree.selection()
-            if not selected:
-                self._show_error(AppError("Selecione um dispositivo."))
-                return
-            try:
-                self.sync_service.revoke_device(str(selected[0]))
-                load_all()
-            except Exception as exc:
-                self._show_error(exc)
 
         def record_clock_event() -> None:
             if not self.current_tournament_id:
@@ -272,20 +157,6 @@ class IntegrationPagesMixin:
             extra = f"\n... e mais {len(alerts) - 12} alerta(s)." if len(alerts) > 12 else ""
             self._show_info(f"Alertas:\n{text}{extra}")
 
-        def show_sync_detail(_event: Any = None) -> None:
-            selected = sync_tree.selection()
-            if not selected:
-                self._show_error(AppError("Selecione um evento de sincronização."))
-                return
-            self._show_json_detail("Evento de sincronização", sync_cache.get(str(selected[0]), {}))
-
-        def show_device_detail(_event: Any = None) -> None:
-            selected = devices_tree.selection()
-            if not selected:
-                self._show_error(AppError("Selecione um dispositivo."))
-                return
-            self._show_json_detail("Dispositivo", device_cache.get(str(selected[0]), {}))
-
         def show_clock_detail(_event: Any = None) -> None:
             selected = clock_tree.selection()
             if not selected:
@@ -293,106 +164,26 @@ class IntegrationPagesMixin:
                 return
             self._show_json_detail("Evento de relógio/ausência", clock_cache.get(str(selected[0]), {}))
 
-        devices_buttons = ctk.CTkFrame(devices_tab, fg_color="transparent")
-        devices_buttons.grid(row=2, column=0, sticky="ew", padx=8, pady=(8, 0))
-        ctk.CTkButton(devices_buttons, text="Autorizar dispositivo", command=register_device).pack(side="left")
-        ctk.CTkButton(devices_buttons, text="Revogar selecionado", command=revoke_selected_device).pack(
-            side="left", padx=(8, 0)
-        )
-        ctk.CTkButton(devices_buttons, text="Detalhes", command=show_device_detail).pack(side="left", padx=(8, 0))
-
         clock_buttons = ctk.CTkFrame(clock_tab, fg_color="transparent")
         clock_buttons.grid(row=2, column=0, sticky="ew", padx=8, pady=(8, 0))
         ctk.CTkButton(clock_buttons, text="Registrar evento", command=record_clock_event).pack(side="left")
         ctk.CTkButton(clock_buttons, text="Ver alertas", command=show_alerts).pack(side="left", padx=(8, 0))
         ctk.CTkButton(clock_buttons, text="Detalhes", command=show_clock_detail).pack(side="left", padx=(8, 0))
-        ctk.CTkButton(sync_tab, text="Salvar configurações", command=save_settings).grid(
-            row=2, column=0, padx=8, pady=(8, 0), sticky="w"
-        )
-        ctk.CTkButton(sync_tab, text="Detalhes do evento", command=show_sync_detail).grid(
-            row=2, column=0, padx=(170, 8), pady=(8, 0), sticky="w"
+        # Os interruptores do relógio (eram da aba Sincronização) ficam na barra
+        # do topo, que tem espaço até em 800 px de largura.
+        ctk.CTkSwitch(
+            toolbar, text="Dispositivos", variable=devices_enabled_var, onvalue="1", offvalue="0"
+        ).grid(row=0, column=1, padx=(0, 10), sticky="w")
+        ctk.CTkSwitch(
+            toolbar, text="Notificações", variable=notifications_enabled_var, onvalue="1", offvalue="0"
+        ).grid(row=0, column=2, padx=(0, 10), sticky="w")
+        ctk.CTkButton(toolbar, text="Salvar configurações", width=170, command=save_settings).grid(
+            row=0, column=6, padx=(8, 0), sticky="e"
         )
 
-        sync_tree.bind("<Double-1>", show_sync_detail)
-        devices_tree.bind("<Double-1>", show_device_detail)
         clock_tree.bind("<Double-1>", show_clock_detail)
 
         load_all()
-
-    def _build_sync_tab(
-        self,
-        parent: ctk.CTkFrame,
-    ) -> tuple[ttk.Treeview, ctk.CTkEntry, tk.StringVar, tk.StringVar, tk.StringVar]:
-        settings_panel = ctk.CTkFrame(parent, fg_color="transparent")
-        settings_panel.grid(row=0, column=0, sticky="ew", padx=8, pady=(8, 0))
-        settings_panel.grid_columnconfigure(1, weight=1)
-
-        sync_enabled_var = tk.StringVar(value="0")
-        devices_enabled_var = tk.StringVar(value="0")
-        notifications_enabled_var = tk.StringVar(value="0")
-
-        ctk.CTkLabel(settings_panel, text="Servidor").grid(row=0, column=0, padx=(0, 8), sticky="w")
-        sync_url_entry = ctk.CTkEntry(settings_panel, width=360, placeholder_text="https://servidor/api")
-        sync_url_entry.grid(row=0, column=1, padx=(0, 12), sticky="ew")
-        ctk.CTkSwitch(settings_panel, text="Sync", variable=sync_enabled_var, onvalue="1", offvalue="0").grid(
-            row=0, column=2, padx=(0, 10), sticky="w"
-        )
-        ctk.CTkSwitch(
-            settings_panel,
-            text="Dispositivos",
-            variable=devices_enabled_var,
-            onvalue="1",
-            offvalue="0",
-        ).grid(row=0, column=3, padx=(0, 10), sticky="w")
-        ctk.CTkSwitch(
-            settings_panel,
-            text="Notificações",
-            variable=notifications_enabled_var,
-            onvalue="1",
-            offvalue="0",
-        ).grid(row=0, column=4, sticky="w")
-
-        panel = self._make_panel(parent)
-        panel.grid(row=1, column=0, sticky="nsew", padx=8, pady=8)
-        panel.grid_columnconfigure(0, weight=1)
-        panel.grid_rowconfigure(0, weight=1)
-        tree = self._make_tree(
-            panel,
-            ["id", "status", "action", "tournament", "round", "attempts", "error", "created"],
-            {
-                "id": "ID",
-                "status": "Status",
-                "action": "Ação",
-                "tournament": "Torneio",
-                "round": "Rodada",
-                "attempts": "Tent.",
-                "error": "Último erro",
-                "created": "Criado em",
-            },
-            {"id": 60, "status": 100, "action": 170, "tournament": 80, "round": 80, "attempts": 60, "error": 280, "created": 150},
-            visible_rows=16,
-        )
-        return tree, sync_url_entry, sync_enabled_var, devices_enabled_var, notifications_enabled_var
-
-    def _build_devices_tab(self, parent: ctk.CTkFrame) -> ttk.Treeview:
-        panel = self._make_panel(parent)
-        panel.grid(row=1, column=0, sticky="nsew", padx=8, pady=8)
-        panel.grid_columnconfigure(0, weight=1)
-        panel.grid_rowconfigure(0, weight=1)
-        return self._make_tree(
-            panel,
-            ["device_id", "name", "role", "status", "last_seen", "updated"],
-            {
-                "device_id": "ID",
-                "name": "Nome",
-                "role": "Perfil",
-                "status": "Status",
-                "last_seen": "Último acesso",
-                "updated": "Atualizado",
-            },
-            {"device_id": 190, "name": 180, "role": 100, "status": 110, "last_seen": 150, "updated": 150},
-            visible_rows=16,
-        )
 
     def _build_clock_tab(
         self,
@@ -420,9 +211,11 @@ class IntegrationPagesMixin:
         seconds_entry = ctk.CTkEntry(form, width=90)
         seconds_entry.grid(row=1, column=3, padx=(0, 8), sticky="w")
 
-        ctk.CTkLabel(form, text="Observação").grid(row=0, column=4, sticky="w")
+        # Numa linha própria: na mesma linha dos outros campos, o formulário
+        # passava de 800 px (aparecia quando o relógio virou a primeira aba).
+        ctk.CTkLabel(form, text="Observação").grid(row=2, column=0, pady=(6, 0), sticky="w")
         note_entry = ctk.CTkEntry(form, width=300)
-        note_entry.grid(row=1, column=4, columnspan=2, sticky="ew")
+        note_entry.grid(row=3, column=0, columnspan=6, sticky="ew")
 
         panel = self._make_panel(parent)
         panel.grid(row=1, column=0, sticky="nsew", padx=8, pady=8)

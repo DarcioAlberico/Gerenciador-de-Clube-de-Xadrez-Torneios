@@ -25,9 +25,10 @@ from .database_learning_levels import LearningLevelMixin
 from .database_members import MemberMixin
 from .database_referees import RefereesMixin
 from .database_schema import CREATE_INDEXES_SQL, CREATE_TABLES_SQL
-from .database_sync_audit import SyncAuditMixin
+from .database_sync_audit import AuditMixin
 from .database_tournament_core import TournamentCoreMixin
 from .database_ui_prefs import UiPrefsMixin
+from .operator import Operator
 
 logger = logging.getLogger(__name__)
 
@@ -423,9 +424,6 @@ APP_SETTING_KEYS: frozenset[str] = frozenset({
     "backup_retention_count",
     "ui_scale_percent",
     "local_result_server_url",
-    "sync_server_url",
-    "sync_enabled",
-    "local_device_id",
     "device_integrations_enabled",
     "notifications_enabled",
     "live_portal_notice",
@@ -457,7 +455,7 @@ class Database(
     CertificateMixin,
     MemberMixin,
     TournamentCoreMixin,
-    SyncAuditMixin,
+    AuditMixin,
     EducationMixin,
     ClubMixin,
     ClubEventMixin,
@@ -468,7 +466,7 @@ class Database(
     RefereesMixin,
     UiPrefsMixin,
 ):
-    SCHEMA_VERSION = 60
+    SCHEMA_VERSION = 61
 
     def __init__(
         self,
@@ -486,6 +484,8 @@ class Database(
         # Conexão da transação aberta em CADA thread (RGS-08): nunca e
         # compartilhada, entre threads, porque o sqlite3 não permite.
         self._thread_state = threading.local()
+        # RG2-43: quem opera. Definido pelo login; None é o sistema.
+        self._operator: Operator | None = None
         if using_default_db_path:
             self._copy_legacy_default_database_if_needed()
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -552,6 +552,14 @@ class Database(
             raise
         finally:
             connection.close()
+
+    def set_operator(self, operator: Operator | None) -> None:
+        """Define quem opera (RG2-43). Só o login e o logout chamam; ``None`` = sistema."""
+        self._operator = operator
+
+    def current_operator(self) -> Operator | None:
+        """O operador logado, ou ``None`` para os fluxos do sistema."""
+        return self._operator
 
     @contextmanager
     def transaction(self):
@@ -809,20 +817,6 @@ class Database(
                 WHERE type = 'table' AND name = 'result_submissions'
                 """
             ).fetchone()
-            devices_table = connection.execute(
-                """
-                SELECT name
-                FROM sqlite_master
-                WHERE type = 'table' AND name = 'devices'
-                """
-            ).fetchone()
-            sync_outbox_table = connection.execute(
-                """
-                SELECT name
-                FROM sqlite_master
-                WHERE type = 'table' AND name = 'sync_outbox'
-                """
-            ).fetchone()
             clock_events_table = connection.execute(
                 """
                 SELECT name
@@ -1060,8 +1054,6 @@ class Database(
                 or not tiebreak_components_table
                 or not public_tokens_table
                 or not result_submissions_table
-                or not devices_table
-                or not sync_outbox_table
                 or not clock_events_table
                 or not classes_table
                 or not enrollments_table

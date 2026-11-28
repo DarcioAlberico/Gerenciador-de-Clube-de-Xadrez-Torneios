@@ -137,7 +137,6 @@ class AlbericusApp(
         self.event_service = EventService(self.db)
         self.inventory_service = InventoryService(self.db)
         self.security_service = SecurityService(self.db)
-        self.sync_service = SyncService(self.db)
         self.clock_integration_service = ClockIntegrationService(self.db)
         self.pairing_service = PairingService(self.db)
         self.qr_result_service = QRResultService(self.db, self.pairing_service)
@@ -371,15 +370,29 @@ class AlbericusApp(
         entrar = primary_button(area, "Entrar", self._try_login, height=40)
         entrar.grid(row=6, column=0, padx=SPACE_XL, pady=(SPACE_SM, SPACE_LG), sticky="ew")
 
-        ajuda = secondary_button(area, "Primeiro acesso?", self._show_first_access_help, height=32)
-        ajuda.grid(row=7, column=0, padx=SPACE_XL, pady=(0, SPACE_XL), sticky="n")
+        # RG2-37: banco novo nasce com o administrador SEM senha; o primeiro
+        # acesso a define aqui. A troca da própria senha também mora na tela de login.
+        apoio = ctk.CTkFrame(area, fg_color="transparent")
+        apoio.grid(row=7, column=0, padx=SPACE_XL, pady=(0, SPACE_XL), sticky="n")
+        primeiro = (
+            "Definir senha do administrador"
+            if self.security_service.needs_first_password()
+            else "Primeiro acesso?"
+        )
+        self.first_access_button = secondary_button(apoio, primeiro, self._show_first_access_help, height=32)
+        self.first_access_button.pack(side="left", padx=(0, SPACE_SM))
+        secondary_button(apoio, "Trocar senha", self._show_change_password_dialog, height=32).pack(side="left")
 
         self.username_entry.bind("<Return>", lambda _e: self.password_entry.focus())
         self.password_entry.bind("<Return>", lambda _e: self._try_login())
 
     def _show_first_access_help(self) -> None:
-        """Orienta sem entregar credencial: senha na tela de login seria um
-        convite a nunca trocá-la."""
+        """Banco novo: define a senha do administrador (RG2-37). Senão, orienta
+        sem entregar credencial: senha na tela de login seria um convite a
+        nunca trocá-la."""
+        if self.security_service.needs_first_password():
+            self._show_first_password_dialog()
+            return
         alert_dialog(
             self,
             "Primeiro acesso",
@@ -390,14 +403,76 @@ class AlbericusApp(
             kind="info",
         )
 
+    def _show_first_password_dialog(self) -> None:
+        from .components import Dialog, FormStack, actions_bar
+
+        dialog = Dialog(self, "Senha do administrador", size=(440, 330))
+        pilha = FormStack(dialog)
+        pilha.section("Primeiro acesso")
+        senha = pilha.text("Nova senha", show="*")
+        confirmacao = pilha.text("Repita a senha", show="*")
+
+        def salvar() -> None:
+            if senha.get() != confirmacao.get():
+                self._show_error(AppError("As duas senhas não conferem."))
+                return
+            try:
+                self.security_service.set_first_password("admin", senha.get())
+            except Exception as exc:
+                self._show_error(exc)
+                return
+            dialog.close()
+            self.first_access_button.configure(text="Primeiro acesso?")
+            self.username_entry.delete(0, "end")
+            self.username_entry.insert(0, "admin")
+            self.password_entry.focus()
+            self.login_error_label.configure(text="Senha definida. Entre com o usuário admin.")
+
+        actions_bar(dialog, primary=("Definir senha", salvar), close_text="Cancelar")
+
+    def _show_change_password_dialog(self) -> None:
+        from .components import Dialog, FormStack, actions_bar
+
+        dialog = Dialog(self, "Trocar senha", size=(440, 400))
+        pilha = FormStack(dialog)
+        pilha.section("Sua conta")
+        usuario = pilha.text("Usuário")
+        usuario.insert(0, self.username_entry.get().strip())
+        atual = pilha.text("Senha atual", show="*")
+        nova = pilha.text("Nova senha", show="*")
+        confirmacao = pilha.text("Repita a nova senha", show="*")
+
+        def salvar() -> None:
+            if nova.get() != confirmacao.get():
+                self._show_error(AppError("As duas senhas novas não conferem."))
+                return
+            try:
+                self.security_service.change_password(usuario.get().strip(), atual.get(), nova.get())
+            except Exception as exc:
+                self._show_error(exc)
+                return
+            dialog.close()
+            self.login_error_label.configure(text="Senha trocada. Entre com a senha nova.")
+
+        actions_bar(dialog, primary=("Trocar", salvar), close_text="Cancelar")
+
     def _try_login(self, event: Any = None) -> None:
         usuario = self.username_entry.get().strip()
-        senha = self.password_entry.get().strip()
+        # Sem strip na senha (RG2-37): o cadastro guarda como foi digitada, e
+        # uma senha com espaço na ponta nunca entrava.
+        senha = self.password_entry.get()
         if not usuario or not senha:
             self.login_error_label.configure(text="Preencha usuário e senha.")
             return
         if not self.security_service.login(usuario, senha):
-            self.login_error_label.configure(text="Credenciais inválidas.")
+            espera = self.security_service.login_wait_seconds(usuario)
+            if espera:
+                mensagem = f"Muitas tentativas seguidas. Aguarde {espera} s e tente de novo."
+            elif self.security_service.needs_first_password() and usuario == "admin":
+                mensagem = "Defina primeiro a senha do administrador (botão abaixo)."
+            else:
+                mensagem = "Credenciais inválidas."
+            self.login_error_label.configure(text=mensagem)
             self.password_entry.delete(0, "end")
             self.password_entry.focus()
             return

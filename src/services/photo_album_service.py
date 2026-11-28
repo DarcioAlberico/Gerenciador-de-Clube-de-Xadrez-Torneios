@@ -14,6 +14,7 @@ from typing import Any, Callable
 
 from src.core.database import Database
 from src.services.constants import AppError
+from src.services.permissions import requires
 from src.services.ftp_publish import (
     build_gallery_html,
     list_images,
@@ -43,6 +44,7 @@ class PhotoAlbumService:
             "passive": str(settings.get("ftp_passive") or "1") in ("1", "true", "True"),
         }
 
+    @requires("settings_write")
     def save_config(self, config: dict[str, Any]) -> None:
         self.db.save_app_settings(
             {

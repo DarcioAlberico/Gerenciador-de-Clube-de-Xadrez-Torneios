@@ -14,6 +14,7 @@ from src.core.database import Database
 from src.services.constants import AppError
 from src.services.numeric_fields import money_field
 from src.services.prizes import PRIZE_KINDS, allocate_prizes
+from src.services.permissions import requires
 
 
 def validated_prizes(prizes: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -38,6 +39,7 @@ class PrizeService:
     def list_prizes(self, tournament_id: int) -> list[dict[str, Any]]:
         return self.db.list_tournament_prizes(tournament_id)
 
+    @requires("tournament_write")
     def replace_prizes(
         self,
         tournament_id: int,

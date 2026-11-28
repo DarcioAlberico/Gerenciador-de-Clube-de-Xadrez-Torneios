@@ -14,26 +14,12 @@ from tests.support.core_service_base import CoreServiceTestCase
 
 
 class QrPortalTest(CoreServiceTestCase):
-    def test_phase2_arbitration_issues_aggregate_qr_sync_and_clock_alerts(self) -> None:
+    def test_phase2_arbitration_issues_aggregate_qr_and_clock_alerts(self) -> None:
         self._create_players(2)
-        remote_device = self.sync_service.register_device("Mesa 1", role="assistant", device_id="device-board-1")
         round_data = self.service.generate_next_round(self.tournament_id)
         pairing = self.db.get_pairings_for_round(int(round_data["id"]))[0]
         token_payload = self.qr_result_service.result_url_for_pairing(self.tournament_id, int(pairing["id"]))
         self.qr_result_service.submit_result(token_payload["token"], "1-0", submitter="Mesa 1")
-        self.sync_service.apply_remote_event(
-            {
-                "event_id": "remote-invalid-result",
-                "device_id": remote_device["device_id"],
-                "tournament_id": self.tournament_id,
-                "round_id": int(round_data["id"]),
-                "entity_type": "pairing",
-                "entity_id": int(pairing["id"]),
-                "action": "result_updated",
-                "payload": {"result": "BYE"},
-                "payload_hash": self.db._hash_payload({"result": "BYE"}),
-            }
-        )
         self.clock_integration_service.record_manual_event(
             self.tournament_id,
             "flag_fall",
@@ -46,11 +32,10 @@ class QrPortalTest(CoreServiceTestCase):
         issues = self.service.arbitration_issues(self.tournament_id)
         sources = {item["source"] for item in issues["issues"]}
 
-        self.assertEqual(3, issues["metrics"]["total"])
+        self.assertEqual(2, issues["metrics"]["total"])
         self.assertEqual(1, issues["metrics"]["qr_pending"])
-        self.assertEqual(1, issues["metrics"]["sync_conflicts"])
         self.assertEqual(1, issues["metrics"]["clock_alerts"])
-        self.assertEqual({"qr", "sync", "clock"}, sources)
+        self.assertEqual({"qr", "clock"}, sources)
         self.assertTrue(all(item.get("payload") for item in issues["issues"]))
         self.assertTrue(all(item.get("issue_key") for item in issues["issues"]))
 

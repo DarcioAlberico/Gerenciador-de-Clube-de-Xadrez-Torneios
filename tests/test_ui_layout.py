@@ -18,6 +18,7 @@ from tests.support.ctk_cleanup import (
     create_tk_window,
     release_dead_ctk_windows,
 )
+from tests.support.login import entrar_como_admin
 from tests.support.ui_input import type_into
 
 # Esta suite abre janela: precisa de display real. Ver o marcador 'gui'
@@ -83,7 +84,7 @@ class UiLayoutSmokeTest(unittest.TestCase):
         self.app._show_error = self._raise_ui_error
         self.app._run_background = self._run_background_now
         
-        self.app.security_service.login("admin", "admin")
+        entrar_como_admin(self.app.security_service)
         if hasattr(self.app, "login_frame"):
             self.app.login_frame.destroy()
             self.app._build_menu()

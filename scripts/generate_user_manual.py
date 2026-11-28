@@ -52,7 +52,6 @@ from src.core.services import (
     MemberService,
     PairingService,
     RefereeService,
-    SyncService,
     TeamService,
     TournamentService,
     TrainingService,
@@ -593,15 +592,14 @@ SCREENS: tuple[ScreenSpec, ...] = (
         menu="Ferramentas",
         action="Integrações Operacionais",
         title="Integrações Operacionais",
-        overview="Monitoramento de sincronização, dispositivos, eventos de relógio/ausência e publicação de álbum por FTP.",
+        overview="Eventos de relógio/ausência e publicação de álbum por FTP.",
         functions=(
-            "Configura URL de sincronização e chaves de habilitação.",
-            "Lista fila de eventos pendentes e detalhes técnicos.",
-            "Autoriza ou revoga dispositivos.",
-            "Registra eventos manuais de relógio/ausência e configura FTP para álbum de fotos.",
+            "Registra eventos manuais de relógio/ausência e mostra os alertas.",
+            "Liga ou desliga relógios conectados e notificações.",
+            "Configura FTP para o álbum de fotos.",
         ),
-        workflow=("Configure servidor e flags.", "Autorize dispositivos se houver operação distribuída.", "Monitore pendências.", "Use eventos de relógio para auditoria operacional."),
-        tabs=("Sincronização", "Dispositivos", "Relogio/Ausencia", "Album/FTP"),
+        workflow=("Ligue os relógios conectados, se houver.", "Use eventos de relógio para auditoria operacional.", "Publique o álbum ao fim da rodada."),
+        tabs=("Relógio/Ausência", "Álbum/FTP"),
         method_name="show_integrations",
     ),
     ScreenSpec(
@@ -699,7 +697,6 @@ def seed_demo_database(db: Database, temp_dir: Path) -> dict[str, int]:
     pairing_service = PairingService(db)
     referee_service = RefereeService(db)
     team_service = TeamService(db)
-    sync_service = SyncService(db)
     library_service = LibraryService(db)
     certificate_service = CertificateService(db, pairing_service)
 
@@ -1074,11 +1071,7 @@ def seed_demo_database(db: Database, temp_dir: Path) -> dict[str, int]:
             continue
         pairing_service.update_result(individual_tournament_id, pairing["id"], results[index % len(results)])
     pairing_service.close_round(individual_tournament_id, first_round["id"])
-    second_round = pairing_service.generate_next_round(individual_tournament_id)
-    first_open_pairing = next(
-        (item for item in db.get_pairings_for_round(second_round["id"]) if not item["is_bye"]),
-        None,
-    )
+    pairing_service.generate_next_round(individual_tournament_id)
 
     players = db.list_players(individual_tournament_id, active_only=False)
     if len(players) >= 2:
@@ -1100,16 +1093,6 @@ def seed_demo_database(db: Database, temp_dir: Path) -> dict[str, int]:
         )
         db.add_requested_bye(individual_tournament_id, int(players[-1]["id"]), 3, "H", reason="Compromisso escolar.")
 
-    if first_open_pairing:
-        db.create_sync_outbox_event(
-            "result_updated",
-            {"pairing_id": int(first_open_pairing["id"]), "result": "1-0"},
-            tournament_id=individual_tournament_id,
-            round_id=int(second_round["id"]),
-            entity_type="pairing",
-            entity_id=int(first_open_pairing["id"]),
-        )
-    sync_service.register_device("Tablet da mesa 1", role="assistant", device_id="tablet_mesa_1")
 
     event_service.save_event(
         {

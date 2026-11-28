@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, Callable, Mapping, Sequence
 from src.core.database import Database
 from src.core.database_tournament_core import default_tiebreak_engine
 from src.domain.numbers import setting_number
+from src.core.operator import SYSTEM_ACTOR
 from src.services.transactions import atomic
 from src.services.constants import (
     ACCELERATION_METHODS as _ACCELERATION_METHODS,
@@ -83,6 +84,7 @@ from src.services.pairing import (
 )
 from src.services.pairing.constraints import seeding_order as _seeding_order
 from src.services.pairing.initial_color import resolve_initial_color
+from src.services.permissions import requires
 from src.services.pairing.pairing_check import (
     PairingCheck,
     manual_adjustment_reason_error as _manual_adjustment_reason_error,
@@ -670,11 +672,6 @@ class PairingService:
         for submission in self.db.list_result_submissions(tournament_id=tournament_id, status="submitted", limit=safe_limit):
             issues.append(_result_submission_issue(submission))
 
-        for event in self.db.list_audit_events(tournament_id, action="sync_remote_rejected", limit=safe_limit):
-            issues.append(_audit_issue(event, "sync", "remote_rejected", "Evento remoto rejeitado"))
-        for event in self.db.list_audit_events(tournament_id, action="sync_event_rejected", limit=safe_limit):
-            issues.append(_audit_issue(event, "sync", "outbox_rejected", "Evento local rejeitado pelo servidor"))
-
         # Queda de seta e ausência BLOQUEIAM até a decisão ser registrada
         # (ARB-03): são os dois eventos que a FIDE não deixa passar sem o
         # árbitro decidir — quem ganha a partida? houve reclamação? perdeu por
@@ -821,6 +818,7 @@ class PairingService:
     # Registro disciplinar (ARB-03)
     # ------------------------------------------------------------------ #
 
+    @requires("tournament_write")
     @atomic
     def register_incident(
         self,
@@ -935,6 +933,7 @@ class PairingService:
     # Participação: retirada e reentrada (ARB-05)
     # ------------------------------------------------------------------ #
 
+    @requires("tournament_write")
     @atomic
     def set_player_participation(
         self,
@@ -988,6 +987,7 @@ class PairingService:
         )
         return rodada
 
+    @requires("tournament_write")
     @atomic
     def set_players_participation(
         self,
@@ -1051,6 +1051,7 @@ class PairingService:
     # Byes solicitados (ARB-04)
     # ------------------------------------------------------------------ #
 
+    @requires("tournament_write")
     @atomic
     def request_bye(
         self,
@@ -1111,6 +1112,7 @@ class PairingService:
         )
         return bye_id
 
+    @requires("tournament_write")
     @atomic
     def cancel_requested_bye(self, tournament_id: int, bye_id: int, reason: str) -> None:
         """Exclui um bye solicitado com regra e rastro (RG2-05).
@@ -1298,6 +1300,7 @@ class PairingService:
             )
         return self.request_bye(tournament_id, player_id, int(round_number), "Z", reason=reason)
 
+    @requires("tournament_write")
     def forfeit_absent_player(
         self, tournament_id: int, player_id: int, round_number: int, reason: str = ""
     ) -> dict[str, Any]:
@@ -1370,6 +1373,7 @@ class PairingService:
         "international_rating",
     )
 
+    @requires("tournament_write")
     def register_late_entry(
         self,
         tournament_id: int,
@@ -1424,6 +1428,7 @@ class PairingService:
             "starting_points": plano.starting_points,
         }
 
+    @requires("tournament_write")
     @atomic
     def postpone_pairing(self, tournament_id: int, pairing_id: int, note: str = "") -> None:
         """Marca a mesa como adiada, com o combinado como nota (ARB-02)."""
@@ -1445,6 +1450,7 @@ class PairingService:
             after={"postponed": 1, "postponed_note": limpa},
         )
 
+    @requires("tournament_write")
     @atomic
     def resume_pairing(self, tournament_id: int, pairing_id: int) -> None:
         """Desfaz o adiamento da mesa (ARB-02)."""
@@ -1554,6 +1560,7 @@ class PairingService:
 
         return [issue for issue in issues if matches_filter(issue) and matches_query(issue)]
 
+    @requires("tournament_write")
     def acknowledge_arbitration_issue(self, tournament_id: int, issue_key: str, note: str = "") -> int:
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
@@ -1610,6 +1617,7 @@ class PairingService:
         }
         return _team_round_dashboard_metrics(matches, boards_by_match_id, FINAL_RESULTS)
 
+    @requires("tournament_write")
     def generate_next_round(
         self,
         tournament_id: int,
@@ -2806,6 +2814,7 @@ class PairingService:
         """Flutuacoes por equipe — o que faltava para penalizar float repetido."""
         return _team_float_histories(*self._team_closed_history(tournament_id))
 
+    @requires("tournament_write")
     def update_result(
         self,
         tournament_id: int,
@@ -2940,6 +2949,7 @@ class PairingService:
             return self._team_round_dashboard_metrics(int(round_id))
         return self._individual_round_dashboard_metrics(int(round_id))
 
+    @requires("tournament_write")
     def close_round(self, tournament_id: int, round_id: int) -> None:
         """Fecha a rodada — individual ou por equipes, pelo mesmo caminho (RGS-11, RG2-08).
 
@@ -3165,6 +3175,7 @@ class PairingService:
             "reason": cleaned,
         }
 
+    @requires("tournament_write")
     def revoke_round_correction_unlock(self, tournament_id: int, round_id: int) -> int:
         """Fecha a rodada de novo antes do prazo. Devolve quantos desbloqueios caíram."""
         revogados = self.db.revoke_correction_unlocks(tournament_id, round_id)
@@ -3696,6 +3707,7 @@ class PairingService:
             "message": _deleted_results_message(len(apagados)) if apagados else "",
         }
 
+    @requires("tournament_write")
     def delete_generated_round(self, round_id: int, reason: str = "") -> None:
         """Exclui rodada gerada e ainda não fechada.
 
@@ -3785,6 +3797,7 @@ class PairingService:
             "qr_submissions": len(self._pending_qr_submissions(tournament_id, round_id)),
         }
 
+    @requires("tournament_write")
     def repair_open_round(
         self,
         tournament_id: int,
@@ -3827,6 +3840,7 @@ class PairingService:
         logger.info("Rodada %s re-emparceirada no modo amistoso", round_id)
         return nova
 
+    @requires("tournament_write")
     def delete_player_if_unpaired(self, tournament_id: int, player_id: int) -> None:
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
@@ -3842,6 +3856,7 @@ class PairingService:
         self.db.delete_player(player_id)
         logger.info("Jogador %s excluido do torneio %s antes de entrar em rodadas", player_id, tournament_id)
 
+    @requires("tournament_write")
     def adjust_pairing_player(
         self,
         tournament_id: int,
@@ -4015,6 +4030,7 @@ class PairingService:
             },
         )
 
+    @requires("tournament_write")
     @atomic
     def swap_team_board_colors(self, tournament_id: int, round_id: int, team_board_id: int) -> None:
         round_data = self.db.get_round(round_id)
@@ -4050,6 +4066,7 @@ class PairingService:
         )
         logger.info("Cores trocadas no tabuleiro por equipes %s", team_board_id)
 
+    @requires("tournament_write")
     @atomic
     def adjust_team_board_player(
         self,
@@ -4887,6 +4904,98 @@ class PairingService:
         """Criterios de desempate de mata-mata oferecidos ao arbitro (PAR-03)."""
         return dict(_KNOCKOUT_CRITERIA)
 
+    # ---- Registros do árbitro: ajustes, proibições, byes de equipe, jogadores (RG2-04) ---- #
+    # A tela gravava estes direto no banco, por fora da permissão. Agora passam
+    # por aqui: @requires checa quem opera e @atomic grava registro e auditoria
+    # juntos. A descrição legível (``summary``) vem de quem sabe descrevê-la.
+
+    _ADJUSTMENT_FIELDS = ("round_number", "player_id", "team_id", "aat_type", "match_points", "game_points", "reason")
+
+    @requires("tournament_write")
+    @atomic
+    def add_point_adjustment(
+        self, tournament_id: int, payload: Mapping[str, Any], summary: str = "", *, restored: bool = False
+    ) -> int:
+        registro = {campo: payload.get(campo) for campo in self._ADJUSTMENT_FIELDS}
+        registro["round_number"] = int(registro.get("round_number") or 0)
+        registro["aat_type"] = str(registro.get("aat_type") or "")
+        registro["match_points"] = float(registro.get("match_points") or 0.0)
+        registro["game_points"] = float(registro.get("game_points") or 0.0)
+        registro["reason"] = str(registro.get("reason") or "").strip()
+        registro["id"] = int(self.db.add_point_adjustment(int(tournament_id), **registro))
+        acao = "point_adjustment_restored" if restored else "point_adjustment_added"
+        self._audit_point_adjustment(acao, tournament_id, summary, registro)
+        return registro["id"]
+
+    @requires("tournament_write")
+    @atomic
+    def delete_point_adjustment(
+        self, tournament_id: int, adjustment_id: int, record: Mapping[str, Any] | None = None, summary: str = ""
+    ) -> None:
+        self.db.delete_point_adjustment(int(adjustment_id))
+        self._audit_point_adjustment(
+            "point_adjustment_removed", tournament_id, summary, {**(record or {}), "id": int(adjustment_id)}
+        )
+
+    def _audit_point_adjustment(
+        self, action: str, tournament_id: int, summary: str, record: Mapping[str, Any]
+    ) -> None:
+        """Na trilha do torneio, onde o ``export_tournament_audit`` procura (TBK-01)."""
+        metadata: dict[str, Any] = {"summary": summary}
+        metadata.update(
+            {campo: record[campo] for campo in self._ADJUSTMENT_FIELDS[:-1] if record.get(campo) is not None}
+        )
+        self.db.create_audit_event(
+            action=action,
+            tournament_id=int(tournament_id),
+            entity_type="point_adjustment",
+            entity_id=int(record.get("id") or 0) or None,
+            reason=str(record.get("reason") or "").strip(),
+            metadata=metadata,
+        )
+
+    @requires("tournament_write")
+    def add_prohibited_pairing(
+        self, tournament_id: int, target_a_id: int, target_b_id: int, *, is_team: bool = False, **payload: Any
+    ) -> int:
+        adicionar = self.db.add_prohibited_team_pairing if is_team else self.db.add_prohibited_pairing
+        return int(adicionar(int(tournament_id), int(target_a_id), int(target_b_id), **payload))
+
+    @requires("tournament_write")
+    def delete_prohibited_pairing(self, prohibition_id: int, *, is_team: bool = False) -> None:
+        if is_team:
+            self.db.delete_prohibited_team_pairing(int(prohibition_id))
+        else:
+            self.db.delete_prohibited_pairing(int(prohibition_id))
+
+    @requires("tournament_write")
+    def add_requested_team_bye(
+        self, tournament_id: int, team_id: int, round_number: int, bye_type: str, reason: str = ""
+    ) -> int:
+        # Equipes não têm política de bye (ARB-04 é do individual): só a permissão.
+        return int(self.db.add_requested_team_bye(int(tournament_id), int(team_id), int(round_number), bye_type, reason=reason))
+
+    @requires("tournament_write")
+    def delete_requested_team_bye(self, requested_bye_id: int) -> None:
+        self.db.delete_requested_team_bye(int(requested_bye_id))
+
+    @requires("tournament_write")
+    def create_player(self, tournament_id: int, **payload: Any) -> int:
+        return int(self.db.create_player(int(tournament_id), **payload))
+
+    @requires("tournament_write")
+    def update_player(self, player_id: int, **payload: Any) -> None:
+        self.db.update_player(int(player_id), **payload)
+
+    @requires("tournament_write")
+    def set_player_scheveningen_group(self, player_id: int, group: str) -> None:
+        self.db.set_player_scheveningen_group(int(player_id), group)
+
+    def _operator_name(self) -> str:
+        operator = self.db.current_operator()
+        return operator.name if operator else SYSTEM_ACTOR
+
+    @requires("tournament_write")
     @atomic
     def register_knockout_advancement(
         self,
@@ -4920,7 +5029,8 @@ class PairingService:
             int(player_id),
             str(criterion).strip(),
             notes=limpo,
-            actor=actor,
+            # RG2-43: sem ator explícito, quem está logado (a tela mandava "").
+            actor=actor.strip() or self._operator_name(),
         )
         self.db.create_audit_event(
             action="knockout_advancement_registered",

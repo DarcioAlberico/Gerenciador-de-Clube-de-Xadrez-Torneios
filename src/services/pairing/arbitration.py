@@ -31,8 +31,8 @@ def audit_issue(
     """Evento de auditoria → pendência do painel.
 
     `severity` é parâmetro porque "decision" **bloqueia o fechamento da rodada**
-    (ver `_blocking_arbitration_issues_for_round`). Isso é certo para um evento
-    de sync rejeitado, que o árbitro precisa resolver antes de seguir, e errado
+    (ver `_blocking_arbitration_issues_for_round`). Isso é certo para queda de
+    seta ou ausência, que o árbitro precisa decidir antes de seguir, e errado
     para um aviso de motor de desempate: pararia o torneio por causa de um
     problema de relatório. O padrão continua "decision" para não mudar o
     comportamento de quem já chamava sem o argumento.
@@ -104,7 +104,6 @@ def issue_metrics(issues: list[dict[str, Any]]) -> dict[str, int]:
     return {
         "total": len(issues),
         "qr_pending": sum(1 for item in issues if item["source"] == "qr"),
-        "sync_conflicts": sum(1 for item in issues if item["source"] == "sync"),
         "clock_alerts": sum(1 for item in issues if item["source"] == "clock"),
         "pairing_alerts": sum(1 for item in issues if item["source"] == "pairing"),
         "tiebreak_alerts": sum(1 for item in issues if item["source"] == "tiebreak"),

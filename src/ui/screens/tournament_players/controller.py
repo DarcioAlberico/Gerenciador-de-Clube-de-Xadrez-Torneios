@@ -128,7 +128,7 @@ class TournamentPlayersController:
         if erro:
             raise self._app_error(erro)
         player_id = int(
-            self.db.create_player(tournament_id, **form.create_payload(starting_points))
+            self.pairing_service.create_player(tournament_id, **form.create_payload(starting_points))
         )
         logger.info("Jogador criado no torneio %s: %s", tournament_id, form.name.strip())
         return player_id
@@ -140,7 +140,7 @@ class TournamentPlayersController:
         atual = self.db.get_player(player_id)
         if not atual:
             raise self._app_error(t("players.error.not_found"))
-        self.db.update_player(player_id, **form.update_payload(atual))
+        self.pairing_service.update_player(player_id, **form.update_payload(atual))
         logger.info("Jogador atualizado: %s", player_id)
 
     def set_status(self, player_id: int, status: str, reason: str = "") -> None:
@@ -158,7 +158,7 @@ class TournamentPlayersController:
         logger.info("Status do jogador %s alterado para %s", player_id, status)
 
     def set_scheveningen_group(self, player_id: int, group: str) -> None:
-        self.db.set_player_scheveningen_group(player_id, normalize_scheveningen_group(group))
+        self.pairing_service.set_player_scheveningen_group(player_id, normalize_scheveningen_group(group))
 
     def delete_if_unpaired(self, tournament_id: int, player_id: int) -> None:
         self.pairing_service.delete_player_if_unpaired(tournament_id, player_id)

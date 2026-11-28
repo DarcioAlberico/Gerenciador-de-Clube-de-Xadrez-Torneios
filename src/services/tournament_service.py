@@ -34,6 +34,7 @@ from src.services.categories import from_row as category_from_row, normalize as 
 from src.services.rating import SPEED_CHOICES, serialize_regulation_overrides
 from src.services.list_layout_service import validated_columns
 from src.services.prize_service import validated_prizes
+from src.services.permissions import requires
 from src.services.tournament_configuration import (
     STRUCTURAL_SETTINGS,
     TIPO_AGENDA_PERDIDA,
@@ -96,11 +97,13 @@ class RefereeService:
             raise AppError("Nome do árbitro é obrigatório.")
         return self.db.insert_referee(data)
 
+    @requires("tournament_write")
     def update_referee(self, referee_id: int, data: dict[str, Any]) -> None:
         if not data.get("name"):
             raise AppError("Nome do árbitro é obrigatório.")
         self.db.update_referee(referee_id, data)
 
+    @requires("tournament_write")
     def toggle_referee_active(self, referee_id: int) -> None:
         referee = self.db.get_referee(referee_id)
         if not referee:
@@ -122,12 +125,14 @@ class TournamentService:
     def __init__(self, db: Database) -> None:
         self.db = db
 
+    @requires("tournament_write")
     def create_tournament(self, tournament_data: dict[str, Any]) -> int:
         payload = self._validated_tournament_payload(tournament_data, {})
         tournament_id = self.db.create_tournament(**payload)
         logger.info("Torneio criado: %s", tournament_id)
         return tournament_id
 
+    @requires("tournament_write")
     def create_tournament_from_profile(
         self,
         tournament_data: dict[str, Any],
@@ -161,6 +166,7 @@ class TournamentService:
         """Categorias cadastradas do torneio (vazio = faixas padrão)."""
         return self.db.list_tournament_categories(tournament_id)
 
+    @requires("tournament_write")
     def replace_categories(
         self, tournament_id: int, categories: list[dict[str, Any]], *, confirmed: bool = False
     ) -> None:
@@ -284,6 +290,7 @@ class TournamentService:
             "closed_rounds": sum(1 for item in rounds if str(item.get("status") or "") == "closed"),
         }
 
+    @requires("delete_records")
     def delete_tournament(self, tournament_id: int) -> None:
         """Exclui o torneio com backup antes e registro na auditoria global (RG2-28).
 
@@ -303,6 +310,7 @@ class TournamentService:
             self.db.delete_tournament(tournament_id)
         logger.info("Torneio excluido: %s (backup %s)", tournament_id, backup_path)
 
+    @requires("tournament_write")
     def save_profile(
         self,
         tournament_id: int,
@@ -360,6 +368,7 @@ class TournamentService:
             or self._category_dates_changed(tournament_id, preparo),
         )
 
+    @requires("tournament_write")
     def save_tournament_configuration(
         self,
         tournament_id: int,
@@ -425,6 +434,7 @@ class TournamentService:
             agenda=[],
         )
 
+    @requires("tournament_write")
     def save_dangerous_changes(
         self,
         tournament_id: int,
@@ -635,6 +645,7 @@ class TournamentService:
                 after={"pairing_system": depois},
             )
 
+    @requires("tournament_write")
     def change_tournament_type(self, tournament_id: int, pairing_method: str) -> None:
         """Muda o metodo de pareamento (RR <-> Suico <-> ...), bloqueado apos a R1."""
         tournament = self.db.get_tournament(tournament_id)
@@ -650,6 +661,7 @@ class TournamentService:
         self.db.update_pairing_method(tournament_id, method)
         logger.info("Torneio %s teve o pareamento alterado para %s", tournament_id, method)
 
+    @requires("tournament_write")
     def split_tournament(self, tournament_id: int, group_count: int) -> list[int]:
         """Divide os jogadores em N torneios-filho por ranking inicial (A=mais forte)."""
         tournament = self.db.get_tournament(tournament_id)
@@ -1234,6 +1246,7 @@ class TeamService:
     def __init__(self, db: Database) -> None:
         self.db = db
 
+    @requires("tournament_write")
     def create_team(self, tournament_id: int, data: dict[str, Any]) -> int:
         self._require_team_tournament(tournament_id)
         payload = self._validated_team_payload(data)
@@ -1244,6 +1257,7 @@ class TeamService:
         logger.info("Equipe criada no torneio %s: %s", tournament_id, team_id)
         return team_id
 
+    @requires("tournament_write")
     def update_team(self, team_id: int, data: dict[str, Any]) -> None:
         team = self.db.get_team(team_id)
         if not team:
@@ -1256,6 +1270,7 @@ class TeamService:
             raise AppError("Já existe uma equipe com este nome no torneio.") from exc
         logger.info("Equipe atualizada: %s", team_id)
 
+    @requires("tournament_write")
     def add_player(
         self,
         team_id: int,
@@ -1289,6 +1304,7 @@ class TeamService:
         logger.info("Jogador %s adicionado a equipe %s", player_id, team_id)
         return team_player_id
 
+    @requires("tournament_write")
     def update_player_assignment(
         self,
         team_player_id: int,
@@ -1321,6 +1337,7 @@ class TeamService:
         self.db.remove_player_from_team(team_player_id)
         logger.info("Jogador removido da equipe: %s", team_player_id)
 
+    @requires("tournament_write")
     def swap_pairing_numbers(self, team_a_id: int, team_b_id: int, *, reason: str = "") -> None:
         """Corrige o TPN trocando o número de duas equipes (EQ-01.5).
 
@@ -1390,6 +1407,7 @@ class TeamService:
             )
         logger.info("TPN trocado entre as equipes %s e %s", team_a["id"], team_b["id"])
 
+    @requires("tournament_write")
     def delete_team(self, team_id: int) -> None:
         team = self.db.get_team(team_id)
         if not team:

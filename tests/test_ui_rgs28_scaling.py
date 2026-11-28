@@ -35,6 +35,7 @@ from tests.support.ctk_cleanup import (
     create_tk_window,
     release_dead_ctk_windows,
 )
+from tests.support.login import entrar_como_admin
 
 
 class GuardaDeVersaoTest(unittest.TestCase):
@@ -71,7 +72,7 @@ class EscalaDepoisDeRemontarTelasTest(unittest.TestCase):
             self.temp_dir.cleanup()
             self.skipTest(f"Tk indisponivel: {exc}")
         self.app.current_tournament_id = self.tournament_id
-        self.app.security_service.login("admin", "admin")
+        entrar_como_admin(self.app.security_service)
         if hasattr(self.app, "login_frame"):
             self.app.login_frame.destroy()
             self.app._build_menu()

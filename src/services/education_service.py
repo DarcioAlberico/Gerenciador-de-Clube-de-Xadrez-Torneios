@@ -16,6 +16,7 @@ from src.core.database import BASE_DIR, DEFAULT_CERTIFICATE_TEMPLATES, Database
 from src.services.constants import *
 from src.services.numeric_fields import decimal_field
 from src.services.transactions import atomic
+from src.services.permissions import requires
 
 if TYPE_CHECKING:
     from src.services.club_service import ClubService
@@ -37,6 +38,7 @@ class TrainingService:
     def __init__(self, db: Database) -> None:
         self.db = db
 
+    @requires("education_write")
     def save_session(self, data: dict[str, Any], session_id: int | None = None) -> int:
         payload = self._validated_session_payload(data)
         if session_id:
@@ -49,6 +51,7 @@ class TrainingService:
         logger.info("Aula/treino criado: %s", saved_id)
         return saved_id
 
+    @requires("education_write")
     @atomic
     def record_attendance(self, session_id: int, rows: list[dict[str, Any]]) -> dict[str, int]:
         session = self.db.get_training_session(session_id)
@@ -195,6 +198,7 @@ class ExerciseService:
     def __init__(self, db: Database) -> None:
         self.db = db
 
+    @requires("education_write")
     def save_exercise(self, data: dict[str, Any], exercise_id: int | None = None) -> int:
         payload = self._validated_exercise_payload(data)
         if exercise_id:
@@ -207,6 +211,7 @@ class ExerciseService:
         logger.info("Exercicio criado: %s", saved_id)
         return saved_id
 
+    @requires("education_write")
     def toggle_exercise_active(self, exercise_id: int) -> int:
         exercise = self.db.get_exercise(exercise_id)
         if not exercise:
@@ -216,6 +221,7 @@ class ExerciseService:
         logger.info("Exercicio %s alterado para active=%s", exercise_id, next_active)
         return next_active
 
+    @requires("education_write")
     def save_training_list(self, data: dict[str, Any], list_id: int | None = None) -> int:
         payload = self._validated_training_list_payload(data)
         if list_id:
@@ -228,6 +234,7 @@ class ExerciseService:
         logger.info("Lista de treino criada: %s", saved_id)
         return saved_id
 
+    @requires("education_write")
     def set_training_list_exercises(self, list_id: int, exercise_ids: list[int]) -> None:
         training_list = self.db.get_training_list(list_id)
         if not training_list:
@@ -264,6 +271,7 @@ class ExerciseService:
         ]
         self.set_training_list_exercises(list_id, current)
 
+    @requires("education_write")
     def record_attempt(self, data: dict[str, Any]) -> int:
         payload = self._validated_attempt_payload(data)
         attempt_id = self.db.create_exercise_attempt(**payload)
@@ -422,6 +430,7 @@ class LearningLevelService:
     def __init__(self, db: Database) -> None:
         self.db = db
 
+    @requires("education_write")
     def create_level(self, data: dict[str, Any]) -> int:
         payload = self._validated_payload(data)
         try:
@@ -431,6 +440,7 @@ class LearningLevelService:
         logger.info("Nivel de aprendizagem criado: %s", level_id)
         return level_id
 
+    @requires("education_write")
     def update_level(self, learning_level_id: int, data: dict[str, Any]) -> None:
         if not self.db.get_learning_level(learning_level_id):
             raise AppError("Nível de aprendizagem não encontrado.")
@@ -441,6 +451,7 @@ class LearningLevelService:
             raise AppError("Já existe um nível com este nome.") from exc
         logger.info("Nivel de aprendizagem atualizado: %s", learning_level_id)
 
+    @requires("education_write")
     def toggle_level_active(self, learning_level_id: int) -> int:
         level = self.db.get_learning_level(learning_level_id)
         if not level:

@@ -22,6 +22,7 @@ from src.ui.app import AlbericusApp
 from src.ui.components.fields import field_has_error
 from src.ui.support import MaskedDateEntry
 from tests.support.ctk_cleanup import cancel_pending_callbacks, create_tk_window, release_dead_ctk_windows
+from tests.support.login import entrar_como_admin
 
 pytestmark = pytest.mark.gui
 
@@ -44,7 +45,7 @@ class FormulariosComDataTest(unittest.TestCase):
         self.app._show_error = lambda error, *a, **kw: self.errors.append(str(error))
         self.app._show_toast = lambda *a, **kw: None
         self.app._show_info = lambda *a, **kw: None
-        self.app.security_service.login("admin", "admin")
+        entrar_como_admin(self.app.security_service)
         if hasattr(self.app, "login_frame"):
             self.app.login_frame.destroy()
             self.app._build_menu()

@@ -686,27 +686,23 @@ Envio de comunicados por e-mail, disparo em massa, WhatsApp e configuração SMT
 
 **Caminho:** Ferramentas > Integrações Operacionais
 
-Monitoramento de sincronização, dispositivos, eventos de relogio/ausencia e publicação de álbum por FTP.
+Eventos de relógio/ausência e publicação de álbum por FTP.
 
 ![Integrações Operacionais](manual_screenshots/integracoes.jpg)
 
 **Abas ou áreas internas:**
-- Sincronização
-- Dispositivos
-- Relogio/Ausencia
-- Album/FTP
+- Relógio/Ausência
+- Álbum/FTP
 
 **Principais funções:**
-- Configura URL de sincronização e chaves de habilitação.
-- Lista fila de eventos pendentes e detalhes técnicos.
-- Autoriza ou revoga dispositivos.
-- Registra eventos manuais de relogio/ausencia e configura FTP para álbum de fotos.
+- Registra eventos manuais de relógio/ausência e mostra os alertas.
+- Liga ou desliga relógios conectados e notificações.
+- Configura FTP para o álbum de fotos.
 
 **Fluxo recomendado:**
-1. Configure servidor e flags.
-2. Autorize dispositivos se houver operação distribuída.
-3. Monitore pendências.
-4. Use eventos de relógio para auditoria operacional.
+1. Ligue os relógios conectados, se houver.
+2. Use eventos de relógio para auditoria operacional.
+3. Publique o álbum ao fim da rodada.
 
 ### Biblioteca Pedagógica
 
