@@ -9,10 +9,15 @@ from src.services.constants import AppError
 from src.services.pairing.constraints import (
     choose_team_bye,
     choose_team_colors,
-    greedy_team_pairs,
-    is_color_valid_fide,
-    optimal_team_pairs,
+    team_pair_penalty,
     team_pairing_order_key,
+)
+from src.services.pairing.fide_dutch import colors_admissible
+from src.services.pairing.round_search import (
+    bracket_pairing,
+    greedy_pairs,
+    optimal_pairs,
+    score_group_pairs,
 )
 
 
@@ -541,140 +546,6 @@ def baku_first_round_team_matches(
     return matches
 
 
-def search_dutch_team_pairing(
-    pairable: list[dict[str, Any]],
-    histories: dict[int, list[str]],
-    played_pairs: set[frozenset[int]],
-    strict_colors: bool,
-    seed_ratings: dict[int, int],
-) -> list[tuple[dict[str, Any], dict[str, Any]]] | None:
-    if not pairable:
-        return []
-
-    half = len(pairable) // 2
-    s1 = pairable[:half]
-    s2 = pairable[half:]
-
-    def solve(
-        s1_idx: int,
-        available_s2: list[dict[str, Any]],
-        current_pairs: list[tuple[dict[str, Any], dict[str, Any]]],
-    ) -> list[tuple[dict[str, Any], dict[str, Any]]] | None:
-        if s1_idx == len(s1):
-            return current_pairs
-
-        p1 = s1[s1_idx]
-        for index, p2 in enumerate(available_s2):
-            if frozenset((int(p1["id"]), int(p2["id"]))) in played_pairs:
-                continue
-
-            if strict_colors:
-                white_id, _black_id = choose_team_colors(p1, p2, histories, seed_ratings)
-                p1_color = "W" if white_id == int(p1["id"]) else "B"
-                p2_color = "W" if white_id == int(p2["id"]) else "B"
-
-                if not is_color_valid_fide(int(p1["id"]), p1_color, histories) or not is_color_valid_fide(
-                    int(p2["id"]), p2_color, histories
-                ):
-                    p1_color_rev = "B" if p1_color == "W" else "W"
-                    p2_color_rev = "B" if p2_color == "W" else "W"
-                    if not is_color_valid_fide(int(p1["id"]), p1_color_rev, histories) or not is_color_valid_fide(
-                        int(p2["id"]), p2_color_rev, histories
-                    ):
-                        continue
-
-            next_pairs = solve(
-                s1_idx + 1,
-                available_s2[:index] + available_s2[index + 1:],
-                current_pairs + [(p1, p2)],
-            )
-            if next_pairs is not None:
-                return next_pairs
-        return None
-
-    return solve(0, s2, [])
-
-
-def dutch_team_bracket_pairing(
-    group: list[dict[str, Any]],
-    standings: dict[int, dict[str, Any]],
-    histories: dict[int, list[str]],
-    played_pairs: set[frozenset[int]],
-    rank_by_team_id: dict[int, int],
-    seed_ratings: dict[int, int],
-    *,
-    max_exhaustive_pairing_teams: int,
-    repeat_pairing_penalty: int,
-    score_group_float_penalty: int,
-    score_diff_penalty: int,
-    float_histories: dict[int, list[str]] | None = None,
-) -> tuple[list[tuple[dict[str, Any], dict[str, Any]]], list[dict[str, Any]]]:
-    n = len(group)
-
-    for num_floaters in range(n % 2, n + 1, 2):
-        if num_floaters == n:
-            break
-        pairable = group[:-num_floaters] if num_floaters else group
-        floaters = group[-num_floaters:] if num_floaters else []
-        best_pairs = search_dutch_team_pairing(
-            pairable,
-            histories,
-            played_pairs,
-            strict_colors=True,
-            seed_ratings=seed_ratings,
-        )
-        if best_pairs is not None:
-            return best_pairs, floaters
-
-    for num_floaters in range(n % 2, n + 1, 2):
-        if num_floaters == n:
-            break
-        pairable = group[:-num_floaters] if num_floaters else group
-        floaters = group[-num_floaters:] if num_floaters else []
-        best_pairs = search_dutch_team_pairing(
-            pairable,
-            histories,
-            played_pairs,
-            strict_colors=False,
-            seed_ratings=seed_ratings,
-        )
-        if best_pairs is not None:
-            return best_pairs, floaters
-
-    for num_floaters in range(n % 2, n + 1, 2):
-        if num_floaters == n:
-            break
-        pairable = group[:-num_floaters] if num_floaters else group
-        floaters = group[-num_floaters:] if num_floaters else []
-        if len(pairable) <= max_exhaustive_pairing_teams:
-            best_pairs = optimal_team_pairs(
-                pairable,
-                standings,
-                played_pairs,
-                rank_by_team_id,
-                repeat_pairing_penalty=repeat_pairing_penalty,
-                score_group_float_penalty=score_group_float_penalty,
-                score_diff_penalty=score_diff_penalty,
-                float_histories=float_histories,
-            )
-        else:
-            best_pairs = greedy_team_pairs(
-                pairable,
-                standings,
-                played_pairs,
-                rank_by_team_id,
-                repeat_pairing_penalty=repeat_pairing_penalty,
-                score_group_float_penalty=score_group_float_penalty,
-                score_diff_penalty=score_diff_penalty,
-                float_histories=float_histories,
-            )
-
-        if all(frozenset((int(p1["id"]), int(p2["id"]))) not in played_pairs for p1, p2 in best_pairs):
-            return best_pairs, floaters
-
-    return [], group
-
-
 def team_round_violations(
     matches: list[dict[str, Any]],
     played_pairs: set[frozenset[int]],
@@ -724,75 +595,57 @@ def swiss_team_matches(
     score_diff_penalty: int,
     float_histories: dict[int, list[str]] | None = None,
 ) -> list[dict[str, Any]]:
+    """Suíço por equipes pelo motor único de busca (RG2-07b).
+
+    A cópia holandesa de equipes (`dutch_team_bracket_pairing`) saiu: grupos,
+    flutuantes e busca são os de `round_search`, com o que é de equipe — a
+    pontuação, a ordem, a cor e o custo do confronto.
+    """
     rank_by_team_id = {
         int(team_id): int(item.get("position", 0) or 0)
         for team_id, item in standings.items()
     }
-    pending = sorted(
-        teams,
-        key=lambda team: team_pairing_order_key(team, standings, seed_ratings),
-    )
+
+    def order_key(team: dict[str, Any]) -> Any:
+        return team_pairing_order_key(team, standings, seed_ratings)
+
+    pending = sorted(teams, key=order_key)
 
     bye_team = None
     if len(pending) % 2 == 1:
         bye_team = choose_team_bye(pending, standings, bye_team_ids, seed_ratings)
         pending.remove(bye_team)
 
-    score_groups: dict[float, list[dict[str, Any]]] = {}
-    for team in pending:
-        score = float(standings.get(int(team["id"]), {}).get("match_points", 0.0) or 0.0)
-        score_groups.setdefault(score, []).append(team)
-
-    team_pairs = []
-    floaters = []
-
-    for score in sorted(score_groups.keys(), reverse=True):
-        group = score_groups[score]
-        group.extend(floaters)
-        floaters = []
-
-        group = sorted(group, key=lambda team: team_pairing_order_key(team, standings, seed_ratings))
-
-        group_pairs, group_floaters = dutch_team_bracket_pairing(
-            group,
+    def cost(team: dict[str, Any], opponent: dict[str, Any]) -> float:
+        return team_pair_penalty(
+            team,
+            opponent,
             standings,
-            histories,
             played_pairs,
             rank_by_team_id,
-            seed_ratings,
-            max_exhaustive_pairing_teams=max_exhaustive_pairing_teams,
             repeat_pairing_penalty=repeat_pairing_penalty,
             score_group_float_penalty=score_group_float_penalty,
             score_diff_penalty=score_diff_penalty,
             float_histories=float_histories,
         )
-        team_pairs.extend(group_pairs)
-        floaters.extend(group_floaters)
 
-    if floaters:
-        pairing_kwargs = {
-            "repeat_pairing_penalty": repeat_pairing_penalty,
-            "score_group_float_penalty": score_group_float_penalty,
-            "score_diff_penalty": score_diff_penalty,
-            "float_histories": float_histories,
-        }
-        if len(floaters) <= max_exhaustive_pairing_teams:
-            leftover_pairs = optimal_team_pairs(
-                floaters,
-                standings,
-                played_pairs,
-                rank_by_team_id,
-                **pairing_kwargs,
-            )
-        else:
-            leftover_pairs = greedy_team_pairs(
-                floaters,
-                standings,
-                played_pairs,
-                rank_by_team_id,
-                **pairing_kwargs,
-            )
-        team_pairs.extend(leftover_pairs)
+    def solve(group: list[dict[str, Any]]) -> list[tuple[dict[str, Any], dict[str, Any]]]:
+        return (optimal_pairs if len(group) <= max_exhaustive_pairing_teams else greedy_pairs)(group, cost)
+
+    def colors(team: dict[str, Any], opponent: dict[str, Any]) -> tuple[int, int]:
+        return choose_team_colors(team, opponent, histories, seed_ratings)
+
+    admissible = colors_admissible(histories, colors)
+    def score_of(team: dict[str, Any]) -> float:
+        return float(standings.get(int(team["id"]), {}).get("match_points", 0.0) or 0.0)
+
+    team_pairs = score_group_pairs(
+        pending,
+        score_of=score_of,
+        order_key=order_key,
+        bracket=lambda group: bracket_pairing(group, played_pairs, admissible=admissible, solve=solve),
+        leftover=solve,
+    )
 
     team_pairs = sorted(
         team_pairs,
@@ -804,7 +657,7 @@ def swiss_team_matches(
 
     matches = []
     for match_number, (team, opponent) in enumerate(team_pairs, start=1):
-        white_team_id, black_team_id = choose_team_colors(team, opponent, histories, seed_ratings)
+        white_team_id, black_team_id = colors(team, opponent)
         matches.append(
             team_match_payload(
                 match_number,
