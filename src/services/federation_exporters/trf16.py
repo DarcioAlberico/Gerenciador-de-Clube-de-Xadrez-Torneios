@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +32,17 @@ from src.services.pairing.acceleration import (
     scheme_is_baku,
     upper_share_size,
 )
+
+
+def write_trf_file(file_path: str | Path, content: str) -> None:
+    """Grava o TRF num temporário ao lado e troca: o arquivo anterior nunca fica pela metade."""
+    destino = Path(file_path)
+    temporario = destino.with_name(f".{destino.name}.tmp")
+    try:
+        temporario.write_text(content, encoding="utf-8", newline="")
+        os.replace(temporario, destino)
+    finally:
+        temporario.unlink(missing_ok=True)
 
 
 class TRF16Exporter:
@@ -70,7 +82,7 @@ class TRF16Exporter:
             raise AppError(submission_message(problemas))
         warnings = [*warnings, *problemas]
 
-        Path(file_path).write_text(conteudo, encoding="utf-8", newline="")
+        write_trf_file(file_path, conteudo)
         return warnings
 
     def render(self, tournament_id: int, *, up_to_round: int | None = None) -> str:
@@ -165,29 +177,15 @@ class TRF16Exporter:
 
         service = self.export_service
         linha = service._trf_tournament_line
-        linhas: list[str] = [
-            linha("012", tournament["name"]),
-            linha("022", tournament.get("location", "")),
-            linha("032", settings.get("federation", "")),
-            linha("042", service._trf_date(tournament.get("start_date"), long_year=True)),
-            linha("052", service._trf_date(tournament.get("end_date"), long_year=True)),
-            linha("062", str(len(players))),
-            linha("072", str(sum(1 for player in players if fide_rating(player) > 0))),
-        ]
-        # `082` e o número de EQUIPES: em torneio individual saia "082 0", que
-        # descreve um torneio por equipes com zero equipes (FED-03).
-        if is_team_tournament:
-            linhas.append(linha("082", str(len(teams))))
-        linhas.append(linha("092", service._trf_tournament_type(tournament, settings)))
         evento = record_xxe(settings.get("fide_event_id"))
-        if evento:
-            linhas.append(f"{evento}\r\n")
-        linhas.append(linha("102", service._trf_chief_arbiter_text(tournament_id, settings)))
-        linhas.extend(
-            linha("112", deputy)
-            for deputy in service._trf_deputy_arbiter_texts(tournament_id, settings)
+        linhas = self.header_lines(
+            tournament_id,
+            tournament,
+            settings,
+            players,
+            teams if is_team_tournament else None,
+            event_line=f"{evento}\r\n" if evento else "",
         )
-        linhas.append(linha("122", tournament.get("time_control", "")))
         linhas.append(linha("142", str(declared_rounds)))
         # Extensões do dialeto TRF16 (FED-03): quem lê TRF16 espera `XXR`, e não
         # o `142`, que é registro TRF25.
@@ -217,6 +215,47 @@ class TRF16Exporter:
         )
 
         return "".join(linhas), players
+
+    def header_lines(
+        self,
+        tournament_id: int,
+        tournament: dict[str, Any],
+        settings: dict[str, Any],
+        players: list[dict[str, Any]],
+        teams: list[dict[str, Any]] | None,
+        *,
+        event_line: str = "",
+    ) -> list[str]:
+        """Registros 012 a 122 — os mesmos no TRF16 e no TRF25 (RG2-29).
+
+        O TRF25 montava a sua cópia, que divergiu: torneio individual saía com
+        ``082 0`` e o 102 sem o FIDE ID do árbitro. ``teams`` é ``None`` no torneio
+        individual: o 082 é o número de EQUIPES, e "082 0" descreve um torneio por
+        equipes com zero equipes (FED-03). ``event_line`` é o XXE do dialeto TRF16.
+        """
+        service = self.export_service
+        linha = service._trf_tournament_line
+        linhas: list[str] = [
+            linha("012", tournament["name"]),
+            linha("022", tournament.get("location", "")),
+            linha("032", settings.get("federation", "")),
+            linha("042", service._trf_date(tournament.get("start_date"), long_year=True)),
+            linha("052", service._trf_date(tournament.get("end_date"), long_year=True)),
+            linha("062", str(len(players))),
+            linha("072", str(sum(1 for player in players if fide_rating(player) > 0))),
+        ]
+        if teams is not None:
+            linhas.append(linha("082", str(len(teams))))
+        linhas.append(linha("092", service._trf_tournament_type(tournament, settings)))
+        if event_line:
+            linhas.append(event_line)
+        linhas.append(linha("102", service._trf_chief_arbiter_text(tournament_id, settings)))
+        linhas.extend(
+            linha("112", deputy)
+            for deputy in service._trf_deputy_arbiter_texts(tournament_id, settings)
+        )
+        linhas.append(linha("122", tournament.get("time_control", "")))
+        return linhas
 
     @staticmethod
     def _file_problems(content: str, players: list[dict[str, Any]]) -> list[str]:
