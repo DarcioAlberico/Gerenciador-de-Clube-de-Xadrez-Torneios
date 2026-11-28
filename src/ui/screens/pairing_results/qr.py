@@ -17,6 +17,8 @@ from typing import Any
 import customtkinter as ctk
 
 from ...components import Dialog, actions_bar
+from ...components.dialogs import choice_dialog
+from src.services.result_server import lan_addresses
 from ...support import AppError, LocalResultServer, SPACE_LG, SPACE_MD
 
 logger = logging.getLogger(__name__)
@@ -52,6 +54,8 @@ class QrResultActions:
         try:
             if host.local_result_server is None:
                 host.local_result_server = LocalResultServer(host.qr_result_service)
+            if not choose_network_address(host, host.local_result_server):
+                return
             url = host.local_result_server.start()
             host.db.save_app_settings({"local_result_server_url": url})
             host._show_report(
@@ -159,3 +163,27 @@ class QrResultActions:
             danger=("Rejeitar", reject),
             close_text="Fechar",
         )
+
+
+def choose_network_address(host: Any, server: LocalResultServer) -> bool:
+    """Qual IP vai no QR quando a máquina está em mais de uma rede (RG2-45).
+
+    Com uma rede só (ou nenhuma) não pergunta. Devolve ``False`` se o árbitro
+    cancelou — aí o servidor não sobe com um endereço que ninguém escolheu.
+    """
+    enderecos = lan_addresses()
+    if len(enderecos) < 2 or server.advertised_host in enderecos:
+        return True
+    opcoes = [(endereco, endereco, "primary" if indice == 0 else "secondary") for indice, endereco in enumerate(enderecos)]
+    escolha = choice_dialog(
+        host,
+        "Endereço na rede",
+        "Esta máquina está em mais de uma rede. Qual endereço os celulares devem usar? "
+        "Escolha o da Wi-Fi do torneio.",
+        options=[*opcoes, ("Cancelar", None, "secondary")],
+        default=enderecos[0],
+    )
+    if not escolha:
+        return False
+    server.advertised_host = str(escolha)
+    return True

@@ -17,6 +17,8 @@ from tkinter import filedialog
 
 from src.core.services import LocalResultServer
 
+from ..pairing_results.qr import choose_network_address
+
 from ...i18n import t
 
 PDF_ONLY = (("PDF", "*.pdf"),)
@@ -143,9 +145,11 @@ class ArbitrationExportActions:
     def publish_live_portal(self) -> None:
         host = self.host
         try:
-            host.db.backup_before("publish_live_portal", tournament_id=self.tournament_id)
             if host.local_result_server is None:
                 host.local_result_server = LocalResultServer(host.qr_result_service)
+            if not choose_network_address(host, host.local_result_server):
+                return
+            host.db.backup_before("publish_live_portal", tournament_id=self.tournament_id)
             modo = str((host.db.get_app_settings() or {}).get("live_portal_mode") or "publico")
             url = host.local_result_server.publish_tournament(
                 self.tournament_id, host.export_service, mode=modo
