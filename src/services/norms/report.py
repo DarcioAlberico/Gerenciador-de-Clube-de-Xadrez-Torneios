@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
 from src.services.constants import player_full_name
+from src.domain.fide_player import fide_rating
 from src.services.fide_rating import fide_performance, player_rating_for_type
 from src.services.norms.evaluation import NormEvaluation, evaluate_norms
 from src.services.norms.opponents import (
@@ -40,6 +41,19 @@ def _slug(value: object) -> str:
     return str(value or "").strip().casefold().replace(" ", "_").replace("-", "_")
 
 
+def norm_rating(player: Mapping[str, Any], rating_type: str = "fide") -> int:
+    """Rating que a norma conta: na base FIDE, só o rating FIDE (RG2-11).
+
+    O ``player_rating_for_type`` cai no rating do clube quando falta o FIDE — certo
+    para estimar variação, errado aqui: 9 adversários "GM" sem FIDE com 2500 local
+    davam Ra 2500 e norma de GM. Sem rating FIDE o adversário é não ratado, e o
+    piso de 1.4.6 cuida dele.
+    """
+    if str(rating_type or "fide").strip().casefold() == "fide":
+        return fide_rating(player)
+    return player_rating_for_type(player, rating_type)
+
+
 def is_round_robin(pairing_system: object) -> bool:
     value = _slug(pairing_system)
     return bool(value) and any(_slug(marker) in value for marker in _ROUND_ROBIN_SYSTEMS)
@@ -59,9 +73,7 @@ def collect_tournament_opponents(
     enquanto o relatório de tela quer o nome como se fala.
     """
     players_by_id: dict[int, Mapping[str, Any]] = {int(player["id"]): player for player in players}
-    rating_by_id = {
-        pid: player_rating_for_type(player, rating_type) for pid, player in players_by_id.items()
-    }
+    rating_by_id = {pid: norm_rating(player, rating_type) for pid, player in players_by_id.items()}
 
     excluded: set[int] = set()
     if is_round_robin(pairing_system):

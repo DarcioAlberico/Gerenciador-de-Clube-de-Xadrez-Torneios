@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from src.domain.fide_player import fide_rating
 from src.services.constants import AppError, FINAL_RESULTS, RESULT_POINTS, player_pairing_name
 from src.services import friendly_mode
 from src.services.results_registry import is_played_result
@@ -171,7 +172,7 @@ class TRF16Exporter:
             linha("042", service._trf_date(tournament.get("start_date"), long_year=True)),
             linha("052", service._trf_date(tournament.get("end_date"), long_year=True)),
             linha("062", str(len(players))),
-            linha("072", str(sum(1 for player in players if service._trf_rating(player) > 0))),
+            linha("072", str(sum(1 for player in players if fide_rating(player) > 0))),
         ]
         # `082` e o número de EQUIPES: em torneio individual saia "082 0", que
         # descreve um torneio por equipes com zero equipes (FED-03).
@@ -379,7 +380,7 @@ class TRF16Exporter:
                 player.get("federation_id") or settings.get("federation")
             ):
                 invalid_federation.append(name)
-            if self.export_service._trf_rating(player) <= 0:
+            if fide_rating(player) <= 0:
                 missing_rating.append(name)
 
         warnings.extend(self.export_service._trf_missing_field_warnings("FIDE ID", missing_fide))

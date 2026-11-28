@@ -10,6 +10,7 @@ from src.core.services import (
     AppError,
     TeamService,
 )
+from src.domain.fide_player import seed_rating
 from tests.support.core_service_base import CoreServiceTestCase
 
 
@@ -818,7 +819,7 @@ class TeamTournamentsTest(CoreServiceTestCase):
             for index, p in enumerate(
                 sorted(
                     self.db.list_players(tournament_id, active_only=False),
-                    key=lambda p: -self.export_service._trf_rating(p),
+                    key=lambda p: -seed_rating(p),
                 ),
                 start=1,
             )

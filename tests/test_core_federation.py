@@ -14,6 +14,7 @@ from src.core.services import (
     OfficialRatingService,
     PairingService,
 )
+from src.domain.fide_player import seed_rating
 from src.services.federation_exporters import FederationExporterRegistry, TRF16Exporter
 from tests.fixtures import load_tournament_fixture
 from tests.support.core_service_base import CoreServiceTestCase
@@ -496,7 +497,7 @@ class FederationExportTest(CoreServiceTestCase):
         players = sorted(
             self.db.list_players(self.tournament_id, active_only=False),
             key=lambda p: (
-                -self.export_service._trf_rating(p),
+                -seed_rating(p),
                 player_pairing_name(p).casefold(),
                 int(p.get("id") or 0),
             ),

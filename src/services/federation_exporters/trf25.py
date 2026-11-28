@@ -93,6 +93,7 @@ from pathlib import Path
 from typing import Any
 
 from src.domain.dates import Data, parse_trf_date
+from src.domain.fide_player import fide_rating
 from src.services.constants import RESULT_POINTS, AppError
 from src.services.federation_exporters.base import FederationExportFormat
 from src.services.federation_exporters.trf16 import TRF16Exporter
@@ -225,7 +226,7 @@ class TRF25Exporter(TRF16Exporter):
             handle.write(service._trf_tournament_line("042", service._trf_date(tournament.get("start_date"), long_year=True)))
             handle.write(service._trf_tournament_line("052", service._trf_date(tournament.get("end_date"), long_year=True)))
             handle.write(service._trf_tournament_line("062", str(len(players))))
-            rated = sum(1 for p in players if service._trf_rating(p) > 0)
+            rated = sum(1 for p in players if fide_rating(p) > 0)
             handle.write(service._trf_tournament_line("072", str(rated)))
             handle.write(service._trf_tournament_line("082", str(len(teams))))
             handle.write(service._trf_tournament_line("092", service._trf_tournament_type(tournament, settings)))

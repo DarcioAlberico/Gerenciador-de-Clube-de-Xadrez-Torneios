@@ -25,7 +25,9 @@ from src.services.federation_exporters.trf16_records import (
     tournament_type_text as _trf16_tournament_type_text,
 )
 from src.services.fide_norms import build_norm_report
-from src.services.fide_rating import build_fide_report_rows, player_rating_for_type
+from src.domain.fide_player import fide_rating, seed_rating
+from src.services.fide_rating import build_fide_report_rows
+from src.services.norms.report import norm_rating
 from src.services.list_layouts import STANDINGS_COLUMNS, resolve_column_specs, resolve_columns
 from src.services.norms.it3 import build_certificate as build_it3_certificate
 from src.services.norms.it3_pdf import write_it3_pdf
@@ -194,7 +196,7 @@ class FederationReportsMixin:
                 candidate.opponents,
                 candidate.evaluation,
                 candidate_name=player_pairing_name(candidate.player),
-                candidate_rating=player_rating_for_type(candidate.player, rating_type),
+                candidate_rating=norm_rating(candidate.player, rating_type),
                 chief_arbiter=chief_arbiter,
                 tournament_type=tournament_type,
                 rounds=declared_rounds,
@@ -626,15 +628,6 @@ class FederationReportsMixin:
         return len(code) == 3 and code.isalpha()
 
     @staticmethod
-    def _trf_rating(player: Mapping[str, Any]) -> int:
-        return int(
-            player.get("international_rating")
-            or player.get("rating")
-            or player.get("national_rating")
-            or 0
-        )
-
-    @staticmethod
     def _trf_points(value: Any) -> str:
         points = float(value or 0.0)
         if points >= 100:
@@ -798,7 +791,7 @@ class FederationReportsMixin:
                 "player_id": int(player["id"]),
                 "points": float(player.get("starting_points", 0.0) or 0.0),
                 "position": 0,
-                "rating": self._trf_rating(player),
+                "rating": seed_rating(player),
                 "name": player_pairing_name(player),
             }
             for player in players
@@ -873,7 +866,10 @@ class FederationReportsMixin:
         sex = self._trf_clean(str(player.get("sex") or "")[:1].lower(), 1)
         title = self._trf_clean(str(player.get("title") or "").upper(), 3)
         name = self._trf_clean(player_pairing_name(player), 33)
-        rating = f"{self._trf_rating(player):4d}"[-4:]
+        # Sem rating FIDE a coluna fica vazia: o rating do clube aqui seria lido
+        # pela FIDE como dela (RG2-11).
+        fide = fide_rating(player)
+        rating = f"{fide:4d}"[-4:] if fide else "    "
         federation = self._trf_clean(
             str(player.get("federation_id") or settings.get("federation") or "").upper(),
             3,
