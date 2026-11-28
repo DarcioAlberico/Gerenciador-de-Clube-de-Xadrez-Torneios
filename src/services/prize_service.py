@@ -11,6 +11,8 @@ from __future__ import annotations
 from typing import Any
 
 from src.core.database import Database
+from src.services.categories import categories_of, default_categories
+from src.services.categories.matching import tag_key
 from src.services.constants import AppError
 from src.services.numeric_fields import money_field
 from src.services.prizes import PRIZE_KINDS, allocate_prizes
@@ -32,6 +34,34 @@ def validated_prizes(prizes: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return limpos
 
 
+def known_categories(
+    definitions: list[dict[str, Any]], players: list[dict[str, Any]]
+) -> list[str]:
+    """As categorias que um prêmio pode citar: as do edital e as escritas à mão.
+
+    Edital vazio vale o conjunto padrão (ORG-01). A categoria escrita à mão no
+    jogador ("Convidados") não está no edital, mas tem classificação.
+    """
+    names = [str(row["name"]) for row in definitions] or [item.name for item in default_categories()]
+    for player in players:
+        names.extend(categories_of(player))
+    return list(dict.fromkeys(name for name in names if name.strip()))
+
+
+def refuse_unknown_categories(prizes: list[dict[str, Any]], known: list[str]) -> None:
+    """RG2-16: prêmio de categoria que não existe nunca acharia ganhador — calado.
+
+    A comparação é a da marca (``tag_key``): sem acento e sem caixa.
+    """
+    keys = {tag_key(name) for name in known}
+    for position, prize in enumerate(prizes, start=1):
+        if prize["kind"] == "category" and tag_key(prize["category"]) not in keys:
+            raise AppError(
+                f"Prêmio {position}: a categoria \"{prize['category']}\" não existe neste torneio. "
+                f"Categorias: {', '.join(known)}."
+            )
+
+
 class PrizeService:
     def __init__(self, db: Database) -> None:
         self.db = db
@@ -48,6 +78,10 @@ class PrizeService:
         if not self.db.get_tournament(tournament_id):
             raise AppError("Selecione um torneio válido.")
         cleaned = validated_prizes(prizes)
+        refuse_unknown_categories(
+            cleaned,
+            known_categories(self.db.list_tournament_categories(tournament_id), self.db.list_players(tournament_id)),
+        )
         self.db.replace_tournament_prizes(tournament_id, cleaned)
         return self.db.list_tournament_prizes(tournament_id)
 

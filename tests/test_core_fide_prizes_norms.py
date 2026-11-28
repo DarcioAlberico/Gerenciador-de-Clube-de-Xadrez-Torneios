@@ -162,9 +162,13 @@ class FidePrizesNormsTest(CoreServiceTestCase):
         # Empate 1-2 divide (1000+600)/2 = 800 cada; sem somar a categoria.
         self.assertEqual(by_id[1]["gross"], 800.0)
         self.assertEqual(by_id[2]["gross"], 800.0)
-        self.assertEqual(by_id[3]["gross"], 200.0)
-        self.assertNotIn(4, by_id)
-        self.assertEqual(result["total_gross"], 1800.0)
+        # RG2-16: as categorias A e B (300) passam para P3 e P4, que ainda não
+        # tinham prêmio; o 3º geral (200) não acha ninguém sem prêmio e fica
+        # como não distribuído, em vez de sumir.
+        self.assertEqual(by_id[3]["gross"], 300.0)
+        self.assertEqual(by_id[4]["gross"], 300.0)
+        self.assertEqual(result["total_gross"], 2200.0)
+        self.assertEqual(result["total_undistributed"], 200.0)
 
     def test_prize_cumulative_adds_overall_and_category(self) -> None:
         from src.services.prizes import allocate_prizes
@@ -207,8 +211,8 @@ class FidePrizesNormsTest(CoreServiceTestCase):
         result = allocate_prizes(self._prize_standings(), self._prize_rows(), "best_only", 10.0)
         by_id = {row["player_id"]: row for row in result["allocations"]}
         self.assertEqual(by_id[1]["net"], 720.0)           # 800 * 0.9
-        self.assertEqual(result["total_net"], 1620.0)      # 1800 * 0.9
-        self.assertEqual(result["total_tax"], 180.0)
+        self.assertEqual(result["total_net"], 1980.0)      # 2200 * 0.9 (RG2-16)
+        self.assertEqual(result["total_tax"], 220.0)
 
     def test_prize_special_listed_as_manual(self) -> None:
         from src.services.prizes import allocate_prizes
@@ -217,7 +221,7 @@ class FidePrizesNormsTest(CoreServiceTestCase):
         result = allocate_prizes(self._prize_standings(), prizes, "best_only", 0.0)
         self.assertEqual(len(result["manual_prizes"]), 1)
         self.assertEqual(result["manual_prizes"][0]["label"], "Melhor feminino")
-        self.assertEqual(result["total_gross"], 1800.0)    # especial não entra no total automático
+        self.assertEqual(result["total_gross"], 2200.0)    # especial não entra no total automático
 
     def test_prize_service_persists_validates_and_allocates(self) -> None:
         self._create_players(4)  # categoria "Absoluto"

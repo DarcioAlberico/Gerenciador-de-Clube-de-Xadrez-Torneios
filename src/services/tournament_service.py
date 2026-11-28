@@ -33,7 +33,7 @@ from src.services.prizes import PRIZE_POLICIES, PRIZE_TIE_SPLITS
 from src.services.categories import from_row as category_from_row, normalize as normalize_category
 from src.services.rating import SPEED_CHOICES, serialize_regulation_overrides
 from src.services.list_layout_service import validated_columns
-from src.services.prize_service import validated_prizes
+from src.services.prize_service import known_categories, refuse_unknown_categories, validated_prizes
 from src.services.permissions import requires
 from src.services.tournament_configuration import (
     STRUCTURAL_SETTINGS,
@@ -391,6 +391,9 @@ class TournamentService:
         preparo = self._prepare_profile(tournament_id, perfil)
         premios_limpos, categorias_limpas, colunas_limpas = self._prepare_extras(
             premios, categorias, colunas
+        )
+        refuse_unknown_categories(
+            premios_limpos, known_categories(categorias_limpas, self.db.list_players(tournament_id))
         )
         recalculo = self._category_change_confirmations(
             tournament_id,

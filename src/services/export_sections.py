@@ -414,7 +414,9 @@ class ReportSectionsMixin:
             ["Desistentes excluídos", result["excluded_withdrawn"]],
             ["Imposto do organizador (%)", result["tax_percent"]],
             ["Premiados", result["winners"]],
-            ["Total bruto", self._format_currency(result["total_gross"])],
+            ["Total anunciado", self._format_currency(result["total_announced"])],
+            ["Total bruto distribuído", self._format_currency(result["total_gross"])],
+            ["Não distribuído", self._format_currency(result["total_undistributed"])],
             ["Total imposto", self._format_currency(result["total_tax"])],
             ["Total líquido distribuído", self._format_currency(result["total_net"])],
         ]
@@ -439,6 +441,24 @@ class ReportSectionsMixin:
                 winner_rows,
             ),
         ]
+        if result["undistributed"]:
+            # RG2-16: o prêmio que não achou ganhador aparece, em vez de sumir.
+            sections.append(
+                (
+                    "Prêmios não distribuídos",
+                    ["Tipo", "Prêmio", "Categoria", "Posição", "Valor"],
+                    [
+                        [
+                            PRIZE_KINDS.get(unit["kind"], unit["kind"]),
+                            unit["label"],
+                            unit["category"],
+                            unit["position"],
+                            self._format_currency(unit["amount"]),
+                        ]
+                        for unit in result["undistributed"]
+                    ],
+                )
+            )
         if result["manual_prizes"]:
             manual_rows = [
                 [
