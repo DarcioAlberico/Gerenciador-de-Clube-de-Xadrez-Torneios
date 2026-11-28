@@ -5,6 +5,7 @@ from typing import Any, Protocol
 
 from src.core.database import Database
 from src.services.constants import AppError
+from src.services.permissions import requires
 
 
 CLOCK_EVENT_TYPES = {
@@ -129,6 +130,7 @@ class ClockIntegrationService:
                 alerts.append(self._alert(event, "Jogador com menos de 60 segundos informado pelo relógio."))
         return alerts
 
+    @requires("tournament_write")
     def queue_notification(
         self,
         channel: str,

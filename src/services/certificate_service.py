@@ -27,6 +27,7 @@ from src.services.prizes import PRIZE_KINDS, PRIZE_POLICIES, allocate_prizes
 from src.services.trf_import import build_trf_rounds, parse_trf
 from src.services.numeric_fields import decimal_field
 from src.services.transactions import atomic
+from src.services.permissions import requires
 
 if TYPE_CHECKING:
     from src.services.club_service import ClubService
@@ -103,6 +104,7 @@ class CertificateService:
             raise AppError("Modelo de diploma não encontrado.")
         return template
 
+    @requires("settings_write")
     def create_template(self, data: dict[str, Any]) -> int:
         payload = self._validated_template_payload(data)
         try:
@@ -112,6 +114,7 @@ class CertificateService:
         logger.info("Modelo de diploma criado: %s", template_id)
         return template_id
 
+    @requires("settings_write")
     def update_template(self, template_id: int, data: dict[str, Any]) -> None:
         existing = self.db.get_certificate_template(template_id)
         if not existing:
@@ -125,6 +128,7 @@ class CertificateService:
             raise AppError("Já existe um modelo de diploma com este nome.") from exc
         logger.info("Modelo de diploma atualizado: %s", template_id)
 
+    @requires("settings_write")
     @atomic
     def seed_gallery(self, count: int = 50) -> dict[str, int]:
         """Cria a galeria de modelos prontos no banco (idempotente por nome).

@@ -14,6 +14,7 @@ from typing import Any, Mapping, TYPE_CHECKING
 
 from src.core.database import BASE_DIR, DEFAULT_CERTIFICATE_TEMPLATES, Database
 from src.services.constants import *
+from src.services.permissions import requires
 
 if TYPE_CHECKING:
     from src.services.club_service import ClubService
@@ -35,6 +36,7 @@ class ClubService:
     def __init__(self, db: Database) -> None:
         self.db = db
 
+    @requires("settings_write")
     def save_profile(self, data: dict[str, Any], club_id: int | None = 1) -> int:
         name = str(data.get("name", "")).strip()
         if not name:
@@ -56,6 +58,7 @@ class ClubService:
         logger.info("Clube/escola atualizado: %s", saved_id)
         return saved_id
 
+    @requires("settings_write")
     def save_class(self, data: dict[str, Any], class_id: int | None = None) -> int:
         try:
             club_id = int(data.get("club_id") or 0)

@@ -10,6 +10,7 @@ from urllib.parse import urlencode
 from src.core.database import Database
 from src.services.constants import AppError, FINAL_RESULTS, UNRATED_RESULTS
 from src.services.transactions import atomic
+from src.services.permissions import requires
 
 
 class QRResultService:
@@ -19,6 +20,7 @@ class QRResultService:
         self.db = db
         self.pairing_service = pairing_service
 
+    @requires("tournament_write")
     @atomic
     def result_url_for_pairing(
         self,
@@ -61,6 +63,7 @@ class QRResultService:
         )
         return self._token_payload(token_row, token, base_url)
 
+    @requires("tournament_write")
     @atomic
     def result_urls_for_pairings(
         self,
@@ -148,6 +151,7 @@ class QRResultService:
     def pending_submissions(self, tournament_id: int) -> list[dict[str, Any]]:
         return self.db.list_result_submissions(tournament_id=tournament_id, status="submitted")
 
+    @requires("tournament_write")
     @atomic
     def approve_submission(self, submission_id: int, reviewer: str = "", reason: str = "") -> None:
         submission = self._pending_submission(submission_id)
@@ -178,6 +182,7 @@ class QRResultService:
             after={"status": "approved", "result": submission["submitted_result"], "reviewer": reviewer},
         )
 
+    @requires("tournament_write")
     @atomic
     def reject_submission(self, submission_id: int, reviewer: str = "", reason: str = "") -> None:
         submission = self._pending_submission(submission_id)

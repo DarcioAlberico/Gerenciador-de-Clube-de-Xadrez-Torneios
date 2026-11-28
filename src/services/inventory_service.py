@@ -16,6 +16,7 @@ from src.domain.dates import is_iso_date
 from src.core.database import BASE_DIR, DEFAULT_CERTIFICATE_TEMPLATES, Database
 from src.services.constants import *
 from src.services.numeric_fields import money_field
+from src.services.permissions import requires
 
 if TYPE_CHECKING:
     from src.services.club_service import ClubService
@@ -37,6 +38,7 @@ class InventoryService:
     def __init__(self, db: Database) -> None:
         self.db = db
 
+    @requires("finance_write")
     def save_item(self, data: dict[str, Any], item_id: int | None = None) -> int:
         payload = self._validated_item_payload(data, item_id=item_id)
         if item_id:
@@ -49,6 +51,7 @@ class InventoryService:
         logger.info("Item de inventario criado: %s", saved_id)
         return saved_id
 
+    @requires("finance_write")
     def toggle_item_active(self, item_id: int) -> int:
         item = self.db.get_inventory_item(item_id)
         if not item:
@@ -60,6 +63,7 @@ class InventoryService:
         logger.info("Item de inventario %s alterado para active=%s", item_id, next_active)
         return next_active
 
+    @requires("finance_write")
     def save_loan(self, data: dict[str, Any], loan_id: int | None = None) -> int:
         payload = self._validated_loan_payload(data, loan_id=loan_id)
         if loan_id:
@@ -83,6 +87,7 @@ class InventoryService:
         payload["return_date"] = return_date.strip() or date.today().isoformat()
         self.save_loan(payload, loan_id=loan_id)
 
+    @requires("finance_write")
     def save_maintenance(self, data: dict[str, Any], maintenance_id: int | None = None) -> int:
         payload = self._validated_maintenance_payload(data)
         if maintenance_id:

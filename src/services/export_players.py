@@ -26,6 +26,7 @@ from src.services.list_layouts import STANDINGS_COLUMNS, resolve_column_specs, r
 from src.services.prizes import PRIZE_KINDS, PRIZE_POLICIES, allocate_prizes
 from src.services.trf_import import build_trf_rounds, parse_trf
 from src.services.import_service import REGISTRATION_FORM_QUESTIONS
+from src.services.permissions import requires
 
 if TYPE_CHECKING:
     from src.services.club_service import ClubService
@@ -232,6 +233,7 @@ class PlayerRoundReportsMixin:
             "tournament_entry": str(settings.get("registration_form_tournament_entry") or ""),
         }
 
+    @requires("tournament_write")
     def save_registration_form_config(self, prefill_link: str, tournament_entry: str) -> dict[str, str]:
         parsed = self.parse_prefill_link(prefill_link)
         entry = (tournament_entry or "").strip()

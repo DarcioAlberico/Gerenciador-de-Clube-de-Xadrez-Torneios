@@ -28,6 +28,7 @@ from src.services.prizes import PRIZE_KINDS, PRIZE_POLICIES, allocate_prizes
 from src.domain.dates import DataInvalida, parse_date, storage_text
 from src.services.trf_import import TrfDateError, build_trf_rounds, parse_trf
 from src.services.transactions import atomic
+from src.services.permissions import requires
 
 if TYPE_CHECKING:
     from src.services.club_service import ClubService
@@ -305,6 +306,7 @@ class ImportService:
                 profiles[str(name)] = {str(k): str(v) for k, v in mapping.items() if v}
         return profiles
 
+    @requires("tournament_write")
     def save_mapping_profile(self, name: str, mapping: Mapping[str, str]) -> None:
         name = str(name or "").strip()
         if not name:
@@ -315,6 +317,7 @@ class ImportService:
             {"import_mapping_profiles": json.dumps(profiles, ensure_ascii=False)}
         )
 
+    @requires("tournament_write")
     def delete_mapping_profile(self, name: str) -> None:
         profiles = self.list_mapping_profiles()
         if str(name) in profiles:
@@ -330,6 +333,7 @@ class ImportService:
         logger.info("%s jogadores importados de %s para o torneio %s", result["imported"], path, tournament_id)
         return result
 
+    @requires("tournament_write")
     def import_trf(self, file_path: str | Path) -> dict[str, Any]:
         """Cria um novo torneio a partir de um arquivo TRF (FIDE/Swiss-Manager).
 
@@ -845,6 +849,7 @@ class ImportService:
             pass  # pandas ausente ou valor não escalar: a célula segue como veio
         return value
 
+    @requires("member_write")
     @atomic
     def import_rating_list_csv(self, file_path: str | Path, rating_type: str = "fide") -> dict[str, Any]:
         """Importa um CSV de ratings FIDE ou CBX e atualiza os membros do clube correspondentes."""

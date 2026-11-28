@@ -84,6 +84,7 @@ from src.services.pairing import (
 )
 from src.services.pairing.constraints import seeding_order as _seeding_order
 from src.services.pairing.initial_color import resolve_initial_color
+from src.services.permissions import requires
 from src.services.pairing.pairing_check import (
     PairingCheck,
     manual_adjustment_reason_error as _manual_adjustment_reason_error,
@@ -817,6 +818,7 @@ class PairingService:
     # Registro disciplinar (ARB-03)
     # ------------------------------------------------------------------ #
 
+    @requires("tournament_write")
     @atomic
     def register_incident(
         self,
@@ -931,6 +933,7 @@ class PairingService:
     # Participação: retirada e reentrada (ARB-05)
     # ------------------------------------------------------------------ #
 
+    @requires("tournament_write")
     @atomic
     def set_player_participation(
         self,
@@ -984,6 +987,7 @@ class PairingService:
         )
         return rodada
 
+    @requires("tournament_write")
     @atomic
     def set_players_participation(
         self,
@@ -1047,6 +1051,7 @@ class PairingService:
     # Byes solicitados (ARB-04)
     # ------------------------------------------------------------------ #
 
+    @requires("tournament_write")
     @atomic
     def request_bye(
         self,
@@ -1107,6 +1112,7 @@ class PairingService:
         )
         return bye_id
 
+    @requires("tournament_write")
     @atomic
     def cancel_requested_bye(self, tournament_id: int, bye_id: int, reason: str) -> None:
         """Exclui um bye solicitado com regra e rastro (RG2-05).
@@ -1294,6 +1300,7 @@ class PairingService:
             )
         return self.request_bye(tournament_id, player_id, int(round_number), "Z", reason=reason)
 
+    @requires("tournament_write")
     def forfeit_absent_player(
         self, tournament_id: int, player_id: int, round_number: int, reason: str = ""
     ) -> dict[str, Any]:
@@ -1366,6 +1373,7 @@ class PairingService:
         "international_rating",
     )
 
+    @requires("tournament_write")
     def register_late_entry(
         self,
         tournament_id: int,
@@ -1420,6 +1428,7 @@ class PairingService:
             "starting_points": plano.starting_points,
         }
 
+    @requires("tournament_write")
     @atomic
     def postpone_pairing(self, tournament_id: int, pairing_id: int, note: str = "") -> None:
         """Marca a mesa como adiada, com o combinado como nota (ARB-02)."""
@@ -1441,6 +1450,7 @@ class PairingService:
             after={"postponed": 1, "postponed_note": limpa},
         )
 
+    @requires("tournament_write")
     @atomic
     def resume_pairing(self, tournament_id: int, pairing_id: int) -> None:
         """Desfaz o adiamento da mesa (ARB-02)."""
@@ -1550,6 +1560,7 @@ class PairingService:
 
         return [issue for issue in issues if matches_filter(issue) and matches_query(issue)]
 
+    @requires("tournament_write")
     def acknowledge_arbitration_issue(self, tournament_id: int, issue_key: str, note: str = "") -> int:
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
@@ -1606,6 +1617,7 @@ class PairingService:
         }
         return _team_round_dashboard_metrics(matches, boards_by_match_id, FINAL_RESULTS)
 
+    @requires("tournament_write")
     def generate_next_round(
         self,
         tournament_id: int,
@@ -2802,6 +2814,7 @@ class PairingService:
         """Flutuacoes por equipe — o que faltava para penalizar float repetido."""
         return _team_float_histories(*self._team_closed_history(tournament_id))
 
+    @requires("tournament_write")
     def update_result(
         self,
         tournament_id: int,
@@ -2936,6 +2949,7 @@ class PairingService:
             return self._team_round_dashboard_metrics(int(round_id))
         return self._individual_round_dashboard_metrics(int(round_id))
 
+    @requires("tournament_write")
     def close_round(self, tournament_id: int, round_id: int) -> None:
         """Fecha a rodada — individual ou por equipes, pelo mesmo caminho (RGS-11, RG2-08).
 
@@ -3161,6 +3175,7 @@ class PairingService:
             "reason": cleaned,
         }
 
+    @requires("tournament_write")
     def revoke_round_correction_unlock(self, tournament_id: int, round_id: int) -> int:
         """Fecha a rodada de novo antes do prazo. Devolve quantos desbloqueios caíram."""
         revogados = self.db.revoke_correction_unlocks(tournament_id, round_id)
@@ -3692,6 +3707,7 @@ class PairingService:
             "message": _deleted_results_message(len(apagados)) if apagados else "",
         }
 
+    @requires("tournament_write")
     def delete_generated_round(self, round_id: int, reason: str = "") -> None:
         """Exclui rodada gerada e ainda não fechada.
 
@@ -3781,6 +3797,7 @@ class PairingService:
             "qr_submissions": len(self._pending_qr_submissions(tournament_id, round_id)),
         }
 
+    @requires("tournament_write")
     def repair_open_round(
         self,
         tournament_id: int,
@@ -3823,6 +3840,7 @@ class PairingService:
         logger.info("Rodada %s re-emparceirada no modo amistoso", round_id)
         return nova
 
+    @requires("tournament_write")
     def delete_player_if_unpaired(self, tournament_id: int, player_id: int) -> None:
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
@@ -3838,6 +3856,7 @@ class PairingService:
         self.db.delete_player(player_id)
         logger.info("Jogador %s excluido do torneio %s antes de entrar em rodadas", player_id, tournament_id)
 
+    @requires("tournament_write")
     def adjust_pairing_player(
         self,
         tournament_id: int,
@@ -4011,6 +4030,7 @@ class PairingService:
             },
         )
 
+    @requires("tournament_write")
     @atomic
     def swap_team_board_colors(self, tournament_id: int, round_id: int, team_board_id: int) -> None:
         round_data = self.db.get_round(round_id)
@@ -4046,6 +4066,7 @@ class PairingService:
         )
         logger.info("Cores trocadas no tabuleiro por equipes %s", team_board_id)
 
+    @requires("tournament_write")
     @atomic
     def adjust_team_board_player(
         self,
@@ -4887,6 +4908,7 @@ class PairingService:
         operator = self.db.current_operator()
         return operator.name if operator else SYSTEM_ACTOR
 
+    @requires("tournament_write")
     @atomic
     def register_knockout_advancement(
         self,

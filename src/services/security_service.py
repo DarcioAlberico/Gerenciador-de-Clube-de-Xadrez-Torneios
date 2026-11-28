@@ -17,6 +17,7 @@ from typing import Any, Mapping, TYPE_CHECKING
 from src.domain.dates import is_iso_date
 from src.core.database import BASE_DIR, DEFAULT_CERTIFICATE_TEMPLATES, Database
 from src.core.operator import SYSTEM_ACTOR, Operator
+from src.services.permissions import has_permission, require_permission
 from src.services.constants import *
 
 if TYPE_CHECKING:
@@ -152,24 +153,12 @@ class SecurityService:
         }
 
     def has_permission(self, action: str) -> bool:
-        """Verifica se o operador atual tem a permissão solicitada."""
-        from src.config.permissions import get_permissions_for_role
-        operator = self.current_operator()
-        role = operator["role"]
-        # admin has everything
-        if role == "admin":
-            return True
-        perms = get_permissions_for_role(role)
-        return action in perms
+        """Se o operador do banco tem a permissão — a regra mora em ``permissions`` (RG2-04)."""
+        return has_permission(self.db, action)
 
     def require_permission(self, action: str) -> None:
-        """Lança erro e audita caso o usuário não tenha permissão."""
-        if not self.has_permission(action):
-            self.audit(
-                action="permission_denied", 
-                description=f"Acesso negado para ação: {action}"
-            )
-            raise AppError("Permissão negada para realizar esta ação.")
+        """Recusa (e audita a recusa) — a mesma regra dos serviços (RG2-04)."""
+        require_permission(self.db, action)
 
     @classmethod
     def _hash_password(cls, password_raw: str) -> str:

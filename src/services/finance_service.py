@@ -16,6 +16,7 @@ from src.domain.dates import Data, is_iso_date, parse_date
 from src.core.database import BASE_DIR, DEFAULT_CERTIFICATE_TEMPLATES, Database
 from src.services.constants import *
 from src.services.numeric_fields import money_field
+from src.services.permissions import requires
 
 if TYPE_CHECKING:
     from src.services.club_service import ClubService
@@ -37,6 +38,7 @@ class FinanceService:
     def __init__(self, db: Database) -> None:
         self.db = db
 
+    @requires("finance_write")
     def save_plan(self, data: dict[str, Any], plan_id: int | None = None) -> int:
         payload = self._validated_plan_payload(data)
         if plan_id:
@@ -49,6 +51,7 @@ class FinanceService:
         logger.info("Plano financeiro criado: %s", saved_id)
         return saved_id
 
+    @requires("finance_write")
     def toggle_plan_active(self, plan_id: int) -> int:
         plan = self.db.get_membership_plan(plan_id)
         if not plan:
@@ -58,6 +61,7 @@ class FinanceService:
         logger.info("Plano financeiro %s alterado para active=%s", plan_id, next_active)
         return next_active
 
+    @requires("finance_write")
     def save_payment(self, data: dict[str, Any], payment_id: int | None = None) -> int:
         payload = self._validated_payment_payload(data)
         if payment_id:
@@ -257,6 +261,7 @@ class FinanceService:
         self._validate_optional_date(end_date, "Data final inválida.")
         return self.db.list_financial_transactions(start_date=start_date.strip(), end_date=end_date.strip())
 
+    @requires("finance_write")
     def save_transaction(self, data: dict[str, Any], transaction_id: int | None = None) -> int:
         payload = {
             "type": data.get("type", "income"),
@@ -278,6 +283,7 @@ class FinanceService:
         logger.info("Transacao financeira criada: %s", saved_id)
         return saved_id
 
+    @requires("delete_records")
     def delete_transaction(self, transaction_id: int) -> None:
         self.db.delete_financial_transaction(transaction_id)
         logger.info("Transacao financeira removida: %s", transaction_id)
@@ -323,6 +329,7 @@ class FinanceService:
             raise AppError("Ocorreu um erro ao gerar o recibo em PDF.") from exc
 
     # generate_dre_report movido para report_engine.py
+    @requires("finance_write")
     def save_sponsor(self, data: dict[str, Any], sponsor_id: int | None = None) -> int:
         payload = {
             "name": str(data.get("name", "")).strip(),
@@ -345,6 +352,7 @@ class FinanceService:
     def list_sponsors(self) -> list[dict[str, Any]]:
         return self.db.list_sponsors()
 
+    @requires("delete_records")
     def delete_sponsor(self, sponsor_id: int) -> None:
         self.db.delete_sponsor(sponsor_id)
         logger.info("Patrocinador removido: %s", sponsor_id)

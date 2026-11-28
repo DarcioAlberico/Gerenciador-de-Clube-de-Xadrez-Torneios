@@ -27,6 +27,7 @@ from src.services.fide_rating import build_fide_report_rows
 from src.services.foreign_rating_lists import map_row, normalize_federation_code, seed_federations
 from src.services.pairing.constraints import select_rating_for_order
 from src.services.transactions import atomic
+from src.services.permissions import requires
 
 if TYPE_CHECKING:
     from src.services.club_service import ClubService
@@ -55,6 +56,7 @@ class OfficialRatingService:
     def __init__(self, db: Database) -> None:
         self.db = db
 
+    @requires("tournament_write")
     def import_official_csv(
         self,
         file_path: str | Path,
@@ -104,6 +106,7 @@ class OfficialRatingService:
             "errors": errors,
         }
 
+    @requires("tournament_write")
     def import_lbx_lists_from_url(self) -> dict[str, Any]:
         players_by_id: dict[str, dict[str, Any]] = {}
         errors: list[str] = []
@@ -159,6 +162,7 @@ class OfficialRatingService:
             payloads.append(payload)
         return payloads, errors
 
+    @requires("tournament_write")
     def import_official_xml(self, file_path: str | Path, source: str, list_date: str = "") -> dict[str, Any]:
         import xml.etree.ElementTree as ET
         source = source.strip().upper()
@@ -205,6 +209,7 @@ class OfficialRatingService:
             "errors": errors,
         }
 
+    @requires("tournament_write")
     def import_official_excel(self, file_path: str | Path, source: str, list_date: str = "") -> dict[str, Any]:
         source = source.strip().upper()
         if source not in self.SOURCES:
@@ -305,6 +310,7 @@ class OfficialRatingService:
 
     FIDE_LIST_URL = "https://ratings.fide.com/download/standard_rating_list.zip"
 
+    @requires("tournament_write")
     def import_fide_list_from_url(self) -> dict[str, Any]:
         """Baixa e importa a lista oficial da FIDE (FED-05).
 
@@ -392,6 +398,7 @@ class OfficialRatingService:
                     }
         return registry
 
+    @requires("tournament_write")
     def add_foreign_federation(self, code: str, name: str, url: str = "", notes: str = "") -> str:
         """Adiciona/atualiza uma federação estrangeira no registro do usuário."""
         normalized = normalize_federation_code(code)
@@ -403,6 +410,7 @@ class OfficialRatingService:
         self.db.save_app_settings({self.FOREIGN_FEDERATIONS_SETTING: json.dumps(registry, ensure_ascii=False)})
         return normalized
 
+    @requires("tournament_write")
     def import_foreign_list(
         self,
         file_path: str | Path,
@@ -425,6 +433,7 @@ class OfficialRatingService:
         logger.info("%s jogadores importados da lista %s (%s)", len(payloads), fed, path.name)
         return {"snapshot_id": snapshot_id, "source": fed, "imported": len(payloads), "errors": errors}
 
+    @requires("tournament_write")
     def import_foreign_list_from_url(
         self,
         federation: str,
@@ -571,6 +580,7 @@ class OfficialRatingService:
             "unmatched": unmatched,
         }
 
+    @requires("tournament_write")
     @atomic
     def apply_tournament_player_updates(
         self,
@@ -1091,6 +1101,7 @@ class FideRatingService:
             "summary": self._summary(rows),
         }
 
+    @requires("tournament_write")
     def save_report(self, tournament_id: int, rating_type: str = "fide") -> dict[str, Any]:
         report = self.compute_report(tournament_id, rating_type)
         self.db.save_fide_rating_report(tournament_id, rating_type, report["rows"])

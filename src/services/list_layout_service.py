@@ -10,6 +10,7 @@ from typing import Any
 
 from src.core.database import Database
 from src.services.constants import AppError
+from src.services.permissions import requires
 from src.services.list_layouts import (
     LAYOUT_REGISTRIES,
     normalize_column_specs,
@@ -46,6 +47,7 @@ class ListLayoutService:
         )
         return {"selected": selected, "available": list(registry.items())}
 
+    @requires("tournament_write")
     def save_columns(
         self,
         tournament_id: int,
@@ -60,6 +62,7 @@ class ListLayoutService:
         self.db.save_report_layout(tournament_id, report_key, cleaned)
         return cleaned
 
+    @requires("tournament_write")
     def reset(self, tournament_id: int, report_key: str = "standings") -> None:
         """Volta ao layout padrão (armazena seleção vazia)."""
         self.db.save_report_layout(tournament_id, report_key, [])

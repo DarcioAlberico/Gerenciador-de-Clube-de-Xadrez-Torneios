@@ -21,6 +21,7 @@ from src.services.chess_results import (
 )
 from src.services.constants import AppError
 from src.services.transactions import atomic
+from src.services.permissions import requires
 
 if TYPE_CHECKING:
     from src.services.export_service import ExportService
@@ -56,6 +57,7 @@ class ChessResultsService:
             "warnings": list(warnings or []),
         }
 
+    @requires("tournament_write")
     @atomic
     def import_entries(self, tournament_id: int, file_path: str | Path) -> dict[str, Any]:
         """Importa inscrições/lista publicada do Chess-Results (CSV) como jogadores."""
@@ -89,6 +91,7 @@ class ChessResultsService:
         settings = self.db.get_tournament_settings(tournament_id) or {}
         return str(settings.get("chess_results_url") or "")
 
+    @requires("tournament_write")
     def set_published_url(self, tournament_id: int, url: str) -> str:
         if not self.db.get_tournament(tournament_id):
             raise AppError("Selecione um torneio válido.")

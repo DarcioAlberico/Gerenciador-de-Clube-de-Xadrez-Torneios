@@ -15,6 +15,7 @@ from typing import Any, Mapping, TYPE_CHECKING
 from src.domain.dates import is_iso_date
 from src.core.database import BASE_DIR, DEFAULT_CERTIFICATE_TEMPLATES, Database
 from src.services.constants import *
+from src.services.permissions import requires
 
 if TYPE_CHECKING:
     from src.services.club_service import ClubService
@@ -36,6 +37,7 @@ class EventService:
     def __init__(self, db: Database) -> None:
         self.db = db
 
+    @requires("member_write")
     def save_event(self, data: dict[str, Any], event_id: int | None = None) -> int:
         payload = self._validated_event_payload(data)
         if event_id:
