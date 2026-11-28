@@ -443,6 +443,10 @@ class _FakeImportDB:
         self.players: list[dict] = []
         self.settings: dict[str, str] = {}
 
+    def current_operator(self) -> None:
+        """Sem login: o sistema (RG2-04 lê o operador do banco)."""
+        return None
+
     def get_tournament(self, tournament_id: int) -> dict:
         return {"id": tournament_id, "name": "Torneio Teste"}
 

@@ -123,6 +123,8 @@ class LoginTest(unittest.TestCase):
         self.assertTrue(self.app.login_frame.winfo_exists(), "a tela de login continua")
 
     def test_login_valido_entra_e_abre_a_tela_inicial(self) -> None:
+        # RG2-37: banco novo nasce com o admin sem senha; o primeiro acesso a define.
+        self.app.security_service.set_first_password("admin", "admin")
         self.app.username_entry.insert(0, "admin")
         self.app.password_entry.insert(0, "admin")
         self._botao("Entrar").invoke()
@@ -143,8 +145,12 @@ class LoginTest(unittest.TestCase):
     # -- primeiro acesso --------------------------------------------------
 
     def test_ajuda_de_primeiro_acesso_orienta_sem_dar_senha(self) -> None:
+        # Banco novo: o botão define a senha do administrador (RG2-37).
+        self.assertEqual("Definir senha do administrador", self.app.first_access_button.cget("text"))
+        # Com a senha já definida, o mesmo botão volta a ser só orientação.
+        self.app.security_service.set_first_password("admin", "admin")
         with mock.patch("src.ui.app.alert_dialog") as dialogo:
-            self._botao("Primeiro acesso").invoke()
+            self.app.first_access_button.invoke()
         dialogo.assert_called_once()
         texto = " ".join(str(arg) for arg in dialogo.call_args.args).lower()
         self.assertIn("responsável pelo clube", texto)

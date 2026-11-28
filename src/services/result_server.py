@@ -32,12 +32,12 @@ def lan_addresses() -> list[str]:
             sonda.connect(("10.255.255.255", 1))
             achados.append(str(sonda.getsockname()[0]))
     except OSError:
-        pass
+        pass  # sem rota (máquina sem rede): a consulta pelo nome da máquina ainda pode achar
     try:
         for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
             achados.append(str(info[4][0]))
     except OSError:
-        pass
+        pass  # nome da máquina sem endereço: fica o que a sonda achou, ou nada
     vistos: list[str] = []
     for endereco in achados:
         if endereco not in vistos and not endereco.startswith(("127.", "169.254.", "0.")):
