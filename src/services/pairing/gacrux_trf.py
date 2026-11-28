@@ -247,7 +247,14 @@ def compensation_letters(deficit: float, slots: int) -> list[str] | None:
 
 
 def with_round_cells(line: str, letters_by_round: dict[int, str]) -> str:
-    """Linha 001 com as células das rodadas dadas trocadas por bye de `letra`."""
+    """Linha 001 com as células das rodadas dadas trocadas por bye de `letra`.
+
+    A linha sai com o MESMO comprimento da que entrou (RG2-21). A última célula
+    pode ser uma mesa recém-gerada, ainda sem resultado (`   4 w  `): o
+    exportador estica a linha até a coluna do resultado justamente para ela não
+    sumir, e um `rstrip()` aqui desfazia isso — o Gacrux `-c` deixava de ler o
+    arquivo depois de toda entrada tardia com pontos.
+    """
     if not letters_by_round:
         return line
     patched = line
@@ -256,7 +263,7 @@ def with_round_cells(line: str, letters_by_round: dict[int, str]) -> str:
         if start > len(patched):
             continue  # rodada que nem existe no arquivo
         patched = patched[:start] + f"0000 - {letter}  " + patched[start + ROUND_CELL_WIDTH:]
-    return patched.rstrip()
+    return patched.rstrip().ljust(len(line))
 
 
 def reconcile_scores(
