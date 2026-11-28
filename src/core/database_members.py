@@ -8,9 +8,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from ._database_base import _DatabaseInfra
 from src.services.categories import normalized_sex
 
+from ._database_base import _DatabaseInfra
 from .categories import AUTO_CATEGORY_VALUES, competition_category_payload
 
 
