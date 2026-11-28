@@ -749,7 +749,8 @@ class TournamentSettingsMixin:
             help_text=(
                 "Sem linhas, valem as faixas padrão.\n"
                 "Idade: 'Até' é inclusivo (Sub-12 aceita 12).\n"
-                "Rating: 'Até' é exclusivo (Sub-1400 recusa 1400)."
+                "Rating: 'Até' é exclusivo (Sub-1400 recusa 1400).\n"
+                "Abaixo: aceita mais novo ou rating menor."
             ),
         )
 

@@ -676,6 +676,8 @@ CREATE TABLE IF NOT EXISTS tournament_categories (
     reference_date TEXT NOT NULL DEFAULT '',
     awards INTEGER NOT NULL DEFAULT 1,
     position INTEGER NOT NULL DEFAULT 0,
+    -- RG2-18 (D2): a faixa aceita quem esta abaixo (mais novo / rating menor).
+    accepts_below INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
     UNIQUE (tournament_id, name),
     FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE

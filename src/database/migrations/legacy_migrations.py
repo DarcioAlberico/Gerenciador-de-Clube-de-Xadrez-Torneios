@@ -113,6 +113,7 @@ class LegacyMigrations:
             59: self._migrate_to_v59,
             60: self._migrate_to_v60,
             61: self._migrate_to_v61,
+            62: self._migrate_to_v62,
         }
 
     def _ensure_current_schema(self, connection: sqlite3.Connection) -> None:
@@ -238,6 +239,8 @@ class LegacyMigrations:
             self._migrate_to_v60(connection)
         if self.db.SCHEMA_VERSION >= 61:
             self._migrate_to_v61(connection)
+        if self.db.SCHEMA_VERSION >= 62:
+            self._migrate_to_v62(connection)
 
     def _migrate_to_v1(self, connection: sqlite3.Connection) -> None:
         now = self.db.now()
@@ -2559,6 +2562,17 @@ class LegacyMigrations:
         connection.execute(
             "DELETE FROM app_settings WHERE key IN ('local_device_id', 'sync_enabled', 'sync_server_url')"
         )
+
+    def _migrate_to_v62(self, connection: sqlite3.Connection) -> None:
+        """Categoria "aceita quem está abaixo" (RG2-18, D2).
+
+        Banco antigo ganha a coluna desligada: cada jogador continua com as
+        mesmas categorias até o árbitro ligar a opção no edital.
+        """
+        if "accepts_below" not in self.db._table_columns(connection, "tournament_categories"):
+            connection.execute(
+                "ALTER TABLE tournament_categories ADD COLUMN accepts_below INTEGER NOT NULL DEFAULT 0"
+            )
 
     def _acentuar_semeado(
         self, connection: sqlite3.Connection, tabela: str, padrao: dict[str, Any]

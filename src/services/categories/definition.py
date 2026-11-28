@@ -45,6 +45,10 @@ class CategoryDefinition:
     obrigaria o árbitro a digitar 1399, que é onde o erro de digitação mora.
 
     `0` em `min_value`/`max_value` significa "sem limite desse lado".
+
+    `accepts_below` (RG2-18, D2): a faixa de idade aceita também quem é mais
+    novo, e a de rating quem tem rating menor — quando o edital deixa o Sub-10
+    disputar o Sub-12. Desligado por padrão: o comportamento de sempre.
     """
 
     name: str
@@ -56,6 +60,7 @@ class CategoryDefinition:
     reference_date: str = ""
     awards: bool = True
     position: int = 0
+    accepts_below: bool = False
 
     @property
     def is_valid(self) -> bool:
@@ -118,5 +123,6 @@ def from_row(row: object) -> CategoryDefinition:
             reference_date=str(data.get("reference_date") or ""),
             awards=bool(data.get("awards", True)),
             position=int(data.get("position") or 0),
+            accepts_below=bool(data.get("accepts_below") or False),
         )
     )

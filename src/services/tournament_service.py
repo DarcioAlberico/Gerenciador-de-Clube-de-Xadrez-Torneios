@@ -272,6 +272,7 @@ class TournamentService:
                     "tag": definicao.tag,
                     "reference_date": definicao.reference_date,
                     "awards": definicao.awards,
+                    "accepts_below": definicao.accepts_below,
                     "position": posicao,
                 }
             )

@@ -660,8 +660,8 @@ class TournamentCoreMixin(_DatabaseInfra):
                 """
                 INSERT INTO tournament_categories (
                     tournament_id, name, kind, min_value, max_value, sex, tag,
-                    reference_date, awards, position, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    reference_date, awards, position, accepts_below, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 [
                     (
@@ -675,6 +675,7 @@ class TournamentCoreMixin(_DatabaseInfra):
                         str(item.get("reference_date") or "").strip(),
                         1 if item.get("awards", True) else 0,
                         int(item.get("position") or index),
+                        1 if item.get("accepts_below") else 0,
                         now,
                     )
                     for index, item in enumerate(categories)
