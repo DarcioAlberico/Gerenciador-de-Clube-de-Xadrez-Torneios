@@ -2029,15 +2029,27 @@ class TournamentCoreMixin(_DatabaseInfra):
                 (status, 1 if status == "active" else 0, player_id),
             )
 
-    def count_player_pairings(self, player_id: int) -> int:
+    def count_player_participation(self, player_id: int) -> int:
+        """Em quantos lugares o jogador já aparece numa rodada (RG2-09).
+
+        Individual (``pairings``) **e** por equipes: tabuleiro jogado
+        (``team_boards``), escalação (``team_lineup_boards``) e substituição
+        (``team_substitution_events``). As tabelas de equipes têm ``ON DELETE
+        SET NULL``/``CASCADE``: excluir quem aparece nelas apaga o histórico.
+        """
         with self.connect() as connection:
             row = connection.execute(
                 """
-                SELECT COUNT(*) AS total
-                FROM pairings
-                WHERE white_player_id = ? OR black_player_id = ?
+                SELECT
+                    (SELECT COUNT(*) FROM pairings
+                      WHERE white_player_id = :p OR black_player_id = :p)
+                  + (SELECT COUNT(*) FROM team_boards
+                      WHERE white_player_id = :p OR black_player_id = :p)
+                  + (SELECT COUNT(*) FROM team_lineup_boards WHERE player_id = :p)
+                  + (SELECT COUNT(*) FROM team_substitution_events
+                      WHERE in_player_id = :p OR out_player_id = :p) AS total
                 """,
-                (player_id, player_id),
+                {"p": int(player_id)},
             ).fetchone()
             return int(row["total"] if row else 0)
 

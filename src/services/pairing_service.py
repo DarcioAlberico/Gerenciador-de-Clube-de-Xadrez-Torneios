@@ -3796,8 +3796,7 @@ class PairingService:
         player = self.db.get_player(player_id)
         if not player or int(player["tournament_id"]) != int(tournament_id):
             raise AppError("Jogador não encontrado para o torneio selecionado.")
-        pairings_count = self.db.count_player_pairings(player_id)
-        if pairings_count:
+        if self.db.count_player_participation(player_id):
             raise AppError(
                 "Não é possível excluir jogador que já aparece em rodada. "
                 "Use \"Retirar do torneio…\" (Desistente) para preservar o histórico."

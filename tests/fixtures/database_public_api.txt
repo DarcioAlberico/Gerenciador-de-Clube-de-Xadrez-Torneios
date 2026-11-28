@@ -19,7 +19,7 @@ close_round
 club_summary
 connect
 copy_backup_to_cloud
-count_player_pairings
+count_player_participation
 count_team_matches
 create_audit_event
 create_audit_log
