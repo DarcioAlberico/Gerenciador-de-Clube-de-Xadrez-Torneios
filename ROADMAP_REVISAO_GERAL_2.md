@@ -180,7 +180,8 @@ RG2-32 (falhas silenciosas, forma fixa da justificativa), RG2-40 (concorrência)
 | 1 | **código feito** em 2026-11-28, branch `fix/rg2-fase1` (empilhada na Fase 0) — D3 decidida pelo dono; suíte completa verde (2 testes da v59 ajustados para não fixar a versão final), gate estático verde, `.exe` com `--self-test` = 0 — ver abaixo |
 | 2 | **código feito** em 2026-11-28, branch `fix/rg2-fase2` (empilhada na Fase 1) — D4 e D5 decididas pelo dono; gate estático verde, `.exe` com `--self-test` = 0; suíte completa: 9 testes presos ao contrato antigo, ajustados em `4f4acd9` — ver abaixo |
 | 3 | **código feito** em 2026-11-28, branch `fix/rg2-fase3` (três frentes em paralelo: fide, motor, import) — D8 decidida pelo dono; suíte completa verde (1 retrato da API atualizado), gate estático verde, `.exe` com `--self-test` = 0 — ver abaixo |
-| 4–6 | não iniciadas |
+| 4 | **código feito** em 2026-11-28, branch `fix/rg2-fase4` — D1 e D2 decididas pelo dono; suíte completa verde com a Fase 3 junta (2713 passaram), gate estático verde, `.exe` com `--self-test` = 0 — ver abaixo |
+| 5–6 | não iniciadas |
 
 ### Fase −1 (2026-11-27)
 
@@ -267,3 +268,17 @@ Três frentes em paralelo, cada uma na sua branch (`fix/rg2-f3-fide`, `fix/rg2-f
 **Achado das Fases 1 e 2, resolvido:** "Importar Ratings" na tela de membros saiu — `members` não tem FIDE/CBX ID, nada era atualizado; não se inventou casamento por nome.
 
 **Suíte completa no merge das três frentes:** 2654 passaram, 8 pulados, 1 falha — o retrato da API pública não tinha o `end_tournament_at_round` do RG2-22 (atualizado em `2a3e3c4`). `.exe`: `--self-test` = 0, 5 de 5 passos.
+
+### Fase 4 (2026-11-28)
+
+Um commit por item, na ordem 16 → 18 → 33 → 35 → 39, teste vermelho antes de cada correção. **D1:** prêmios não cumulativos do maior valor para o menor; valor igual → ordem do edital. **D2:** "aceita quem está abaixo" por categoria, desligada por padrão.
+
+| Passo | Item | Entrega | Prova | Desvio da spec |
+|---|---|---|---|---|
+| F4.1 | RG2-16 | Alocação sequencial pela D1; quem já ganhou sai da fila e o prêmio passa ao próximo; empate antes da trava; `undistributed` e "Prêmios não distribuídos" no relatório; prêmio de categoria inexistente recusado na gravação | `r8/t1`: J1 = 100, J2 = 50, J3 = 50, Feminino não distribuído = 50, soma 250; mutator: 19 sobreviventes, nenhum na lógica nova (7 equivalentes, 12 em linhas antigas) | Com a política "acumular" e nos prêmios "soma" não há trava. `test_core_fide_prizes_norms` esperava o comportamento corrigido: P3 e P4 levam 300 e o 3º geral fica não distribuído |
+| F4.2 | RG2-18 | Opção "Abaixo" por categoria (migração **v62**), na tela de categorias; elegibilidade e classificação por categoria consideram todas as faixas que aceitam o jogador | Desligada = categorias iguais às de antes (caracterização); ligada, o 1º do cenário entra no Sub-12 e no Sub-1800 | A categoria principal continua sendo a mais estreita; jogador sem rating segue fora das faixas de rating |
+| F4.3 | RG2-33 | Rateio "Desempate decide"; o diploma `category_award` lê a mesma alocação da premiação, num lugar só | Empate com 500/300 → 500 e 300; "1º Feminino" sai para quem recebeu o prêmio Feminino | Sem prêmio de categoria no edital, o diploma segue a classificação da categoria, como antes |
+| F4.4 | RG2-35 | Desligar o Modo Livre com rodada gerada exige motivo; o registro guarda quantas rodadas havia; "já foi amistoso" mantém a pergunta antes do rating e o aviso no TRF | Desligar com R1 fechada e aplicar rating sem confirmação → `AppError` | Torneio desligado antes desta versão não tem a contagem no registro e não é reconhecido como "já foi amistoso" |
+| F4.5 | RG2-39 | Categorias impossíveis recusadas; "Preencher agenda" respeita a folga; agenda em ordem não decrescente; o banco não apaga data acima do total sem ordem do serviço; aviso sem data de início | Um teste por linha | Folga = um dia inteiro livre depois da rodada marcada |
+
+**Não verificado:** teste de janela do diálogo do motivo do Modo Livre (a regra é provada no serviço); o filtro de categoria da tela de diplomas ainda lista só as categorias principais.

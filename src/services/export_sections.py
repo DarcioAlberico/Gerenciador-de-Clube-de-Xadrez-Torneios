@@ -18,6 +18,7 @@ from src.services.pairing.incidents import (
 )
 from src.services.pairing.point_adjustments import format_signed
 from src.services.pairing.constraints import seeding_order
+from src.services.prize_service import PrizeService
 from src.services.prizes import PRIZE_KINDS, PRIZE_POLICIES, PRIZE_TIE_SPLITS, allocate_prizes
 from src.services.export_federation import FederationReportsMixin
 
@@ -396,16 +397,8 @@ class ReportSectionsMixin:
         if tournament.get("competition_type") == "team":
             raise AppError("Distribuição de prêmios disponível apenas para torneios individuais.")
 
-        settings = self.db.get_tournament_settings(tournament_id) or {}
-        prizes = self.db.list_tournament_prizes(tournament_id)
-        standings = self.pairing_service.standings(tournament_id)
-        result = allocate_prizes(
-            standings,
-            prizes,
-            policy=str(settings.get("prize_policy") or "best_only"),
-            tax_percent=float(settings.get("prize_tax_percent") or 0.0),
-            tie_split=str(settings.get("prize_tie_split") or "equal"),
-            exclude_withdrawn=bool(settings.get("prize_exclude_withdrawn")),
+        result = PrizeService(self.db).allocation_for(
+            tournament_id, self.pairing_service.standings(tournament_id)
         )
 
         policy_label = PRIZE_POLICIES.get(result["policy"], result["policy"])
@@ -416,7 +409,9 @@ class ReportSectionsMixin:
             ["Desistentes excluídos", result["excluded_withdrawn"]],
             ["Imposto do organizador (%)", result["tax_percent"]],
             ["Premiados", result["winners"]],
-            ["Total bruto", self._format_currency(result["total_gross"])],
+            ["Total anunciado", self._format_currency(result["total_announced"])],
+            ["Total bruto distribuído", self._format_currency(result["total_gross"])],
+            ["Não distribuído", self._format_currency(result["total_undistributed"])],
             ["Total imposto", self._format_currency(result["total_tax"])],
             ["Total líquido distribuído", self._format_currency(result["total_net"])],
         ]
@@ -441,6 +436,24 @@ class ReportSectionsMixin:
                 winner_rows,
             ),
         ]
+        if result["undistributed"]:
+            # RG2-16: o prêmio que não achou ganhador aparece, em vez de sumir.
+            sections.append(
+                (
+                    "Prêmios não distribuídos",
+                    ["Tipo", "Prêmio", "Categoria", "Posição", "Valor"],
+                    [
+                        [
+                            PRIZE_KINDS.get(unit["kind"], unit["kind"]),
+                            unit["label"],
+                            unit["category"],
+                            unit["position"],
+                            self._format_currency(unit["amount"]),
+                        ]
+                        for unit in result["undistributed"]
+                    ],
+                )
+            )
         if result["manual_prizes"]:
             manual_rows = [
                 [

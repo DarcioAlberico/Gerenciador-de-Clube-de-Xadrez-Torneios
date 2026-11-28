@@ -13,6 +13,7 @@ Duas perguntas diferentes, e o ORG-01 precisa das duas:
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any, Mapping, Sequence
 
 from src.services.categories.definition import (
@@ -72,9 +73,11 @@ def narrowest_by_kind(
     Idade e rating rendem UMA cada (a mais estreita); sexo rende uma; marcas
     rendem todas, porque "Sócio" e "Melhor Local" não competem entre si.
     """
-    found = matching_categories(
-        definitions, player, reference_year=reference_year, rating=rating
-    )
+    # A mais estreita é a do jogador pela faixa do edital, sem a ampliação do
+    # "aceita quem está abaixo": senão a faixa "11 a 12" ligada viraria a
+    # categoria principal do menino de 9 anos (RG2-18).
+    strict = [replace(item, accepts_below=False) for item in definitions]
+    found = matching_categories(strict, player, reference_year=reference_year, rating=rating)
     chosen: list[CategoryDefinition] = []
     for kind in (AGE, RATING, SEX):
         candidates = [item for item in found if item.kind == kind]
@@ -85,12 +88,22 @@ def narrowest_by_kind(
 
 
 def awardable_names(definitions: Sequence[CategoryDefinition], **kwargs: Any) -> list[str]:
-    """Nomes das categorias premiáveis do jogador, sem repetição."""
-    return list(
-        dict.fromkeys(
-            item.name for item in narrowest_by_kind(definitions, **kwargs) if item.awards
-        )
+    """Nomes das categorias premiáveis do jogador, sem repetição.
+
+    A mais estreita de cada dimensão, mais as faixas de idade e de rating que
+    "aceitam quem está abaixo" (RG2-18) e casam com ele. A principal continua
+    sendo a mais estreita: a opção amplia as disputas, não troca a categoria.
+    """
+    below = [
+        item
+        for item in matching_categories(definitions, **kwargs)
+        if item.kind in (AGE, RATING) and item.accepts_below
+    ]
+    chosen = sorted(
+        {item.name: item for item in [*narrowest_by_kind(definitions, **kwargs), *below]}.values(),
+        key=lambda item: (int(item.position or 0), item.name.casefold()),
     )
+    return [item.name for item in chosen if item.awards]
 
 
 def category_of_kind(

@@ -101,7 +101,7 @@ def matches(
         if age is None:
             return False
         # `max_value` INCLUSIVO: "Sub-12" aceita quem completa 12.
-        if definition.min_value and age < definition.min_value:
+        if definition.min_value and age < definition.min_value and not definition.accepts_below:
             return False
         return not (definition.max_value and age > definition.max_value)
 
@@ -109,7 +109,7 @@ def matches(
         value = int(rating or 0)
         if value <= 0:
             return False
-        if definition.min_value and value < definition.min_value:
+        if definition.min_value and value < definition.min_value and not definition.accepts_below:
             return False
         # `max_value` EXCLUSIVO: "Sub-1400" recusa quem tem exatamente 1400.
         return not (definition.max_value and value >= definition.max_value)

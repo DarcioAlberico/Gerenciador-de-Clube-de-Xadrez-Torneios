@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import textwrap
+
 from src.domain.dates import Data
 
 from ..support import *
@@ -749,13 +751,19 @@ class TournamentSettingsMixin:
             help_text=(
                 "Sem linhas, valem as faixas padrão.\n"
                 "Idade: 'Até' é inclusivo (Sub-12 aceita 12).\n"
-                "Rating: 'Até' é exclusivo (Sub-1400 recusa 1400)."
+                "Rating: 'Até' é exclusivo (Sub-1400 recusa 1400).\n"
+                "Abaixo: aceita mais novo ou rating menor."
             ),
         )
 
         # Data ou só o ano (RGS-07): a idade e a que o jogador COMPLETA no ano.
         category_reference_entry = self._make_date_entry(tab_prizes, width=20, permite_ano=True)
         category_reference_entry.insert(0, str(settings.get("category_reference_date") or ""))
+        # RG2-39: sem início nem referência, o ano cai na data de cadastro.
+        # Linhas curtas: rótulo longo puxa a largura mínima da tela (B-8).
+        aviso_ano = textwrap.fill(
+            self.tournament_service.category_reference_warning(self.current_tournament_id), width=46
+        )
         stack(
             tab_prizes,
             category_reference_entry,
@@ -763,6 +771,7 @@ class TournamentSettingsMixin:
             help_text=(
                 "Vazio = ano do torneio.\n"
                 "A idade é a que o jogador COMPLETA no ano."
+                + (f"\n{aviso_ano}" if aviso_ano else "")
             ),
         )
         setting_entries["category_reference_date"] = category_reference_entry
@@ -893,6 +902,10 @@ class TournamentSettingsMixin:
                     round_duration_minutes=auto_entries["duration"].get(),
                     break_minutes=auto_entries["break"].get(),
                     rounds_per_day=rounds_per_day,
+                    # RG2-39: a "Folga" marcada abre um dia livre depois da rodada.
+                    rest_after_rounds={
+                        numero for numero, campos in schedule_entries.items() if campos["rest_day"].get()
+                    },
                 )
                 for item in generated_schedule:
                     entries = schedule_entries.get(int(item["round_number"]))

@@ -15,6 +15,7 @@ auditoria.
 """
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from datetime import date
 from typing import Any
@@ -81,13 +82,43 @@ INTERNAL_RATING_YES = "Contar no rating"
 INTERNAL_RATING_NO = "Não contar"
 
 
-def internal_rating_question(settings: Mapping[str, Any] | None) -> str:
+def played_as_friendly(db: Any, tournament_id: int) -> bool:
+    """O torneio foi jogado no Modo Livre: ligado agora, ou desligado com rodada gerada (RG2-35).
+
+    Desligar a marca não apaga o que foi jogado com entrada tardia, rodada
+    refeita e atraso flexível. O evento ``free_mode_changed`` guarda quantas
+    rodadas já existiam quando o modo foi desligado.
+    """
+    if is_friendly(db.get_tournament_settings(int(tournament_id))):
+        return True
+    for event in db.list_audit_events(int(tournament_id), action="free_mode_changed", limit=5000):
+        try:
+            metadata = json.loads(str(event.get("metadata_json") or "") or "{}")
+        except ValueError:  # metadado ilegível não prova que houve rodada amistosa
+            continue
+        if isinstance(metadata, dict) and int(metadata.get("rounds_generated") or 0) > 0:
+            return True
+    return False
+
+
+def disable_reason_error(reason: str, rounds_generated: int) -> str:
+    """Por que desligar ainda não pode. ``""`` quando pode (RG2-35)."""
+    if rounds_generated and not str(reason or "").strip():
+        return (
+            f"O torneio já tem rodada gerada no {FRIENDLY_MODE_LABEL}. Diga o motivo para "
+            "desligar: o que já foi jogado continua amistoso para o rating e para o TRF."
+        )
+    return ""
+
+
+def internal_rating_question(played: bool) -> str:
     """A pergunta antes de o amistoso contar para o rating interno (decisão D2).
 
-    Vazia no torneio oficial, que conta sem perguntar. No amistoso, o serviço
-    recusa aplicar sem a resposta (`friendly_confirmed=True`), e a tela pergunta.
+    Vazia no torneio oficial, que conta sem perguntar. No que foi jogado como
+    amistoso (``played_as_friendly``), o serviço recusa aplicar sem a resposta
+    (`friendly_confirmed=True`), e a tela pergunta.
     """
-    if not is_friendly(settings):
+    if not played:
         return ""
     return (
         f"Este torneio está no {FRIENDLY_MODE_LABEL}: entrada tardia com pontos "
@@ -219,11 +250,13 @@ class FriendlyModeService:
         return dict(self.db.get_tournament_settings(int(tournament_id)) or {})
 
     @requires("tournament_write")
-    def set_enabled(self, tournament_id: int, enabled: bool, actor: str = "") -> bool:
+    def set_enabled(self, tournament_id: int, enabled: bool, actor: str = "", reason: str = "") -> bool:
         """Liga ou desliga o modo num torneio que já existe (MA-07), com auditoria.
 
-        Ligar num torneio de perfil FIDE é recusado (MA-02). Devolve ``True``
-        quando a marca mudou; pedir o estado que já vale não grava nada.
+        Ligar num torneio de perfil FIDE é recusado (MA-02). Desligar com rodada
+        gerada exige motivo, e o evento guarda quantas rodadas havia (RG2-35).
+        Devolve ``True`` quando a marca mudou; pedir o estado que já vale não
+        grava nada.
         """
         if not self.db.get_tournament(int(tournament_id)):
             raise AppError("Selecione um torneio válido.")
@@ -234,6 +267,10 @@ class FriendlyModeService:
         conflito = profile_conflict(bool(enabled), ajustes.get("tournament_profile"))
         if conflito:
             raise AppError(conflito)
+        rodadas = 0 if enabled else len(self.db.list_rounds(int(tournament_id)))
+        recusa = disable_reason_error(reason, rodadas)
+        if recusa:
+            raise AppError(recusa)
         with self.db.transaction():
             self.db.set_free_mode(int(tournament_id), bool(enabled))
             self.db.create_audit_event(
@@ -244,6 +281,8 @@ class FriendlyModeService:
                 actor=actor,
                 before={"free_mode": int(antes)},
                 after={"free_mode": int(bool(enabled))},
+                reason=str(reason or "").strip(),
+                metadata={"rounds_generated": rodadas},
             )
         return True
 

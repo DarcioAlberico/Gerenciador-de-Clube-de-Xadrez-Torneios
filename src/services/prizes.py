@@ -22,9 +22,11 @@ Duas correções da ORG-02 valem nota:
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from typing import Any, Mapping, Sequence
 
 from src.services.categories import categories_of
+from src.services.categories.matching import tag_key
 
 PRIZE_KINDS = {
     "overall": "Geral (colocação)",
@@ -44,6 +46,9 @@ PRIZE_POLICIES = {
 PRIZE_TIE_SPLITS = {
     "equal": "Dividir por igual entre empatados",
     "hort": "Sistema Hort (50% da posição + 50% do bolo)",
+    # RG2-33: o edital que diz "o desempate decide" — cada empatado recebe o
+    # prêmio da própria posição na ordem do desempate.
+    "tiebreak": "Desempate decide (cada um recebe o da própria posição)",
 }
 
 AUTO_KINDS = {"overall", "category"}
@@ -61,28 +66,12 @@ WITHDRAWN_STATUSES = {"withdrawn", "desistente", "expelled", "expulso"}
 COMPETING_OUT_STATUSES = {"absent", "ausente", "inactive"}
 
 
-def _norm_category(value: Any) -> str:
-    return str(value or "").strip().casefold()
-
-
 def _prize_band(prize: Mapping[str, Any]) -> tuple[int, int, float]:
     rank_from = int(prize.get("rank_from") or 1)
     rank_to = int(prize.get("rank_to") or rank_from)
     if rank_to < rank_from:
         rank_from, rank_to = rank_to, rank_from
     return max(1, rank_from), max(1, rank_to), float(prize.get("amount") or 0.0)
-
-
-def _position_amounts(prizes: Sequence[Mapping[str, Any]]) -> dict[int, float]:
-    """Mapa posição -> valor a partir das faixas (somando sobreposições)."""
-    amounts: dict[int, float] = {}
-    for prize in prizes:
-        rank_from, rank_to, amount = _prize_band(prize)
-        if amount <= 0:
-            continue
-        for position in range(rank_from, rank_to + 1):
-            amounts[position] = amounts.get(position, 0.0) + amount
-    return amounts
 
 
 def is_withdrawn(row: Mapping[str, Any]) -> bool:
@@ -94,88 +83,169 @@ def is_withdrawn(row: Mapping[str, Any]) -> bool:
     return not int(row.get("active", 1) or 0)
 
 
-def _allocate_band(
-    ranked_players: Sequence[Mapping[str, Any]],
-    position_amounts: dict[int, float],
-    tie_split: str = "equal",
-) -> dict[int, float]:
-    """Divide os valores das posições entre os jogadores, tratando empates.
+@dataclass
+class _Unit:
+    """Um prêmio de UMA posição numa disputa (o geral ou uma categoria)."""
 
-    `ranked_players` já vem na ordem da classificação — o que significa que a
-    ordem DENTRO de um grupo empatado já é a ordem do desempate, e é dela que o
-    Sistema Hort precisa.
+    kind: str
+    category: str
+    key: str
+    position: int
+    amount: float
+    order: int
+    label: str
+    priority: float = 0.0
 
-    - `equal`: o grupo soma os prêmios das posições que ocupa e divide por igual;
-    - `hort`: cada um recebe 50% do prêmio da SUA posição mais 50% do bolo
-      dividido por igual. A soma dá o mesmo bolo — o Hort não cria nem destrói
-      dinheiro, só reconhece o desempate sem entregar tudo ao primeiro.
+
+def _competition_key(prize: Mapping[str, Any]) -> str:
+    if str(prize.get("kind")) == "overall":
+        return "overall"
+    return "category:" + tag_key(prize.get("category"))
+
+
+def _units(prizes: Sequence[Mapping[str, Any]]) -> dict[str, dict[int, _Unit]]:
+    """Os prêmios do edital como unidades (disputa, posição), somando sobreposições.
+
+    A prioridade de uma posição é o maior valor dela ou de qualquer posição
+    abaixo na mesma disputa: assim a disputa é sempre percorrida de cima para
+    baixo, mesmo num edital que pague mais ao 2º que ao 1º.
     """
-    shares: dict[int, float] = {}
-    total = len(ranked_players)
-    index = 0
-    position = 1
-    while index < total:
-        end = index
-        points = float(ranked_players[index].get("points") or 0.0)
-        while end + 1 < total and float(ranked_players[end + 1].get("points") or 0.0) == points:
-            end += 1
-        group = ranked_players[index:end + 1]
-        band = [position_amounts.get(position + offset, 0.0) for offset in range(len(group))]
-        pooled = sum(band)
-        if pooled > 0:
-            if tie_split == "hort" and len(group) > 1:
-                equal_half = (pooled * 0.5) / len(group)
-                for offset, player in enumerate(group):
-                    pid = int(player["player_id"])
-                    shares[pid] = shares.get(pid, 0.0) + band[offset] * 0.5 + equal_half
+    competitions: dict[str, dict[int, _Unit]] = {}
+    for order, prize in enumerate(prizes):
+        key = _competition_key(prize)
+        if key == "category:":
+            continue
+        rank_from, rank_to, amount = _prize_band(prize)
+        if amount <= 0:
+            continue
+        units = competitions.setdefault(key, {})
+        for position in range(rank_from, rank_to + 1):
+            unit = units.get(position)
+            if unit is None:
+                units[position] = _Unit(
+                    kind=str(prize.get("kind")),
+                    category=str(prize.get("category") or "").strip() if key != "overall" else "",
+                    key=key,
+                    position=position,
+                    amount=amount,
+                    order=order,
+                    label=str(prize.get("label") or ""),
+                )
             else:
-                per_player = pooled / len(group)
-                for player in group:
-                    pid = int(player["player_id"])
-                    shares[pid] = shares.get(pid, 0.0) + per_player
-        position += len(group)
-        index = end + 1
-    return shares
+                unit.amount += amount
+    for units in competitions.values():
+        best_below = 0.0
+        for position in sorted(units, reverse=True):
+            best_below = max(best_below, units[position].amount)
+            units[position].priority = best_below
+    return competitions
 
 
-def _combine(overall: float, category: float, policy: str) -> float:
-    if policy == "cumulative":
-        return overall + category
-    return max(overall, category)  # best_only
+def _ranking_of(key: str, ordered: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
+    if key == "overall":
+        return list(ordered)
+    wanted = key.split(":", 1)[1]
+    return [item for item in ordered if wanted in {tag_key(name) for name in categories_of(item)}]
 
 
-def _category_shares(
-    ordered: Sequence[Mapping[str, Any]],
-    category_prizes: Sequence[Mapping[str, Any]],
-    tie_split: str,
-) -> tuple[dict[int, float], dict[int, float]]:
-    """Prêmios de categoria, separados em "segue a política" e "sempre soma".
+def _points(row: Mapping[str, Any]) -> float:
+    return float(row.get("points") or 0.0)
 
-    O jogador entra na classificação de CADA categoria dele — Sub-12, Sub-1400 e
-    Feminino são três disputas, e antes o alocador só enxergava a principal.
+
+@dataclass
+class _Distribution:
+    shares: dict[int, dict[str, float]] = field(default_factory=dict)
+    awards: dict[int, list[dict[str, Any]]] = field(default_factory=dict)
+    undistributed: list[_Unit] = field(default_factory=list)
+    announced: float = 0.0
+
+
+def _split(pooled: float, band: list[float], size: int, tie_split: str) -> list[float]:
+    """O bolo de um grupo empatado: por igual, ou Hort (50% da posição + 50% do bolo)."""
+    if tie_split == "hort" and size > 1:
+        equal_half = (pooled * 0.5) / size
+        return [band[offset] * 0.5 + equal_half for offset in range(size)]
+    return [pooled / size] * size
+
+
+def _tied_group(ranked: Sequence[Mapping[str, Any]], index: int, tie_split: str) -> tuple[int, int]:
+    """O grupo empatado em pontos em volta de ``index``.
+
+    Quem já ganhou nesta disputa nunca está empatado com quem vem depois dele
+    ainda sem prêmio: os dois estavam na fila quando o primeiro ganhou, e o
+    empate os teria posto no mesmo grupo. Por isso o grupo não precisa pular
+    ninguém. Com "desempate decide" não há grupo: a ordem da classificação já
+    é a do desempate, e cada um fica com a própria posição.
     """
-    by_policy: dict[int, float] = {}
-    always: dict[int, float] = {}
+    first = last = index
+    if tie_split == "tiebreak":
+        return first, last
+    points = _points(ranked[index])
+    while first > 0 and _points(ranked[first - 1]) == points:
+        first -= 1
+    while last + 1 < len(ranked) and _points(ranked[last + 1]) == points:
+        last += 1
+    return first, last
 
-    grupos: dict[tuple[str, bool], list[Mapping[str, Any]]] = {}
-    for prize in category_prizes:
-        chave = (_norm_category(prize.get("category")), bool(prize.get("cumulative")))
-        grupos.setdefault(chave, []).append(prize)
 
-    for (category_key, cumulative), prizes_in_category in grupos.items():
-        if not category_key:
+def _distribute(
+    competitions: dict[str, dict[int, _Unit]],
+    ordered: Sequence[Mapping[str, Any]],
+    tie_split: str,
+    *,
+    one_prize_each: bool,
+    result: _Distribution,
+) -> None:
+    """Percorre os prêmios do maior para o menor (D1) e dá cada um ao seu dono.
+
+    Com ``one_prize_each``, quem já recebeu prêmio de OUTRA disputa sai da fila
+    desta: o prêmio desce para o próximo. Quem recebeu desta disputa continua
+    ocupando a sua posição nela.
+    """
+    rankings = {key: _ranking_of(key, ordered) for key in competitions}
+    queue = sorted(
+        (unit for units in competitions.values() for unit in units.values()),
+        key=lambda unit: (-unit.priority, unit.order, unit.position),
+    )
+    result.announced += sum(unit.amount for unit in queue)
+    holder: dict[int, str] = {}
+    consumed: set[tuple[str, int]] = set()
+    for unit in queue:
+        if (unit.key, unit.position) in consumed:
             continue
         ranked = [
-            item
-            for item in ordered
-            if category_key in {_norm_category(name) for name in categories_of(item)}
+            row
+            for row in rankings[unit.key]
+            if not one_prize_each or holder.get(int(row["player_id"]), unit.key) == unit.key
         ]
-        alvo = always if cumulative else by_policy
-        for pid, share in _allocate_band(
-            ranked, _position_amounts(prizes_in_category), tie_split
-        ).items():
-            alvo[pid] = alvo.get(pid, 0.0) + share
-    return by_policy, always
+        index = unit.position - 1
+        if index >= len(ranked):
+            consumed.add((unit.key, unit.position))
+            result.undistributed.append(unit)
+            continue
+        first, last = _tied_group(ranked, index, tie_split)
+        group = ranked[first:last + 1]
+        units = competitions[unit.key]
+        # As posições do grupo ainda estão livres: a disputa é percorrida de
+        # cima para baixo, e quem ganhou nela fica à frente de quem não ganhou.
+        band_units = [units.get(first + 1 + offset) for offset in range(len(group))]
+        band = [item.amount if item else 0.0 for item in band_units]
+        for offset, player in enumerate(group):
+            consumed.add((unit.key, first + 1 + offset))
+        for offset, (player, share) in enumerate(zip(group, _split(sum(band), band, len(group), tie_split))):
+            pid = int(player["player_id"])
+            holder[pid] = unit.key
+            by_kind = result.shares.setdefault(pid, {})
+            by_kind[unit.kind] = by_kind.get(unit.kind, 0.0) + share
+            result.awards.setdefault(pid, []).append(
+                {
+                    "kind": unit.kind,
+                    "category": unit.category,
+                    "label": (band_units[offset] or unit).label,
+                    "position": first + 1 + offset,
+                    "amount": round(share, 2),
+                }
+            )
 
 
 def allocate_prizes(
@@ -202,26 +272,26 @@ def allocate_prizes(
         ordered = [item for item in ordered if not is_withdrawn(item)]
         excluded = antes - len(ordered)
 
-    overall_prizes = [p for p in prizes if str(p.get("kind")) == "overall"]
-    category_prizes = [p for p in prizes if str(p.get("kind")) == "category"]
+    auto_prizes = [p for p in prizes if str(p.get("kind")) in AUTO_KINDS]
     manual_prizes = [p for p in prizes if str(p.get("kind")) in MANUAL_KINDS]
+    locked = [p for p in auto_prizes if policy == "best_only" and not p.get("cumulative")]
+    free = [p for p in auto_prizes if not (policy == "best_only" and not p.get("cumulative"))]
 
-    overall_shares = _allocate_band(ordered, _position_amounts(overall_prizes), tie_split)
-    category_by_policy, category_always = _category_shares(ordered, category_prizes, tie_split)
+    distribution = _Distribution()
+    _distribute(_units(locked), ordered, tie_split, one_prize_each=True, result=distribution)
+    _distribute(_units(free), ordered, tie_split, one_prize_each=False, result=distribution)
 
     by_id = {int(item["player_id"]): item for item in ordered}
     allocations: list[dict[str, Any]] = []
     total_gross = 0.0
-    for pid in by_id:
-        overall = round(overall_shares.get(pid, 0.0), 2)
-        category_policy = round(category_by_policy.get(pid, 0.0), 2)
-        category_always_value = round(category_always.get(pid, 0.0), 2)
-        category = round(category_policy + category_always_value, 2)
-        gross = round(_combine(overall, category_policy, policy) + category_always_value, 2)
+    for pid, item in by_id.items():
+        shares = distribution.shares.get(pid, {})
+        overall = round(shares.get("overall", 0.0), 2)
+        category = round(shares.get("category", 0.0), 2)
+        gross = round(overall + category, 2)
         if gross <= 0:
             continue
         net = round(gross * (1.0 - tax / 100.0), 2)
-        item = by_id[pid]
         allocations.append(
             {
                 "player_id": pid,
@@ -234,6 +304,7 @@ def allocate_prizes(
                 "category_prize": category,
                 "gross": gross,
                 "net": net,
+                "awards": distribution.awards.get(pid, []),
             }
         )
         total_gross += gross
@@ -258,6 +329,18 @@ def allocate_prizes(
             }
             for prize in manual_prizes
         ],
+        "undistributed": [
+            {
+                "kind": unit.kind,
+                "category": unit.category,
+                "label": unit.label,
+                "position": unit.position,
+                "amount": round(unit.amount, 2),
+            }
+            for unit in sorted(distribution.undistributed, key=lambda unit: (unit.order, unit.position))
+        ],
+        "total_announced": round(distribution.announced, 2),
+        "total_undistributed": round(sum(unit.amount for unit in distribution.undistributed), 2),
         "winners": len(allocations),
         "total_gross": total_gross,
         "total_tax": round(total_gross - total_net, 2),

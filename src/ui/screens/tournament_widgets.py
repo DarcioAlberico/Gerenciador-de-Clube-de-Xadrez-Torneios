@@ -437,7 +437,8 @@ class ColumnLayoutEditor(ctk.CTkFrame):
 class CategoryEditor(ctk.CTkFrame):
     """Editor de categorias do torneio em linhas dinâmicas (ORG-01).
 
-    Cada linha e uma categoria do edital: nome, tipo, faixa e se ela premia.
+    Cada linha e uma categoria do edital: nome, tipo, faixa, se ela premia e
+    se aceita quem está abaixo (RG2-18: o Sub-10 disputando o Sub-12).
     `get_rows()` devolve o que o TournamentService persiste.
 
     O campo de faixa muda de significado conforme o tipo, e o rótulo diz qual:
@@ -476,6 +477,7 @@ class CategoryEditor(ctk.CTkFrame):
             "sex": str(item.get("sex") or "").upper()[:1],
             "tag": str(item.get("tag") or ""),
             "awards": bool(item.get("awards", True)),
+            "accepts_below": bool(item.get("accepts_below") or False),
         }
 
     def _sync(self) -> None:
@@ -487,6 +489,7 @@ class CategoryEditor(ctk.CTkFrame):
             data["sex"] = self._sex_by_label.get(widgets["sex"].get(), "")
             data["tag"] = widgets["tag"].get().strip()
             data["awards"] = bool(widgets["awards"].get())
+            data["accepts_below"] = bool(widgets["accepts_below"].get())
 
     def get_rows(self) -> list[dict[str, Any]]:
         self._sync()
@@ -529,6 +532,7 @@ class CategoryEditor(ctk.CTkFrame):
             ("Sexo", 96),
             ("Marca", 86),
             ("Premia", 50),
+            ("Abaixo", 50),
             ("", 36),
         ]
         for index, (text, width) in enumerate(columns):
@@ -561,14 +565,19 @@ class CategoryEditor(ctk.CTkFrame):
             if data["awards"]:
                 awards.select()
             awards.grid(row=0, column=6, padx=2)
+            accepts_below = ctk.CTkCheckBox(row, text="", width=50)
+            if data["accepts_below"]:
+                accepts_below.select()
+            accepts_below.grid(row=0, column=7, padx=2)
             ctk.CTkButton(
                 row, text="✕", width=36, fg_color=THEME_DANGER, hover_color=THEME_DANGER_HOVER,
                 command=lambda i=index: self._remove(i),
-            ).grid(row=0, column=7, padx=2)
+            ).grid(row=0, column=8, padx=2)
             self._widgets.append(
                 {
                     "name": name, "kind": kind, "min_value": min_value,
                     "max_value": max_value, "sex": sex, "tag": tag, "awards": awards,
+                    "accepts_below": accepts_below,
                 }
             )
 
@@ -599,6 +608,7 @@ class CategoryEditor(ctk.CTkFrame):
                     "sex": item.sex,
                     "tag": item.tag,
                     "awards": item.awards,
+                    "accepts_below": item.accepts_below,
                 }
                 for item in default_categories()
             ]

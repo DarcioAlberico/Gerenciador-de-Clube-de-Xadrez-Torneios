@@ -45,6 +45,10 @@ class CategoryDefinition:
     obrigaria o árbitro a digitar 1399, que é onde o erro de digitação mora.
 
     `0` em `min_value`/`max_value` significa "sem limite desse lado".
+
+    `accepts_below` (RG2-18, D2): a faixa de idade aceita também quem é mais
+    novo, e a de rating quem tem rating menor — quando o edital deixa o Sub-10
+    disputar o Sub-12. Desligado por padrão: o comportamento de sempre.
     """
 
     name: str
@@ -56,6 +60,7 @@ class CategoryDefinition:
     reference_date: str = ""
     awards: bool = True
     position: int = 0
+    accepts_below: bool = False
 
     @property
     def is_valid(self) -> bool:
@@ -85,6 +90,27 @@ def _range_text(minimum: int, maximum: int, unit: str, *, inclusive_max: bool) -
     if low:
         return f"{low} {unit} ou mais"
     return f"sem limite de {unit}"
+
+
+def impossible_reason(definition: CategoryDefinition) -> str:
+    """Por que a categoria nunca casaria com ninguém. ``""`` quando pode casar (RG2-39).
+
+    "15 a 12 anos", rating "1800 até 1400", sexo em branco e marca vazia eram
+    aceitos e ficavam vazios, calados.
+    """
+    low, high = int(definition.min_value or 0), int(definition.max_value or 0)
+    if definition.kind == AGE and low and high and low > high:
+        return f"A categoria '{definition.name}' vai de {low} a {high} anos: o mínimo passa do máximo."
+    if definition.kind == RATING and low and high and low >= high:
+        return (
+            f"A categoria '{definition.name}' vai de rating {low} até {high} (exclusivo): "
+            "o mínimo precisa ficar abaixo do máximo."
+        )
+    if definition.kind == SEX and definition.sex not in ("F", "M"):
+        return f"A categoria '{definition.name}' é por sexo: escolha Feminino ou Masculino."
+    if definition.kind == TAG and not definition.tag:
+        return f"A categoria '{definition.name}' é por marca: informe a marca."
+    return ""
 
 
 def normalize(definition: CategoryDefinition) -> CategoryDefinition:
@@ -118,5 +144,6 @@ def from_row(row: object) -> CategoryDefinition:
             reference_date=str(data.get("reference_date") or ""),
             awards=bool(data.get("awards", True)),
             position=int(data.get("position") or 0),
+            accepts_below=bool(data.get("accepts_below") or False),
         )
     )

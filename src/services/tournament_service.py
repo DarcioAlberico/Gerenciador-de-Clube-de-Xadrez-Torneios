@@ -11,7 +11,7 @@ import unicodedata
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from dataclasses import dataclass, field as dataclass_field
-from typing import Any, Mapping, Sequence, TYPE_CHECKING
+from typing import Any, Iterable, Mapping, Sequence, TYPE_CHECKING
 
 from src.core.database import BASE_DIR, DEFAULT_CERTIFICATE_TEMPLATES, Database
 from src.core.database_tournament_core import default_pairing_system
@@ -31,9 +31,10 @@ from src.services.pairing.initial_color import normalize_initial_color, resolve_
 from src.services import friendly_mode
 from src.services.prizes import PRIZE_POLICIES, PRIZE_TIE_SPLITS
 from src.services.categories import from_row as category_from_row, normalize as normalize_category
+from src.services.categories.definition import impossible_reason as impossible_category_reason
 from src.services.rating import SPEED_CHOICES, serialize_regulation_overrides
 from src.services.list_layout_service import validated_columns
-from src.services.prize_service import validated_prizes
+from src.services.prize_service import known_categories, refuse_unknown_categories, validated_prizes
 from src.services.permissions import requires
 from src.services.tournament_configuration import (
     STRUCTURAL_SETTINGS,
@@ -198,7 +199,8 @@ class TournamentService:
         return self._category_change_confirmations(tournament_id, self._categories_changed(tournament_id, limpos))
 
     def _categories_changed(self, tournament_id: int, limpos: list[dict[str, Any]]) -> bool:
-        return self._validated_categories(self.db.list_tournament_categories(tournament_id)) != limpos
+        gravadas = self.db.list_tournament_categories(tournament_id)
+        return self._validated_categories(gravadas, refuse_impossible=False) != limpos
 
     def _category_dates_changed(self, tournament_id: int, preparo: "_PerfilPreparado") -> bool:
         """A data de referência ou o início do torneio mudaram — e com eles a idade de todos."""
@@ -248,8 +250,15 @@ class TournamentService:
         )
 
     @staticmethod
-    def _validated_categories(categories: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """Categorias normalizadas, sem gravar; recusa nome repetido (ORG-01)."""
+    def _validated_categories(
+        categories: list[dict[str, Any]], *, refuse_impossible: bool = True
+    ) -> list[dict[str, Any]]:
+        """Categorias normalizadas, sem gravar; recusa nome repetido (ORG-01).
+
+        Recusa também a que nunca casaria com ninguém (RG2-39). A comparação
+        com o edital já gravado usa ``refuse_impossible=False``: um edital
+        antigo com faixa impossível não pode travar o salvamento do novo.
+        """
         limpos: list[dict[str, Any]] = []
         vistos: set[str] = set()
         for posicao, item in enumerate(categories or []):
@@ -258,6 +267,9 @@ class TournamentService:
                 if str(item.get("name") or "").strip():
                     raise AppError(f"Tipo de categoria inválido em '{definicao.name}'.")
                 continue
+            recusa = impossible_category_reason(definicao) if refuse_impossible else ""
+            if recusa:
+                raise AppError(recusa)
             chave = definicao.name.casefold()
             if chave in vistos:
                 raise AppError(f"Categoria repetida: '{definicao.name}'.")
@@ -272,6 +284,7 @@ class TournamentService:
                     "tag": definicao.tag,
                     "reference_date": definicao.reference_date,
                     "awards": definicao.awards,
+                    "accepts_below": definicao.accepts_below,
                     "position": posicao,
                 }
             )
@@ -391,6 +404,9 @@ class TournamentService:
         preparo = self._prepare_profile(tournament_id, perfil)
         premios_limpos, categorias_limpas, colunas_limpas = self._prepare_extras(
             premios, categorias, colunas
+        )
+        refuse_unknown_categories(
+            premios_limpos, known_categories(categorias_limpas, self.db.list_players(tournament_id))
         )
         recalculo = self._category_change_confirmations(
             tournament_id,
@@ -530,20 +546,23 @@ class TournamentService:
             )
         self._validate_initial_color_change(tournament_id, current_settings, settings_data, generated_rounds)
 
+        # A perda de agenda olha também o que já está gravado: a tela pode não
+        # mandar a rodada 5, e o banco a apagaria do mesmo jeito (RG2-39).
+        agenda_completa = self._schedule_with_stored(tournament_id, schedule)
         confirmacoes = plan_tournament_configuration(
             rodadas_geradas=highest_generated_round,
             ajustes_atuais=current_settings,
             ajustes_pedidos=settings_data,
             ajustes_validados=settings_payload,
             total_rodadas=int(tournament_payload["rounds_count"]),
-            agenda=schedule,
+            agenda=agenda_completa,
         )
         return _PerfilPreparado(
             torneio=tournament_payload,
             ajustes=settings_payload,
             agenda=schedule_payload,
             confirmacoes=tuple(confirmacoes),
-            agenda_perdida=agenda_perdida(schedule, int(tournament_payload["rounds_count"])),
+            agenda_perdida=agenda_perdida(agenda_completa, int(tournament_payload["rounds_count"])),
             mudancas_estruturais=(
                 mudancas_estruturais(current_settings, settings_data, settings_payload)
                 if generated_rounds
@@ -601,7 +620,11 @@ class TournamentService:
         A auditoria vem depois de todas as validações (RGS-09): antes, o evento
         de agenda era gravado e só então vinha a recusa por falta de motivo.
         """
-        self.db.update_tournament_details(tournament_id=tournament_id, **preparo.torneio)
+        self.db.update_tournament_details(
+            tournament_id=tournament_id,
+            **preparo.torneio,
+            discard_schedule_above=bool(preparo.agenda_perdida),
+        )
         self.db.save_tournament_settings(tournament_id, preparo.ajustes)
         self.db.save_round_schedule(tournament_id, preparo.agenda)
 
@@ -1160,6 +1183,8 @@ class TournamentService:
                     }
                 )
 
+        TournamentService._refuse_schedule_out_of_order(rows)
+
         if dropped and not confirm_schedule_loss:
             # ORG-03: confirmação, não descarte calado. Quem reduziu o total de
             # rodadas esta prestes a perder datas que já podem ter sido
@@ -1173,6 +1198,57 @@ class TournamentService:
 
         return sorted(rows, key=lambda item: item["round_number"])
 
+    def _schedule_with_stored(
+        self, tournament_id: int, schedule: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """A agenda gravada, com o que a tela mandou por cima (por número de rodada)."""
+        por_rodada: dict[int, dict[str, Any]] = {
+            int(item["round_number"]): dict(item) for item in self.db.list_round_schedule(tournament_id)
+        }
+        for item in schedule:
+            try:
+                por_rodada[int(item.get("round_number") or 0)] = dict(item)
+            except (TypeError, ValueError):  # a validação da agenda recusa com a mensagem certa
+                continue
+        return [por_rodada[numero] for numero in sorted(por_rodada)]
+
+    def category_reference_warning(self, tournament_id: int) -> str:
+        """Aviso quando o ano da idade vai cair na data de cadastro (RG2-39).
+
+        Sem data de início nem data de referência, o ano de referência vem de
+        ``created_at``: o torneio criado em dezembro para janeiro calcularia a
+        idade do ano errado.
+        """
+        torneio = self.db.get_tournament(tournament_id) or {}
+        ajustes = self.db.get_tournament_settings(tournament_id) or {}
+        if str(ajustes.get("category_reference_date") or "").strip() or str(torneio.get("start_date") or "").strip():
+            return ""
+        return (
+            "Sem data de início, a idade das categorias usa o ano em que o torneio foi "
+            "cadastrado. Preencha a data de início ou a data de referência."
+        )
+
+    @staticmethod
+    def _refuse_schedule_out_of_order(rows: list[dict[str, Any]]) -> None:
+        """A agenda segue a ordem das rodadas: a R3 não acontece antes da R2 (RG2-39).
+
+        Rodada sem data não entra na conta; no mesmo dia, a hora decide.
+        """
+        anterior: tuple[int, str, str] | None = None
+        for item in sorted(rows, key=lambda row: int(row["round_number"])):
+            if not item["date"]:
+                continue
+            if anterior is not None:
+                numero, data, hora = anterior
+                if item["date"] < data or (
+                    item["date"] == data and hora and item["time"] and item["time"] < hora
+                ):
+                    raise AppError(
+                        f"A rodada {item['round_number']} está marcada antes da rodada {numero}: "
+                        "a agenda precisa seguir a ordem das rodadas."
+                    )
+            anterior = (int(item["round_number"]), item["date"], item["time"])
+
     @staticmethod
     def generate_round_schedule(
         rounds_count: Any,
@@ -1181,7 +1257,13 @@ class TournamentService:
         round_duration_minutes: Any,
         break_minutes: Any,
         rounds_per_day: Any,
+        rest_after_rounds: Iterable[int] = (),
     ) -> list[dict[str, Any]]:
+        """Datas e horas das rodadas a partir do início, do ritmo e das rodadas por dia.
+
+        ``rest_after_rounds`` são as rodadas marcadas com "Folga": depois delas
+        fica um dia inteiro livre, e a rodada seguinte abre o dia (RG2-39).
+        """
         try:
             total_rounds = int(rounds_count)
         except (TypeError, ValueError) as exc:
@@ -1227,19 +1309,25 @@ class TournamentService:
             per_day = total_rounds
 
         step = timedelta(minutes=duration_minutes + interval_minutes)
+        folgas = {int(numero) for numero in rest_after_rounds}
         rows = []
-        for index in range(total_rounds):
-            day_offset = index // per_day
-            slot = index % per_day
+        day_offset = slot = 0
+        for round_number in range(1, total_rounds + 1):
             day_start = datetime.combine(start_day + timedelta(days=day_offset), start_time)
             scheduled_at = day_start + (step * slot)
             rows.append(
                 {
-                    "round_number": index + 1,
+                    "round_number": round_number,
                     "date": scheduled_at.date().isoformat(),
                     "time": scheduled_at.strftime("%H:%M"),
                 }
             )
+            if round_number in folgas:
+                day_offset, slot = day_offset + 2, 0
+            elif slot + 1 == per_day:
+                day_offset, slot = day_offset + 1, 0
+            else:
+                slot += 1
         return rows
 
 class TeamService:

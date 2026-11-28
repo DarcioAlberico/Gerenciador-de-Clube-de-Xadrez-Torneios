@@ -74,7 +74,7 @@ class TRF16Exporter:
         conteudo, players = self._render(tournament_id, up_to_round=None)
         warnings = self.validate(tournament_id)
         problemas = self._file_problems(conteudo, players)
-        if submission and friendly_mode.is_friendly(self.db.get_tournament_settings(tournament_id)):
+        if submission and friendly_mode.played_as_friendly(self.db, tournament_id):
             # MA-06: o torneio amistoso flexibiliza entrada, rodada e atraso;
             # não vai para rating da federação.
             problemas = [friendly_mode.RATING_REFUSAL, *problemas]
@@ -328,7 +328,7 @@ class TRF16Exporter:
         players = self.db.list_players(tournament_id, active_only=False)
         rounds = self.db.list_rounds(tournament_id)
         warnings: list[str] = []
-        if friendly_mode.is_friendly(settings):
+        if friendly_mode.played_as_friendly(self.db, tournament_id):
             warnings.append(friendly_mode.RATING_REFUSAL)
 
         if not players:
