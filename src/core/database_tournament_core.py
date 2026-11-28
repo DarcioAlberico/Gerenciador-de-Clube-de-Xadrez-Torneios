@@ -165,12 +165,34 @@ class TournamentCoreMixin(_DatabaseInfra):
         bye_points: float = 1.0,
         class_id: int | None = None,
         competition_type: str = "individual",
+        *,
+        discard_schedule_above: bool = False,
     ) -> None:
+        """Grava os dados do torneio e ajusta a agenda ao novo total de rodadas.
+
+        Data ou hora marcada acima do novo total só sai com
+        ``discard_schedule_above=True`` (RG2-39): quem decide apagar é o
+        serviço, depois de o árbitro confirmar; antes, o banco apagava calado.
+        """
         club_value = int(club_id) if club_id is not None else None
         class_value = int(class_id) if class_id is not None else None
         competition_value = competition_type.strip() or "individual"
         inicio_antes = str((self.get_tournament(tournament_id) or {}).get("start_date") or "")
         with self.connect() as connection:
+            marcadas = connection.execute(
+                """
+                SELECT round_number FROM round_schedule
+                WHERE tournament_id = ? AND round_number > ?
+                  AND (TRIM(COALESCE(date, '')) <> '' OR TRIM(COALESCE(time, '')) <> '')
+                """,
+                (tournament_id, int(rounds_count)),
+            ).fetchall()
+            if marcadas and not discard_schedule_above:
+                raise ValueError(
+                    "Agenda com data marcada acima do novo total de rodadas: "
+                    f"{[int(row['round_number']) for row in marcadas]}. "
+                    "Passe discard_schedule_above=True depois de confirmar."
+                )
             connection.execute(
                 """
                 UPDATE tournaments
