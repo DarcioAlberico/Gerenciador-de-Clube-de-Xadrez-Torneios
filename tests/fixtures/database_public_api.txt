@@ -55,7 +55,6 @@ create_round_with_pairings
 create_round_with_team_matches
 create_sponsor
 create_standings_snapshot
-create_sync_outbox_event
 create_team
 create_team_lineups_from_round
 create_team_substitution_event
@@ -79,7 +78,6 @@ delete_sponsor
 delete_team
 delete_tournament
 duplicate_tournament
-ensure_local_device
 find_latest_official_player
 get_active_public_token_for_pairing
 get_app_settings
@@ -139,7 +137,6 @@ list_clock_events
 list_club_events
 list_clubs
 list_correction_unlocks
-list_devices
 list_exercise_attempts
 list_exercises
 list_financial_transactions
@@ -185,7 +182,6 @@ list_session_members_for_attendance
 list_sponsors
 list_standings_snapshots
 list_superseded_standings_snapshots
-list_sync_outbox
 list_team_board_results
 list_team_boards
 list_team_lineup_boards
@@ -204,15 +200,11 @@ list_training_list_exercises
 list_training_lists
 list_training_sessions
 mark_standings_snapshots_pending
-mark_sync_outbox_failed
-mark_sync_outbox_rejected
-mark_sync_outbox_synced
 member_attendance_summary
 now
 prune_backups
 record_internal_rating_update
 refresh_player_categories
-register_device
 remove_player_from_team
 remove_tournament_referee
 replace_team_lineup_board_player
@@ -262,7 +254,6 @@ unlink_guardian_from_member
 update_certificate_template
 update_class
 update_club_event
-update_device_status
 update_exercise
 update_financial_transaction
 update_guardian

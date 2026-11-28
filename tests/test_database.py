@@ -94,7 +94,8 @@ class TestDatabaseSchema(DatabaseTestCase):
         # v58 (EQ-01/E6, RGS-30): TPN, semente e rodada de entrada da equipe.
         # v59: textos semeados (níveis e modelos de certificado) com acento.
         # v60: sexo no cadastro de membro (RG2-47).
-        self.assertEqual(Database.SCHEMA_VERSION, 60)
+        # v61: a sincronização com dispositivos sai (RG2-38).
+        self.assertEqual(Database.SCHEMA_VERSION, 61)
 
     def test_core_tables_exist(self) -> None:
         with self.db.connect() as conn:

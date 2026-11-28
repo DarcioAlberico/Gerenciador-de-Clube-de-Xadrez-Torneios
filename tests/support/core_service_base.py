@@ -27,7 +27,6 @@ from src.core.services import (
     PrizeService,
     QRResultService,
     SecurityService,
-    SyncService,
     TeamService,
     TournamentService,
     TrainingService,
@@ -57,7 +56,6 @@ class CoreServiceTestCase(unittest.TestCase):
         self.internal_rating_service = InternalRatingService(self.db)
         self.inventory_service = InventoryService(self.db)
         self.security_service = SecurityService(self.db)
-        self.sync_service = SyncService(self.db)
         self.qr_result_service = QRResultService(self.db, self.service)
         self.export_service = ExportService(self.db, self.service)
         self.certificate_service = CertificateService(self.db, self.service)

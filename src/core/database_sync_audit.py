@@ -1,6 +1,6 @@
-"""Mixin de sincronização, auditoria e dados de apoio da Database.
+"""Mixin de auditoria e dados de apoio da Database.
 
-Logs de auditoria, dispositivos, fila de sync (outbox), eventos de relógio,
+Logs de auditoria, eventos de relógio,
 snapshots de pareamento/classificacao, componentes de tiebreak, tokens
 públicos e submissões de resultado. Extraído de ``src.core.database`` na
 decomposição da God Class. Ver ``_database_base._DatabaseInfra``.
@@ -16,7 +16,7 @@ from ._database_base import _DatabaseInfra
 from .operator import SYSTEM_ACTOR
 
 
-class SyncAuditMixin(_DatabaseInfra):
+class AuditMixin(_DatabaseInfra):
     def create_audit_log(
         self,
         action: str,
@@ -103,204 +103,6 @@ class SyncAuditMixin(_DatabaseInfra):
         if operator is None:
             return SYSTEM_ACTOR, ""
         return operator.name, operator.role
-
-    def ensure_local_device(self, name: str = "") -> dict[str, Any]:
-        settings = self.get_app_settings()
-        device_id = str(settings.get("local_device_id") or "").strip()
-        if not device_id:
-            seed = f"{self.db_path.resolve()}:{self.now()}:{datetime.now().timestamp()}"
-            device_id = "dev_" + self._hash_payload(seed)[:24]
-            self.save_app_settings({"local_device_id": device_id})
-        device_name = name.strip() or str(settings.get("operator_name") or "").strip() or "Desktop local"
-        return self.register_device(device_id=device_id, name=device_name, role="desktop", status="authorized")
-
-    def register_device(
-        self,
-        device_id: str,
-        name: str,
-        role: str = "assistant",
-        status: str = "authorized",
-        secret: str = "",
-        metadata: Mapping[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        safe_device_id = device_id.strip()
-        if not safe_device_id:
-            raise ValueError("device_id obrigatório")
-        safe_status = status.strip() or "authorized"
-        safe_role = role.strip() or "assistant"
-        now = self.now()
-        secret_hash = self._hash_payload(secret) if secret else ""
-        metadata_json = self._canonical_json(metadata)
-        with self.connect() as connection:
-            connection.execute(
-                """
-                INSERT INTO devices (
-                    device_id, name, role, status, secret_hash, metadata_json,
-                    created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(device_id) DO UPDATE SET
-                    name = excluded.name,
-                    role = excluded.role,
-                    status = excluded.status,
-                    secret_hash = CASE
-                        WHEN excluded.secret_hash != '' THEN excluded.secret_hash
-                        ELSE devices.secret_hash
-                    END,
-                    metadata_json = excluded.metadata_json,
-                    updated_at = excluded.updated_at
-                """,
-                (
-                    safe_device_id,
-                    name.strip() or safe_device_id,
-                    safe_role,
-                    safe_status,
-                    secret_hash,
-                    metadata_json,
-                    now,
-                    now,
-                ),
-            )
-            row = connection.execute("SELECT * FROM devices WHERE device_id = ?", (safe_device_id,)).fetchone()
-            return dict(row)
-
-    def list_devices(self, status: str = "") -> list[dict[str, Any]]:
-        params: list[Any] = []
-        where = ""
-        if status:
-            where = "WHERE status = ?"
-            params.append(status.strip())
-        with self.connect() as connection:
-            rows = connection.execute(
-                f"""
-                SELECT *
-                FROM devices
-                {where}
-                ORDER BY status, name
-                """,
-                params,
-            ).fetchall()
-            return self.rows_to_dicts(rows)
-
-    def update_device_status(self, device_id: str, status: str) -> None:
-        with self.connect() as connection:
-            connection.execute(
-                """
-                UPDATE devices
-                SET status = ?, updated_at = ?
-                WHERE device_id = ?
-                """,
-                (status.strip(), self.now(), device_id.strip()),
-            )
-
-    def create_sync_outbox_event(
-        self,
-        action: str,
-        payload: Mapping[str, Any] | list[Any],
-        tournament_id: int | None = None,
-        round_id: int | None = None,
-        entity_type: str = "",
-        entity_id: int | None = None,
-        device_id: str = "",
-        conflict_policy: str = "server_authoritative",
-        status: str = "pending",
-    ) -> int:
-        local_device = self.ensure_local_device()
-        resolved_device_id = device_id.strip() or str(local_device["device_id"])
-        payload_json = self._canonical_json(payload)
-        now = self.now()
-        event_seed = self._canonical_json(
-            {
-                "device_id": resolved_device_id,
-                "action": action,
-                "tournament_id": tournament_id,
-                "round_id": round_id,
-                "entity_type": entity_type,
-                "entity_id": entity_id,
-                "payload_hash": self._hash_payload(payload_json),
-                "created_at": now,
-            }
-        )
-        event_id = self._hash_payload(f"{event_seed}:{datetime.now().timestamp()}")
-        with self.connect() as connection:
-            cursor = connection.execute(
-                """
-                INSERT INTO sync_outbox (
-                    event_id, device_id, tournament_id, round_id, entity_type,
-                    entity_id, action, payload_json, payload_hash, conflict_policy,
-                    status, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    event_id,
-                    resolved_device_id,
-                    tournament_id,
-                    round_id,
-                    entity_type.strip(),
-                    entity_id,
-                    action.strip(),
-                    payload_json,
-                    self._hash_payload(payload_json),
-                    conflict_policy.strip() or "server_authoritative",
-                    status.strip() or "pending",
-                    now,
-                    now,
-                ),
-            )
-            return int(cursor.lastrowid)
-
-    def list_sync_outbox(self, status: str = "pending", limit: int = 200) -> list[dict[str, Any]]:
-        conditions = []
-        params: list[Any] = []
-        if status:
-            conditions.append("status = ?")
-            params.append(status.strip())
-        where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
-        safe_limit = max(1, min(int(limit or 200), 5000))
-        with self.connect() as connection:
-            rows = connection.execute(
-                f"""
-                SELECT *
-                FROM sync_outbox
-                {where}
-                ORDER BY created_at ASC, id ASC
-                LIMIT ?
-                """,
-                [*params, safe_limit],
-            ).fetchall()
-            return self.rows_to_dicts(rows)
-
-    def mark_sync_outbox_synced(self, event_id: str) -> None:
-        with self.connect() as connection:
-            connection.execute(
-                """
-                UPDATE sync_outbox
-                SET status = 'synced', synced_at = ?, updated_at = ?, last_error = ''
-                WHERE event_id = ?
-                """,
-                (self.now(), self.now(), event_id),
-            )
-
-    def mark_sync_outbox_failed(self, event_id: str, error: str) -> None:
-        with self.connect() as connection:
-            connection.execute(
-                """
-                UPDATE sync_outbox
-                SET attempts = attempts + 1, last_error = ?, updated_at = ?, next_attempt_at = ?
-                WHERE event_id = ?
-                """,
-                (error[:500], self.now(), self.now(), event_id),
-            )
-
-    def mark_sync_outbox_rejected(self, event_id: str, error: str) -> None:
-        with self.connect() as connection:
-            connection.execute(
-                """
-                UPDATE sync_outbox
-                SET status = 'rejected', attempts = attempts + 1, last_error = ?, updated_at = ?
-                WHERE event_id = ?
-                """,
-                (error[:500], self.now(), event_id),
-            )
 
     def create_clock_event(
         self,
@@ -460,24 +262,6 @@ class SyncAuditMixin(_DatabaseInfra):
                 ),
             )
             audit_row_id = int(cursor.lastrowid)
-        if not action.startswith("sync_"):
-            self.create_sync_outbox_event(
-                action=action,
-                tournament_id=tournament_id,
-                round_id=round_id,
-                entity_type=entity_type,
-                entity_id=entity_id,
-                payload={
-                    "audit_event_id": event_id,
-                    "action": action,
-                    "actor": resolved_actor,
-                    "role": resolved_role,
-                    "reason": reason,
-                    "before": before,
-                    "after": after,
-                    "metadata": metadata,
-                },
-            )
         return audit_row_id
 
     def list_audit_events(

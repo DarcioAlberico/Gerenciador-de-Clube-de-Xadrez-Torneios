@@ -137,7 +137,6 @@ class AlbericusApp(
         self.event_service = EventService(self.db)
         self.inventory_service = InventoryService(self.db)
         self.security_service = SecurityService(self.db)
-        self.sync_service = SyncService(self.db)
         self.clock_integration_service = ClockIntegrationService(self.db)
         self.pairing_service = PairingService(self.db)
         self.qr_result_service = QRResultService(self.db, self.pairing_service)

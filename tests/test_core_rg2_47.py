@@ -72,7 +72,7 @@ class MigracaoV60Test(unittest.TestCase):
             db = Database(caminho, backup_dir=Path(pasta) / "backups")
             (membro,) = db.list_members()
             self.assertEqual("", membro["sex"])
-            self.assertEqual(Database.SCHEMA_VERSION, 60)
+            self.assertGreaterEqual(Database.SCHEMA_VERSION, 60)
 
 
 if __name__ == "__main__":

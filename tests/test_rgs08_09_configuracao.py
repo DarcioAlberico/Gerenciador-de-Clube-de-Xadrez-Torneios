@@ -45,19 +45,15 @@ class _Falha(RuntimeError):
 def _retrato(db_path: Path) -> dict[str, list[tuple[Any, ...]]]:
     """``SELECT *`` de todas as tabelas, por uma conexão independente.
 
-    As linhas do backup automático (evento ``backup_created`` e o reflexo dele
-    na fila de sincronização) ficam de fora: o aceite admite exatamente esse
-    evento a mais, e ele é contado à parte. Pelo mesmo motivo sai a tabela
-    ``devices``: a fila de sincronização desse evento carimba o ``updated_at``
-    do dispositivo local (``ensure_local_device``).
+    As linhas do backup automático (evento ``backup_created``) ficam de fora:
+    o aceite admite exatamente esse evento a mais, e ele é contado à parte.
     """
     conexao = sqlite3.connect(db_path)
     try:
         tabelas = [
             str(linha[0])
             for linha in conexao.execute(
-                "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' "
-                "AND name <> 'devices'"
+                "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
             )
         ]
         retrato: dict[str, list[tuple[Any, ...]]] = {}

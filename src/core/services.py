@@ -20,7 +20,6 @@ from src.services.qr_result_service import QRResultService
 from src.services.result_server import LocalResultServer
 from src.services.rating_service import OfficialRatingService, InternalRatingService, FideRatingService, NormAssistantService
 from src.services.security_service import SecurityService
-from src.services.sync_service import SyncService
 from src.services.tournament_service import RefereeService, TournamentService, TeamService
 import logging
 logger = logging.getLogger(__name__)

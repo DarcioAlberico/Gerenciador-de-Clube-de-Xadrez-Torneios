@@ -238,13 +238,13 @@ class DatabaseMigrationsTest(CoreServiceTestCase):
                     SELECT name
                     FROM sqlite_master
                     WHERE type = 'table'
-                        AND name IN ('devices', 'sync_outbox', 'clock_events')
+                        AND name = 'clock_events'
                     """
                 ).fetchall()
             }
             integration_indexes = {
                 row["name"]
-                for table_name in ("devices", "sync_outbox", "clock_events")
+                for table_name in ("clock_events",)
                 for row in connection.execute(f"PRAGMA index_list({table_name})").fetchall()
             }
             certificate_template_count = connection.execute(
@@ -323,9 +323,7 @@ class DatabaseMigrationsTest(CoreServiceTestCase):
         self.assertIn("idx_tiebreak_components_player", phase0_indexes)
         self.assertIn("idx_public_tokens_hash", phase0_indexes)
         self.assertIn("idx_result_submissions_status", phase0_indexes)
-        self.assertEqual({"devices", "sync_outbox", "clock_events"}, integration_tables)
-        self.assertIn("idx_devices_status", integration_indexes)
-        self.assertIn("idx_sync_outbox_status", integration_indexes)
+        self.assertEqual({"clock_events"}, integration_tables)
         self.assertIn("idx_clock_events_tournament", integration_indexes)
         self.assertGreaterEqual(certificate_template_count, 7)
         self.assertIn("logo_path", certificate_template_columns)

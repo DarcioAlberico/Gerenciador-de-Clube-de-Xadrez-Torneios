@@ -255,7 +255,7 @@ presencial** ou de um requisito trazido por torneio real.
 - Pré-visualização da atualização oficial dos inscritos com comparação
   antes/depois, lista separada de jogadores sem correspondência e confirmação
   explicita das divergências selecionadas.
-- Central de pendências com filtros por decisão, QR, sincronização e relógio,
+- Central de pendências com filtros por decisão, QR, relógio, desempate e correção,
   busca por mesa ou detalhe e contador atualizado.
 - Painel do árbitro com **alertas clicáveis** (cada alerta leva direto ao
   contexto: pendências bloqueantes, fechar rodada, aprovar QR, ausentes) e
@@ -281,8 +281,6 @@ presencial** ou de um requisito trazido por torneio real.
   sensíveis.
 - Torneios por equipes com escalações por rodada, reservas e histórico de
   substituições.
-- Sincronização multi-dispositivo opcional por fila local, preservando o
-  desktop/banco SQLite como autoridade.
 - Registro opcional de eventos de relógio, tempo e ausência como alertas para
   o árbitro, sem aplicar resultado automaticamente.
 - Geração de diplomas/certificados de torneios em PDF, com modelos
@@ -292,8 +290,8 @@ presencial** ou de um requisito trazido por torneio real.
 ## Manual operacional de arbitragem
 
 O Albericus usa uma regra simples de autoridade: o desktop com o banco SQLite
-local e sempre a fonte oficial do torneio. QR, portal live, sincronização,
-dispositivos, relógios e notificações são camadas auxiliares. Elas podem sugerir
+local e sempre a fonte oficial do torneio. QR, portal live, relógios e
+notificações são camadas auxiliares. Elas podem sugerir
 ou registrar eventos, mas resultado fechado e alteração crítica dependem do
 fluxo normal do árbitro.
 
@@ -367,8 +365,6 @@ computador físico reserva.
 - **Portal live:** publica dados do torneio em modo público ou restrito; dados
   sensíveis ficam fora do modo público.
 - **QR local:** facilita coleta de resultados, mas toda submissão exige revisão.
-- **Sincronização:** eventos ficam em `sync_outbox`; se a rede cair, o torneio
-  continua local e os eventos pendentes podem sincronizar depois.
 - **Dispositivos/relogios:** registram `clock_events` e alertas de anomalia; o
   árbitro continua responsável pela decisão.
 - **Notificações:** são opcionais e auditadas. Sem configuração ativa, são
@@ -376,8 +372,8 @@ computador físico reserva.
 
 ### Checklist de segurança operacional
 
-Cobre as cinco áreas criticas: backup, auditoria, TRF, publicação e
-sincronização opcional.
+Cobre as áreas críticas: backup, jogadores, rodadas, auditoria, TRF e
+publicação.
 
 - **Backup:** pasta de backups configurada e testada; backup manual antes da
   primeira rodada e backup final arquivado junto das exportações.
@@ -391,8 +387,6 @@ sincronização opcional.
   antes de gerar o `Chess-Results (TRF16)`, quando aplicável.
 - **Publicação:** portal live / site HTML revisado para não expor dados
   sensíveis no modo público.
-- **Sincronização:** se usada, `sync_outbox` drenado (sem eventos pendentes)
-  antes de arquivar o torneio.
 
 ### Próximos incrementos
 

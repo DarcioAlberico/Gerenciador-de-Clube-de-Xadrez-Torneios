@@ -112,6 +112,7 @@ class LegacyMigrations:
             58: self._migrate_to_v58,
             59: self._migrate_to_v59,
             60: self._migrate_to_v60,
+            61: self._migrate_to_v61,
         }
 
     def _ensure_current_schema(self, connection: sqlite3.Connection) -> None:
@@ -235,6 +236,8 @@ class LegacyMigrations:
             self._migrate_to_v59(connection)
         if self.db.SCHEMA_VERSION >= 60:
             self._migrate_to_v60(connection)
+        if self.db.SCHEMA_VERSION >= 61:
+            self._migrate_to_v61(connection)
 
     def _migrate_to_v1(self, connection: sqlite3.Connection) -> None:
         now = self.db.now()
@@ -2544,6 +2547,21 @@ class LegacyMigrations:
         """
         if "sex" not in self.db._table_columns(connection, "members"):
             connection.execute("ALTER TABLE members ADD COLUMN sex TEXT NOT NULL DEFAULT ''")
+
+    def _migrate_to_v61(self, connection: sqlite3.Connection) -> None:
+        """A sincronização com dispositivos sai inteira (RG2-38, D5).
+
+        Cada evento de auditoria gravava uma linha em ``sync_outbox`` — 416
+        pendentes no banco real, com a sincronização desligada. Saem as duas
+        tabelas (os índices vão com elas) e as chaves de configuração. Os
+        eventos ``sync_*``/``device_*`` já gravados em ``audit_events`` ficam:
+        são história.
+        """
+        connection.execute("DROP TABLE IF EXISTS sync_outbox")
+        connection.execute("DROP TABLE IF EXISTS devices")
+        connection.execute(
+            "DELETE FROM app_settings WHERE key IN ('local_device_id', 'sync_enabled', 'sync_server_url')"
+        )
 
     def _acentuar_semeado(
         self, connection: sqlite3.Connection, tabela: str, padrao: dict[str, Any]

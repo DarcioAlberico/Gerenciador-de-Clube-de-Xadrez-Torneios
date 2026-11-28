@@ -671,11 +671,6 @@ class PairingService:
         for submission in self.db.list_result_submissions(tournament_id=tournament_id, status="submitted", limit=safe_limit):
             issues.append(_result_submission_issue(submission))
 
-        for event in self.db.list_audit_events(tournament_id, action="sync_remote_rejected", limit=safe_limit):
-            issues.append(_audit_issue(event, "sync", "remote_rejected", "Evento remoto rejeitado"))
-        for event in self.db.list_audit_events(tournament_id, action="sync_event_rejected", limit=safe_limit):
-            issues.append(_audit_issue(event, "sync", "outbox_rejected", "Evento local rejeitado pelo servidor"))
-
         # Queda de seta e ausência BLOQUEIAM até a decisão ser registrada
         # (ARB-03): são os dois eventos que a FIDE não deixa passar sem o
         # árbitro decidir — quem ganha a partida? houve reclamação? perdeu por

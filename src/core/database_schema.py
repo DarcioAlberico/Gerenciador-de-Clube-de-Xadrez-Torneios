@@ -991,42 +991,6 @@ CREATE TABLE IF NOT EXISTS result_submissions (
     FOREIGN KEY (token_id) REFERENCES public_tokens(id) ON DELETE SET NULL
 );
 
-CREATE TABLE IF NOT EXISTS devices (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    device_id TEXT NOT NULL UNIQUE,
-    name TEXT NOT NULL,
-    role TEXT NOT NULL DEFAULT 'assistant',
-    status TEXT NOT NULL DEFAULT 'authorized',
-    secret_hash TEXT DEFAULT '',
-    last_seen_at TEXT DEFAULT '',
-    metadata_json TEXT DEFAULT '',
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS sync_outbox (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    event_id TEXT NOT NULL UNIQUE,
-    device_id TEXT NOT NULL DEFAULT '',
-    tournament_id INTEGER,
-    round_id INTEGER,
-    entity_type TEXT NOT NULL DEFAULT '',
-    entity_id INTEGER,
-    action TEXT NOT NULL,
-    payload_json TEXT NOT NULL,
-    payload_hash TEXT NOT NULL,
-    conflict_policy TEXT NOT NULL DEFAULT 'server_authoritative',
-    status TEXT NOT NULL DEFAULT 'pending',
-    attempts INTEGER NOT NULL DEFAULT 0,
-    last_error TEXT DEFAULT '',
-    next_attempt_at TEXT DEFAULT '',
-    synced_at TEXT DEFAULT '',
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
-    FOREIGN KEY (round_id) REFERENCES rounds(id) ON DELETE SET NULL
-);
-
 CREATE TABLE IF NOT EXISTS clock_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     event_id TEXT NOT NULL UNIQUE,
@@ -1441,14 +1405,6 @@ CREATE INDEX IF NOT EXISTS idx_result_submissions_status
 CREATE INDEX IF NOT EXISTS idx_result_submissions_pairing
     ON result_submissions(pairing_id, status);
 
-CREATE INDEX IF NOT EXISTS idx_devices_status
-    ON devices(status, role, name);
-
-CREATE INDEX IF NOT EXISTS idx_sync_outbox_status
-    ON sync_outbox(status, next_attempt_at, created_at);
-
-CREATE INDEX IF NOT EXISTS idx_sync_outbox_tournament
-    ON sync_outbox(tournament_id, status, created_at);
 
 CREATE INDEX IF NOT EXISTS idx_clock_events_tournament
     ON clock_events(tournament_id, round_id, occurred_at);
