@@ -24,7 +24,7 @@ from src.services.fide_rating import build_fide_report_rows
 from src.services.list_layouts import STANDINGS_COLUMNS, resolve_column_specs, resolve_columns
 from src.services.prizes import PRIZE_KINDS, PRIZE_POLICIES, allocate_prizes
 from src.domain.dates import DataInvalida, parse_date, storage_text
-from src.services.trf_import import TrfDateError, build_trf_rounds, parse_trf
+from src.services.trf_import import TrfError, build_trf_rounds, parse_trf
 from src.services.transactions import atomic
 from src.services.permissions import requires
 
@@ -340,16 +340,7 @@ class ImportService:
         vazio; o round-trip promete o que o TRF carrega, e não mais do que isso.
         """
         path = Path(file_path)
-        content = read_text_file(path)
-
-        try:
-            parsed = parse_trf(content)
-        except TrfDateError as exc:
-            # Data impossível no arquivo (RGS-07): nada é criado, e a mensagem
-            # diz linha e colunas para o árbitro corrigir o TRF.
-            raise AppError(f"{exc} Corrija o arquivo e importe de novo.") from exc
-        if not parsed["players"]:
-            raise AppError("Arquivo TRF sem jogadores reconhecíveis (linhas 001).")
+        parsed = self._read_trf(path)
 
         name = parsed["name"] or f"Torneio importado ({path.stem})"
         rounds_count = parsed["rounds_count"] if parsed["rounds_count"] > 0 else 7
@@ -409,6 +400,7 @@ class ImportService:
 
             equipes = self._create_imported_teams(tournament_id, parsed.get("teams") or [], rank_to_id)
             rounds = build_trf_rounds(parsed["players"], rank_to_id)
+            open_rounds = 0
             for round_number, pairings in rounds:
                 round_id = self.db.create_round_with_pairings(
                     tournament_id,
@@ -417,7 +409,12 @@ class ImportService:
                     pairing_engine_version="trf-import",
                     ruleset_version="trf-import",
                 )
-                self.db.close_round(round_id)
+                # RG2-13 (D8): só fecha a rodada com todas as mesas decididas;
+                # a pareada e ainda sem resultado entra aberta, para continuar.
+                if all(pairing["result"] in FINAL_RESULTS for pairing in pairings):
+                    self.db.close_round(round_id)
+                else:
+                    open_rounds += 1
 
         logger.info(
             "TRF importado de %s: torneio %s com %s jogadores e %s rodadas",
@@ -431,9 +428,35 @@ class ImportService:
             "name": name,
             "players_imported": len(parsed["players"]),
             "rounds_imported": len(rounds),
+            "open_rounds": open_rounds,
             "rounds_count": rounds_count,
             "teams_imported": equipes,
+            "warnings": list(parsed["warnings"]),
         }
+
+    def preview_trf(self, file_path: str | Path) -> dict[str, Any]:
+        """O que ``import_trf`` vai criar, e os avisos, sem gravar nada (RG2-13)."""
+        path = Path(file_path)
+        parsed = self._read_trf(path)
+        return {
+            "name": parsed["name"] or f"Torneio importado ({path.stem})",
+            "players": len(parsed["players"]),
+            "rounds_count": parsed["rounds_count"],
+            "warnings": list(parsed["warnings"]),
+        }
+
+    @staticmethod
+    def _read_trf(path: Path) -> dict[str, Any]:
+        """Lê e interpreta o TRF; erro de formato vira ``AppError`` com a linha."""
+        try:
+            parsed = parse_trf(read_text_file(path))
+        except TrfError as exc:
+            # Data impossível (RGS-07) ou rank ilegível/repetido (RG2-13): nada é
+            # criado, e a mensagem diz a linha para o árbitro corrigir o TRF.
+            raise AppError(f"{exc} Corrija o arquivo e importe de novo.") from exc
+        if not parsed["players"]:
+            raise AppError("Arquivo TRF sem jogadores reconhecíveis (linhas 001).")
+        return parsed
 
     def _create_imported_teams(
         self,
