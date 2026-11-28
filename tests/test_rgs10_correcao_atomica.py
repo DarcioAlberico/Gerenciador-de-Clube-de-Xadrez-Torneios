@@ -30,13 +30,14 @@ _MOTIVO = "Sumula trocada pelo arbitro"
 
 
 class _TresRodadasFechadas(CoreServiceTestCase):
-    """4 jogadores, 3 rodadas fechadas com vitória das brancas."""
+    """4 jogadores (``JOGADORES``), 3 rodadas fechadas com vitória das brancas."""
 
     RODADAS = 3
+    JOGADORES = 4
 
     def setUp(self) -> None:
         super().setUp()
-        self.player_ids = self._create_players(4)
+        self.player_ids = self._create_players(self.JOGADORES)
         self.round_ids: list[int] = []
         for _ in range(self.RODADAS):
             round_data = self.service.generate_next_round(self.tournament_id)
@@ -147,6 +148,19 @@ class CorrecaoAtomicaTest(_TresRodadasFechadas):
         self._corrigir_r1()
         self.assertEqual([(self.tournament_id, {1: 1, 2: 1, 3: 1})], vistos)
 
+
+
+# --------------------------------------------------------------------------- #
+# 2. A reconciliação e o trabalhador
+# --------------------------------------------------------------------------- #
+
+
+class LancamentoEmRodadaAbertaTest(_TresRodadasFechadas):
+    """Precisa de uma R4. Com 4 jogadores (ou 6, com estes resultados) não há R4
+    sem repetir confronto: o motor antigo repetia; desde o RG2-07b ele recusa."""
+
+    JOGADORES = 8
+
     def test_lancamento_em_rodada_aberta_nao_marca_nem_avisa(self) -> None:
         vistos: list[int] = []
         self.service.on_snapshots_pending = vistos.append
@@ -155,11 +169,6 @@ class CorrecaoAtomicaTest(_TresRodadasFechadas):
         self.service.update_result(self.tournament_id, int(mesa["id"]), "1-0")
         self.assertEqual([], vistos)
         self.assertEqual({1: 0, 2: 0, 3: 0}, self._pendencias())
-
-
-# --------------------------------------------------------------------------- #
-# 2. A reconciliação e o trabalhador
-# --------------------------------------------------------------------------- #
 
 
 class ReconciliacaoTest(_TresRodadasFechadas):
