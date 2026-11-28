@@ -240,12 +240,16 @@ def team_pairing_order_key(
     team: dict[str, Any],
     standings: dict[int, dict[str, Any]],
     seed_ratings: dict[int, int],
+    *,
+    primary: str = "match_points",
+    secondary: str = "game_points",
 ) -> tuple[float, float, int, str]:
+    """Ordem de pareamento da equipe: critério principal, o outro, semente, nome (RG2-23)."""
     team_id = int(team["id"])
     standing = standings.get(team_id, {})
     return (
-        -float(standing.get("match_points", 0.0) or 0.0),
-        -float(standing.get("game_points", 0.0) or 0.0),
+        -float(standing.get(primary, 0.0) or 0.0),
+        -float(standing.get(secondary, 0.0) or 0.0),
         -int(seed_ratings.get(team_id, 0)),
         str(team["name"]).casefold(),
     )
@@ -274,6 +278,9 @@ def choose_team_bye(
     standings: dict[int, dict[str, Any]],
     bye_team_ids: set[int],
     seed_ratings: dict[int, int],
+    *,
+    primary: str = "match_points",
+    secondary: str = "game_points",
 ) -> dict[str, Any]:
     candidates = [team for team in teams if int(team["id"]) not in bye_team_ids]
     if not candidates:
@@ -281,8 +288,8 @@ def choose_team_bye(
     return min(
         candidates,
         key=lambda team: (
-            float(standings.get(int(team["id"]), {}).get("match_points", 0.0) or 0.0),
-            float(standings.get(int(team["id"]), {}).get("game_points", 0.0) or 0.0),
+            float(standings.get(int(team["id"]), {}).get(primary, 0.0) or 0.0),
+            float(standings.get(int(team["id"]), {}).get(secondary, 0.0) or 0.0),
             seed_ratings.get(int(team["id"]), 0),
             str(team["name"]).casefold(),
         ),
@@ -494,8 +501,9 @@ def team_pair_penalty(
     score_group_float_penalty: int,
     score_diff_penalty: int,
     float_histories: dict[int, list[str]] | None = None,
+    score_key: str = "match_points",
 ) -> float:
-    """Custo de um confronto por equipes.
+    """Custo de um confronto por equipes; ``score_key`` é o critério principal (RG2-23).
 
     `float_histories` traz a penalidade de FLOAT REPETIDO, que o individual já
     tinha e aqui faltava (PAR-04): sem ela, a mesma equipe podia descer de grupo
@@ -503,8 +511,8 @@ def team_pair_penalty(
     """
     team_id = int(team["id"])
     opponent_id = int(opponent["id"])
-    team_score = float(standings.get(team_id, {}).get("match_points", 0.0) or 0.0)
-    opponent_score = float(standings.get(opponent_id, {}).get("match_points", 0.0) or 0.0)
+    team_score = float(standings.get(team_id, {}).get(score_key, 0.0) or 0.0)
+    opponent_score = float(standings.get(opponent_id, {}).get(score_key, 0.0) or 0.0)
     score_diff = abs(team_score - opponent_score)
     penalty = score_diff * score_diff_penalty
     if score_diff:

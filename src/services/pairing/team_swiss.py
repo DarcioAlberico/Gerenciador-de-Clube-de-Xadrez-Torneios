@@ -581,6 +581,23 @@ def team_round_violations(
     return problemas
 
 
+TEAM_SCORE_KEYS = ("match_points", "game_points")
+
+
+def team_score_keys(settings: dict[str, Any]) -> tuple[str, str]:
+    """(principal, secundário) do pareamento por equipes, pelo critério configurado.
+
+    O pareamento agrupava sempre por match points, enquanto a classificação e
+    o TRF25 respeitam ``team_standing_primary`` (RG2-23). Valor desconhecido
+    fica no padrão: match points.
+    """
+    primary = str(settings.get("team_standing_primary") or "match_points")
+    if primary not in TEAM_SCORE_KEYS:
+        primary = "match_points"
+    secondary = next(key for key in TEAM_SCORE_KEYS if key != primary)
+    return primary, secondary
+
+
 def swiss_team_matches(
     teams: list[dict[str, Any]],
     rosters: dict[int, dict[int, int]],
@@ -609,14 +626,18 @@ def swiss_team_matches(
         for team_id, item in standings.items()
     }
 
+    primary, secondary = team_score_keys(settings)
+
     def order_key(team: dict[str, Any]) -> Any:
-        return team_pairing_order_key(team, standings, seed_ratings)
+        return team_pairing_order_key(team, standings, seed_ratings, primary=primary, secondary=secondary)
 
     pending = sorted(teams, key=order_key)
 
     bye_team = None
     if len(pending) % 2 == 1:
-        bye_team = choose_team_bye(pending, standings, bye_team_ids, seed_ratings)
+        bye_team = choose_team_bye(
+            pending, standings, bye_team_ids, seed_ratings, primary=primary, secondary=secondary
+        )
         pending.remove(bye_team)
 
     def cost(team: dict[str, Any], opponent: dict[str, Any]) -> float:
@@ -630,6 +651,7 @@ def swiss_team_matches(
             score_group_float_penalty=score_group_float_penalty,
             score_diff_penalty=score_diff_penalty,
             float_histories=float_histories,
+            score_key=primary,
         )
 
     def solve(group: list[dict[str, Any]]) -> list[tuple[dict[str, Any], dict[str, Any]]]:
@@ -640,7 +662,7 @@ def swiss_team_matches(
 
     admissible = colors_admissible(histories, colors)
     def score_of(team: dict[str, Any]) -> float:
-        return float(standings.get(int(team["id"]), {}).get("match_points", 0.0) or 0.0)
+        return float(standings.get(int(team["id"]), {}).get(primary, 0.0) or 0.0)
 
     team_pairs = score_group_pairs(
         pending,
@@ -663,7 +685,7 @@ def swiss_team_matches(
                 teams,
                 key=lambda team: (
                     score_of(team),
-                    float(standings.get(int(team["id"]), {}).get("game_points", 0.0) or 0.0),
+                    float(standings.get(int(team["id"]), {}).get(secondary, 0.0) or 0.0),
                     seed_ratings.get(int(team["id"]), 0),
                     str(team["name"]).casefold(),
                 ),
