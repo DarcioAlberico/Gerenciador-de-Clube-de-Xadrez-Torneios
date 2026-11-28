@@ -17,6 +17,8 @@ from src.core.database import BASE_DIR, DEFAULT_CERTIFICATE_TEMPLATES, Database
 from src.core.database_tournament_core import default_pairing_system
 from src.domain.dates import Data, DateError, normalize_date, parse_date
 from src.services.constants import *
+from src.domain.numbers import BYE_POINTS, setting_number
+from src.services.numeric_fields import decimal_field, money_field, points_field
 from src.services.pairing import (
     acceleration_spec,
     parse_player_tiebreak_sequence,
@@ -570,53 +572,58 @@ class TournamentService:
 
         child_ids: list[int] = []
         index = 0
-        for group_index in range(groups):
-            size = base_size + (1 if group_index < remainder else 0)
-            chunk = ordered[index:index + size]
-            index += size
-            label = chr(ord("A") + group_index)
-            child_id = self.db.create_tournament(
-                name=f"{tournament['name']} - {label}",
-                club_id=tournament.get("club_id"),
-                location=str(tournament.get("location") or ""),
-                rounds_count=int(tournament.get("rounds_count") or 5),
-                time_control=str(tournament.get("time_control") or ""),
-                start_date=str(tournament.get("start_date") or ""),
-                end_date=str(tournament.get("end_date") or ""),
-                bye_points=float(tournament.get("bye_points") or 1.0),
-                class_id=tournament.get("class_id"),
-                competition_type="individual",
-            )
-            self.db.set_tournament_parent(child_id, tournament_id)
-            self.db.save_tournament_settings(child_id, source_settings)
-            self.db.save_round_schedule(child_id, source_schedule)
-            if source_prizes:
-                self.db.replace_tournament_prizes(child_id, source_prizes)
-            if source_standings_layout:
-                self.db.save_report_layout(child_id, "standings", source_standings_layout)
-            for player in chunk:
-                self.db.create_player(
-                    tournament_id=child_id,
-                    name=str(player.get("name") or ""),
-                    surname=str(player.get("surname") or ""),
-                    given_name=str(player.get("given_name") or ""),
-                    title=str(player.get("title") or ""),
-                    sex=str(player.get("sex") or ""),
-                    club=str(player.get("club") or ""),
-                    rating=int(player.get("rating") or 0),
-                    national_rating=int(player.get("national_rating") or 0),
-                    international_rating=int(player.get("international_rating") or 0),
-                    category=str(player.get("category") or ""),
-                    federation_id=str(player.get("federation_id") or ""),
-                    fide_id=str(player.get("fide_id") or ""),
-                    cbx_id=str(player.get("cbx_id") or ""),
-                    lbx_id=str(player.get("lbx_id") or ""),
-                    birth_date=str(player.get("birth_date") or ""),
-                    member_id=player.get("member_id"),
-                    player_status=str(player.get("player_status") or "active"),
-                    starting_points=float(player.get("starting_points") or 0.0),
+        # RG2-10: ~8 gravações por grupo; uma falha no grupo B não deixa o A pela metade.
+        with self.db.transaction():
+            for group_index in range(groups):
+                size = base_size + (1 if group_index < remainder else 0)
+                chunk = ordered[index:index + size]
+                index += size
+                label = chr(ord("A") + group_index)
+                child_id = self.db.create_tournament(
+                    name=f"{tournament['name']} - {label}",
+                    club_id=tournament.get("club_id"),
+                    location=str(tournament.get("location") or ""),
+                    rounds_count=int(tournament.get("rounds_count") or 5),
+                    time_control=str(tournament.get("time_control") or ""),
+                    start_date=str(tournament.get("start_date") or ""),
+                    end_date=str(tournament.get("end_date") or ""),
+                    bye_points=setting_number(tournament, "bye_points", 1.0),
+                    class_id=tournament.get("class_id"),
+                    competition_type="individual",
                 )
-            child_ids.append(child_id)
+                self.db.set_tournament_parent(child_id, tournament_id)
+                self.db.save_tournament_settings(child_id, source_settings)
+                self.db.save_round_schedule(child_id, source_schedule)
+                if source_prizes:
+                    self.db.replace_tournament_prizes(child_id, source_prizes)
+                if source_standings_layout:
+                    self.db.save_report_layout(child_id, "standings", source_standings_layout)
+                for player in chunk:
+                    self.db.create_player(
+                        tournament_id=child_id,
+                        name=str(player.get("name") or ""),
+                        surname=str(player.get("surname") or ""),
+                        given_name=str(player.get("given_name") or ""),
+                        title=str(player.get("title") or ""),
+                        sex=str(player.get("sex") or ""),
+                        club=str(player.get("club") or ""),
+                        rating=int(player.get("rating") or 0),
+                        national_rating=int(player.get("national_rating") or 0),
+                        international_rating=int(player.get("international_rating") or 0),
+                        category=str(player.get("category") or ""),
+                        federation_id=str(player.get("federation_id") or ""),
+                        fide_id=str(player.get("fide_id") or ""),
+                        cbx_id=str(player.get("cbx_id") or ""),
+                        lbx_id=str(player.get("lbx_id") or ""),
+                        birth_date=str(player.get("birth_date") or ""),
+                        member_id=player.get("member_id"),
+                        player_status=str(player.get("player_status") or "active"),
+                        starting_points=float(player.get("starting_points") or 0.0),
+                        rapid_rating=int(player.get("rapid_rating") or 0),
+                        blitz_rating=int(player.get("blitz_rating") or 0),
+                        games_played=int(player.get("games_played") or 0),
+                    )
+                child_ids.append(child_id)
 
         logger.info("Torneio %s dividido em %s grupos: %s", tournament_id, groups, child_ids)
         return child_ids
@@ -673,12 +680,7 @@ class TournamentService:
         if rounds_count < 1:
             raise AppError("O torneio precisa ter pelo menos uma rodada.")
 
-        try:
-            bye_points = float(str(data.get("bye_points") or "0").replace(",", "."))
-        except ValueError as exc:
-            raise AppError("Pontuação do bye inválida.") from exc
-        if bye_points < 0:
-            raise AppError("Pontuação do bye não pode ser negativa.")
+        bye_points = points_field(data.get("bye_points"), "Pontuação do bye inválida.", BYE_POINTS, vazio=0.0)
 
         start_date = self._normalize_optional_date(data.get("start_date", ""), "Data inicial inválida.")
         end_date = self._normalize_optional_date(data.get("end_date", ""), "Data final inválida.")
@@ -817,10 +819,9 @@ class TournamentService:
             ):
                 raise AppError("Método de aceleração inválido.")
 
-        try:
-            late_entry_points = float(str(data.get("late_entry_points") or "0").replace(",", "."))
-        except ValueError as exc:
-            raise AppError("Pontos por adesão tardia inválidos.") from exc
+        late_entry_points = points_field(
+            data.get("late_entry_points"), "Pontos por adesão tardia inválidos.", BYE_POINTS, vazio=0.0
+        )
         try:
             team_boards_count = int(data.get("team_boards_count") or 4)
         except ValueError as exc:
@@ -854,16 +855,9 @@ class TournamentService:
         }
         team_points: dict[str, float] = {}
         for field, message in team_point_fields.items():
-            raw_value = data.get(field)
-            if raw_value in (None, ""):
-                raw_value = team_point_defaults[field]
-            try:
-                value = float(str(raw_value).replace(",", "."))
-            except ValueError as exc:
-                raise AppError(message) from exc
-            if value < 0:
-                raise AppError(message)
-            team_points[field] = value
+            team_points[field] = points_field(
+                data.get(field), message, None, vazio=float(team_point_defaults[field])
+            )
 
         rating_fees: dict[str, float] = {}
         for field, label in (
@@ -871,10 +865,7 @@ class TournamentService:
             ("rating_fee_cbx", "CBX"),
             ("rating_fee_lbx", "LBX"),
         ):
-            try:
-                value = float(str(data.get(field) or "0").replace(",", "."))
-            except ValueError as exc:
-                raise AppError(f"Taxa de rating {label} inválida.") from exc
+            value = money_field(data.get(field), f"Taxa de rating {label} inválida.")
             if value < 0:
                 raise AppError(f"Taxa de rating {label} não pode ser negativa.")
             rating_fees[field] = value
@@ -916,10 +907,7 @@ class TournamentService:
         prize_policy = str(data.get("prize_policy", "best_only")).strip() or "best_only"
         if prize_policy not in PRIZE_POLICIES:
             raise AppError("Política de premiação inválida.")
-        try:
-            prize_tax_percent = float(str(data.get("prize_tax_percent") or "0").replace(",", "."))
-        except ValueError as exc:
-            raise AppError("Imposto de premiação inválido.") from exc
+        prize_tax_percent = decimal_field(data.get("prize_tax_percent"), "Imposto de premiação inválido.", vazio=0.0)
         if not 0.0 <= prize_tax_percent <= 100.0:
             raise AppError("Imposto de premiação deve estar entre 0 e 100%.")
 

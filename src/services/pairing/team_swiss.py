@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from src.domain.numbers import setting_number
 from src.services.constants import AppError
 from src.services.pairing.constraints import (
     choose_team_bye,
@@ -375,8 +376,8 @@ def team_bye_payload(
     pelo mesmo `result` (ver team_bye_summary)."""
     match_points, game_points = team_bye_points(
         bye_type,
-        win_points=float(settings.get("team_match_win_points", 2.0) or 2.0),
-        draw_points=float(settings.get("team_match_draw_points", 1.0) or 1.0),
+        win_points=setting_number(settings, "team_match_win_points", 2.0),
+        draw_points=setting_number(settings, "team_match_draw_points", 1.0),
         loss_points=float(settings.get("team_match_loss_points", 0.0) or 0.0),
         boards_count=boards_count,
     )

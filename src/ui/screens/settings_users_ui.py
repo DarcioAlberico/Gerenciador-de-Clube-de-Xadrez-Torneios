@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from ..support import *
 from ..components import Dialog, FormStack, actions_bar
+from src.domain.numbers import NumberError, parse_decimal_br
 
 
 class SettingsUsersMixin:
@@ -100,10 +101,11 @@ class SettingsUsersMixin:
             active_var.set(bool(plan["active"]))
 
         def save():
+            # RG2-46: "1.500" é R$ 1.500,00 — a mesma leitura do serviço de finanças.
             try:
-                amount = float(amount_entry.get().replace(",", "."))
-            except ValueError:
-                self._show_error("Valor inválido.")
+                amount = round(parse_decimal_br(amount_entry.get()) or 0.0, 2)
+            except NumberError as exc:
+                self._show_error(f"Valor inválido: {exc}")
                 return
 
             name = name_entry.get().strip()

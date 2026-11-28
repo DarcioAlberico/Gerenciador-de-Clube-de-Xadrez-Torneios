@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, Callable, Mapping, Sequence
 
 from src.core.database import Database
 from src.core.database_tournament_core import default_tiebreak_engine
+from src.domain.numbers import setting_number
 from src.services.constants import (
     ACCELERATION_METHODS as _ACCELERATION_METHODS,
     AppError,
@@ -2609,8 +2610,8 @@ class PairingService:
             int(tournament.get("rounds_count") or 0),
             round_number,
             primary_score=str(settings.get("team_standing_primary") or "match_points"),
-            win_points=float(settings.get("team_match_win_points", 2.0) or 2.0),
-            draw_points=float(settings.get("team_match_draw_points", 1.0) or 1.0),
+            win_points=setting_number(settings, "team_match_win_points", 2.0),
+            draw_points=setting_number(settings, "team_match_draw_points", 1.0),
             loss_points=float(settings.get("team_match_loss_points", 0.0) or 0.0),
         )
         pareadas = {int(team["id"]) for team in to_pair}
@@ -3540,9 +3541,9 @@ class PairingService:
                 summaries.append(
                     _team_bye_summary(
                         match,
-                        win_points=float(settings.get("team_match_win_points", 2.0) or 2.0),
+                        win_points=setting_number(settings, "team_match_win_points", 2.0),
                         boards_count=int(settings.get("team_boards_count", 4) or 4),
-                        draw_points=float(settings.get("team_match_draw_points", 1.0) or 1.0),
+                        draw_points=setting_number(settings, "team_match_draw_points", 1.0),
                         loss_points=float(settings.get("team_match_loss_points", 0.0) or 0.0),
                     )
                 )
@@ -3576,9 +3577,9 @@ class PairingService:
                     white_team_player_ids,
                     black_team_player_ids,
                     RESULT_POINTS,
-                    win_points=float(settings.get("team_match_win_points", 2.0) or 2.0),
+                    win_points=setting_number(settings, "team_match_win_points", 2.0),
                     loss_points=float(settings.get("team_match_loss_points", 0.0) or 0.0),
-                    draw_points=float(settings.get("team_match_draw_points", 1.0) or 1.0),
+                    draw_points=setting_number(settings, "team_match_draw_points", 1.0),
                 )
             )
 

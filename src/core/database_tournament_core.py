@@ -14,6 +14,7 @@ import secrets
 import sqlite3
 from typing import Any
 
+from src.domain.numbers import setting_number
 from src.services.categories import from_row as category_from_row
 
 from ._database_base import _DatabaseInfra
@@ -544,8 +545,8 @@ class TournamentCoreMixin(_DatabaseInfra):
                     str(data.get("prize_policy", "best_only")).strip() or "best_only",
                     float(data.get("prize_tax_percent", 0.0) or 0.0),
                     int(data.get("team_boards_count", 4) or 4),
-                    float(data.get("team_match_win_points", 2.0) or 2.0),
-                    float(data.get("team_match_draw_points", 1.0) or 1.0),
+                    setting_number(data, "team_match_win_points", 2.0),
+                    setting_number(data, "team_match_draw_points", 1.0),
                     float(data.get("team_match_loss_points", 0.0) or 0.0),
                     str(data.get("team_pairing_method", "swiss")).strip() or "swiss",
                     str(data.get("team_standing_primary", "match_points")).strip() or "match_points",

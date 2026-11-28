@@ -137,6 +137,7 @@ from src.services.pairing.acceleration import (
 )
 from src.services.pairing.standings_cut import teams_as_of_round
 from src.services.pairing.initial_color import normalize_initial_color
+from src.domain.numbers import setting_number
 
 
 
@@ -540,7 +541,7 @@ class TRF25Exporter(TRF16Exporter):
             [int(item["team_id"]) for item in prepared],
             [int(team["id"]) for team in iniciais],
         )
-        win = float(settings.get("team_match_win_points", 2.0) or 2.0)
+        win = setting_number(settings, "team_match_win_points", 2.0)
         return [
             record_250(vp * win, 0.0, first_round, last_round, [first, last])
             for vp, first_round, last_round, first, last in baku_acceleration_blocks(

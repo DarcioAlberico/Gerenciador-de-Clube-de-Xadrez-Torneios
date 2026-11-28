@@ -19,6 +19,7 @@ from src.domain.dates import is_iso_date
 from src.core.database import BASE_DIR, DEFAULT_CERTIFICATE_TEMPLATES, Database
 from src.services.constants import *
 from src.services.export_service import ImportService
+from src.services.numeric_fields import rating_cell
 from src.services.fide_list import parse_rating_list as parse_fide_rating_list
 from src.services import friendly_mode
 from src.services.fide_norms import build_norm_report
@@ -702,7 +703,12 @@ class OfficialRatingService:
     @staticmethod
     def _official_payload(row: dict[str, Any], source: str) -> dict[str, Any]:
         pick = ImportService._pick
-        parse_optional_int = ImportService._parse_optional_int
+        # Lista oficial: "1.850" é 1850 (RG2-14). Célula ilegível continua 0 aqui,
+        # como antes — a lista não tem "erro de linha" por rating, e uma célula
+        # ruim não pode derrubar as outras 500 mil.
+        def parse_optional_int(texto: str) -> int:
+            return rating_cell(texto, "rating")[0]
+
         # "fide_no"/"id_no"/"rtg_nat"/"rtg_int"/"clubname"/"birthday" são os
         # cabeçalhos do formato Swiss-Manager usado pela lista da LBX (Liga
         # Brasileira de Xadrez); os demais cobrem CSV/Excel próprios e a FIDE.
