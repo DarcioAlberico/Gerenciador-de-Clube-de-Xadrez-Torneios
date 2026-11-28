@@ -100,6 +100,9 @@ class TournamentListController:
     def suggested_copy_name(tournament: dict[str, Any]) -> str:
         return f"{tournament['name']} - cópia"
 
+    def deletion_summary(self, tournament_id: int) -> dict[str, Any]:
+        return dict(self.tournament_service.deletion_summary(tournament_id))
+
     def delete(self, tournament_id: int) -> None:
         self.tournament_service.delete_tournament(tournament_id)
 

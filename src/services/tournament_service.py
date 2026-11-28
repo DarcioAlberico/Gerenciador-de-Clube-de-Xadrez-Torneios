@@ -205,12 +205,37 @@ class TournamentService:
             )
         return limpos
 
-    def delete_tournament(self, tournament_id: int) -> None:
+    def deletion_summary(self, tournament_id: int) -> dict[str, Any]:
+        """O que a exclusão apaga, para a confirmação dizer (RG2-28)."""
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
             raise AppError("Selecione um torneio válido para excluir.")
-        self.db.delete_tournament(tournament_id)
-        logger.info("Torneio excluido: %s", tournament_id)
+        rounds = self.db.list_rounds(tournament_id)
+        return {
+            "name": str(tournament["name"]),
+            "players": len(self.db.list_players(tournament_id, active_only=False)),
+            "rounds": len(rounds),
+            "closed_rounds": sum(1 for item in rounds if str(item.get("status") or "") == "closed"),
+        }
+
+    def delete_tournament(self, tournament_id: int) -> None:
+        """Exclui o torneio com backup antes e registro na auditoria global (RG2-28).
+
+        A auditoria do torneio (``audit_events``) some com ele, por ``ON DELETE
+        CASCADE``; o rastro fica em ``audit_logs``. Sem backup, não exclui.
+        """
+        resumo = self.deletion_summary(tournament_id)
+        backup_path = self.db.backup_before("delete_tournament", tournament_id=tournament_id)
+        with self.db.transaction():
+            self.db.create_audit_log(
+                action="tournament_deleted",
+                entity_type="tournament",
+                entity_id=int(tournament_id),
+                description=f"Torneio excluído: {resumo['name']}",
+                metadata_json=json.dumps({**resumo, "backup": str(backup_path)}, ensure_ascii=False, sort_keys=True),
+            )
+            self.db.delete_tournament(tournament_id)
+        logger.info("Torneio excluido: %s (backup %s)", tournament_id, backup_path)
 
     def save_profile(
         self,
