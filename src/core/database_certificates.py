@@ -180,6 +180,19 @@ class CertificateMixin(_DatabaseInfra):
                 inserted_ids.append(int(cursor.lastrowid))
         return inserted_ids
 
+    def count_tournament_certificates(self, tournament_id: int) -> int:
+        """Certificados não revogados emitidos para o torneio (RG2-15, D3)."""
+        with self.connect() as connection:
+            row = connection.execute(
+                """
+                SELECT COUNT(*) AS total
+                FROM certificate_issuances
+                WHERE context_type = 'tournament' AND source_id = ? AND revoked = 0
+                """,
+                (int(tournament_id),),
+            ).fetchone()
+            return int(row["total"] if row else 0)
+
     def list_certificate_issuances(
         self,
         limit: int = 50,

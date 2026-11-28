@@ -40,9 +40,11 @@ from src.services.tournament_configuration import (
     TIPO_MUDANCA_ESTRUTURAL,
     TIPO_MUDANCAS_PERIGOSAS,
     TIPO_MOTOR_RESERVA,
+    TIPO_RECALCULO_CATEGORIAS,
     Confirmacao,
     PerfilTorneio,
     agenda_perdida,
+    confirmacao_recalculo_categorias,
     confirmacoes_pendentes,
     escolhe_motor_reserva,
     liga_mudancas_perigosas,
@@ -160,7 +162,7 @@ class TournamentService:
         return self.db.list_tournament_categories(tournament_id)
 
     def replace_categories(
-        self, tournament_id: int, categories: list[dict[str, Any]]
+        self, tournament_id: int, categories: list[dict[str, Any]], *, confirmed: bool = False
     ) -> None:
         """Regrava as categorias do torneio, normalizadas (ORG-01).
 
@@ -172,8 +174,72 @@ class TournamentService:
         if not tournament:
             raise AppError("Selecione um torneio válido.")
         limpos = self._validated_categories(categories)
-        self.db.replace_tournament_categories(tournament_id, limpos)
+        confirmacoes = self._category_change_confirmations(
+            tournament_id, self._categories_changed(tournament_id, limpos)
+        )
+        if confirmacoes and not confirmed:
+            raise AppError("\n\n".join(item.mensagem for item in confirmacoes))
+        with self.db.transaction():
+            # A categoria dos inscritos é recalculada na mesma transação (RG2-15).
+            self.db.replace_tournament_categories(tournament_id, limpos)
+            if confirmacoes:
+                self._audit_category_recalculation(tournament_id)
         logger.info("Categorias do torneio %s regravadas (%d)", tournament_id, len(limpos))
+
+    def plan_category_change(self, tournament_id: int, categories: list[dict[str, Any]]) -> list[Confirmacao]:
+        """O que regravar o edital pede ao árbitro (RG2-15, D3). Recusa o que não tem confirmação."""
+        limpos = self._validated_categories(categories)
+        return self._category_change_confirmations(tournament_id, self._categories_changed(tournament_id, limpos))
+
+    def _categories_changed(self, tournament_id: int, limpos: list[dict[str, Any]]) -> bool:
+        return self._validated_categories(self.db.list_tournament_categories(tournament_id)) != limpos
+
+    def _category_dates_changed(self, tournament_id: int, preparo: "_PerfilPreparado") -> bool:
+        """A data de referência ou o início do torneio mudaram — e com eles a idade de todos."""
+        tournament = self.db.get_tournament(tournament_id) or {}
+        settings = self.db.get_tournament_settings(tournament_id) or {}
+        return (
+            str(preparo.ajustes.get("category_reference_date") or "") != str(settings.get("category_reference_date") or "")
+            or str(preparo.torneio.get("start_date") or "") != str(tournament.get("start_date") or "")
+        )
+
+    def _category_change_confirmations(self, tournament_id: int, changes: bool) -> list[Confirmacao]:
+        """O gancho da D3 (RG2-15): recalcular categoria depois de rodada fechada.
+
+        Sem mudança, nada. Torneio encerrado ou com certificado emitido: recusa —
+        recalcular mudaria quem já recebeu. Com rodada fechada: pede confirmação
+        (e a gravação audita). Antes da 1ª rodada fechada: recalcula direto.
+        """
+        if not changes:
+            return []
+        tournament = self.db.get_tournament(tournament_id) or {}
+        if str(tournament.get("status") or "") == "finished":
+            raise AppError(
+                "O torneio está encerrado: mudar as categorias ou as datas que as definem agora "
+                "mudaria a classificação por categoria e a premiação já fechadas."
+            )
+        if self.db.count_tournament_certificates(tournament_id):
+            raise AppError(
+                "Já há certificado emitido deste torneio: mudar as categorias ou as datas que as "
+                "definem agora mudaria a categoria de quem já recebeu. Revogue os certificados antes."
+            )
+        fechadas = sum(1 for item in self.db.list_rounds(tournament_id) if str(item.get("status") or "") == "closed")
+        return [confirmacao_recalculo_categorias(fechadas)] if fechadas else []
+
+    def _audit_category_recalculation(self, tournament_id: int) -> None:
+        """Chamar DENTRO da transação que regravou edital ou datas."""
+        rounds = self.db.list_rounds(tournament_id)
+        self.db.create_audit_event(
+            action="player_categories_recalculated",
+            tournament_id=int(tournament_id),
+            entity_type="tournament",
+            entity_id=int(tournament_id),
+            reason="Edital ou datas mudaram depois de rodada fechada (D3); retratos ficam com a categoria da época.",
+            after={
+                "players": len(self.db.list_players(tournament_id, active_only=False)),
+                "closed_rounds": sum(1 for item in rounds if str(item.get("status") or "") == "closed"),
+            },
+        )
 
     @staticmethod
     def _validated_categories(categories: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -256,7 +322,10 @@ class TournamentService:
         preparo = self._prepare_profile(
             tournament_id, PerfilTorneio(tournament_data, settings_data, schedule)
         )
-        confirmadas = {TIPO_MUDANCAS_PERIGOSAS, TIPO_MOTOR_RESERVA}
+        recalculo = self._category_change_confirmations(
+            tournament_id, self._category_dates_changed(tournament_id, preparo)
+        )
+        confirmadas = {TIPO_MUDANCAS_PERIGOSAS, TIPO_MOTOR_RESERVA, TIPO_RECALCULO_CATEGORIAS}
         if confirm_schedule_loss:
             confirmadas.add(TIPO_AGENDA_PERDIDA)
         if str(structural_change_reason or "").strip():
@@ -264,6 +333,8 @@ class TournamentService:
         self._require_confirmations(preparo.confirmacoes, confirmadas, structural_change_reason)
         with self.db.transaction():
             self._write_profile(tournament_id, preparo, structural_change_reason)
+            if recalculo:
+                self._audit_category_recalculation(tournament_id)
         logger.info("Configuracoes do torneio %s atualizadas", tournament_id)
 
     def plan_configuration(
@@ -282,8 +353,12 @@ class TournamentService:
         branco.
         """
         preparo = self._prepare_profile(tournament_id, perfil)
-        self._prepare_extras(premios, categorias, colunas)
-        return list(preparo.confirmacoes)
+        _premios, categorias_limpas, _colunas = self._prepare_extras(premios, categorias, colunas)
+        return list(preparo.confirmacoes) + self._category_change_confirmations(
+            tournament_id,
+            self._categories_changed(tournament_id, categorias_limpas)
+            or self._category_dates_changed(tournament_id, preparo),
+        )
 
     def save_tournament_configuration(
         self,
@@ -308,14 +383,22 @@ class TournamentService:
         premios_limpos, categorias_limpas, colunas_limpas = self._prepare_extras(
             premios, categorias, colunas
         )
-        self._require_confirmations(preparo.confirmacoes, set(confirmadas), motivo)
+        recalculo = self._category_change_confirmations(
+            tournament_id,
+            self._categories_changed(tournament_id, categorias_limpas)
+            or self._category_dates_changed(tournament_id, preparo),
+        )
+        self._require_confirmations((*preparo.confirmacoes, *recalculo), set(confirmadas), motivo)
 
         self.db.backup_before("tournament_configuration", tournament_id)
         with self.db.transaction():
             self._write_profile(tournament_id, preparo, motivo)
             self.db.replace_tournament_prizes(tournament_id, premios_limpos)
+            # A categoria dos inscritos é recalculada aqui dentro (RG2-15).
             self.db.replace_tournament_categories(tournament_id, categorias_limpas)
             self.db.save_report_layout(tournament_id, "standings", colunas_limpas)
+            if recalculo:
+                self._audit_category_recalculation(tournament_id)
         logger.info("Configuracoes completas do torneio %s salvas", tournament_id)
 
     # -- "Avançado": mudanças perigosas gravando sozinha (RGS-20) ------------ #

@@ -23,6 +23,7 @@ TIPO_AGENDA_PERDIDA = "schedule_loss"
 TIPO_MUDANCA_ESTRUTURAL = "structural_change"
 TIPO_MUDANCAS_PERIGOSAS = "dangerous_changes"
 TIPO_MOTOR_RESERVA = "reserve_engine"
+TIPO_RECALCULO_CATEGORIAS = "category_recalculation"
 
 # Configurações que mudam o SIGNIFICADO do torneio (ORG-04): trocar qualquer
 # uma no meio do caminho reescreve como as rodadas já jogadas deveriam ter
@@ -192,6 +193,20 @@ def plan_tournament_configuration(
             )
 
     return confirmacoes
+
+
+def confirmacao_recalculo_categorias(rodadas_fechadas: int) -> Confirmacao:
+    """Mudar edital ou datas depois de rodada fechada recalcula as categorias (RG2-15, D3)."""
+    rodadas = "a 1ª rodada" if rodadas_fechadas == 1 else f"{rodadas_fechadas} rodadas"
+    return Confirmacao(
+        tipo=TIPO_RECALCULO_CATEGORIAS,
+        mensagem=(
+            f"O torneio já tem {rodadas} fechada(s) e você está mudando as categorias ou as datas "
+            "que as definem. As categorias dos jogadores serão recalculadas — a classificação por "
+            "categoria e a premiação mudam a partir de agora. Os retratos das rodadas fechadas "
+            "ficam com a categoria da época, e a mudança fica na auditoria."
+        ),
+    )
 
 
 def confirmacoes_pendentes(

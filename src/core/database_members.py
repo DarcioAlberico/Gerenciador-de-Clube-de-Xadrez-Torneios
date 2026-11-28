@@ -11,7 +11,7 @@ from typing import Any
 from ._database_base import _DatabaseInfra
 from src.services.categories import normalized_sex
 
-from .categories import competition_category_payload
+from .categories import AUTO_CATEGORY_VALUES, competition_category_payload
 
 
 def _texto(valor: Any) -> str:
@@ -528,7 +528,9 @@ class MemberMixin(_DatabaseInfra):
             name=tournament_name,
             club=club_name,
             rating=int(member["rating"] or 0),
-            category=member["category"],
+            # RG2-15: a categoria do cadastro foi calculada no ano corrente, com
+            # as faixas padrão; no torneio vale o edital. Só a manual vai junto.
+            category="" if str(member.get("category") or "") in AUTO_CATEGORY_VALUES else str(member["category"] or ""),
             birth_date=member["birth_date"],
             member_id=member_id,
             surname=surname,

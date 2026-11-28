@@ -12,13 +12,14 @@ import logging
 import os
 import secrets
 import sqlite3
+from collections.abc import Iterable
 from typing import Any
 
 from src.domain.numbers import setting_number
 from src.services.categories import from_row as category_from_row
 
 from ._database_base import _DatabaseInfra
-from .categories import competition_category_payload, reference_year
+from .categories import AUTO_CATEGORY_VALUES, competition_category_payload, reference_year
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +78,9 @@ def default_tiebreak_engine() -> str:
 def _as_ints(*valores: Any) -> tuple[int, ...]:
     """Inteiros, com vazio/None virando 0 (ratings e contagens do jogador)."""
     return tuple(int(v or 0) for v in valores)
+
+PLAYER_CATEGORY_COLUMNS = ("category", "age_category", "rating_category", "categories", "prize_tags")
+"""Colunas do jogador derivadas do edital (RG2-15)."""
 
 DUPLICATE_RESET_TOURNAMENT_COLUMNS: frozenset[str] = frozenset(
     {"id", "created_at", "start_date", "end_date", "status", "parent_tournament_id"}
@@ -165,6 +169,7 @@ class TournamentCoreMixin(_DatabaseInfra):
         club_value = int(club_id) if club_id is not None else None
         class_value = int(class_id) if class_id is not None else None
         competition_value = competition_type.strip() or "individual"
+        inicio_antes = str((self.get_tournament(tournament_id) or {}).get("start_date") or "")
         with self.connect() as connection:
             connection.execute(
                 """
@@ -195,6 +200,9 @@ class TournamentCoreMixin(_DatabaseInfra):
                 """,
                 (tournament_id, int(rounds_count)),
             )
+        if start_date.strip() != inicio_antes:
+            # RG2-15: sem data de referência, o ano do início define a idade.
+            self.refresh_player_categories(tournament_id)
 
     def duplicate_tournament(self, source_tournament_id: int, new_name: str) -> int:
         with self.connect() as connection:
@@ -446,6 +454,7 @@ class TournamentCoreMixin(_DatabaseInfra):
                 (tournament_id,),
             ).fetchone()
             merged = dict(current) if current else {}
+            referencia_antes = str(merged.get("category_reference_date") or "")
             merged.update(incoming)
             data = merged
             connection.execute(
@@ -561,6 +570,55 @@ class TournamentCoreMixin(_DatabaseInfra):
                         tournament_id,
                     ),
                 )
+        if str(incoming.get("category_reference_date", referencia_antes) or "") != referencia_antes:
+            # RG2-15: a data de referência define a idade de todos os inscritos.
+            self.refresh_player_categories(tournament_id)
+
+    def refresh_player_categories(self, tournament_id: int, stale_names: Iterable[str] = ()) -> int:
+        """Recalcula a categoria de todos os inscritos do torneio (RG2-15). Devolve quantos mudaram.
+
+        A categoria é DERIVADA do edital, da data de referência e do início do
+        torneio; gravada sem invalidação, ela ficava velha. A categoria escrita
+        à mão fica; a que o programa calculou (faixa padrão, ou nome de faixa
+        do edital antigo em ``stale_names``) é recalculada. Os retratos por
+        rodada não mudam: são retratos.
+        """
+        with self.connect() as connection:
+            atuais = {
+                str(row["name"])
+                for row in connection.execute(
+                    "SELECT name FROM tournament_categories WHERE tournament_id = ?", (tournament_id,)
+                ).fetchall()
+            }
+            calculadas = set(AUTO_CATEGORY_VALUES) | atuais | {str(nome) for nome in stale_names}
+            jogadores = connection.execute(
+                "SELECT * FROM players WHERE tournament_id = ?", (tournament_id,)
+            ).fetchall()
+            mudaram = 0
+            for linha in jogadores:
+                jogador = dict(linha)
+                atual = str(jogador.get("category") or "").strip()
+                payload = self._player_category_payload(
+                    connection,
+                    tournament_id=tournament_id,
+                    member_id=jogador.get("member_id"),
+                    birth_date=str(jogador.get("birth_date") or ""),
+                    rating=int(jogador.get("rating") or 0),
+                    national_rating=int(jogador.get("national_rating") or 0),
+                    international_rating=int(jogador.get("international_rating") or 0),
+                    category="" if atual in calculadas else atual,
+                    sex=str(jogador.get("sex") or ""),
+                    club=str(jogador.get("club") or ""),
+                )
+                novo = tuple(payload[k] for k in PLAYER_CATEGORY_COLUMNS)
+                if novo == tuple(str(jogador.get(k) or "") for k in PLAYER_CATEGORY_COLUMNS):
+                    continue
+                connection.execute(
+                    f"UPDATE players SET {', '.join(f'{k} = ?' for k in PLAYER_CATEGORY_COLUMNS)} WHERE id = ?",
+                    (*novo, int(jogador["id"])),
+                )
+                mudaram += 1
+            return mudaram
 
     def list_tournament_categories(self, tournament_id: int) -> list[dict[str, Any]]:
         """Categorias cadastradas do torneio, na ordem configurada.
@@ -586,7 +644,12 @@ class TournamentCoreMixin(_DatabaseInfra):
         tournament_id: int,
         categories: list[dict[str, Any]],
     ) -> None:
-        """Regrava as categorias do torneio (idempotente por torneio)."""
+        """Regrava as categorias do torneio (idempotente por torneio).
+
+        A categoria do jogador é derivada do edital (RG2-15): na mesma
+        transação, ela é recalculada para todos os inscritos.
+        """
+        nomes_antes = {str(item["name"]) for item in self.list_tournament_categories(tournament_id)}
         now = self.now()
         with self.connect() as connection:
             connection.execute(
@@ -618,6 +681,7 @@ class TournamentCoreMixin(_DatabaseInfra):
                     if str(item.get("name") or "").strip()
                 ],
             )
+        self.refresh_player_categories(tournament_id, stale_names=nomes_antes)
 
     def save_fide_rating_report(
         self,
