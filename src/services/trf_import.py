@@ -14,6 +14,7 @@ from __future__ import annotations
 from typing import Any, Mapping, Sequence
 
 from src.domain.dates import DataInvalida, ResultadoData, parse_trf_date, parse_trf_round_date, storage_text
+from src.services.categories.matching import normalized_sex
 from src.services.results_registry import code_from_trf_letter
 from src.services.trf_layout import (
     BIRTH as _BIRTH,
@@ -254,7 +255,7 @@ def parse_trf(content: str) -> dict[str, Any]:
                     "name": display,
                     "surname": surname,
                     "given_name": given,
-                    "sex": _slice(line, _SEX),
+                    "sex": normalized_sex(_slice(line, _SEX)),
                     "title": _slice(line, _TITLE),
                     "rating": rating,
                     "federation_id": _slice(line, _FEDERATION),

@@ -16,6 +16,7 @@ from src.domain.dates import Data, is_iso_date, parse_date
 from src.core.database import BASE_DIR, DEFAULT_CERTIFICATE_TEMPLATES, Database
 from src.services.constants import *
 from src.services.numeric_fields import money_field
+from src.services.pdf_fonts import install_pdf_fonts
 from src.services.permissions import requires
 
 if TYPE_CHECKING:
@@ -305,6 +306,7 @@ class FinanceService:
             if output_path.suffix.lower() != ".pdf":
                 output_path = output_path.with_suffix(".pdf")
                 
+            install_pdf_fonts()
             c = canvas.Canvas(str(output_path), pagesize=A5)
             c.setFont("Helvetica-Bold", 16)
             c.drawString(50, 550, "RECIBO DE PAGAMENTO")

@@ -23,6 +23,7 @@ from src.services.constants import *
 from src.services.fide_norms import build_norm_report
 from src.services.fide_rating import build_fide_report_rows
 from src.services.list_layouts import STANDINGS_COLUMNS, resolve_column_specs, resolve_columns
+from src.services.pdf_fonts import install_pdf_fonts
 from src.services.prizes import PRIZE_KINDS, PRIZE_POLICIES, allocate_prizes
 from src.services.trf_import import build_trf_rounds, parse_trf
 from src.services.numeric_fields import decimal_field
@@ -205,6 +206,7 @@ class CertificateService:
         if path.suffix.lower() != ".pdf":
             path = path.with_suffix(".pdf")
         path.parent.mkdir(parents=True, exist_ok=True)
+        install_pdf_fonts()
         document = canvas.Canvas(str(path), pagesize=page_size)
         render_guide(ReportLabSurface(document, width, height), orientation)
         document.showPage()
@@ -1228,6 +1230,7 @@ class CertificateService:
 
         page_size = A4 if template.get("orientation") == "portrait" else landscape(A4)
         width, height = page_size
+        install_pdf_fonts()
         document = canvas.Canvas(str(path), pagesize=page_size)
 
         kind = str(template.get("template_kind") or "generated")

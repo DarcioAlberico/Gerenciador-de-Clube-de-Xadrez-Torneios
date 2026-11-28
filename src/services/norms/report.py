@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
 from src.services.constants import player_full_name
+from src.domain.fide_player import effective_federation, fide_rating
 from src.services.fide_rating import fide_performance, player_rating_for_type
 from src.services.norms.evaluation import NormEvaluation, evaluate_norms
 from src.services.norms.opponents import (
@@ -40,6 +41,19 @@ def _slug(value: object) -> str:
     return str(value or "").strip().casefold().replace(" ", "_").replace("-", "_")
 
 
+def norm_rating(player: Mapping[str, Any], rating_type: str = "fide") -> int:
+    """Rating que a norma conta: na base FIDE, só o rating FIDE (RG2-11).
+
+    O ``player_rating_for_type`` cai no rating do clube quando falta o FIDE — certo
+    para estimar variação, errado aqui: 9 adversários "GM" sem FIDE com 2500 local
+    davam Ra 2500 e norma de GM. Sem rating FIDE o adversário é não ratado, e o
+    piso de 1.4.6 cuida dele.
+    """
+    if str(rating_type or "fide").strip().casefold() == "fide":
+        return fide_rating(player)
+    return player_rating_for_type(player, rating_type)
+
+
 def is_round_robin(pairing_system: object) -> bool:
     value = _slug(pairing_system)
     return bool(value) and any(_slug(marker) in value for marker in _ROUND_ROBIN_SYSTEMS)
@@ -52,6 +66,7 @@ def collect_tournament_opponents(
     *,
     pairing_system: object = "",
     name_of: Any = player_full_name,
+    tournament_settings: Mapping[str, Any] | None = None,
 ) -> tuple[dict[int, Mapping[str, Any]], dict[int, list[NormOpponent]]]:
     """Jogadores indexados e seus adversários de norma.
 
@@ -59,9 +74,7 @@ def collect_tournament_opponents(
     enquanto o relatório de tela quer o nome como se fala.
     """
     players_by_id: dict[int, Mapping[str, Any]] = {int(player["id"]): player for player in players}
-    rating_by_id = {
-        pid: player_rating_for_type(player, rating_type) for pid, player in players_by_id.items()
-    }
+    rating_by_id = {pid: norm_rating(player, rating_type) for pid, player in players_by_id.items()}
 
     excluded: set[int] = set()
     if is_round_robin(pairing_system):
@@ -76,6 +89,7 @@ def collect_tournament_opponents(
         closed_pairings,
         rating_by_id,
         name_of=name_of,
+        federation_of=lambda player: effective_federation(player, tournament_settings),
         excluded_ids=excluded,
     )
     return players_by_id, opponents
@@ -85,12 +99,12 @@ def summarize(
     player: Mapping[str, Any],
     opponents: Sequence[NormOpponent],
     evaluations: Sequence[NormEvaluation],
+    own: str = "",
 ) -> dict[str, Any]:
     """Linha de resumo do jogador — ratings reais, sem o piso de nenhuma norma."""
     games = len(opponents)
     score = round(sum(opponent.points for opponent in opponents), 2)
     average_opponent = average_rating([opponent.rating_for_norm for opponent in opponents])
-    own = str(player.get("federation_id") or "").strip().upper()
     federations = {opponent.federation for opponent in opponents if opponent.federation}
     federations.discard(own)
 
@@ -121,10 +135,15 @@ def build_norm_report(
     rating_type: str = "fide",
     *,
     pairing_system: object = "",
+    tournament_settings: Mapping[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Indicadores de norma por jogador (somente quem jogou partidas válidas)."""
     players_by_id, opponents_by_id = collect_tournament_opponents(
-        players, closed_pairings, rating_type, pairing_system=pairing_system
+        players,
+        closed_pairings,
+        rating_type,
+        pairing_system=pairing_system,
+        tournament_settings=tournament_settings,
     )
 
     report: list[dict[str, Any]] = []
@@ -132,10 +151,9 @@ def build_norm_report(
         opponents = opponents_by_id.get(player_id, [])
         if not opponents:
             continue
-        evaluations = evaluate_norms(
-            str(player.get("federation_id") or ""), player.get("sex"), opponents
-        )
-        report.append(summarize(player, opponents, evaluations))
+        own = effective_federation(player, tournament_settings)
+        evaluations = evaluate_norms(own, player.get("sex"), opponents)
+        report.append(summarize(player, opponents, evaluations, own))
 
     report.sort(key=lambda item: (-int(item["performance"]), str(item["name"]).casefold()))
     return report
@@ -151,6 +169,7 @@ def norm_candidates(
     player_id: int | None = None,
     title: str | None = None,
     name_of: Any = player_full_name,
+    tournament_settings: Mapping[str, Any] | None = None,
 ) -> list[NormCandidate]:
     """Candidatos a norma, um por par (jogador, norma).
 
@@ -159,7 +178,12 @@ def norm_candidates(
     perto e quer ver, no papel, o que faltou.
     """
     players_by_id, opponents_by_id = collect_tournament_opponents(
-        players, closed_pairings, rating_type, pairing_system=pairing_system, name_of=name_of
+        players,
+        closed_pairings,
+        rating_type,
+        pairing_system=pairing_system,
+        name_of=name_of,
+        tournament_settings=tournament_settings,
     )
     wanted_title = str(title or "").strip().upper()
 
@@ -171,7 +195,7 @@ def norm_candidates(
         if not opponents:
             continue
         for evaluation in evaluate_norms(
-            str(player.get("federation_id") or ""), player.get("sex"), opponents
+            effective_federation(player, tournament_settings), player.get("sex"), opponents
         ):
             if wanted_title and evaluation.title != wanted_title:
                 continue

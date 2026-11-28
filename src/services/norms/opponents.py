@@ -7,7 +7,10 @@ jogador, a lista de adversários de norma. Nenhum acesso a banco.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Iterable, Mapping, Sequence
+from functools import partial
+from typing import Any, Callable, Iterable, Mapping, Sequence
+
+from src.domain.fide_player import effective_federation
 
 from src.services.norms.handbook import UNRATED_RATING, NormRequirement, normalized_title
 
@@ -111,10 +114,12 @@ def collect_opponents(
     rating_by_id: Mapping[int, int],
     *,
     name_of: Any,
+    federation_of: Callable[[Mapping[str, Any]], str] | None = None,
     excluded_ids: Iterable[int] = (),
 ) -> dict[int, list[NormOpponent]]:
     """Adversários de norma por jogador, em ordem de rodada."""
     discarded = {int(pid) for pid in excluded_ids}
+    read_federation = federation_of or partial(effective_federation, settings=None)
     result: dict[int, list[NormOpponent]] = {pid: [] for pid in players_by_id}
 
     for game in played_games(closed_pairings, players_by_id):
@@ -130,7 +135,7 @@ def collect_opponents(
                 NormOpponent(
                     player_id=opponent_id,
                     name=name_of(opponent),
-                    federation=str(opponent.get("federation_id") or "").strip().upper(),
+                    federation=read_federation(opponent),
                     title=normalized_title(opponent.get("title")),
                     rating=int(rating_by_id.get(opponent_id, 0) or 0),
                     round_number=int(game["round_number"]),
@@ -174,10 +179,16 @@ def average_rating(values: Sequence[int]) -> int:
     return int(sum(values) / len(values) + 0.5)
 
 
-def federation_counts(opponents: Sequence[NormOpponent]) -> dict[str, int]:
+def federation_counts(opponents: Sequence[NormOpponent], own: str = "") -> dict[str, int]:
+    """Adversários por federação; sem federação conta como a do candidato (RG2-12).
+
+    Federação vazia é o cadastro local que não a preencheu — na prática, gente da
+    casa. Descartá-la deixava o candidato passar no limite da própria federação
+    com 0; contá-la como estrangeira inventaria uma federação. O lado seguro é o
+    do candidato.
+    """
     counts: dict[str, int] = {}
     for opponent in opponents:
-        if not opponent.federation:
-            continue
-        counts[opponent.federation] = counts.get(opponent.federation, 0) + 1
+        federation = opponent.federation or own
+        counts[federation] = counts.get(federation, 0) + 1
     return counts

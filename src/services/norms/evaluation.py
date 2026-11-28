@@ -126,7 +126,7 @@ def evaluate_norm(
     performance = fide_performance(average_opponent, score, games)
 
     own = str(candidate_federation or "").strip().upper()
-    counts = federation_counts(opponents)
+    counts = federation_counts(opponents, own)
     other_federations = sorted(code for code in counts if code != own)
 
     title_holders = sum(1 for opponent in opponents if handbook.is_title_holder(opponent.title))
@@ -134,7 +134,7 @@ def evaluate_norm(
         1 for opponent in opponents if handbook.holds_level_title(opponent.title, requirement)
     )
     unrated = sum(1 for opponent in opponents if opponent.is_unrated)
-    own_count = counts.get(own, 0) if own else 0
+    own_count = counts.get(own, 0)
     largest = max(counts.values(), default=0)
 
     indicators = [

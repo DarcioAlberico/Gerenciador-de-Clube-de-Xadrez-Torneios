@@ -15,6 +15,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from src.services.categories.matching import normalized_sex
+
 # 1.4.6.4 — adversário sem rating conta como 1400 (era 1000 até 2023).
 UNRATED_RATING = 1400
 
@@ -115,8 +117,13 @@ def holds_level_title(title: object, requirement: NormRequirement) -> bool:
 
 
 def applicable_norms(sex: object) -> tuple[str, ...]:
-    """Normas avaliáveis para o candidato: WGM/WIM só para jogadoras."""
-    if str(sex or "").strip().upper() == "F":
+    """Normas avaliáveis para o candidato: WGM/WIM só para jogadoras.
+
+    ``normalized_sex`` porque o TRF traz ``w`` e o cadastro ``F`` (RG2-29): só o
+    ``F`` era reconhecido, e a jogadora importada do Swiss-Manager nunca era
+    avaliada para WGM/WIM.
+    """
+    if normalized_sex(sex) == "F":
         return OPEN_NORMS + WOMEN_ONLY_NORMS
     return OPEN_NORMS
 

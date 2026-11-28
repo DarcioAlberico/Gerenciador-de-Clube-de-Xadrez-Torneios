@@ -14,6 +14,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Sequence
 
+from src.domain.fide_player import effective_federation
 from src.services.norms.evaluation import NormEvaluation
 from src.services.norms.handbook import NORM_REQUIREMENTS
 from src.services.norms.opponents import NormOpponent, adjusted_ratings
@@ -137,7 +138,7 @@ def build_certificate(
         chief_arbiter=chief_arbiter,
         candidate_name=candidate_name,
         candidate_fide_id=str(candidate.get("fide_id") or "").strip(),
-        candidate_federation=str(candidate.get("federation_id") or "").strip().upper(),
+        candidate_federation=effective_federation(candidate, settings),
         candidate_rating=int(candidate_rating or 0),
         candidate_title=str(candidate.get("title") or "").strip().upper(),
         norm_title=evaluation.title,

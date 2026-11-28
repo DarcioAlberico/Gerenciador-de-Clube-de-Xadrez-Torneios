@@ -53,8 +53,11 @@ desenho ao pacote.
 Benefício-chave: o **mesmo** `renderer.py` produz PDF (ReportLabSurface) **e**
 miniatura do visualizador (TkSurface). Um código de desenho, dois destinos.
 
-Fontes: apenas as **built-in do ReportLab** (Helvetica, Times, Courier) — sem
-depender de TTF externas. Serifa = Times.
+Fontes: os nomes continuam os do ReportLab (Helvetica, Times), mas desde o
+RG2-29 eles apontam para a **DejaVu Condensed empacotada** em `assets/fonts`
+(`src/services/pdf_fonts.py`): as embutidas não têm `Ł`, `Ć`, `Ş` nem `ễ`, e o
+nome do premiado saía com quadrados. A Condensed tem a largura da Helvetica, e
+os modelos gravados com "Times-Roman" seguem valendo. Serifa = Times.
 
 ## 4. Modelo de dados — migração de schema v42 → v43
 
