@@ -178,7 +178,7 @@ RG2-32 (falhas silenciosas, forma fixa da justificativa), RG2-40 (concorrência)
 | −1 | **feita** em 2026-11-27 (D7 aprovada pelo dono), branch `fix/rgs-fase0-exe` — ver abaixo |
 | 0 | **código feito** em 2026-11-27, branch `fix/rg2-fase0-hotfix` — falta a revisão da nota pelo árbitro (F0.9) e o `.exe` — ver abaixo |
 | 1 | **código feito** em 2026-11-28, branch `fix/rg2-fase1` (empilhada na Fase 0) — D3 decidida pelo dono; suíte completa verde (2 testes da v59 ajustados para não fixar a versão final), gate estático verde, `.exe` com `--self-test` = 0 — ver abaixo |
-| 2 | **código feito** em 2026-11-28, branch `fix/rg2-fase2` (empilhada na Fase 1) — D4 e D5 decididas pelo dono; gate estático verde e `.exe` com `--self-test` = 0; suíte completa em andamento — ver abaixo |
+| 2 | **código feito** em 2026-11-28, branch `fix/rg2-fase2` (empilhada na Fase 1) — D4 e D5 decididas pelo dono; gate estático verde, `.exe` com `--self-test` = 0; suíte completa: 9 testes presos ao contrato antigo, ajustados em `4f4acd9` — ver abaixo |
 | 3–6 | não iniciadas |
 
 ### Fase −1 (2026-11-27)
