@@ -2037,7 +2037,7 @@ class PairingService:
                     )
                     avisos.extend(engine.warnings)
                 except GacruxRefusal as recusa:
-                    if not reserve_engine:
+                    if not reserve_engine or not recusa.offers_reserve:
                         raise
                     avisos.append(
                         f"Rodada {next_number} pareada pelo {RESERVE_ENGINE_LABEL}, "
@@ -2948,6 +2948,43 @@ class PairingService:
         if tournament and tournament.get("competition_type") == "team":
             return self._team_round_dashboard_metrics(int(round_id))
         return self._individual_round_dashboard_metrics(int(round_id))
+
+    @requires("tournament_write")
+    @atomic
+    def end_tournament_early(self, tournament_id: int, reason: str) -> None:
+        """Encerra o torneio na última rodada fechada (RG2-22).
+
+        É a saída quando não existe pareamento legal para a próxima rodada: o
+        total de rodadas passa a ser o que já foi jogado, o torneio fica
+        encerrado e o evento ``tournament_ended_early`` guarda o total anterior
+        e o motivo. Recusa com rodada aberta — encerrar com mesa sem resultado
+        deixaria a classificação final contando uma rodada pela metade.
+        """
+        motivo = str(reason or "").strip()
+        if not motivo:
+            raise AppError("Diga o motivo de encerrar o torneio antes do total de rodadas.")
+        tournament = self.db.get_tournament(tournament_id)
+        if not tournament:
+            raise AppError("Selecione um torneio válido.")
+        rounds = self.db.list_rounds(tournament_id)
+        if not rounds:
+            raise AppError("O torneio ainda não tem rodada jogada para encerrar nela.")
+        abertas = [int(item["number"]) for item in rounds if str(item.get("status") or "") != "closed"]
+        if abertas:
+            raise AppError(
+                f"A rodada {abertas[0]} está aberta: feche-a ou exclua-a antes de encerrar o torneio."
+            )
+        jogadas = max(int(item["number"]) for item in rounds)
+        self.db.end_tournament_at_round(tournament_id, jogadas)
+        self.db.create_audit_event(
+            action="tournament_ended_early",
+            tournament_id=int(tournament_id),
+            entity_type="tournament",
+            entity_id=int(tournament_id),
+            reason=motivo,
+            before={"rounds_count": int(tournament["rounds_count"]), "status": tournament.get("status", "")},
+            after={"rounds_count": jogadas, "status": "finished"},
+        )
 
     @requires("tournament_write")
     def close_round(self, tournament_id: int, round_id: int) -> None:
