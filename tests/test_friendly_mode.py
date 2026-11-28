@@ -391,7 +391,7 @@ class FronteiraComOficialTest(TorneioAmistosoBase):
     def test_ligar_o_modo_em_torneio_fide_e_recusado(self) -> None:
         from src.services.constants import AppError
 
-        self.service.set_enabled(self.tid, False)
+        self.service.set_enabled(self.tid, False, reason="Vai valer como torneio do clube")
         self.salvar_perfil("fide")
         with self.assertRaises(AppError):
             self.service.set_enabled(self.tid, True)
@@ -423,7 +423,7 @@ class FronteiraComOficialTest(TorneioAmistosoBase):
         from src.services.rating_service import InternalRatingService
 
         servico = InternalRatingService(self.db)
-        pergunta = friendly_mode.internal_rating_question(self.db.get_tournament_settings(self.tid))
+        pergunta = friendly_mode.internal_rating_question(friendly_mode.played_as_friendly(self.db, self.tid))
         self.assertIn(friendly_mode.FRIENDLY_MODE_LABEL, pergunta)
         with self.assertRaises(AppError) as recusa:
             servico.apply_tournament_ratings(self.tid)
@@ -434,7 +434,7 @@ class FronteiraComOficialTest(TorneioAmistosoBase):
         from src.services.rating_service import InternalRatingService
 
         self.db.set_free_mode(self.tid, False)
-        self.assertEqual("", friendly_mode.internal_rating_question(self.db.get_tournament_settings(self.tid)))
+        self.assertEqual("", friendly_mode.internal_rating_question(friendly_mode.played_as_friendly(self.db, self.tid)))
         self.assertIn("updated", InternalRatingService(self.db).apply_tournament_ratings(self.tid))
 
     def test_arquivo_de_trabalho_sai_com_aviso(self) -> None:

@@ -827,7 +827,7 @@ class InternalRatingService:
             raise AppError("Selecione um torneio válido.")
         # D2 (ESPEC_REVISAO_MODO_AMISTOSO): o amistoso só conta com o "sim" do usuário.
         pergunta = friendly_mode.internal_rating_question(
-            self.db.get_tournament_settings(int(tournament_id))
+            friendly_mode.played_as_friendly(self.db, int(tournament_id))
         )
         if pergunta and not friendly_confirmed:
             raise AppError(pergunta, suggestion="Responda à pergunta da tela antes de atualizar.")

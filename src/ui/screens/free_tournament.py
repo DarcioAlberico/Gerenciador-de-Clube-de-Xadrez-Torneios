@@ -348,10 +348,11 @@ class FreeTournamentMixin:
             INTERNAL_RATING_NO,
             INTERNAL_RATING_YES,
             internal_rating_question,
+            played_as_friendly,
         )
         from ..components.dialogs import confirm_dialog
 
-        pergunta = internal_rating_question(self.db.get_tournament_settings(int(tournament_id)))
+        pergunta = internal_rating_question(played_as_friendly(self.db, int(tournament_id)))
         if not pergunta:
             return True
         if confirm_dialog(
@@ -386,8 +387,14 @@ class FreeTournamentMixin:
 
         def alternar() -> None:
             ligar = bool(caixa.get())
+            motivo = "" if ligar else self._free_mode_disable_reason(int(self.current_tournament_id))
+            if motivo is None:
+                caixa.select()
+                return
             try:
-                FriendlyModeService(self.db).set_enabled(int(self.current_tournament_id), ligar)
+                FriendlyModeService(self.db).set_enabled(
+                    int(self.current_tournament_id), ligar, reason=motivo
+                )
                 self._set_current_tournament(int(self.current_tournament_id))
                 self._show_toast(
                     f"{FRIENDLY_MODE_LABEL} {'ligado' if ligar else 'desligado'}.", kind="success"
@@ -402,6 +409,25 @@ class FreeTournamentMixin:
         caixa.configure(command=alternar)
         if hasattr(self, "_disable_if_unauthorized"):
             self._disable_if_unauthorized(caixa, "tournament_write")
+
+    def _free_mode_disable_reason(self, tournament_id: int) -> str | None:
+        """Motivo para desligar o modo com rodada gerada (RG2-35). ``None`` = cancelou."""
+        from src.services.friendly_mode import disable_reason_error
+
+        from ..components.dialogs import reason_dialog
+
+        rodadas = len(self.db.list_rounds(tournament_id))
+        if not rodadas:
+            return ""
+        return reason_dialog(
+            self,
+            f"Desligar o {FRIENDLY_MODE_LABEL}",
+            f"O torneio já tem {rodadas} rodada(s) gerada(s) no {FRIENDLY_MODE_LABEL}. "
+            "O que já foi jogado continua amistoso: o rating interno vai perguntar antes "
+            "de contar, e o TRF sai com o aviso. Diga por que o modo vai ser desligado:",
+            validate=lambda texto: disable_reason_error(texto, rodadas),
+            confirm_text="Desligar",
+        )
 
     # ------------------------------------------------------------------
     # Mecânicas do Modo Livre (só atuam quando a marca free_mode é ligada)
