@@ -635,7 +635,11 @@ class ReportSectionsMixin:
         players = self.db.list_players(tournament_id, active_only=False)
         closed = self.db.get_pairings_for_tournament(tournament_id, closed_only=True)
         report = build_norm_report(
-            players, closed, "fide", pairing_system=settings.get("pairing_method")
+            players,
+            closed,
+            "fide",
+            pairing_system=settings.get("pairing_method"),
+            tournament_settings=settings,
         )
 
         notice_rows = [

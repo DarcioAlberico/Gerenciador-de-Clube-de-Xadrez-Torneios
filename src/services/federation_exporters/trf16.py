@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from src.domain.fide_player import fide_rating
+from src.domain.fide_player import effective_federation, fide_rating
 from src.services.constants import AppError, FINAL_RESULTS, RESULT_POINTS, player_pairing_name
 from src.services import friendly_mode
 from src.services.results_registry import is_played_result
@@ -374,11 +374,10 @@ class TRF16Exporter:
                 missing_birth.append(name)
             elif not self.export_service._trf_date_is_valid(player.get("birth_date")):
                 invalid_birth.append(name)
-            if not str(player.get("federation_id") or settings.get("federation") or "").strip():
+            federation = effective_federation(player, settings)
+            if not federation:
                 missing_federation.append(name)
-            elif not self.export_service._trf_valid_federation_code(
-                player.get("federation_id") or settings.get("federation")
-            ):
+            elif not self.export_service._trf_valid_federation_code(federation):
                 invalid_federation.append(name)
             if fide_rating(player) <= 0:
                 missing_rating.append(name)

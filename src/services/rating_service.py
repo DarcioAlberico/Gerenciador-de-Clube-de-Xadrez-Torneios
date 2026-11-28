@@ -1159,6 +1159,7 @@ class NormAssistantService:
                 closed_pairings,
                 rating_type,
                 pairing_system=settings.get("pairing_method"),
+                tournament_settings=settings,
             ),
         }
 

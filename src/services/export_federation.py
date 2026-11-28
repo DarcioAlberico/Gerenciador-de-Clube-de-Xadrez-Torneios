@@ -25,7 +25,7 @@ from src.services.federation_exporters.trf16_records import (
     tournament_type_text as _trf16_tournament_type_text,
 )
 from src.services.fide_norms import build_norm_report
-from src.domain.fide_player import fide_rating, seed_rating
+from src.domain.fide_player import effective_federation, fide_rating, seed_rating
 from src.services.fide_rating import build_fide_report_rows
 from src.services.norms.report import norm_rating
 from src.services.list_layouts import STANDINGS_COLUMNS, resolve_column_specs, resolve_columns
@@ -170,6 +170,7 @@ class FederationReportsMixin:
             closed,
             rating_type,
             pairing_system=settings.get("pairing_method"),
+            tournament_settings=settings,
             achieved_only=player_id is None,
             player_id=player_id,
             title=title,
@@ -870,10 +871,7 @@ class FederationReportsMixin:
         # pela FIDE como dela (RG2-11).
         fide = fide_rating(player)
         rating = f"{fide:4d}"[-4:] if fide else "    "
-        federation = self._trf_clean(
-            str(player.get("federation_id") or settings.get("federation") or "").upper(),
-            3,
-        )
+        federation = self._trf_clean(effective_federation(player, settings), 3)
         fide_id = self._trf_clean(player.get("fide_id"))[:11].rjust(11)
         birth_date = self._trf_clean(self._trf_date(player.get("birth_date"), long_year=True), 10)
         points = self._trf_points(standing.get("points", player.get("starting_points", 0.0)))
