@@ -6,8 +6,10 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from src.services.constants import *
+from src.domain.fide_player import fide_rating, seed_rating
 from src.services.fide_norms import build_norm_report
 from src.services.categories import group_by_category
+from src.services.pdf_fonts import install_pdf_fonts
 from src.services.rating import build_report_rows, regulation_from_settings, resolve_speed
 from src.services.time_control import SPEED_LABELS, below_blitz_minimum
 from src.services.pairing.incidents import (
@@ -169,7 +171,7 @@ class ReportSectionsMixin:
             [
                 index,
                 player_full_name(player),
-                self._trf_rating(player),
+                seed_rating(player),
                 player.get("club", ""),
                 player.get("category", ""),
                 PLAYER_STATUSES.get(player.get("player_status", "active"), player.get("player_status", "")),
@@ -647,7 +649,11 @@ class ReportSectionsMixin:
         players = self.db.list_players(tournament_id, active_only=False)
         closed = self.db.get_pairings_for_tournament(tournament_id, closed_only=True)
         report = build_norm_report(
-            players, closed, "fide", pairing_system=settings.get("pairing_method")
+            players,
+            closed,
+            "fide",
+            pairing_system=settings.get("pairing_method"),
+            tournament_settings=settings,
         )
 
         notice_rows = [
@@ -727,7 +733,7 @@ class ReportSectionsMixin:
             raise AppError("Selecione um torneio válido.")
         settings = self.db.get_tournament_settings(tournament_id) or {}
         players = self.db.list_players(tournament_id, active_only=False)
-        rated = sum(1 for player in players if self._trf_rating(player) > 0)
+        rated = sum(1 for player in players if fide_rating(player) > 0)
         referees = self.db.list_tournament_referees(tournament_id)
         competition = "Equipes" if tournament.get("competition_type") == "team" else "Individual"
 
@@ -746,7 +752,7 @@ class ReportSectionsMixin:
             ["Rodadas", tournament.get("rounds_count", "")],
             ["Tipo", competition],
             ["Jogadores", len(players)],
-            ["Jogadores com rating", rated],
+            ["Jogadores com rating FIDE", rated],
             ["Organizador", settings.get("organizer", "")],
             ["Árbitro principal (config.)", settings.get("chief_arbiter", "")],
         ]
@@ -923,6 +929,7 @@ class ReportSectionsMixin:
         tournament = data["tournament"]
         width, height = A4
         center = width / 2
+        install_pdf_fonts()
         document = canvas.Canvas(str(path), pagesize=A4)
         document.setLineWidth(2)
         document.rect(30, 30, width - 60, height - 60)
@@ -976,7 +983,7 @@ class ReportSectionsMixin:
             raise AppError("Selecione um torneio válido.")
         settings = self.db.get_tournament_settings(tournament_id) or {}
         players = self.db.list_players(tournament_id, active_only=False)
-        rated = sum(1 for player in players if self._trf_rating(player) > 0)
+        rated = sum(1 for player in players if seed_rating(player) > 0)
         competition = "Equipes" if tournament.get("competition_type") == "team" else "Individual"
 
         header_rows = [

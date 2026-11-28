@@ -841,9 +841,14 @@ class PairingResultsMixin:
         (EQ-02.4) → W.O. do confronto inteiro. Outro erro segue o caminho
         normal (``False``).
         """
+        from src.services.pairing.round_search import NoLegalPairingError
         from src.services.pairing.team_swiss import TeamWithoutPlayersError
         from src.ui.components.dialogs import confirm_dialog
 
+        if isinstance(error, NoLegalPairingError):
+            # RG2-07b: o motor único não achou pareamento legal — mesma saída
+            # do Gacrux sem pareamento legal (RG2-22).
+            return self._offer_end_without_legal_pairing(tournament_id, error)
         if not isinstance(error, TeamWithoutPlayersError):
             return self._offer_reserve_engine(tournament_id, error)
         if confirm_dialog(
@@ -871,6 +876,8 @@ class PairingResultsMixin:
 
         if not isinstance(error, GacruxRefusal):
             return False
+        if not error.offers_reserve:
+            return self._offer_end_without_legal_pairing(tournament_id, error)
         if confirm_dialog(
             self,
             "Motor FIDE recusou a rodada",
@@ -879,6 +886,32 @@ class PairingResultsMixin:
             cancel_text="Cancelar",
         ):
             self._start_round_generation(tournament_id, reserve_engine=True)
+        return True
+
+    def _offer_end_without_legal_pairing(self, tournament_id: int, error: Exception) -> bool:
+        """Sem pareamento legal (RG2-22): encerrar aqui ou voltar e rever as ausências."""
+        from src.ui.components.dialogs import confirm_dialog
+
+        if not confirm_dialog(
+            self,
+            "Não há pareamento legal",
+            str(error),
+            confirm_text="Encerrar o torneio aqui",
+            cancel_text="Rever ausências",
+        ):
+            return True
+        rodada = getattr(error, "round_number", None)
+        try:
+            self.pairing_service.end_tournament_early(
+                tournament_id,
+                f"Rodada {rodada}: não existe pareamento legal (C.04.1)."
+                if rodada
+                else "Não existe pareamento legal (C.04.1).",
+            )
+        except Exception as exc:
+            self._show_error(exc)
+            return True
+        self.show_pairings()
         return True
 
     def _preview_next_round(self) -> None:

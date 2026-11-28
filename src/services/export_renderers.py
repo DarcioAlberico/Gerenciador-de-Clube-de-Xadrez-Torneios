@@ -27,6 +27,7 @@ from src.services.pairing.team_tiebreaks import (
     extra_team_columns as _extra_team_columns,
     team_standing_value as _team_standing_value,
 )
+from src.services.pdf_fonts import install_pdf_fonts
 from src.services.prizes import PRIZE_KINDS, PRIZE_POLICIES, allocate_prizes
 from src.services.trf_import import build_trf_rounds, parse_trf
 
@@ -159,6 +160,7 @@ class ReportRenderersMixin:
 
         path.parent.mkdir(parents=True, exist_ok=True)
         page_width, page_height = A4
+        install_pdf_fonts()
         document = canvas.Canvas(str(path), pagesize=A4)
         document.setTitle(f"Súmulas - {tournament.get('name', '')} - Rodada {round_data.get('number', '')}")
 
@@ -254,6 +256,7 @@ class ReportRenderersMixin:
 
         path.parent.mkdir(parents=True, exist_ok=True)
         page_width, page_height = A4
+        install_pdf_fonts()
         document = canvas.Canvas(str(path), pagesize=A4)
         document.setTitle(title)
         margin = 11 * mm
@@ -341,6 +344,7 @@ class ReportRenderersMixin:
         pairings = self.db.get_pairings_for_round(int(round_data["id"]))
         path.parent.mkdir(parents=True, exist_ok=True)
         page_width, page_height = A4
+        install_pdf_fonts()
         document = canvas.Canvas(str(path), pagesize=A4)
         document.setTitle(f"Mural - {tournament.get('name', '')} - Rodada {round_data.get('number', '')}")
         margin = 10 * mm
@@ -479,6 +483,7 @@ class ReportRenderersMixin:
             int(pairing["board_number"]): pairing
             for pairing in self.db.get_pairings_for_round(int(round_data["id"]))
         } if round_data else {}
+        install_pdf_fonts()
         document = canvas.Canvas(str(path), pagesize=A4)
         document.setTitle("Cartões de mesa")
         page_width, page_height = A4

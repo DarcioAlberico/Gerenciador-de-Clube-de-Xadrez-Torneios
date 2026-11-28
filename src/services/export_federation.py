@@ -9,7 +9,6 @@ import re
 import secrets
 import shutil
 import sqlite3
-import unicodedata
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any, Mapping, TYPE_CHECKING
@@ -25,7 +24,9 @@ from src.services.federation_exporters.trf16_records import (
     tournament_type_text as _trf16_tournament_type_text,
 )
 from src.services.fide_norms import build_norm_report
-from src.services.fide_rating import build_fide_report_rows, player_rating_for_type
+from src.domain.fide_player import effective_federation, fide_ascii, fide_rating, seed_rating, trf_sex
+from src.services.fide_rating import build_fide_report_rows
+from src.services.norms.report import norm_rating
 from src.services.list_layouts import STANDINGS_COLUMNS, resolve_column_specs, resolve_columns
 from src.services.norms.it3 import build_certificate as build_it3_certificate
 from src.services.norms.it3_pdf import write_it3_pdf
@@ -168,6 +169,7 @@ class FederationReportsMixin:
             closed,
             rating_type,
             pairing_system=settings.get("pairing_method"),
+            tournament_settings=settings,
             achieved_only=player_id is None,
             player_id=player_id,
             title=title,
@@ -194,7 +196,7 @@ class FederationReportsMixin:
                 candidate.opponents,
                 candidate.evaluation,
                 candidate_name=player_pairing_name(candidate.player),
-                candidate_rating=player_rating_for_type(candidate.player, rating_type),
+                candidate_rating=norm_rating(candidate.player, rating_type),
                 chief_arbiter=chief_arbiter,
                 tournament_type=tournament_type,
                 rounds=declared_rounds,
@@ -562,9 +564,7 @@ class FederationReportsMixin:
 
     @staticmethod
     def _trf_clean(value: Any, width: int | None = None) -> str:
-        text = unicodedata.normalize("NFKD", str(value or ""))
-        text = "".join(char for char in text if not unicodedata.combining(char))
-        text = " ".join(text.replace("\r", " ").replace("\n", " ").split())
+        text = fide_ascii(value or "")
         if width is not None:
             return text[:width].ljust(width)
         return text
@@ -624,15 +624,6 @@ class FederationReportsMixin:
     def _trf_valid_federation_code(value: Any) -> bool:
         code = str(value or "").strip()
         return len(code) == 3 and code.isalpha()
-
-    @staticmethod
-    def _trf_rating(player: Mapping[str, Any]) -> int:
-        return int(
-            player.get("international_rating")
-            or player.get("rating")
-            or player.get("national_rating")
-            or 0
-        )
 
     @staticmethod
     def _trf_points(value: Any) -> str:
@@ -798,7 +789,7 @@ class FederationReportsMixin:
                 "player_id": int(player["id"]),
                 "points": float(player.get("starting_points", 0.0) or 0.0),
                 "position": 0,
-                "rating": self._trf_rating(player),
+                "rating": seed_rating(player),
                 "name": player_pairing_name(player),
             }
             for player in players
@@ -870,14 +861,14 @@ class FederationReportsMixin:
         player_id = int(player["id"])
         start_rank = player_id_to_start_rank[player_id]
         standing = standings_by_player.get(player_id, {})
-        sex = self._trf_clean(str(player.get("sex") or "")[:1].lower(), 1)
+        sex = trf_sex(player.get("sex")) or " "
         title = self._trf_clean(str(player.get("title") or "").upper(), 3)
         name = self._trf_clean(player_pairing_name(player), 33)
-        rating = f"{self._trf_rating(player):4d}"[-4:]
-        federation = self._trf_clean(
-            str(player.get("federation_id") or settings.get("federation") or "").upper(),
-            3,
-        )
+        # Sem rating FIDE a coluna fica vazia: o rating do clube aqui seria lido
+        # pela FIDE como dela (RG2-11).
+        fide = fide_rating(player)
+        rating = f"{fide:4d}"[-4:] if fide else "    "
+        federation = self._trf_clean(effective_federation(player, settings), 3)
         fide_id = self._trf_clean(player.get("fide_id"))[:11].rjust(11)
         birth_date = self._trf_clean(self._trf_date(player.get("birth_date"), long_year=True), 10)
         points = self._trf_points(standing.get("points", player.get("starting_points", 0.0)))

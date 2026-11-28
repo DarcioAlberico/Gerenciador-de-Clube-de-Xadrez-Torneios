@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from src.core.database import Database
 from src.services.constants import AppError
+from src.services.pdf_fonts import install_pdf_fonts
 
 if TYPE_CHECKING:
     from src.services.finance_service import FinanceService
@@ -79,6 +80,7 @@ class ReportEngine:
             if output_path.suffix.lower() != ".pdf":
                 output_path = output_path.with_suffix(".pdf")
                 
+            install_pdf_fonts()
             c = canvas.Canvas(str(output_path), pagesize=A4)
             c.setFont("Helvetica-Bold", 16)
             c.drawString(50, 800, "DEMONSTRATIVO DO RESULTADO DO EXERCÍCIO (DRE)")

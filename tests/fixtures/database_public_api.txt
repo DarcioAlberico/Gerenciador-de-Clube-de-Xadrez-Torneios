@@ -78,6 +78,7 @@ delete_sponsor
 delete_team
 delete_tournament
 duplicate_tournament
+end_tournament_at_round
 find_latest_official_player
 get_active_public_token_for_pairing
 get_app_settings

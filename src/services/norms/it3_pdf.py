@@ -12,6 +12,7 @@ from typing import Any, Sequence
 
 from src.services.constants import AppError
 from src.services.norms.it3 import DISCLAIMER, IT3Certificate, IT3Game
+from src.services.pdf_fonts import install_pdf_fonts
 
 _COLUMNS: tuple[tuple[str, float, str], ...] = (
     ("Rd", 12.0, "center"),
@@ -287,6 +288,7 @@ def write_it3_pdf(certificates: Sequence[IT3Certificate], file_path: str | Path)
     path.parent.mkdir(parents=True, exist_ok=True)
 
     page_width, page_height = A4
+    install_pdf_fonts()
     document = canvas.Canvas(str(path), pagesize=A4)
     first = certificates[0]
     document.setTitle(f"IT3 {first.norm_title} - {first.candidate_name}")

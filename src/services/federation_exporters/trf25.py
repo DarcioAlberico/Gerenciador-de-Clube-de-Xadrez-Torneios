@@ -93,9 +93,10 @@ from pathlib import Path
 from typing import Any
 
 from src.domain.dates import Data, parse_trf_date
+from src.domain.fide_player import fide_rating
 from src.services.constants import RESULT_POINTS, AppError
 from src.services.federation_exporters.base import FederationExportFormat
-from src.services.federation_exporters.trf16 import TRF16Exporter
+from src.services.federation_exporters.trf16 import TRF16Exporter, write_trf_file
 from src.services.federation_exporters.trf25_records import (
     encode_time_control,
     record_172,
@@ -217,100 +218,92 @@ class TRF25Exporter(TRF16Exporter):
         )
         teams = self.db.list_teams(tournament_id, active_only=False) if is_team else []
 
-        path = Path(file_path)
-        with path.open("w", encoding="utf-8", newline="") as handle:
-            handle.write(service._trf_tournament_line("012", tournament["name"]))
-            handle.write(service._trf_tournament_line("022", tournament.get("location", "")))
-            handle.write(service._trf_tournament_line("032", settings.get("federation", "")))
-            handle.write(service._trf_tournament_line("042", service._trf_date(tournament.get("start_date"), long_year=True)))
-            handle.write(service._trf_tournament_line("052", service._trf_date(tournament.get("end_date"), long_year=True)))
-            handle.write(service._trf_tournament_line("062", str(len(players))))
-            rated = sum(1 for p in players if service._trf_rating(p) > 0)
-            handle.write(service._trf_tournament_line("072", str(rated)))
-            handle.write(service._trf_tournament_line("082", str(len(teams))))
-            handle.write(service._trf_tournament_line("092", service._trf_tournament_type(tournament, settings)))
-            handle.write(service._trf_tournament_line("102", service._trf_chief_arbiter(tournament_id, settings)))
-            for deputy in service._trf_deputy_arbiters(tournament_id, settings):
-                handle.write(service._trf_tournament_line("112", deputy))
-            handle.write(service._trf_tournament_line("122", tournament.get("time_control", "")))
-            handle.write(service._trf_round_dates_line(round_count, schedule))
+        # 012 a 122 são os do TRF16 — uma montagem só (RG2-29).
+        linhas = self.header_lines(
+            tournament_id, tournament, settings, players, teams if is_team else None
+        )
+        linhas.append(service._trf_round_dates_line(round_count, schedule))
 
-            prepared = self._prepare_teams(tournament_id, teams, players, start_rank_by_player)
-            tpn_by_team = {item["team_id"]: number for number, item in enumerate(prepared, start=1)}
+        prepared = self._prepare_teams(tournament_id, teams, players, start_rank_by_player)
+        tpn_by_team = {item["team_id"]: number for number, item in enumerate(prepared, start=1)}
 
-            # Extensões TRF25 (ESPEC §1).
-            handle.write(tournament_line("142", round_count))
-            initial_colour = self._initial_colour_152(players, prepared, rounds, is_team, settings)
-            if initial_colour:
-                handle.write(tournament_line("152", initial_colour))
-            encoded_time = encode_time_control(tournament.get("time_control"))
-            if encoded_time:
-                handle.write(tournament_line("222", encoded_time))
-            starting_rank_172 = self._starting_rank_method_172(players, settings)
-            if starting_rank_172:
-                handle.write(starting_rank_172)
-            handle.write(tournament_line("192", self._type_code_192(tournament, settings)))
-            handle.write(record_212(self._tiebreak_codes_212(is_team, tournament_id)))
-            if is_team:
-                handle.write(tournament_line("352", self._colour_sequence_352(settings)))
-                scoring_362 = self._scoring_system_362(settings)
-                if scoring_362:
-                    handle.write(scoring_362)
+        # Extensões TRF25 (ESPEC §1).
+        linhas.append(tournament_line("142", round_count))
+        initial_colour = self._initial_colour_152(players, prepared, rounds, is_team, settings)
+        if initial_colour:
+            linhas.append(tournament_line("152", initial_colour))
+        encoded_time = encode_time_control(tournament.get("time_control"))
+        if encoded_time:
+            linhas.append(tournament_line("222", encoded_time))
+        starting_rank_172 = self._starting_rank_method_172(players, settings)
+        if starting_rank_172:
+            linhas.append(starting_rank_172)
+        linhas.append(tournament_line("192", self._type_code_192(tournament, settings)))
+        linhas.append(record_212(self._tiebreak_codes_212(is_team, tournament_id)))
+        if is_team:
+            linhas.append(tournament_line("352", self._colour_sequence_352(settings)))
+            scoring_362 = self._scoring_system_362(settings)
+            if scoring_362:
+                linhas.append(scoring_362)
 
-            for player in players:
-                handle.write(
-                    service._trf_player_line(
-                        player, start_rank_by_player, standings_by_player,
-                        pairings_by_round, cells_round_count, settings,
-                    )
+        for player in players:
+            linhas.append(
+                service._trf_player_line(
+                    player, start_rank_by_player, standings_by_player,
+                    pairings_by_round, cells_round_count, settings,
                 )
-            for line in self._national_rating_records(players, start_rank_by_player, settings):
-                handle.write(line)
-            for line in self._team_records_310(prepared):
-                handle.write(line)
-            if is_team:
-                pab_line = self._pab_record_320(tournament_id, tpn_by_team, round_count, settings)
-                if pab_line:
-                    handle.write(pab_line)
-                for line in self._forfeit_records_330(tournament_id, tpn_by_team):
-                    handle.write(line)
-                for line in self._out_of_order_records_300(
-                    tournament_id, prepared, tpn_by_team, start_rank_by_player
-                ):
-                    handle.write(line)
-                for line in self._team_records_802(tournament_id, prepared, tpn_by_team, round_count):
-                    handle.write(line)
-                for line in self._prohibited_team_pairing_records_260(
-                    tournament_id, tpn_by_team, round_count
-                ):
-                    handle.write(line)
-                for line in self._requested_team_bye_records_240(rounds, tpn_by_team):
-                    handle.write(line)
-                for line in self._team_acceleration_records_250(
-                    tournament_id, teams, prepared, settings, round_count
-                ):
-                    handle.write(line)
-
-            if not is_team:
-                acceleration_line = self._acceleration_record_250(
-                    players, settings, round_count, pairings_by_round
-                )
-                if acceleration_line:
-                    handle.write(acceleration_line)
-                for line in self._prohibited_pairing_records_260(
-                    tournament_id, start_rank_by_player, round_count
-                ):
-                    handle.write(line)
-                for line in self._requested_bye_records_240(
-                    pairings_by_round, start_rank_by_player
-                ):
-                    handle.write(line)
-
-            for line in self._point_adjustment_records_299(
-                tournament_id, is_team, start_rank_by_player, tpn_by_team
+            )
+        for line in self._national_rating_records(players, start_rank_by_player, settings):
+            linhas.append(line)
+        for line in self._team_records_310(prepared):
+            linhas.append(line)
+        if is_team:
+            pab_line = self._pab_record_320(tournament_id, tpn_by_team, round_count, settings)
+            if pab_line:
+                linhas.append(pab_line)
+            for line in self._forfeit_records_330(tournament_id, tpn_by_team):
+                linhas.append(line)
+            for line in self._out_of_order_records_300(
+                tournament_id, prepared, tpn_by_team, start_rank_by_player
             ):
-                handle.write(line)
+                linhas.append(line)
+            for line in self._team_records_802(tournament_id, prepared, tpn_by_team, round_count):
+                linhas.append(line)
+            for line in self._prohibited_team_pairing_records_260(
+                tournament_id, tpn_by_team, round_count
+            ):
+                linhas.append(line)
+            for line in self._requested_team_bye_records_240(rounds, tpn_by_team):
+                linhas.append(line)
+            for line in self._team_acceleration_records_250(
+                tournament_id, teams, prepared, settings, round_count
+            ):
+                linhas.append(line)
 
+        if not is_team:
+            acceleration_line = self._acceleration_record_250(
+                players, settings, round_count, pairings_by_round
+            )
+            if acceleration_line:
+                linhas.append(acceleration_line)
+            for line in self._prohibited_pairing_records_260(
+                tournament_id, start_rank_by_player, round_count
+            ):
+                linhas.append(line)
+            for line in self._requested_bye_records_240(
+                pairings_by_round, start_rank_by_player
+            ):
+                linhas.append(line)
+
+        for line in self._point_adjustment_records_299(
+            tournament_id, is_team, start_rank_by_player, tpn_by_team
+        ):
+            linhas.append(line)
+
+        conteudo = "".join(linhas)
+        # Reciprocidade, resultado pendente e FIDE ID repetido, como no TRF16 (RG2-29).
+        warnings = [*warnings, *self._file_problems(conteudo, players)]
+        write_trf_file(file_path, conteudo)
         return warnings
 
     # O registro 250 (aceleração) subiu para o TRF16 (FED-03): e o registro

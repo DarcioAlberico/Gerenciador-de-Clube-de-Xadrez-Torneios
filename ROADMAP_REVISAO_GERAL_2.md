@@ -179,7 +179,8 @@ RG2-32 (falhas silenciosas, forma fixa da justificativa), RG2-40 (concorrência)
 | 0 | **código feito** em 2026-11-27, branch `fix/rg2-fase0-hotfix` — falta a revisão da nota pelo árbitro (F0.9) e o `.exe` — ver abaixo |
 | 1 | **código feito** em 2026-11-28, branch `fix/rg2-fase1` (empilhada na Fase 0) — D3 decidida pelo dono; suíte completa verde (2 testes da v59 ajustados para não fixar a versão final), gate estático verde, `.exe` com `--self-test` = 0 — ver abaixo |
 | 2 | **código feito** em 2026-11-28, branch `fix/rg2-fase2` (empilhada na Fase 1) — D4 e D5 decididas pelo dono; gate estático verde, `.exe` com `--self-test` = 0; suíte completa: 9 testes presos ao contrato antigo, ajustados em `4f4acd9` — ver abaixo |
-| 3–6 | não iniciadas |
+| 3 | **código feito** em 2026-11-28, branch `fix/rg2-fase3` (três frentes em paralelo: fide, motor, import) — D8 decidida pelo dono; suíte completa verde (1 retrato da API atualizado), gate estático verde, `.exe` com `--self-test` = 0 — ver abaixo |
+| 4–6 | não iniciadas |
 
 ### Fase −1 (2026-11-27)
 
@@ -246,3 +247,23 @@ Um commit por item, teste vermelho antes de cada correção. **D4** e **D5** dec
 | F2.5 | RG2-19 + 45 | `build_app`; só o torneio publicado (404); modo fixo (o `?mode=` só vale nesta máquina; privado → 403 na rede); `no-store` e `X-Frame-Options`; QR com o IP da rede, escolhido quando há mais de um | Aceite da espec com `TestClient` de IP da rede; QR da súmula com o IP | — |
 
 **Correção no caminho:** o F2.1 pôs `_operator_name` entre o `@atomic` e o avanço de eliminatória, que perdeu a transação; a varredura do RG2-25 pegou (`78d5f08`).
+
+### Fase 3 (2026-11-28)
+
+Três frentes em paralelo, cada uma na sua branch (`fix/rg2-f3-fide`, `fix/rg2-f3-motor`, `fix/rg2-f3-import`), juntadas na `fix/rg2-fase3` sem conflito. Um commit por item, teste vermelho antes de cada correção. **D1, D2 e D8** decididas pelo dono em 2026-11-28: prêmios do maior valor para o menor (empate de valor → ordem do edital); "aceita quem está abaixo" como opção por categoria, desligada; importar TRF de torneio em andamento é uso suportado.
+
+| Passo | Item | Entrega | Prova | Desvio da spec |
+|---|---|---|---|---|
+| F3.1 | RG2-11 | `src/domain/fide_player.py`: `fide_rating` só lê `international_rating`; o atalho virou `seed_rating`, só na ordem inicial; normas com `norm_rating`; IT3 com o rating FIDE | Rating do clube sem FIDE → colunas 49-52 vazias e fora do 072; `t6 B` → `unrated_opponents=9`, sem norma | O relatório de variação de rating segue caindo no rating do clube (fora do item) |
+| F3.2 | RG2-12 | `effective_federation(player, settings)` único no TRF, aviso, normas e IT3 | `t6 A` → `own_federation_opponents=7`, reprova no 1.4.4 | Sem federação no jogador e no torneio, a norma conta o adversário como da própria federação (o lado conservador) |
+| F3.3 | RG2-21 | A linha 001 recomposta mantém o comprimento | R3 com entrante de 0,5 → "confere", sem `pairing_check_unverified` | — |
+| F3.4 | RG2-22 | `GacruxNoLegalPairing` (subclasse de `GacruxRefusal`) com texto C.04.1, sem reserva; `end_tournament_early` (motivo, auditoria) e "Encerrar o torneio aqui" / "Rever ausências" na tela | 2 jogadores na R2 → recusa sem traceback | A marca `GACRUX-SEM-PAREAMENTO-LEGAL` está no Gacrux vendorizado e no `gacrux_engine`, com teste que confere as duas |
+| F3.5 | RG2-24 | `swiss = pairing_method == "swiss"` | Scheveningen e eliminatória com `-p` | — |
+| F3.6 | RG2-13 | Célula vazia = "não pareado"; rank ilegível/duplicado → `TrfError` com a linha; total pelo 142/XXR; avisos (adversário fora do arquivo, jogo de um lado só, letra desconhecida); `preview_trf`; só fecha rodada decidida; a tela mostra os avisos antes de importar | 13 testes: `t7` → 5 rodadas e R2 aberta; aviso cita o rank 9 e a linha do jogador 3 | Os avisos vão na chave `warnings` do dicionário de `parse_trf`, sem mudar o retorno para tupla |
+| F3.7 | RG2-30 | `src/services/text_files.py`: `read_text_file` (utf-8-sig → cp1252 → `AppError`), `download_text` com teto de 10 MB, `csv.Error` → `AppError` | cp1252 importa "João"; byte inválido → `AppError` | O zip da lista FIDE fica sem o teto (passa de 10 MB) |
+| F3.8 | RG2-29 | `trf_sex` (F → `w`; normas e importação aceitam `w`); `fide_ascii` translitera; TRF25 monta 012–122 pelo TRF16 (sem 082 no individual, 102 com o FIDE ID), `_file_problems` e gravação por temporário + troca; DejaVu **Condensed** empacotada e registrada nos nomes Helvetica/Times de todo escritor de PDF, com varredura | "Łukasz Øster" → "Oster, Lukasz", FIDE ID nos bytes 58-68; o PDF extrai "Łukasz"; 200 cartões em < 5 s | Condensed, não a Sans: a Sans é ≈ 10 % mais larga que a Helvetica e estouraria súmulas e cartões. Registrar nos nomes antigos evita mexer em ≈ 100 `setFont` e mantém os modelos de diploma gravados |
+| F3.9 | RG2-07b + 23 | Caracterização do motor antigo (20 cenários de equipes, 11 de jogadores); busca num lugar só (`round_search.py`, saem 573 linhas); `legal_round` exato (emparelhamento perfeito de menor custo, sem aresta para confronto jogado, bye como nó); `team_score_keys(settings)` única leitura do critério principal | 7 × 6, sementes 0–9 contra força bruta: nenhuma repetição, nenhum 2º PAB, cor ferida só no mínimo do oráculo; 3 × 4 e 2 jogadores → erro claro; dryer de 8 pares ≥ 0,8 para 1 | "Sem 3 cores seguidas" só quando algum pareamento legal evita (semente 6). A busca exata só substitui a heurística quando ela repete ou dá 2º PAB. Três testes antigos só passavam repetindo confronto (a força bruta confirmou): ganharam jogadores ou passaram a esperar a recusa |
+
+**Achado das Fases 1 e 2, resolvido:** "Importar Ratings" na tela de membros saiu — `members` não tem FIDE/CBX ID, nada era atualizado; não se inventou casamento por nome.
+
+**Suíte completa no merge das três frentes:** 2654 passaram, 8 pulados, 1 falha — o retrato da API pública não tinha o `end_tournament_at_round` do RG2-22 (atualizado em `2a3e3c4`). `.exe`: `--self-test` = 0, 5 de 5 passos.

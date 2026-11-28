@@ -257,16 +257,37 @@ class TournamentListView:
             )
             if not caminho:
                 return
+            if not self._confirm_trf_warnings(self.controller.preview_trf(caminho)):
+                return
             resultado = self.controller.import_trf(caminho)
             self.host._set_current_tournament(resultado["tournament_id"])
+            abertas = int(resultado.get("open_rounds") or 0)
             self.host._show_toast(
                 f"Torneio '{resultado['name']}' importado com "
-                f"{resultado['players_imported']} jogadores.",
+                f"{resultado['players_imported']} jogadores."
+                + (f" {abertas} rodada(s) sem resultado ficaram abertas." if abertas else ""),
                 kind="success",
             )
             self.host.show_players()
         except Exception as exc:
             self.host._show_error(exc)
+
+    def _confirm_trf_warnings(self, previa: dict[str, Any]) -> bool:
+        """RG2-13: o que o TRF traz e não vai entrar aparece antes de importar."""
+        avisos = list(previa.get("warnings") or [])
+        if not avisos:
+            return True
+        mostrados = "\n".join(f"• {aviso}" for aviso in avisos[:8])
+        resto = len(avisos) - 8
+        if resto > 0:
+            mostrados += f"\n… e mais {resto} aviso(s)."
+        return bool(
+            self.host._confirm_action(
+                "Importar TRF com avisos",
+                f"O arquivo de '{previa['name']}' tem {len(avisos)} ponto(s) que a importação "
+                f"não consegue honrar:\n\n{mostrados}\n\nImportar assim mesmo?",
+            )
+        )
 
     def _open_selected(self) -> None:
         tournament_id = self.selected_id()

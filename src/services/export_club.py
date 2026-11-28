@@ -22,6 +22,7 @@ from src.services.constants import *
 from src.services.fide_norms import build_norm_report
 from src.services.fide_rating import build_fide_report_rows
 from src.services.list_layouts import STANDINGS_COLUMNS, resolve_column_specs, resolve_columns
+from src.services.pdf_fonts import install_pdf_fonts
 from src.services.prizes import PRIZE_KINDS, PRIZE_POLICIES, allocate_prizes
 from src.services.trf_import import build_trf_rounds, parse_trf
 
@@ -137,6 +138,7 @@ class ClubReportsMixin:
             from reportlab.pdfgen import canvas
             from reportlab.lib.pagesizes import A4
             
+            install_pdf_fonts()
             c = canvas.Canvas(str(path), pagesize=A4)
             c.setFont("Helvetica-Bold", 18)
             c.drawString(50, 800, "RECIBO DE PAGAMENTO")

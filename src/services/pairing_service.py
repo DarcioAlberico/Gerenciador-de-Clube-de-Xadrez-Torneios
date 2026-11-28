@@ -2037,7 +2037,7 @@ class PairingService:
                     )
                     avisos.extend(engine.warnings)
                 except GacruxRefusal as recusa:
-                    if not reserve_engine:
+                    if not reserve_engine or not recusa.offers_reserve:
                         raise
                     avisos.append(
                         f"Rodada {next_number} pareada pelo {RESERVE_ENGINE_LABEL}, "
@@ -2782,8 +2782,9 @@ class PairingService:
         """Guarda do RG2-07a: rodada que fere a C.04.1 não é gravada.
 
         O motor de equipes repetia confronto quando havia pareamento sem
-        repetição (o redesenho é o RG2-07b). Até lá, a rodada pronta é
-        conferida; se repete confronto ou dá um segundo PAB, o caso vai à
+        repetição. Desde o RG2-07b o motor único proíbe a repetição e o 2º PAB
+        (busca exata, ``round_search.legal_round``); a guarda fica como rede de
+        segurança: se mesmo assim a rodada pronta fere a C.04.1, o caso vai à
         auditoria e a geração para com o motivo — melhor nenhuma rodada do que
         uma ilegal gravada em silêncio.
         """
@@ -2806,8 +2807,7 @@ class PairingService:
             "(C.04.1: duas equipes não se enfrentam duas vezes, e nenhuma recebe dois byes):\n"
             + "\n".join(f"- {item}" for item in problemas)
             + "\n\nA rodada não foi gerada, e o caso ficou registrado na auditoria. "
-            "O motor de equipes ainda não encontra sozinho a alternativa sem repetição; "
-            "confira os confrontos anteriores e as proibições de pareamento antes de tentar de novo."
+            "Confira os confrontos anteriores e as proibições de pareamento antes de tentar de novo."
         )
 
     def _team_float_histories(self, tournament_id: int) -> dict[int, list[str]]:
@@ -2948,6 +2948,43 @@ class PairingService:
         if tournament and tournament.get("competition_type") == "team":
             return self._team_round_dashboard_metrics(int(round_id))
         return self._individual_round_dashboard_metrics(int(round_id))
+
+    @requires("tournament_write")
+    @atomic
+    def end_tournament_early(self, tournament_id: int, reason: str) -> None:
+        """Encerra o torneio na última rodada fechada (RG2-22).
+
+        É a saída quando não existe pareamento legal para a próxima rodada: o
+        total de rodadas passa a ser o que já foi jogado, o torneio fica
+        encerrado e o evento ``tournament_ended_early`` guarda o total anterior
+        e o motivo. Recusa com rodada aberta — encerrar com mesa sem resultado
+        deixaria a classificação final contando uma rodada pela metade.
+        """
+        motivo = str(reason or "").strip()
+        if not motivo:
+            raise AppError("Diga o motivo de encerrar o torneio antes do total de rodadas.")
+        tournament = self.db.get_tournament(tournament_id)
+        if not tournament:
+            raise AppError("Selecione um torneio válido.")
+        rounds = self.db.list_rounds(tournament_id)
+        if not rounds:
+            raise AppError("O torneio ainda não tem rodada jogada para encerrar nela.")
+        abertas = [int(item["number"]) for item in rounds if str(item.get("status") or "") != "closed"]
+        if abertas:
+            raise AppError(
+                f"A rodada {abertas[0]} está aberta: feche-a ou exclua-a antes de encerrar o torneio."
+            )
+        jogadas = max(int(item["number"]) for item in rounds)
+        self.db.end_tournament_at_round(tournament_id, jogadas)
+        self.db.create_audit_event(
+            action="tournament_ended_early",
+            tournament_id=int(tournament_id),
+            entity_type="tournament",
+            entity_id=int(tournament_id),
+            reason=motivo,
+            before={"rounds_count": int(tournament["rounds_count"]), "status": tournament.get("status", "")},
+            after={"rounds_count": jogadas, "status": "finished"},
+        )
 
     @requires("tournament_write")
     def close_round(self, tournament_id: int, round_id: int) -> None:
