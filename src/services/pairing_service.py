@@ -2903,68 +2903,77 @@ class PairingService:
         return self._individual_round_dashboard_metrics(int(round_id))
 
     def close_round(self, tournament_id: int, round_id: int) -> None:
+        """Fecha a rodada — individual ou por equipes, pelo mesmo caminho (RGS-11, RG2-08).
+
+        Guarda "já fechada", conferência, backup e uma transação só com status,
+        retrato, auditoria e status do torneio. O por equipes só injeta o seu
+        passo: conferir os tabuleiros e gravar o resumo de cada confronto.
+        """
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
             raise AppError("Selecione um torneio válido.")
-        if tournament.get("competition_type") == "team":
-            self._close_team_round(tournament_id, round_id, tournament)
-            return
-
         round_data = self.db.get_round(round_id)
         if not round_data or int(round_data["tournament_id"]) != int(tournament_id):
             raise AppError("Rodada não encontrada para o torneio selecionado.")
         if str(round_data.get("status") or "") == "closed":
             # RGS-11: o segundo clique não gera outro backup, outro retrato nem
-            # outro `round_closed`. Reabrir/corrigir tem caminho próprio.
+            # outro evento de fechamento. Reabrir/corrigir tem caminho próprio.
             logger.info("Rodada %s ja estava fechada; nada a fazer", round_id)
             return
 
-        pairings = self.db.get_pairings_for_round(round_id)
-        pending = [
-            pairing
-            for pairing in pairings
-            if not pairing["result"] or pairing["result"] not in FINAL_RESULTS
-        ]
-        if pending:
-            # Mesa adiada primeiro, com recado próprio (ARB-02): mandar o árbitro
-            # "preencher todos os resultados" quando ele SABE que aquela mesa esta
-            # em aberto e o manda procurar o que ele mesmo combinou.
-            adiadas = self.db.list_postponed_pairings(round_id)
-            if adiadas:
-                raise AppError(_postponed_blocking_message(adiadas))
-            raise AppError("Preencha todos os resultados antes de fechar a rodada.")
+        team = tournament.get("competition_type") == "team"
+        if team:
+            summaries = self._team_close_summaries(tournament_id, round_id)
+        else:
+            self._check_individual_round_complete(round_id)
+            summaries = []
 
         blocking_issues = self._blocking_arbitration_issues_for_round(tournament_id, round_id)
         if blocking_issues:
             raise AppError(_blocking_issues_message(blocking_issues))
 
-        backup_path = self.db.backup_before("close_round", tournament_id=tournament_id, round_id=round_id)
+        reason = "close_team_round" if team else "close_round"
+        backup_path = self.db.backup_before(reason, tournament_id=tournament_id, round_id=round_id)
         logger.info("Backup criado antes de fechar rodada %s: %s", round_id, backup_path)
 
+        round_number = int(round_data["number"])
         # RGS-11: status, retrato, componentes, auditoria e status do torneio
         # entram juntos. O status vem primeiro DENTRO da transação porque a
         # classificação só conta rodada fechada; quem é fora só vê a rodada
         # fechada quando o retrato já existe.
         with self.db.transaction():
+            for summary in summaries:
+                self.db.update_team_match_summary(
+                    int(summary["team_match_id"]),
+                    str(summary["result"]),
+                    float(summary["white_match_points"]),
+                    float(summary["black_match_points"]),
+                    float(summary["white_game_points"]),
+                    float(summary["black_game_points"]),
+                )
             self.db.close_round(round_id)
-            # RGS-10: o mesmo corte da reconciliação, para que o retrato do
-            # fechamento e o reconciliado digam a mesma coisa sobre a rodada N
-            # (ajuste lançado para rodada futura, inscrito durante a rodada).
-            standings = self._standings(tournament_id, up_to_round=int(round_data["number"]))
+            if team:
+                standings = self._team_standings(tournament_id)
+            else:
+                # RGS-10: o mesmo corte da reconciliação, para que o retrato do
+                # fechamento e o reconciliado digam a mesma coisa sobre a rodada N
+                # (ajuste lançado para rodada futura, inscrito durante a rodada).
+                standings = self._standings(tournament_id, up_to_round=round_number)
             self.db.create_standings_snapshot(
                 tournament_id=tournament_id,
                 round_id=round_id,
-                round_number=int(round_data["number"]),
+                round_number=round_number,
                 standings=standings,
             )
-            self._persist_tiebreak_components(
-                tournament_id=tournament_id,
-                round_id=round_id,
-                round_number=int(round_data["number"]),
-                standings=standings,
-            )
+            if not team:
+                self._persist_tiebreak_components(
+                    tournament_id=tournament_id,
+                    round_id=round_id,
+                    round_number=round_number,
+                    standings=standings,
+                )
             self.db.create_audit_event(
-                action="round_closed",
+                action="team_round_closed" if team else "round_closed",
                 tournament_id=tournament_id,
                 round_id=round_id,
                 entity_type="round",
@@ -2979,6 +2988,22 @@ class PairingService:
             else:
                 self.db.update_tournament_status(tournament_id, "running")
         logger.info("Rodada %s fechada no torneio %s", round_id, tournament_id)
+
+    def _check_individual_round_complete(self, round_id: int) -> None:
+        pairings = self.db.get_pairings_for_round(round_id)
+        pending = [
+            pairing
+            for pairing in pairings
+            if not pairing["result"] or pairing["result"] not in FINAL_RESULTS
+        ]
+        if pending:
+            # Mesa adiada primeiro, com recado próprio (ARB-02): mandar o árbitro
+            # "preencher todos os resultados" quando ele SABE que aquela mesa esta
+            # em aberto e o manda procurar o que ele mesmo combinou.
+            adiadas = self.db.list_postponed_pairings(round_id)
+            if adiadas:
+                raise AppError(_postponed_blocking_message(adiadas))
+            raise AppError("Preencha todos os resultados antes de fechar a rodada.")
 
     def _update_team_board_result(
         self,
@@ -3519,16 +3544,9 @@ class PairingService:
             )
         return True
 
-    def _close_team_round(
-        self,
-        tournament_id: int,
-        round_id: int,
-        tournament: dict[str, Any],
-    ) -> None:
-        round_data = self.db.get_round(round_id)
-        if not round_data or int(round_data["tournament_id"]) != int(tournament_id):
-            raise AppError("Rodada não encontrada para o torneio selecionado.")
-
+    def _team_close_summaries(self, tournament_id: int, round_id: int) -> list[dict[str, Any]]:
+        """O passo de equipes do fechamento: confere os tabuleiros e calcula o resumo
+        de cada confronto. Só lê; quem grava é ``close_round``, na transação."""
         matches = self.db.list_team_matches_for_round(round_id)
         if not matches:
             raise AppError("A rodada não possui confrontos por equipes.")
@@ -3585,48 +3603,7 @@ class PairingService:
 
         if pending:
             raise AppError("Preencha todos os resultados dos tabuleiros antes de fechar a rodada.")
-
-        blocking_issues = self._blocking_arbitration_issues_for_round(tournament_id, round_id)
-        if blocking_issues:
-            raise AppError(_blocking_issues_message(blocking_issues))
-
-        backup_path = self.db.backup_before("close_team_round", tournament_id=tournament_id, round_id=round_id)
-        logger.info("Backup criado antes de fechar rodada por equipes %s: %s", round_id, backup_path)
-
-        for summary in summaries:
-            self.db.update_team_match_summary(
-                int(summary["team_match_id"]),
-                str(summary["result"]),
-                float(summary["white_match_points"]),
-                float(summary["black_match_points"]),
-                float(summary["white_game_points"]),
-                float(summary["black_game_points"]),
-            )
-
-        self.db.close_round(round_id)
-        standings = self._team_standings(tournament_id)
-        self.db.create_standings_snapshot(
-            tournament_id=tournament_id,
-            round_id=round_id,
-            round_number=int(round_data["number"]),
-            standings=standings,
-        )
-        self.db.create_audit_event(
-            action="team_round_closed",
-            tournament_id=tournament_id,
-            round_id=round_id,
-            entity_type="round",
-            entity_id=round_id,
-            before={"status": round_data.get("status", "")},
-            after={"status": "closed", "standings_count": len(standings)},
-        )
-        logger.info("Rodada por equipes %s fechada no torneio %s", round_id, tournament_id)
-
-        latest = self.db.get_latest_round(tournament_id)
-        if latest and int(latest["number"]) >= int(tournament["rounds_count"]):
-            self.db.update_tournament_status(tournament_id, "finished")
-        else:
-            self.db.update_tournament_status(tournament_id, "running")
+        return summaries
 
     def _round_results_to_delete(self, round_id: int) -> list[dict[str, Any]]:
         """Resultados que a exclusão da rodada apagaria (RGS-34).
