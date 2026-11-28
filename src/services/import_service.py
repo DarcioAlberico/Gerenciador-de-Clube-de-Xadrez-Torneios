@@ -568,6 +568,7 @@ class ImportService:
         payload = {
             "name": name,
             "surname": surname,
+            "sex": self._pick(row, "sex", "sexo", "genero", "gênero"),
             "club_id": club_id,
             "class_id": class_id,
             "learning_level_id": learning_level_id,

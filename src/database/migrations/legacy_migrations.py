@@ -111,6 +111,7 @@ class LegacyMigrations:
             57: self._migrate_to_v57,
             58: self._migrate_to_v58,
             59: self._migrate_to_v59,
+            60: self._migrate_to_v60,
         }
 
     def _ensure_current_schema(self, connection: sqlite3.Connection) -> None:
@@ -232,6 +233,8 @@ class LegacyMigrations:
             self._migrate_to_v58(connection)
         if self.db.SCHEMA_VERSION >= 59:
             self._migrate_to_v59(connection)
+        if self.db.SCHEMA_VERSION >= 60:
+            self._migrate_to_v60(connection)
 
     def _migrate_to_v1(self, connection: sqlite3.Connection) -> None:
         now = self.db.now()
@@ -2530,6 +2533,17 @@ class LegacyMigrations:
             self._acentuar_semeado(connection, "learning_levels", padrao)
         for padrao in modelos:
             self._acentuar_semeado(connection, "certificate_templates", padrao)
+
+    def _migrate_to_v60(self, connection: sqlite3.Connection) -> None:
+        """Sexo no cadastro de membro (RG2-47).
+
+        A inscrição a partir do cadastro (e o Modo Livre, que inscreve turmas
+        inteiras) criava o jogador sem sexo, e a categoria Feminino saía vazia.
+        Banco antigo ganha a coluna vazia: nada muda na classificação até
+        alguém preencher.
+        """
+        if "sex" not in self.db._table_columns(connection, "members"):
+            connection.execute("ALTER TABLE members ADD COLUMN sex TEXT NOT NULL DEFAULT ''")
 
     def _acentuar_semeado(
         self, connection: sqlite3.Connection, tabela: str, padrao: dict[str, Any]

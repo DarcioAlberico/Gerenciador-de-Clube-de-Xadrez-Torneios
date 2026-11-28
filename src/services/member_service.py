@@ -15,6 +15,7 @@ from typing import Any, Mapping, TYPE_CHECKING
 from src.domain.dates import Data, parse_date
 from src.core.database import BASE_DIR, DEFAULT_CERTIFICATE_TEMPLATES, Database
 from src.services.constants import *
+from src.services.categories import normalized_sex
 from src.services.transactions import atomic
 
 if TYPE_CHECKING:
@@ -461,9 +462,15 @@ class MemberService:
         except ValueError:
             online_rapid_rating = 0
 
+        sexo_digitado = str(data.get("sex") or "").strip()
+        sex = normalized_sex(sexo_digitado)
+        if sexo_digitado and not sex:
+            raise AppError("Sexo do membro inválido: use F ou M (ou deixe vazio).")
+
         return {
             "name": name,
             "surname": str(data.get("surname", "")),
+            "sex": sex,
             "club_id": club_id,
             "learning_level_id": learning_level_id or None,
             "city": str(data.get("city", "")),

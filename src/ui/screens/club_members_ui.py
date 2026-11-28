@@ -56,6 +56,7 @@ class ClubMembersMixin:
             ("email", "E-mail"),
             ("document", "Documento"),
             ("birth_date", "Nascimento"),
+            ("sex", "Sexo (F/M)"),
             ("guardian_name", "Responsável"),
             ("guardian_phone", "Telefone resp."),
             ("notes", "Observações"),
@@ -68,6 +69,10 @@ class ClubMembersMixin:
             elif key == "category":
                 from ..support import FIDE_CATEGORIES
                 entry = ctk.CTkOptionMenu(form, values=FIDE_CATEGORIES, width=250)
+                entry.set("")
+            elif key == "sex":
+                # RG2-47: vai junto na inscrição — sem ele a categoria Feminino sai vazia.
+                entry = ctk.CTkOptionMenu(form, values=["", "F", "M"], width=250)
                 entry.set("")
             else:
                 entry = ctk.CTkEntry(form, width=250)

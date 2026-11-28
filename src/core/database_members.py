@@ -9,6 +9,8 @@ from __future__ import annotations
 from typing import Any
 
 from ._database_base import _DatabaseInfra
+from src.services.categories import normalized_sex
+
 from .categories import competition_category_payload
 
 
@@ -33,6 +35,7 @@ MEMBER_UPDATE_COLUMNS: dict[str, Any] = {
     "notes": _texto, "lichess_username": _texto, "chesscom_username": _texto,
     "online_blitz_rating": _inteiro, "online_rapid_rating": _inteiro,
     "departure_date": _texto, "departure_reason": _texto, "transfer_notes": _texto,
+    "sex": normalized_sex,
 }
 """Colunas que ``update_member`` aceita e como cada uma é normalizada (RG2-34)."""
 
@@ -129,6 +132,7 @@ class MemberMixin(_DatabaseInfra):
         chesscom_username: str = "",
         online_blitz_rating: int = 0,
         online_rapid_rating: int = 0,
+        sex: str = "",
     ) -> int:
         club = self.get_club(int(club_id or 1))
         category_payload = competition_category_payload(
@@ -148,8 +152,9 @@ class MemberMixin(_DatabaseInfra):
                     club_id, learning_level_id, name, surname, city, phone, email, document, birth_date, rating,
                     category, age_category, rating_category, prize_tags,
                     member_type, status, guardian_name, guardian_phone,
-                    notes, lichess_username, chesscom_username, online_blitz_rating, online_rapid_rating, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    notes, lichess_username, chesscom_username, online_blitz_rating, online_rapid_rating, sex,
+                    created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     int(club_id or 1),
@@ -175,6 +180,7 @@ class MemberMixin(_DatabaseInfra):
                     chesscom_username.strip(),
                     int(online_blitz_rating or 0),
                     int(online_rapid_rating or 0),
+                    normalized_sex(sex),
                     now,
                     now,
                 ),
@@ -527,4 +533,5 @@ class MemberMixin(_DatabaseInfra):
             member_id=member_id,
             surname=surname,
             given_name=given_name,
+            sex=str(member.get("sex") or ""),
         )
