@@ -71,7 +71,6 @@ class KnockoutActions:
                         lados[jogador_option.get()],
                         criterio_por_rotulo[criterio_option.get()],
                         observacao.get(),
-                        actor=getattr(host, "current_user_name", "") or "",
                     )
                     dialog.close()
                     host._show_toast("Avanço registrado.", kind="success")

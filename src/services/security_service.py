@@ -16,6 +16,7 @@ from typing import Any, Mapping, TYPE_CHECKING
 
 from src.domain.dates import is_iso_date
 from src.core.database import BASE_DIR, DEFAULT_CERTIFICATE_TEMPLATES, Database
+from src.core.operator import SYSTEM_ACTOR, Operator
 from src.services.constants import *
 
 if TYPE_CHECKING:
@@ -40,7 +41,22 @@ class SecurityService:
 
     def __init__(self, db: Database) -> None:
         self.db = db
-        self._current_user: dict[str, str] | None = None
+
+    @property
+    def _current_user(self) -> dict[str, str] | None:
+        """O usuário logado, lido do operador do banco — a única fonte (RG2-43)."""
+        operator = self.db.current_operator()
+        if operator is None:
+            return None
+        return {"id": str(operator.user_id), "username": operator.name, "role": operator.role}
+
+    @_current_user.setter
+    def _current_user(self, user: Mapping[str, Any] | None) -> None:
+        self.db.set_operator(
+            None
+            if not user
+            else Operator(user_id=int(user.get("id") or 0), name=str(user["username"]), role=str(user["role"]))
+        )
 
     def login(self, username: str, password_raw: str) -> bool:
         with self.db.connect() as conn:
@@ -123,17 +139,17 @@ class SecurityService:
             return 0
 
     def current_operator(self) -> dict[str, str]:
-        if self._current_user:
-            role = self._current_user["role"]
-            name = self._current_user["username"]
-            return {"name": name, "role": role, "role_label": OPERATOR_ROLES.get(role, role)}
-            
-        settings = self.db.get_app_settings()
-        role = str(settings.get("operator_role") or "admin")
-        if role not in OPERATOR_ROLES:
-            role = "admin"
-        name = str(settings.get("operator_name") or "").strip() or OPERATOR_ROLES[role]
-        return {"name": name, "role": role, "role_label": OPERATOR_ROLES[role]}
+        """O operador do banco (RG2-43). Sem login é o sistema, com permissão total:
+        só os fluxos sem tela (migração, autoteste, testes de serviço) chegam aqui
+        sem login — o app abre na tela de login."""
+        operator = self.db.current_operator()
+        if operator is None:
+            return {"name": SYSTEM_ACTOR, "role": "admin", "role_label": "Sistema"}
+        return {
+            "name": operator.name,
+            "role": operator.role,
+            "role_label": OPERATOR_ROLES.get(operator.role, operator.role),
+        }
 
     def has_permission(self, action: str) -> bool:
         """Verifica se o operador atual tem a permissão solicitada."""

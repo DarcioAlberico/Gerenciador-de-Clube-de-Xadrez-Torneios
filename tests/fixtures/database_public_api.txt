@@ -62,6 +62,7 @@ create_team_substitution_event
 create_tournament
 create_training_list
 create_training_session
+current_operator
 delete_certificate_issuances
 delete_financial_transaction
 delete_incident
@@ -245,6 +246,7 @@ set_learning_level_active
 set_member_active_class
 set_member_status
 set_membership_plan_active
+set_operator
 set_pairing_postponed
 set_player_active
 set_player_scheveningen_group

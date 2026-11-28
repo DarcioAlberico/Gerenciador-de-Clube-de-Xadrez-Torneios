@@ -13,6 +13,7 @@ from datetime import datetime
 from typing import Any, Mapping
 
 from ._database_base import _DatabaseInfra
+from .operator import SYSTEM_ACTOR
 
 
 class SyncAuditMixin(_DatabaseInfra):
@@ -97,10 +98,11 @@ class SyncAuditMixin(_DatabaseInfra):
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
     def _operator_context(self) -> tuple[str, str]:
-        settings = self.get_app_settings()
-        actor = str(settings.get("operator_name") or "").strip()
-        role = str(settings.get("operator_role") or "").strip()
-        return actor, role
+        """Quem a auditoria registra: o operador logado, ou o sistema (RG2-43)."""
+        operator = self.current_operator()
+        if operator is None:
+            return SYSTEM_ACTOR, ""
+        return operator.name, operator.role
 
     def ensure_local_device(self, name: str = "") -> dict[str, Any]:
         settings = self.get_app_settings()

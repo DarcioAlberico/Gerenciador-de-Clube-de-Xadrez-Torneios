@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, Callable, Mapping, Sequence
 from src.core.database import Database
 from src.core.database_tournament_core import default_tiebreak_engine
 from src.domain.numbers import setting_number
+from src.core.operator import SYSTEM_ACTOR
 from src.services.transactions import atomic
 from src.services.constants import (
     ACCELERATION_METHODS as _ACCELERATION_METHODS,
@@ -4888,6 +4889,10 @@ class PairingService:
         return dict(_KNOCKOUT_CRITERIA)
 
     @atomic
+    def _operator_name(self) -> str:
+        operator = self.db.current_operator()
+        return operator.name if operator else SYSTEM_ACTOR
+
     def register_knockout_advancement(
         self,
         tournament_id: int,
@@ -4920,7 +4925,8 @@ class PairingService:
             int(player_id),
             str(criterion).strip(),
             notes=limpo,
-            actor=actor,
+            # RG2-43: sem ator explícito, quem está logado (a tela mandava "").
+            actor=actor.strip() or self._operator_name(),
         )
         self.db.create_audit_event(
             action="knockout_advancement_registered",

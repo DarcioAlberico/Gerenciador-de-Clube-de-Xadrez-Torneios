@@ -14,6 +14,9 @@ from contextlib import AbstractContextManager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterable, Mapping
 
+if TYPE_CHECKING:
+    from .operator import Operator
+
 
 class _DatabaseInfra:
     # Atributos de instância definidos no __init__ da fachada Database:
@@ -44,6 +47,8 @@ class _DatabaseInfra:
 
         @staticmethod
         def _table_columns(connection: sqlite3.Connection, table_name: str) -> set[str]: ...
+
+        def current_operator(self) -> Operator | None: ...
 
         # Config/base que permanece na fachada Database e e usada por mixins:
         def get_app_settings(self) -> dict[str, Any]: ...

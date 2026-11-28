@@ -28,6 +28,7 @@ from .database_schema import CREATE_INDEXES_SQL, CREATE_TABLES_SQL
 from .database_sync_audit import SyncAuditMixin
 from .database_tournament_core import TournamentCoreMixin
 from .database_ui_prefs import UiPrefsMixin
+from .operator import Operator
 
 logger = logging.getLogger(__name__)
 
@@ -486,6 +487,8 @@ class Database(
         # Conexão da transação aberta em CADA thread (RGS-08): nunca e
         # compartilhada, entre threads, porque o sqlite3 não permite.
         self._thread_state = threading.local()
+        # RG2-43: quem opera. Definido pelo login; None é o sistema.
+        self._operator: Operator | None = None
         if using_default_db_path:
             self._copy_legacy_default_database_if_needed()
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -552,6 +555,14 @@ class Database(
             raise
         finally:
             connection.close()
+
+    def set_operator(self, operator: Operator | None) -> None:
+        """Define quem opera (RG2-43). Só o login e o logout chamam; ``None`` = sistema."""
+        self._operator = operator
+
+    def current_operator(self) -> Operator | None:
+        """O operador logado, ou ``None`` para os fluxos do sistema."""
+        return self._operator
 
     @contextmanager
     def transaction(self):
