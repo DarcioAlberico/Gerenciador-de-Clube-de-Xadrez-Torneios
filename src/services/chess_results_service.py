@@ -20,6 +20,7 @@ from src.services.chess_results import (
     parse_entries_csv,
 )
 from src.services.constants import AppError
+from src.services.text_files import read_text_file
 from src.services.transactions import atomic
 from src.services.permissions import requires
 
@@ -64,10 +65,7 @@ class ChessResultsService:
         if not self.db.get_tournament(tournament_id):
             raise AppError("Selecione um torneio válido.")
         path = Path(file_path)
-        try:
-            content = path.read_text(encoding="utf-8-sig")
-        except UnicodeDecodeError:
-            content = path.read_text(encoding="latin-1")
+        content = read_text_file(path)
 
         payloads, errors = parse_entries_csv(content)
         imported = 0

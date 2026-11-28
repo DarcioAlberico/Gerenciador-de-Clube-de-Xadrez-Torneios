@@ -1,7 +1,5 @@
 from __future__ import annotations
-import csv
 import html
-import io
 import json
 import logging
 import math
@@ -14,12 +12,12 @@ from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any, Mapping, TYPE_CHECKING
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
-from urllib.request import Request, urlopen
 
 from src.core.database import BASE_DIR, DEFAULT_CERTIFICATE_TEMPLATES, Database
 from src.services.access_export import access_driver_available, write_accdb, write_csv_bundle
 from src.services.constants import *
 from src.services.spreadsheet_safety import unguard_csv_cell
+from src.services.text_files import csv_records, download_text, read_text_file
 from src.services.numeric_fields import rating_cell
 from src.services.fide_norms import build_norm_report
 from src.services.fide_rating import build_fide_report_rows
@@ -342,10 +340,7 @@ class ImportService:
         vazio; o round-trip promete o que o TRF carrega, e não mais do que isso.
         """
         path = Path(file_path)
-        try:
-            content = path.read_text(encoding="utf-8")
-        except UnicodeDecodeError:
-            content = path.read_text(encoding="latin-1")
+        content = read_text_file(path)
 
         try:
             parsed = parse_trf(content)
@@ -782,33 +777,23 @@ class ImportService:
         path = Path(source)
         extension = path.suffix.lower()
         if extension == ".csv":
-            return self._tabular_from_csv_text(path.read_text(encoding="utf-8-sig"))
+            return self._tabular_from_csv_text(read_text_file(path))
         if extension in {".xls", ".xlsx"}:
             return self._tabular_from_spreadsheet(path)
         raise AppError("Formato não suportado. Use .csv, .xls, .xlsx ou link CSV do Google Sheets.")
 
     def _tabular_from_csv_text(self, content: str) -> dict[str, Any]:
-        sample = content[:4096]
-        reader = csv.DictReader(io.StringIO(content), dialect=self._csv_dialect(sample))
-        if not reader.fieldnames:
-            raise AppError("CSV sem cabeçalho.")
-        headers = [str(name) for name in reader.fieldnames]
+        headers, records = csv_records(content)
         # RG2-20: o CSV exportado pelo Albericus protege fórmula com "'"; aqui
         # ele sai, e o texto volta igual ao que foi exportado.
         rows = [
             (line_number, {chave: unguard_csv_cell(valor) for chave, valor in row.items()})
-            for line_number, row in enumerate(reader, start=2)
+            for line_number, row in records
         ]
         return {"headers": headers, "rows": rows}
 
     def _tabular_from_url(self, url: str) -> dict[str, Any]:
-        csv_url = self._google_sheets_csv_url(url)
-        request = Request(csv_url, headers={"User-Agent": "Albericus"})
-        try:
-            with urlopen(request, timeout=20) as response:
-                content = response.read().decode("utf-8-sig")
-        except Exception as exc:
-            raise AppError(f"Não foi possível baixar a planilha: {exc}") from exc
+        content = download_text(self._google_sheets_csv_url(url), timeout=20, label="a planilha")
         return self._tabular_from_csv_text(content)
 
     def _tabular_from_spreadsheet(self, path: Path) -> dict[str, Any]:
@@ -833,7 +818,7 @@ class ImportService:
         return {"headers": headers, "rows": rows}
 
     def _player_rows_from_csv(self, path: Path) -> list[tuple[int, dict[str, Any]]]:
-        return self._tabular_from_csv_text(path.read_text(encoding="utf-8-sig"))["rows"]
+        return self._tabular_from_csv_text(read_text_file(path))["rows"]
 
     def _player_rows_from_spreadsheet(self, path: Path) -> list[tuple[int, dict[str, Any]]]:
         return self._tabular_from_spreadsheet(path)["rows"]
@@ -858,62 +843,57 @@ class ImportService:
         skipped = 0
         errors: list[str] = []
 
-        with path.open("r", encoding="utf-8-sig", newline="") as file:
-            sample = file.read(4096)
-            file.seek(0)
-            reader = csv.DictReader(file, dialect=self._csv_dialect(sample))
-            if not reader.fieldnames:
-                raise AppError("CSV sem cabeçalho.")
-                
-            all_members = self.db.list_members()
-            fide_map = {str(m.get("fide_id")).strip(): m["id"] for m in all_members if m.get("fide_id")}
-            cbx_map = {str(m.get("cbx_id")).strip(): m["id"] for m in all_members if m.get("cbx_id")}
+        _headers, records = csv_records(read_text_file(path))
+            
+        all_members = self.db.list_members()
+        fide_map = {str(m.get("fide_id")).strip(): m["id"] for m in all_members if m.get("fide_id")}
+        cbx_map = {str(m.get("cbx_id")).strip(): m["id"] for m in all_members if m.get("cbx_id")}
 
-            for line_number, row in enumerate(reader, start=2):
-                row = {chave: unguard_csv_cell(valor) for chave, valor in row.items()}
-                player_id_csv = self._pick(row, "fide_id", "fide", "id_fide", "idnumber", "id", "cbx_id", "cbx", "id_cbx")
-                if not player_id_csv:
-                    errors.append(f"Linha {line_number}: ID (FIDE/CBX) não encontrado.")
-                    skipped += 1
-                    continue
-                    
-                player_id_csv = str(player_id_csv).strip()
-                rating_text = self._pick(row, "rating", "elo", "rtg", "standard", "rating_fide", "rating_cbx")
-                if not rating_text:
-                    errors.append(f"Linha {line_number}: Rating vazio.")
-                    skipped += 1
-                    continue
-                    
-                try:
-                    rating = int(float(rating_text))
-                except ValueError:
-                    errors.append(f"Linha {line_number}: Rating inválido ({rating_text}).")
-                    skipped += 1
-                    continue
-                    
-                member_id = None
-                if rating_type == "fide":
-                    member_id = fide_map.get(player_id_csv)
-                else:
-                    member_id = cbx_map.get(player_id_csv)
-                    
-                if not member_id:
-                    skipped += 1
-                    continue
-                    
-                member = self.db.get_member(member_id)
-                if not member:
-                    continue
-                    
-                payload = dict(member)
-                if rating_type == "fide":
-                    payload["international_rating"] = rating
-                else:
-                    payload["national_rating"] = rating
-                    
-                self.db.update_member(member_id, payload)
-                updated += 1
+        for line_number, row in records:
+            row = {chave: unguard_csv_cell(valor) for chave, valor in row.items()}
+            player_id_csv = self._pick(row, "fide_id", "fide", "id_fide", "idnumber", "id", "cbx_id", "cbx", "id_cbx")
+            if not player_id_csv:
+                errors.append(f"Linha {line_number}: ID (FIDE/CBX) não encontrado.")
+                skipped += 1
+                continue
                 
+            player_id_csv = str(player_id_csv).strip()
+            rating_text = self._pick(row, "rating", "elo", "rtg", "standard", "rating_fide", "rating_cbx")
+            if not rating_text:
+                errors.append(f"Linha {line_number}: Rating vazio.")
+                skipped += 1
+                continue
+                
+            try:
+                rating = int(float(rating_text))
+            except ValueError:
+                errors.append(f"Linha {line_number}: Rating inválido ({rating_text}).")
+                skipped += 1
+                continue
+                
+            member_id = None
+            if rating_type == "fide":
+                member_id = fide_map.get(player_id_csv)
+            else:
+                member_id = cbx_map.get(player_id_csv)
+                
+            if not member_id:
+                skipped += 1
+                continue
+                
+            member = self.db.get_member(member_id)
+            if not member:
+                continue
+                
+            payload = dict(member)
+            if rating_type == "fide":
+                payload["international_rating"] = rating
+            else:
+                payload["national_rating"] = rating
+                
+            self.db.update_member(member_id, payload)
+            updated += 1
+            
         logger.info("%s membros atualizados via importacao de rating %s de %s", updated, rating_type, path)
         return {"updated": updated, "skipped": skipped, "errors": errors}
 
@@ -1063,28 +1043,6 @@ class ImportService:
             "international_rating": international_rating,
         }
         return {"name": name, "payload": payload, "errors": errors}
-
-    @staticmethod
-    def _csv_dialect(sample: str) -> Any:
-        try:
-            detectado = csv.Sniffer().sniff(sample, delimiters=",;")
-        except csv.Error:
-            detectado = None
-        if detectado is not None:
-            # Do Sniffer, só o separador (RG2-20): com duas células protegidas
-            # lado a lado ("'=1+1;'+55…") ele elegia "'" como aspas e partia o
-            # texto. Excel, Google Sheets e o exportador usam aspas duplas.
-            class DetectedDialect(csv.excel):
-                delimiter = detectado.delimiter
-
-            return DetectedDialect
-        first_line = sample.splitlines()[0] if sample.splitlines() else ""
-        if first_line.count(";") > first_line.count(","):
-            class SemicolonDialect(csv.excel):
-                delimiter = ";"
-
-            return SemicolonDialect
-        return csv.get_dialect("excel")
 
     @staticmethod
     def _registration_duplicate_key(payload: dict[str, Any]) -> tuple[str, str]:
