@@ -8,6 +8,7 @@ decomposição da God Class. Ver ``_database_base._DatabaseInfra``.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import secrets
 import sqlite3
@@ -17,6 +18,12 @@ from src.services.categories import from_row as category_from_row
 
 from ._database_base import _DatabaseInfra
 from .categories import competition_category_payload, reference_year
+
+logger = logging.getLogger(__name__)
+
+# RG2-31: a partir de quantas linhas da lista antiga removidas vale compactar o
+# banco. A lista FIDE tem ~550 mil; a CBX, ~3 mil (não compensa os segundos).
+OFFICIAL_LIST_VACUUM_ROWS = 10_000
 
 
 def default_pairing_system() -> str:
@@ -911,7 +918,46 @@ class TournamentCoreMixin(_DatabaseInfra):
                     updated_at=now,
                     **player,
                 )
-            return snapshot_id
+            # RG2-31: a lista nova substitui a anterior da mesma fonte, na mesma
+            # transação (se a importação falhar, a anterior fica). As consultas
+            # só leem o retrato mais recente; os antigos só engordavam o banco
+            # e cada backup (110 MB no banco real).
+            antigos = [
+                int(linha[0])
+                for linha in connection.execute(
+                    "SELECT id FROM official_rating_snapshots WHERE source = ? AND id <> ?",
+                    (source, snapshot_id),
+                )
+            ]
+            removidos = 0
+            if antigos:
+                marcas = ", ".join("?" for _ in antigos)
+                removidos = connection.execute(
+                    f"DELETE FROM official_players WHERE snapshot_id IN ({marcas})", antigos
+                ).rowcount
+                connection.execute(
+                    f"DELETE FROM official_rating_snapshots WHERE id IN ({marcas})", antigos
+                )
+        if removidos >= OFFICIAL_LIST_VACUUM_ROWS:
+            self._compact_after_list_replacement(removidos)
+        return snapshot_id
+
+    def _compact_after_list_replacement(self, removidos: int) -> None:
+        """``VACUUM`` depois de trocar uma lista grande (RG2-31).
+
+        Sem compactar, o arquivo — e cada backup — ficava do tamanho das duas
+        listas: com nomes repetidos, os índices não esvaziam páginas inteiras,
+        e o SQLite não devolve o espaço sozinho.
+        """
+        logger.info(
+            "Compactando o banco depois de substituir a lista oficial (%d jogadores antigos removidos)",
+            removidos,
+        )
+        conexao = sqlite3.connect(self.db_path, timeout=30)
+        try:
+            conexao.execute("VACUUM")
+        finally:
+            conexao.close()
 
     def insert_official_player(
         self,
