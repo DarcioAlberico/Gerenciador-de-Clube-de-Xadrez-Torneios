@@ -292,9 +292,8 @@ class ControladorTest(unittest.TestCase):
 
         E lá que a política mora (limite por jogador, última rodada, jogador
         inativo), e a tela não pode ser o único lugar que valida — ela pode ser
-        burlada. Equipes seguem gravando direto: a política e do individual, e
-        inventar uma regra para equipes que nenhum regulamento pediu seria pior
-        do que deixar explicito que ela não existe lá.
+        burlada. Equipes não têm essa política (nenhum regulamento pediu), mas
+        passam pelo serviço também desde o RG2-04: é lá que mora a permissão.
         """
         controlador, db, servico = self.controlador_com_servico()
         controlador.add_bye(1, state.RequestedByeForm(3, 2, "H", "", is_team=False))
@@ -302,16 +301,18 @@ class ControladorTest(unittest.TestCase):
         controlador.delete_bye(1, 8, is_team=True)
         # RG2-05: excluir o bye individual também passa pelo serviço.
         controlador.delete_bye(1, 9, is_team=False, reason="engano")
+        self.assertEqual([], db.nomes_chamados(), "a tela não grava direto (RG2-04)")
         self.assertEqual(
-            ["add_requested_team_bye", "delete_requested_team_bye"],
-            db.nomes_chamados(),
+            ["request_bye", "add_requested_team_bye", "delete_requested_team_bye", "cancel_requested_bye"],
+            servico.nomes_chamados(),
         )
-        self.assertEqual(["request_bye", "cancel_requested_bye"], servico.nomes_chamados())
 
     def test_proibicao_de_equipe_usa_a_tabela_de_equipes(self) -> None:
-        controlador, db = self.controlador()
+        controlador, db, servico = self.controlador_com_servico()
         controlador.add_prohibition(1, state.ProhibitionForm(1, 2, "", "", "", is_team=True))
-        self.assertEqual(["add_prohibited_team_pairing"], db.nomes_chamados())
+        self.assertEqual([], db.nomes_chamados())
+        ((nome, _args, kwargs),) = servico.chamadas
+        self.assertEqual(("add_prohibited_pairing", True), (nome, kwargs["is_team"]))
 
     def test_formulario_invalido_nao_chega_ao_banco(self) -> None:
         controlador, db = self.controlador()
@@ -332,45 +333,35 @@ class ControladorTest(unittest.TestCase):
         Vai para `audit_events` — a mesma trilha de `round_generated` — porque é
         de lá que o `export_tournament_audit` tira o relatório de auditoria.
         """
-        controlador, db = self.controlador()
+        controlador, db, servico = self.controlador_com_servico()
         controlador.add_adjustment(
             7, state.AdjustmentForm(3, 2, "", "", "-0,5", "Celular tocou")
         )
-        self.assertEqual(["add_point_adjustment", "create_audit_event"], db.nomes_chamados())
-        _nome, _args, kwargs = db.chamadas[-1]
-        self.assertEqual("point_adjustment_added", kwargs["action"])
-        self.assertEqual(7, kwargs["tournament_id"])
-        self.assertEqual("Celular tocou", kwargs["reason"])
-        self.assertIn("-0,5 (rodada 2)", kwargs["metadata"]["summary"])
+        # RG2-04: ajuste e trilha gravam juntos no serviço (que checa a permissão);
+        # a tela só manda o lançamento e a descrição legível.
+        self.assertEqual([], db.nomes_chamados())
+        ((nome, args, _kwargs),) = servico.chamadas
+        self.assertEqual("add_point_adjustment", nome)
+        torneio, payload, resumo = args
+        self.assertEqual(7, torneio)
+        self.assertEqual("Celular tocou", payload["reason"])
+        self.assertIn("-0,5 (rodada 2)", resumo)
 
     def test_exclusao_de_ajuste_tambem_e_auditada(self) -> None:
         """Apagar o ajuste devolve os pontos: é uma decisão como a de lançar."""
-        controlador, db = self.controlador(
+        db = BancoDeMentira(
             list_point_adjustments=[
                 {"id": 4, "player_id": 3, "game_points": -0.5, "reason": "Celular tocou",
                  "round_number": 2, "player_name": "Ana"}
             ]
         )
-        controlador.delete_adjustment(7, 4)
-        self.assertEqual(
-            ["list_point_adjustments", "delete_point_adjustment", "create_audit_event"],
-            db.nomes_chamados(),
-        )
-        _nome, _args, kwargs = db.chamadas[-1]
-        self.assertEqual("point_adjustment_removed", kwargs["action"])
-        self.assertIn("Ana", kwargs["metadata"]["summary"])
-
-    def test_trilha_indisponivel_nao_derruba_o_lancamento(self) -> None:
-        """Em pleno salão, problema de registro não pode virar problema de operação."""
-
-        class BancoQueFalhaNaAuditoria(BancoDeMentira):
-            def create_audit_event(self, **kwargs: Any) -> int:
-                raise RuntimeError("banco ocupado")
-
-        db = BancoQueFalhaNaAuditoria()
-        controlador = ArbitrationController(db, pairing_service=BancoDeMentira())
-        controlador.add_adjustment(7, state.AdjustmentForm(3, 2, "", "", "-0,5", "Celular"))
-        self.assertEqual(["add_point_adjustment"], db.nomes_chamados())
+        servico = BancoDeMentira()
+        ArbitrationController(db, pairing_service=servico).delete_adjustment(7, 4)
+        self.assertEqual(["list_point_adjustments"], db.nomes_chamados())
+        ((nome, args, _kwargs),) = servico.chamadas
+        self.assertEqual(("delete_point_adjustment", 7, 4), (nome, args[0], args[1]))
+        self.assertEqual("Celular tocou", args[2]["reason"], "o retrato vai junto, para a trilha")
+        self.assertIn("Ana", args[3])
 
     def test_lancamento_inline_em_rodada_fechada_aponta_para_a_tela_certa(self) -> None:
         """ARB-01: a faixa rápida não tem campo de motivo — então não pede um.

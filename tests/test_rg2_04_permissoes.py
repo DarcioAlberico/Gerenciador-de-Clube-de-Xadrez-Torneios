@@ -79,6 +79,25 @@ class VarreduraTest(unittest.TestCase):
     def test_isencao_que_nao_precisa_mais_sai_da_lista(self) -> None:
         self.assertEqual(set(), set(ISENTOS) - set(gravam_sem_checar()), "a isenção só encolhe")
 
+    def test_tela_nao_grava_direto_no_banco(self) -> None:
+        """A tela passa pelo serviço — senão a permissão dele não vale nada.
+
+        Fica de fora só ``save_app_settings``: preferência de tela e
+        configuração do aplicativo, que as próprias telas de configuração
+        protegem.
+        """
+        escrita = re.compile(
+            r"(?:self|host)(?:\.host)?\.db\.((?:create|update|delete|replace|save|add|close|set|insert|"
+            r"remove|mark|upsert|toggle|record|apply|register)_\w*)\("
+        )
+        achados = []
+        for arquivo in sorted((SERVICOS.parent / "ui").rglob("*.py")):
+            for numero, linha in enumerate(arquivo.read_text(encoding="utf-8").splitlines(), start=1):
+                for chamada in escrita.findall(linha):
+                    if chamada != "save_app_settings":
+                        achados.append(f"{arquivo.name}:{numero}: {chamada}")
+        self.assertEqual([], achados)
+
 
 class _ComPapel(CoreServiceTestCase):
     def setUp(self) -> None:
@@ -121,6 +140,15 @@ class ViewerNaoGravaTest(_ComPapel):
         self.assertIsNotNone(self.db.get_tournament(self.tournament_id))
         self.assertIn(lancamento, [t["id"] for t in self.finance_service.list_transactions()])
 
+    def test_ajuste_de_pontos(self) -> None:
+        self._como("viewer")
+        self._recusa(
+            lambda: self.service.add_point_adjustment(
+                self.tournament_id, {"round_number": 1, "player_id": self.jogadores[0], "match_points": 1.0, "reason": "x"}
+            )
+        )
+        self.assertEqual([], self.db.list_point_adjustments(self.tournament_id))
+
     def test_a_recusa_fica_na_auditoria_global(self) -> None:
         self._como("viewer")
         self._recusa(lambda: self.service.update_result(self.tournament_id, int(self.mesa["id"]), "1-0"))
@@ -140,6 +168,31 @@ class ArbitroTest(_ComPapel):
     def test_arbitro_lanca_resultado(self) -> None:
         self._como("arbiter")
         self.service.update_result(self.tournament_id, int(self.mesa["id"]), "1-0")
+
+    def test_arbitro_lanca_ajuste_com_auditoria_junto(self) -> None:
+        self._como("arbiter")
+        ajuste = self.service.add_point_adjustment(
+            self.tournament_id, {"round_number": 1, "player_id": self.jogadores[0], "match_points": 1.0, "reason": "x"},
+            "J0 +1",
+        )
+        (evento,) = self.db.list_audit_events(self.tournament_id, action="point_adjustment_added")
+        self.assertEqual((ajuste, "u_arbiter"), (evento["entity_id"], evento["actor"]))
+
+    def test_ajuste_sem_trilha_nao_fica(self) -> None:
+        """Ajuste e auditoria entram juntos (RG2-25): sem trilha, o ajuste não fica.
+
+        Antes a tela gravava o ajuste e engolia a falha da auditoria — o ponto
+        mexia na classificação sem rastro.
+        """
+        from unittest import mock
+
+        self._como("arbiter")
+        with mock.patch.object(self.db, "create_audit_event", side_effect=RuntimeError("banco ocupado")):
+            with self.assertRaises(RuntimeError):
+                self.service.add_point_adjustment(
+                    self.tournament_id, {"round_number": 1, "player_id": self.jogadores[0], "match_points": 1.0}
+                )
+        self.assertEqual([], self.db.list_point_adjustments(self.tournament_id))
 
 
 if __name__ == "__main__":

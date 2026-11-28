@@ -4904,6 +4904,93 @@ class PairingService:
         """Criterios de desempate de mata-mata oferecidos ao arbitro (PAR-03)."""
         return dict(_KNOCKOUT_CRITERIA)
 
+    # ---- Registros do árbitro: ajustes, proibições, byes de equipe, jogadores (RG2-04) ---- #
+    # A tela gravava estes direto no banco, por fora da permissão. Agora passam
+    # por aqui: @requires checa quem opera e @atomic grava registro e auditoria
+    # juntos. A descrição legível (``summary``) vem de quem sabe descrevê-la.
+
+    _ADJUSTMENT_FIELDS = ("round_number", "player_id", "team_id", "aat_type", "match_points", "game_points", "reason")
+
+    @requires("tournament_write")
+    @atomic
+    def add_point_adjustment(
+        self, tournament_id: int, payload: Mapping[str, Any], summary: str = "", *, restored: bool = False
+    ) -> int:
+        registro = {campo: payload.get(campo) for campo in self._ADJUSTMENT_FIELDS}
+        registro["round_number"] = int(registro.get("round_number") or 0)
+        registro["aat_type"] = str(registro.get("aat_type") or "")
+        registro["match_points"] = float(registro.get("match_points") or 0.0)
+        registro["game_points"] = float(registro.get("game_points") or 0.0)
+        registro["reason"] = str(registro.get("reason") or "").strip()
+        registro["id"] = int(self.db.add_point_adjustment(int(tournament_id), **registro))
+        acao = "point_adjustment_restored" if restored else "point_adjustment_added"
+        self._audit_point_adjustment(acao, tournament_id, summary, registro)
+        return registro["id"]
+
+    @requires("tournament_write")
+    @atomic
+    def delete_point_adjustment(
+        self, tournament_id: int, adjustment_id: int, record: Mapping[str, Any] | None = None, summary: str = ""
+    ) -> None:
+        self.db.delete_point_adjustment(int(adjustment_id))
+        self._audit_point_adjustment(
+            "point_adjustment_removed", tournament_id, summary, {**(record or {}), "id": int(adjustment_id)}
+        )
+
+    def _audit_point_adjustment(
+        self, action: str, tournament_id: int, summary: str, record: Mapping[str, Any]
+    ) -> None:
+        """Na trilha do torneio, onde o ``export_tournament_audit`` procura (TBK-01)."""
+        metadata: dict[str, Any] = {"summary": summary}
+        metadata.update(
+            {campo: record[campo] for campo in self._ADJUSTMENT_FIELDS[:-1] if record.get(campo) is not None}
+        )
+        self.db.create_audit_event(
+            action=action,
+            tournament_id=int(tournament_id),
+            entity_type="point_adjustment",
+            entity_id=int(record.get("id") or 0) or None,
+            reason=str(record.get("reason") or "").strip(),
+            metadata=metadata,
+        )
+
+    @requires("tournament_write")
+    def add_prohibited_pairing(
+        self, tournament_id: int, target_a_id: int, target_b_id: int, *, is_team: bool = False, **payload: Any
+    ) -> int:
+        adicionar = self.db.add_prohibited_team_pairing if is_team else self.db.add_prohibited_pairing
+        return int(adicionar(int(tournament_id), int(target_a_id), int(target_b_id), **payload))
+
+    @requires("tournament_write")
+    def delete_prohibited_pairing(self, prohibition_id: int, *, is_team: bool = False) -> None:
+        if is_team:
+            self.db.delete_prohibited_team_pairing(int(prohibition_id))
+        else:
+            self.db.delete_prohibited_pairing(int(prohibition_id))
+
+    @requires("tournament_write")
+    def add_requested_team_bye(
+        self, tournament_id: int, team_id: int, round_number: int, bye_type: str, reason: str = ""
+    ) -> int:
+        # Equipes não têm política de bye (ARB-04 é do individual): só a permissão.
+        return int(self.db.add_requested_team_bye(int(tournament_id), int(team_id), int(round_number), bye_type, reason=reason))
+
+    @requires("tournament_write")
+    def delete_requested_team_bye(self, requested_bye_id: int) -> None:
+        self.db.delete_requested_team_bye(int(requested_bye_id))
+
+    @requires("tournament_write")
+    def create_player(self, tournament_id: int, **payload: Any) -> int:
+        return int(self.db.create_player(int(tournament_id), **payload))
+
+    @requires("tournament_write")
+    def update_player(self, player_id: int, **payload: Any) -> None:
+        self.db.update_player(int(player_id), **payload)
+
+    @requires("tournament_write")
+    def set_player_scheveningen_group(self, player_id: int, group: str) -> None:
+        self.db.set_player_scheveningen_group(int(player_id), group)
+
     def _operator_name(self) -> str:
         operator = self.db.current_operator()
         return operator.name if operator else SYSTEM_ACTOR
