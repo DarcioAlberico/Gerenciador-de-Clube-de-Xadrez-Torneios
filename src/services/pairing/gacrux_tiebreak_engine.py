@@ -157,7 +157,7 @@ class GacruxTiebreakEngine:
         export_service = self._export_service()
         plan = build_tiebreak_plan(codes)
         settings = self.db.get_tournament_settings(tournament_id) or {}
-        swiss = str(settings.get("pairing_method") or "swiss") != "round_robin"
+        swiss = str(settings.get("pairing_method") or "swiss") == "swiss"  # RG2-24: só o suíço é suíço
 
         # Ranking 1-based pela MESMA lista do exporter (==> cid do TRF): a ordem
         # inicial do torneio (`seeding_key`, RGS-13), só com quem existia no
@@ -262,7 +262,7 @@ class GacruxTiebreakEngine:
         exporter = TRF25Exporter(export_service)
         plan = build_team_tiebreak_plan(codes)
         settings = self.db.get_tournament_settings(tournament_id) or {}
-        swiss = str(settings.get("team_pairing_method") or "swiss") != "round_robin"
+        swiss = str(settings.get("team_pairing_method") or "swiss") == "swiss"
 
         # cid (Team Pairing Number do TRF-25) -> team_id, reusando a MESMA
         # ordenação do exporter (_prepare_teams ordena pelo TPN, EQ-01). Os
