@@ -213,7 +213,7 @@ class TournamentCoreMixin(_DatabaseInfra):
             # mão não acompanhou ORG-01..04 e perdia ajustes; coluna nova agora
             # entra na cópia sem ninguém lembrar.
             copiar = [
-                coluna for coluna in self._table_columns(connection, "tournaments")
+                coluna for coluna in sorted(self._table_columns(connection, "tournaments"))
                 if coluna not in DUPLICATE_RESET_TOURNAMENT_COLUMNS and coluna != "name"
             ]
             colunas = ["name", "status", "created_at", *copiar]
@@ -226,7 +226,7 @@ class TournamentCoreMixin(_DatabaseInfra):
             self._ensure_tournament_settings(connection, source_tournament_id)
             self._ensure_tournament_settings(connection, new_tournament_id)
             ajustes = [
-                coluna for coluna in self._table_columns(connection, "tournament_settings")
+                coluna for coluna in sorted(self._table_columns(connection, "tournament_settings"))
                 if coluna not in DUPLICATE_RESET_SETTINGS_COLUMNS
             ]
             connection.execute(
@@ -240,7 +240,7 @@ class TournamentCoreMixin(_DatabaseInfra):
                 (self.now(), new_tournament_id, source_tournament_id),
             )
             categorias = [
-                coluna for coluna in self._table_columns(connection, "tournament_categories")
+                coluna for coluna in sorted(self._table_columns(connection, "tournament_categories"))
                 if coluna not in {"id", "tournament_id", "created_at"}
             ]
             connection.execute(
@@ -342,10 +342,6 @@ class TournamentCoreMixin(_DatabaseInfra):
                 ],
             )
             return new_tournament_id
-
-    @staticmethod
-    def _table_columns(connection: sqlite3.Connection, table: str) -> list[str]:
-        return [str(row[1]) for row in connection.execute(f"PRAGMA table_info({table})")]
 
     def delete_tournament(self, tournament_id: int) -> None:
         with self.connect() as connection:
