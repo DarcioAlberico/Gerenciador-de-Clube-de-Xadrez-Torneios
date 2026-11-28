@@ -15,6 +15,7 @@ from src.domain.dates import is_iso_date
 from src.core.database import BASE_DIR, DEFAULT_CERTIFICATE_TEMPLATES, Database
 from src.services.constants import *
 from src.services.numeric_fields import decimal_field
+from src.services.pdf_fonts import install_pdf_fonts
 from src.services.transactions import atomic
 from src.services.permissions import requires
 
@@ -772,6 +773,7 @@ class LibraryService:
         suffix = "Aluno" if for_student else "Professor"
         file_path = export_dir / f"Apostila_{safe_title}_{suffix}_{collection_id}.pdf"
 
+        install_pdf_fonts()
         doc = SimpleDocTemplate(str(file_path), pagesize=A4, rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40)
         styles = getSampleStyleSheet()
         elements = []

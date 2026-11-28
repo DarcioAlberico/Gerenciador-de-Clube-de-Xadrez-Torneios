@@ -18,6 +18,7 @@ from urllib.request import Request, urlopen
 
 from src.core.database import BASE_DIR, DEFAULT_CERTIFICATE_TEMPLATES, Database
 from src.services.access_export import access_driver_available, write_accdb, write_csv_bundle
+from src.services.pdf_fonts import install_pdf_fonts
 from src.services.spreadsheet_safety import csv_row, looks_like_formula
 from src.services.constants import *
 from src.services.fide_norms import build_norm_report
@@ -217,6 +218,7 @@ class ReportWritersMixin:
         except ImportError as exc:
             raise AppError("Instale reportlab para exportar PDF.") from exc
 
+        install_pdf_fonts()
         document = SimpleDocTemplate(str(path), pagesize=landscape(A4))
         styles = getSampleStyleSheet()
         data = [headers] + [[str(value) for value in row] for row in rows]
@@ -248,6 +250,7 @@ class ReportWritersMixin:
         except ImportError as exc:
             raise AppError("Instale reportlab para exportar PDF.") from exc
 
+        install_pdf_fonts()
         document = SimpleDocTemplate(str(path), pagesize=landscape(A4))
         styles = getSampleStyleSheet()
         story = []

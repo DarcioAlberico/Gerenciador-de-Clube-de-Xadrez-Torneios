@@ -9,6 +9,7 @@ from src.services.constants import *
 from src.domain.fide_player import fide_rating, seed_rating
 from src.services.fide_norms import build_norm_report
 from src.services.categories import group_by_category
+from src.services.pdf_fonts import install_pdf_fonts
 from src.services.rating import build_report_rows, regulation_from_settings, resolve_speed
 from src.services.time_control import SPEED_LABELS, below_blitz_minimum
 from src.services.pairing.incidents import (
@@ -915,6 +916,7 @@ class ReportSectionsMixin:
         tournament = data["tournament"]
         width, height = A4
         center = width / 2
+        install_pdf_fonts()
         document = canvas.Canvas(str(path), pagesize=A4)
         document.setLineWidth(2)
         document.rect(30, 30, width - 60, height - 60)
