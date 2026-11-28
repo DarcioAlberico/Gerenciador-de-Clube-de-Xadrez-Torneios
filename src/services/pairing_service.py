@@ -4888,11 +4888,11 @@ class PairingService:
         """Criterios de desempate de mata-mata oferecidos ao arbitro (PAR-03)."""
         return dict(_KNOCKOUT_CRITERIA)
 
-    @atomic
     def _operator_name(self) -> str:
         operator = self.db.current_operator()
         return operator.name if operator else SYSTEM_ACTOR
 
+    @atomic
     def register_knockout_advancement(
         self,
         tournament_id: int,
