@@ -173,24 +173,10 @@ class MemberService:
         if not member:
             raise AppError("Membro não encontrado.")
         
+        # RG2-34: só o que a desativação muda; o resto do cadastro fica.
         self.db.update_member(
-            member_id=member_id,
-            name=member["name"],
-            surname=member["surname"],
-            club_id=member["club_id"],
-            learning_level_id=member["learning_level_id"],
-            city=member["city"],
-            phone=member["phone"],
-            email=member["email"],
-            document=member["document"],
-            birth_date=member["birth_date"],
-            rating=member["rating"],
-            category=member["category"],
-            member_type=member["member_type"],
+            member_id,
             status="inactive",
-            guardian_name=member["guardian_name"],
-            guardian_phone=member["guardian_phone"],
-            notes=member["notes"],
             departure_date=date,
             departure_reason=reason,
             transfer_notes=notes,
