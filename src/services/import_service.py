@@ -857,69 +857,6 @@ class ImportService:
             pass  # pandas ausente ou valor não escalar: a célula segue como veio
         return value
 
-    @requires("member_write")
-    @atomic
-    def import_rating_list_csv(self, file_path: str | Path, rating_type: str = "fide") -> dict[str, Any]:
-        """Importa um CSV de ratings FIDE ou CBX e atualiza os membros do clube correspondentes."""
-        path = Path(file_path)
-        updated = 0
-        skipped = 0
-        errors: list[str] = []
-
-        _headers, records = csv_records(read_text_file(path))
-            
-        all_members = self.db.list_members()
-        fide_map = {str(m.get("fide_id")).strip(): m["id"] for m in all_members if m.get("fide_id")}
-        cbx_map = {str(m.get("cbx_id")).strip(): m["id"] for m in all_members if m.get("cbx_id")}
-
-        for line_number, row in records:
-            row = {chave: unguard_csv_cell(valor) for chave, valor in row.items()}
-            player_id_csv = self._pick(row, "fide_id", "fide", "id_fide", "idnumber", "id", "cbx_id", "cbx", "id_cbx")
-            if not player_id_csv:
-                errors.append(f"Linha {line_number}: ID (FIDE/CBX) não encontrado.")
-                skipped += 1
-                continue
-                
-            player_id_csv = str(player_id_csv).strip()
-            rating_text = self._pick(row, "rating", "elo", "rtg", "standard", "rating_fide", "rating_cbx")
-            if not rating_text:
-                errors.append(f"Linha {line_number}: Rating vazio.")
-                skipped += 1
-                continue
-                
-            try:
-                rating = int(float(rating_text))
-            except ValueError:
-                errors.append(f"Linha {line_number}: Rating inválido ({rating_text}).")
-                skipped += 1
-                continue
-                
-            member_id = None
-            if rating_type == "fide":
-                member_id = fide_map.get(player_id_csv)
-            else:
-                member_id = cbx_map.get(player_id_csv)
-                
-            if not member_id:
-                skipped += 1
-                continue
-                
-            member = self.db.get_member(member_id)
-            if not member:
-                continue
-                
-            payload = dict(member)
-            if rating_type == "fide":
-                payload["international_rating"] = rating
-            else:
-                payload["national_rating"] = rating
-                
-            self.db.update_member(member_id, payload)
-            updated += 1
-            
-        logger.info("%s membros atualizados via importacao de rating %s de %s", updated, rating_type, path)
-        return {"updated": updated, "skipped": skipped, "errors": errors}
-
     def _online_registration_rows(self, tournament_id: int, file_path: str | Path) -> list[dict[str, Any]]:
         source_rows = self._online_registration_source_rows(file_path)
         return self._build_registration_rows(tournament_id, source_rows)
