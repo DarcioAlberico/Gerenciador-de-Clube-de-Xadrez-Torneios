@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 from src.services.constants import player_pairing_name
+from src.services.pairing.round_search import greedy_pairs, optimal_pairs
 
 
 COLOR_HARD_VIOLATION_PENALTY = 100_000
@@ -239,12 +240,16 @@ def team_pairing_order_key(
     team: dict[str, Any],
     standings: dict[int, dict[str, Any]],
     seed_ratings: dict[int, int],
+    *,
+    primary: str = "match_points",
+    secondary: str = "game_points",
 ) -> tuple[float, float, int, str]:
+    """Ordem de pareamento da equipe: critério principal, o outro, semente, nome (RG2-23)."""
     team_id = int(team["id"])
     standing = standings.get(team_id, {})
     return (
-        -float(standing.get("match_points", 0.0) or 0.0),
-        -float(standing.get("game_points", 0.0) or 0.0),
+        -float(standing.get(primary, 0.0) or 0.0),
+        -float(standing.get(secondary, 0.0) or 0.0),
         -int(seed_ratings.get(team_id, 0)),
         str(team["name"]).casefold(),
     )
@@ -273,6 +278,9 @@ def choose_team_bye(
     standings: dict[int, dict[str, Any]],
     bye_team_ids: set[int],
     seed_ratings: dict[int, int],
+    *,
+    primary: str = "match_points",
+    secondary: str = "game_points",
 ) -> dict[str, Any]:
     candidates = [team for team in teams if int(team["id"]) not in bye_team_ids]
     if not candidates:
@@ -280,8 +288,8 @@ def choose_team_bye(
     return min(
         candidates,
         key=lambda team: (
-            float(standings.get(int(team["id"]), {}).get("match_points", 0.0) or 0.0),
-            float(standings.get(int(team["id"]), {}).get("game_points", 0.0) or 0.0),
+            float(standings.get(int(team["id"]), {}).get(primary, 0.0) or 0.0),
+            float(standings.get(int(team["id"]), {}).get(secondary, 0.0) or 0.0),
             seed_ratings.get(int(team["id"]), 0),
             str(team["name"]).casefold(),
         ),
@@ -321,6 +329,25 @@ def _opposite_color(color: str) -> str:
     return "B" if color == "W" else "W"
 
 
+def _orientation_by_cost(first_id: Any, second_id: Any, histories: dict[int, list[str]]) -> tuple[Any, Any] | None:
+    """(brancas, pretas) pela cor: violação dura e depois preferência; ``None`` no empate.
+
+    É a parte da escolha de cor que jogador e equipe compartilham (RG2-07b);
+    o desempate do empate é de cada um.
+    """
+    def total(first_color: str) -> tuple[int, int]:
+        hard_a, penalty_a = color_assignment_cost(first_id, first_color, histories)
+        hard_b, penalty_b = color_assignment_cost(second_id, _opposite_color(first_color), histories)
+        return hard_a + hard_b, penalty_a + penalty_b
+
+    as_white, as_black = total("W"), total("B")
+    if as_white < as_black:
+        return first_id, second_id
+    if as_black < as_white:
+        return second_id, first_id
+    return None
+
+
 def choose_colors(
     player: dict[str, Any],
     opponent: dict[str, Any],
@@ -337,20 +364,9 @@ def choose_colors(
     """
     player_id = player["id"]
     opponent_id = opponent["id"]
-    first_hard, first_penalty = color_assignment_cost(player_id, "W", histories)
-    opponent_hard, opponent_penalty = color_assignment_cost(opponent_id, "B", histories)
-    first_hard += opponent_hard
-    first_penalty += opponent_penalty
-
-    second_hard, second_penalty = color_assignment_cost(player_id, "B", histories)
-    opponent_hard, opponent_penalty = color_assignment_cost(opponent_id, "W", histories)
-    second_hard += opponent_hard
-    second_penalty += opponent_penalty
-
-    if (first_hard, first_penalty) < (second_hard, second_penalty):
-        return player_id, opponent_id
-    if (second_hard, second_penalty) < (first_hard, first_penalty):
-        return opponent_id, player_id
+    by_preference = _orientation_by_cost(player_id, opponent_id, histories)
+    if by_preference is not None:
+        return by_preference
 
     if ranking is not None:
         return _colors_by_ranking(
@@ -407,20 +423,9 @@ def choose_team_colors(
 ) -> tuple[int, int]:
     team_id = int(team["id"])
     opponent_id = int(opponent["id"])
-    first_hard, first_penalty = color_assignment_cost(team_id, "W", histories)
-    opponent_hard, opponent_penalty = color_assignment_cost(opponent_id, "B", histories)
-    first_hard += opponent_hard
-    first_penalty += opponent_penalty
-
-    second_hard, second_penalty = color_assignment_cost(team_id, "B", histories)
-    opponent_hard, opponent_penalty = color_assignment_cost(opponent_id, "W", histories)
-    second_hard += opponent_hard
-    second_penalty += opponent_penalty
-
-    if (first_hard, first_penalty) < (second_hard, second_penalty):
-        return team_id, opponent_id
-    if (second_hard, second_penalty) < (first_hard, first_penalty):
-        return opponent_id, team_id
+    by_preference = _orientation_by_cost(team_id, opponent_id, histories)
+    if by_preference is not None:
+        return by_preference
     if seed_ratings.get(team_id, 0) >= seed_ratings.get(opponent_id, 0):
         return team_id, opponent_id
     return opponent_id, team_id
@@ -496,8 +501,9 @@ def team_pair_penalty(
     score_group_float_penalty: int,
     score_diff_penalty: int,
     float_histories: dict[int, list[str]] | None = None,
+    score_key: str = "match_points",
 ) -> float:
-    """Custo de um confronto por equipes.
+    """Custo de um confronto por equipes; ``score_key`` é o critério principal (RG2-23).
 
     `float_histories` traz a penalidade de FLOAT REPETIDO, que o individual já
     tinha e aqui faltava (PAR-04): sem ela, a mesma equipe podia descer de grupo
@@ -505,8 +511,8 @@ def team_pair_penalty(
     """
     team_id = int(team["id"])
     opponent_id = int(opponent["id"])
-    team_score = float(standings.get(team_id, {}).get("match_points", 0.0) or 0.0)
-    opponent_score = float(standings.get(opponent_id, {}).get("match_points", 0.0) or 0.0)
+    team_score = float(standings.get(team_id, {}).get(score_key, 0.0) or 0.0)
+    opponent_score = float(standings.get(opponent_id, {}).get(score_key, 0.0) or 0.0)
     score_diff = abs(team_score - opponent_score)
     penalty = score_diff * score_diff_penalty
     if score_diff:
@@ -527,8 +533,7 @@ def team_pair_penalty(
     return penalty
 
 
-def greedy_player_pairs(
-    players: list[dict[str, Any]],
+def player_pair_cost(
     standings: dict[int, dict[str, Any]],
     histories: dict[int, list[str]],
     float_histories: dict[int, list[str]],
@@ -539,102 +544,11 @@ def greedy_player_pairs(
     score_group_float_penalty: int,
     score_diff_penalty: int,
     topscorers: frozenset[int] | set[int] = frozenset(),
-) -> list[tuple[dict[str, Any], dict[str, Any]]]:
-    pending = players[:]
-    pairs = []
-    while pending:
-        player = pending.pop(0)
-        opponent = min(
-            pending,
-            key=lambda candidate: pair_penalty(
-                player,
-                candidate,
-                standings,
-                histories,
-                float_histories,
-                played_pairs,
-                rank_by_player_id,
-                repeat_pairing_penalty=repeat_pairing_penalty,
-                score_group_float_penalty=score_group_float_penalty,
-                score_diff_penalty=score_diff_penalty,
-                topscorers=topscorers,
-            ),
-        )
-        pending.remove(opponent)
-        pairs.append((player, opponent))
-    return pairs
-
-
-def optimal_player_pairs(
-    players: list[dict[str, Any]],
-    standings: dict[int, dict[str, Any]],
-    histories: dict[int, list[str]],
-    float_histories: dict[int, list[str]],
-    played_pairs: set[frozenset[int]],
-    rank_by_player_id: dict[int, int],
-    *,
-    repeat_pairing_penalty: int,
-    score_group_float_penalty: int,
-    score_diff_penalty: int,
-    topscorers: frozenset[int] | set[int] = frozenset(),
-) -> list[tuple[dict[str, Any], dict[str, Any]]]:
-    player_by_id = {int(player["id"]): player for player in players}
-    penalty_cache: dict[tuple[int, int], float] = {}
-
-    def penalty(player_id: int, opponent_id: int) -> float:
-        key = (player_id, opponent_id)
-        if key not in penalty_cache:
-            penalty_cache[key] = pair_penalty(
-                player_by_id[player_id],
-                player_by_id[opponent_id],
-                standings,
-                histories,
-                float_histories,
-                played_pairs,
-                rank_by_player_id,
-                repeat_pairing_penalty=repeat_pairing_penalty,
-                score_group_float_penalty=score_group_float_penalty,
-                score_diff_penalty=score_diff_penalty,
-                topscorers=topscorers,
-            )
-        return penalty_cache[key]
-
-    best_cost = float("inf")
-    best_pairs: list[tuple[int, int]] = []
-    seen_costs: dict[tuple[int, ...], float] = {}
-
-    def search(
-        remaining: tuple[int, ...],
-        selected_pairs: list[tuple[int, int]],
-        current_cost: float,
-    ) -> None:
-        nonlocal best_cost, best_pairs
-        if current_cost >= best_cost:
-            return
-        if current_cost >= seen_costs.get(remaining, float("inf")):
-            return
-        seen_costs[remaining] = current_cost
-        if not remaining:
-            best_cost = current_cost
-            best_pairs = selected_pairs[:]
-            return
-
-        player_id = remaining[0]
-        candidates = sorted(remaining[1:], key=lambda candidate_id: penalty(player_id, candidate_id))
-        for opponent_id in candidates:
-            next_remaining = tuple(
-                item_id for item_id in remaining[1:] if item_id != opponent_id
-            )
-            search(
-                next_remaining,
-                selected_pairs + [(player_id, opponent_id)],
-                current_cost + penalty(player_id, opponent_id),
-            )
-
-    search(tuple(player_by_id), [], 0.0)
-    if not best_pairs:
-        return greedy_player_pairs(
-            players,
+) -> Callable[[dict[str, Any], dict[str, Any]], float]:
+    def cost(player: dict[str, Any], opponent: dict[str, Any]) -> float:
+        return pair_penalty(
+            player,
+            opponent,
             standings,
             histories,
             float_histories,
@@ -645,113 +559,37 @@ def optimal_player_pairs(
             score_diff_penalty=score_diff_penalty,
             topscorers=topscorers,
         )
-    return [(player_by_id[player_id], player_by_id[opponent_id]) for player_id, opponent_id in best_pairs]
+
+    return cost
 
 
-def greedy_team_pairs(
-    teams: list[dict[str, Any]],
+def greedy_player_pairs(
+    players: list[dict[str, Any]],
     standings: dict[int, dict[str, Any]],
+    histories: dict[int, list[str]],
+    float_histories: dict[int, list[str]],
     played_pairs: set[frozenset[int]],
-    rank_by_team_id: dict[int, int],
-    *,
-    repeat_pairing_penalty: int,
-    score_group_float_penalty: int,
-    score_diff_penalty: int,
-    float_histories: dict[int, list[str]] | None = None,
+    rank_by_player_id: dict[int, int],
+    **penalties: Any,
 ) -> list[tuple[dict[str, Any], dict[str, Any]]]:
-    pending = teams[:]
-    pairs = []
-    while pending:
-        team = pending.pop(0)
-        opponent = min(
-            pending,
-            key=lambda candidate: team_pair_penalty(
-                team,
-                candidate,
-                standings,
-                played_pairs,
-                rank_by_team_id,
-                repeat_pairing_penalty=repeat_pairing_penalty,
-                score_group_float_penalty=score_group_float_penalty,
-                score_diff_penalty=score_diff_penalty,
-                float_histories=float_histories,
-            ),
-        )
-        pending.remove(opponent)
-        pairs.append((team, opponent))
-    return pairs
+    """Gulosa do motor de jogadores — a busca é a do motor único (RG2-07b)."""
+    return greedy_pairs(
+        players,
+        player_pair_cost(standings, histories, float_histories, played_pairs, rank_by_player_id, **penalties),
+    )
 
 
-def optimal_team_pairs(
-    teams: list[dict[str, Any]],
+def optimal_player_pairs(
+    players: list[dict[str, Any]],
     standings: dict[int, dict[str, Any]],
+    histories: dict[int, list[str]],
+    float_histories: dict[int, list[str]],
     played_pairs: set[frozenset[int]],
-    rank_by_team_id: dict[int, int],
-    *,
-    repeat_pairing_penalty: int,
-    score_group_float_penalty: int,
-    score_diff_penalty: int,
-    float_histories: dict[int, list[str]] | None = None,
+    rank_by_player_id: dict[int, int],
+    **penalties: Any,
 ) -> list[tuple[dict[str, Any], dict[str, Any]]]:
-    team_by_id = {int(team["id"]): team for team in teams}
-    penalty_cache: dict[tuple[int, int], float] = {}
-
-    def penalty(team_id: int, opponent_id: int) -> float:
-        key = (team_id, opponent_id)
-        if key not in penalty_cache:
-            penalty_cache[key] = team_pair_penalty(
-                team_by_id[team_id],
-                team_by_id[opponent_id],
-                standings,
-                played_pairs,
-                rank_by_team_id,
-                repeat_pairing_penalty=repeat_pairing_penalty,
-                score_group_float_penalty=score_group_float_penalty,
-                score_diff_penalty=score_diff_penalty,
-                float_histories=float_histories,
-            )
-        return penalty_cache[key]
-
-    best_cost = float("inf")
-    best_pairs: list[tuple[int, int]] = []
-    seen_costs: dict[tuple[int, ...], float] = {}
-
-    def search(
-        remaining: tuple[int, ...],
-        selected_pairs: list[tuple[int, int]],
-        current_cost: float,
-    ) -> None:
-        nonlocal best_cost, best_pairs
-        if current_cost >= best_cost:
-            return
-        if current_cost >= seen_costs.get(remaining, float("inf")):
-            return
-        seen_costs[remaining] = current_cost
-        if not remaining:
-            best_cost = current_cost
-            best_pairs = selected_pairs[:]
-            return
-
-        team_id = remaining[0]
-        candidates = sorted(remaining[1:], key=lambda candidate_id: penalty(team_id, candidate_id))
-        for opponent_id in candidates:
-            next_remaining = tuple(item_id for item_id in remaining[1:] if item_id != opponent_id)
-            search(
-                next_remaining,
-                selected_pairs + [(team_id, opponent_id)],
-                current_cost + penalty(team_id, opponent_id),
-            )
-
-    search(tuple(team_by_id), [], 0.0)
-    if not best_pairs:
-        return greedy_team_pairs(
-            teams,
-            standings,
-            played_pairs,
-            rank_by_team_id,
-            repeat_pairing_penalty=repeat_pairing_penalty,
-            score_group_float_penalty=score_group_float_penalty,
-            score_diff_penalty=score_diff_penalty,
-            float_histories=float_histories,
-        )
-    return [(team_by_id[team_id], team_by_id[opponent_id]) for team_id, opponent_id in best_pairs]
+    """Ótimo do motor de jogadores — a busca é a do motor único (RG2-07b)."""
+    return optimal_pairs(
+        players,
+        player_pair_cost(standings, histories, float_histories, played_pairs, rank_by_player_id, **penalties),
+    )

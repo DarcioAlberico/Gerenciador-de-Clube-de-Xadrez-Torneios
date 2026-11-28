@@ -125,7 +125,9 @@ class FaltarSoUmaRodadaTest(CoreServiceTestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        self.ids = self._create_players(6)
+        # 8, não 6: com 6, depois da R4 não sobra pareamento da R5 sem repetir
+        # confronto. O motor antigo repetia; desde o RG2-07b ele recusa.
+        self.ids = self._create_players(8)
 
     def test_bye_z_na_r4_e_pareado_na_r5(self) -> None:
         for _ in range(3):

@@ -10,5 +10,6 @@
 *.ico binary
 *.db binary
 *.accdb binary
+*.ttf binary
 # A lista CBX (.xls) entrou no repositório como texto; marcá-la como binária
 # aqui faria o git vê-la alterada. Ela sai do repositório no RG2-41.

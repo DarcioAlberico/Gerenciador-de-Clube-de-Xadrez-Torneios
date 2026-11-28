@@ -215,9 +215,12 @@ class pairing:
         if len(nodes) > 0:
             # Falha de pareamento: nós sem par ao final do algoritmo.
             # Era breakpoint() — substituído para não bloquear modo não-interativo.
+            # A marca é o que o Albericus procura no stderr para dizer ao árbitro
+            # "não existe pareamento legal" em vez do traceback (RG2-22); o mesmo
+            # texto está em gacrux_engine.NO_LEGAL_PAIRING_TAG.
             unpaired_cids = [node.get('cid') for node in nodes]
             raise RuntimeError(
-                f"Gacrux: {len(nodes)} nó(s) sem par após todos os níveis de pontuação. "
+                f"GACRUX-SEM-PAREAMENTO-LEGAL Gacrux: {len(nodes)} nó(s) sem par após todos os níveis de pontuação. "
                 f"Rodada={self.rnd}, cids={unpaired_cids[:10]}"
             )
         if pabbracket:

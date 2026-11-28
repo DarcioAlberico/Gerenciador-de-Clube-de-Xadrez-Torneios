@@ -11,8 +11,8 @@ Posições na spec FIDE são 1-based e inclusivas (ex.: `5 - 7` = colunas 5,6,7)
 from __future__ import annotations
 
 import re
-import unicodedata
 
+from src.domain.fide_player import fide_ascii
 from src.services.time_control import trf25_descriptor
 
 
@@ -29,10 +29,8 @@ def _place(parts: list[tuple[int, str]]) -> str:
 
 
 def trf_ascii(value: object) -> str:
-    """Remove acentos/diacríticos e colapsa espaços (igual ao TRF16)."""
-    text = unicodedata.normalize("NFKD", str(value if value is not None else ""))
-    text = "".join(char for char in text if not unicodedata.combining(char))
-    return " ".join(text.replace("\r", " ").replace("\n", " ").split())
+    """O texto do TRF25 — a mesma transliteração do TRF16 (``fide_ascii``)."""
+    return fide_ascii(value)
 
 
 def _fixed(value: object, width: int) -> str:

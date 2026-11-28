@@ -112,6 +112,9 @@ class TournamentListController:
     def import_trf(self, file_path: str) -> dict[str, Any]:
         return dict(self.import_service.import_trf(file_path))
 
+    def preview_trf(self, file_path: str) -> dict[str, Any]:
+        return dict(self.import_service.preview_trf(file_path))
+
     def display_name(self, tournament_id: int) -> str:
         """Nome para a mensagem de confirmação; cai no id se o registro sumiu."""
         tournament = self.db.get_tournament(tournament_id)

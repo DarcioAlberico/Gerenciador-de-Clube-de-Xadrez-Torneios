@@ -1,0 +1,3136 @@
+{
+ "equipes-7x2-r6-s0": [
+  [
+   [
+    "Equipe 1",
+    "Equipe 4"
+   ],
+   [
+    "Equipe 3",
+    "Equipe 6"
+   ],
+   [
+    "Equipe 5",
+    "Equipe 2"
+   ],
+   [
+    "Equipe 7",
+    null
+   ]
+  ],
+  [
+   [
+    "Equipe 1",
+    "Equipe 5"
+   ],
+   [
+    "Equipe 2",
+    "Equipe 4"
+   ],
+   [
+    "Equipe 6",
+    "Equipe 7"
+   ],
+   [
+    "Equipe 3",
+    null
+   ]
+  ],
+  [
+   [
+    "Equipe 4",
+    "Equipe 7"
+   ],
+   [
+    "Equipe 5",
+    "Equipe 3"
+   ],
+   [
+    "Equipe 6",
+    "Equipe 1"
+   ],
+   [
+    "Equipe 2",
+    null
+   ]
+  ],
+  [
+   [
+    "Equipe 2",
+    "Equipe 1"
+   ],
+   [
+    "Equipe 5",
+    "Equipe 6"
+   ],
+   [
+    "Equipe 7",
+    "Equipe 3"
+   ],
+   [
+    "Equipe 4",
+    null
+   ]
+  ]
+ ],
+ "equipes-7x2-r6-s1": [
+  [
+   [
+    "Equipe 1",
+    "Equipe 4"
+   ],
+   [
+    "Equipe 3",
+    "Equipe 6"
+   ],
+   [
+    "Equipe 5",
+    "Equipe 2"
+   ],
+   [
+    "Equipe 7",
+    null
+   ]
+  ],
+  [
+   [
+    "Equipe 4",
+    "Equipe 3"
+   ],
+   [
+    "Equipe 6",
+    "Equipe 1"
+   ],
+   [
+    "Equipe 7",
+    "Equipe 5"
+   ],
+   [
+    "Equipe 2",
+    null
+   ]
+  ],
+  [
+   [
+    "Equipe 2",
+    "Equipe 4"
+   ],
+   [
+    "Equipe 3",
+    "Equipe 5"
+   ],
+   [
+    "Equipe 6",
+    "Equipe 7"
+   ],
+   [
+    "Equipe 1",
+    null
+   ]
+  ],
+  [
+   [
+    "Equipe 1",
+    "Equipe 7"
+   ],
+   [
+    "Equipe 2",
+    "Equipe 3"
+   ],
+   [
+    "Equipe 4",
+    "Equipe 6"
+   ],
+   [
+    "Equipe 5",
+    null
+   ]
+  ],
+  [
+   [
+    "Equipe 1",
+    "Equipe 2"
+   ],
+   [
+    "Equipe 5",
+    "Equipe 4"
+   ],
+   [
+    "Equipe 7",
+    "Equipe 3"
+   ],
+   [
+    "Equipe 6",
+    null
+   ]
+  ],
+  [
+   [
+    "Equipe 2",
+    "Equipe 7"
+   ],
+   [
+    "Equipe 3",
+    "Equipe 1"
+   ],
+   [
+    "Equipe 6",
+    "Equipe 5"
+   ],
+   [
+    "Equipe 4",
+    null
+   ]
+  ]
+ ],
+ "equipes-7x2-r6-s2": [
+  [
+   [
+    "Equipe 1",
+    "Equipe 4"
+   ],
+   [
+    "Equipe 3",
+    "Equipe 6"
+   ],
+   [
+    "Equipe 5",
+    "Equipe 2"
+   ],
+   [
+    "Equipe 7",
+    null
+   ]
+  ],
+  [
+   [
+    "Equipe 2",
+    "Equipe 4"
+   ],
+   [
+    "Equipe 6",
+    "Equipe 1"
+   ],
+   [
+    "Equipe 7",
+    "Equipe 5"
+   ],
+   [
+    "Equipe 3",
+    null
+   ]
+  ],
+  [
+   [
+    "Equipe 1",
+    "Equipe 2"
+   ],
+   [
+    "Equipe 5",
+    "Equipe 3"
+   ],
+   [
+    "Equipe 6",
+    "Equipe 7"
+   ],
+   [
+    "Equipe 4",
+    null
+   ]
+  ]
+ ],
+ "equipes-7x2-r6-s3": [
+  [
+   [
+    "Equipe 1",
+    "Equipe 4"
+   ],
+   [
+    "Equipe 3",
+    "Equipe 6"
+   ],
+   [
+    "Equipe 5",
+    "Equipe 2"
+   ],
+   [
+    "Equipe 7",
+    null
+   ]
+  ],
+  [
+   [
+    "Equipe 1",
+    "Equipe 5"
+   ],
+   [
+    "Equipe 2",
+    "Equipe 4"
+   ],
+   [
+    "Equipe 7",
+    "Equipe 3"
+   ],
+   [
+    "Equipe 6",
+    null
+   ]
+  ],
+  [
+   [
+    "Equipe 3",
+    "Equipe 2"
+   ],
+   [
+    "Equipe 4",
+    "Equipe 6"
+   ],
+   [
+    "Equipe 7",
+    "Equipe 1"
+   ],
+   [
+    "Equipe 5",
+    null
+   ]
+  ],
+  [
+   [
+    "Equipe 4",
+    "Equipe 7"
+   ],
+   [
+    "Equipe 5",
+    "Equipe 3"
+   ],
+   [
+    "Equipe 6",
+    "Equipe 1"
+   ],
+   [
+    "Equipe 2",
+    null
+   ]
+  ],
+  [
+   [
+    "Equipe 1",
+    "Equipe 3"
+   ],
+   [
+    "Equipe 2",
+    "Equipe 6"
+   ],
+   [
+    "Equipe 5",
+    "Equipe 7"
+   ],
+   [
+    "Equipe 4",
+    null
+   ]
+  ]
+ ],
+ "equipes-7x2-r6-s4": [
+  [
+   [
+    "Equipe 1",
+    "Equipe 4"
+   ],
+   [
+    "Equipe 3",
+    "Equipe 6"
+   ],
+   [
+    "Equipe 5",
+    "Equipe 2"
+   ],
+   [
+    "Equipe 7",
+    null
+   ]
+  ],
+  [
+   [
+    "Equipe 1",
+    "Equipe 5"
+   ],
+   [
+    "Equipe 2",
+    "Equipe 4"
+   ],
+   [
+    "Equipe 7",
+    "Equipe 3"
+   ],
+   [
+    "Equipe 6",
+    null
+   ]
+  ],
+  [
+   [
+    "Equipe 4",
+    "Equipe 3"
+   ],
+   [
+    "Equipe 5",
+    "Equipe 7"
+   ],
+   [
+    "Equipe 6",
+    "Equipe 2"
+   ],
+   [
+    "Equipe 1",
+    null
+   ]
+  ],
+  [
+   [
+    "Equipe 2",
+    "Equipe 1"
+   ],
+   [
+    "Equipe 4",
+    "Equipe 7"
+   ],
+   [
+    "Equipe 6",
+    "Equipe 5"
+   ],
+   [
+    "Equipe 3",
+    null
+   ]
+  ]
+ ],
+ "equipes-7x2-r6-s5": [
+  [
+   [
+    "Equipe 1",
+    "Equipe 4"
+   ],
+   [
+    "Equipe 3",
+    "Equipe 6"
+   ],
+   [
+    "Equipe 5",
+    "Equipe 2"
+   ],
+   [
+    "Equipe 7",
+    null
+   ]
+  ],
+  [
+   [
+    "Equipe 3",
+    "Equipe 5"
+   ],
+   [
+    "Equipe 4",
+    "Equipe 7"
+   ],
+   [
+    "Equipe 6",
+    "Equipe 1"
+   ],
+   [
+    "Equipe 2",
+    null
+   ]
+  ],
+  [
+   [
+    "Equipe 2",
+    "Equipe 1"
+   ],
+   [
+    "Equipe 4",
+    "Equipe 6"
+   ],
+   [
+    "Equipe 7",
+    "Equipe 5"
+   ],
+   [
+    "Equipe 3",
+    null
+   ]
+  ]
+ ],
+ "equipes-7x2-r6-s6": [
+  [
+   [
+    "Equipe 1",
+    "Equipe 4"
+   ],
+   [
+    "Equipe 3",
+    "Equipe 6"
+   ],
+   [
+    "Equipe 5",
+    "Equipe 2"
+   ],
+   [
+    "Equipe 7",
+    null
+   ]
+  ],
+  [
+   [
+    "Equipe 2",
+    "Equipe 6"
+   ],
+   [
+    "Equipe 3",
+    "Equipe 5"
+   ],
+   [
+    "Equipe 4",
+    "Equipe 7"
+   ],
+   [
+    "Equipe 1",
+    null
+   ]
+  ],
+  [
+   [
+    "Equipe 4",
+    "Equipe 3"
+   ],
+   [
+    "Equipe 5",
+    "Equipe 1"
+   ],
+   [
+    "Equipe 6",
+    "Equipe 7"
+   ],
+   [
+    "Equipe 2",
+    null
+   ]
+  ],
+  [
+   [
+    "Equipe 1",
+    "Equipe 2"
+   ],
+   [
+    "Equipe 5",
+    "Equipe 4"
+   ],
+   [
+    "Equipe 7",
+    "Equipe 3"
+   ],
+   [
+    "Equipe 6",
+    null
+   ]
+  ],
+  [
+   [
+    "Equipe 3",
+    "Equipe 2"
+   ],
+   [
+    "Equipe 6",
+    "Equipe 4"
+   ],
+   [
+    "Equipe 7",
+    "Equipe 1"
+   ],
+   [
+    "Equipe 5",
+    null
+   ]
+  ]
+ ],
+ "equipes-7x2-r6-s7": [
+  [
+   [
+    "Equipe 1",
+    "Equipe 4"
+   ],
+   [
+    "Equipe 3",
+    "Equipe 6"
+   ],
+   [
+    "Equipe 5",
+    "Equipe 2"
+   ],
+   [
+    "Equipe 7",
+    null
+   ]
+  ],
+  [
+   [
+    "Equipe 2",
+    "Equipe 1"
+   ],
+   [
+    "Equipe 4",
+    "Equipe 5"
+   ],
+   [
+    "Equipe 7",
+    "Equipe 3"
+   ],
+   [
+    "Equipe 6",
+    null
+   ]
+  ],
+  [
+   [
+    "Equipe 1",
+    "Equipe 7"
+   ],
+   [
+    "Equipe 3",
+    "Equipe 5"
+   ],
+   [
+    "Equipe 6",
+    "Equipe 4"
+   ],
+   [
+    "Equipe 2",
+    null
+   ]
+  ],
+  [
+   [
+    "Equipe 1",
+    "Equipe 3"
+   ],
+   [
+    "Equipe 5",
+    "Equipe 6"
+   ],
+   [
+    "Equipe 7",
+    "Equipe 2"
+   ],
+   [
+    "Equipe 4",
+    null
+   ]
+  ],
+  [
+   [
+    "Equipe 2",
+    "Equipe 3"
+   ],
+   [
+    "Equipe 4",
+    "Equipe 7"
+   ],
+   [
+    "Equipe 6",
+    "Equipe 1"
+   ],
+   [
+    "Equipe 5",
+    null
+   ]
+  ],
+  [
+   [
+    "Equipe 2",
+    "Equipe 4"
+   ],
+   [
+    "Equipe 5",
+    "Equipe 1"
+   ],
+   [
+    "Equipe 7",
+    "Equipe 6"
+   ],
+   [
+    "Equipe 3",
+    null
+   ]
+  ]
+ ],
+ "equipes-7x2-r6-s8": [
+  [
+   [
+    "Equipe 1",
+    "Equipe 4"
+   ],
+   [
+    "Equipe 3",
+    "Equipe 6"
+   ],
+   [
+    "Equipe 5",
+    "Equipe 2"
+   ],
+   [
+    "Equipe 7",
+    null
+   ]
+  ],
+  [
+   [
+    "Equipe 2",
+    "Equipe 1"
+   ],
+   [
+    "Equipe 4",
+    "Equipe 6"
+   ],
+   [
+    "Equipe 7",
+    "Equipe 5"
+   ],
+   [
+    "Equipe 3",
+    null
+   ]
+  ],
+  [
+   [
+    "Equipe 1",
+    "Equipe 5"
+   ],
+   [
+    "Equipe 4",
+    "Equipe 3"
+   ],
+   [
+    "Equipe 6",
+    "Equipe 7"
+   ],
+   [
+    "Equipe 2",
+    null
+   ]
+  ],
+  [
+   [
+    "Equipe 3",
+    "Equipe 2"
+   ],
+   [
+    "Equipe 6",
+    "Equipe 1"
+   ],
+   [
+    "Equipe 7",
+    "Equipe 4"
+   ],
+   [
+    "Equipe 5",
+    null
+   ]
+  ],
+  [
+   [
+    "Equipe 2",
+    "Equipe 6"
+   ],
+   [
+    "Equipe 3",
+    "Equipe 7"
+   ],
+   [
+    "Equipe 5",
+    "Equipe 4"
+   ],
+   [
+    "Equipe 1",
+    null
+   ]
+  ],
+  [
+   [
+    "Equipe 1",
+    "Equipe 3"
+   ],
+   [
+    "Equipe 6",
+    "Equipe 5"
+   ],
+   [
+    "Equipe 7",
+    "Equipe 2"
+   ],
+   [
+    "Equipe 4",
+    null
+   ]
+  ]
+ ],
+ "equipes-7x2-r6-s9": [
+  [
+   [
+    "Equipe 1",
+    "Equipe 4"
+   ],
+   [
+    "Equipe 3",
+    "Equipe 6"
+   ],
+   [
+    "Equipe 5",
+    "Equipe 2"
+   ],
+   [
+    "Equipe 7",
+    null
+   ]
+  ],
+  [
+   [
+    "Equipe 2",
+    "Equipe 6"
+   ],
+   [
+    "Equipe 3",
+    "Equipe 5"
+   ],
+   [
+    "Equipe 7",
+    "Equipe 1"
+   ],
+   [
+    "Equipe 4",
+    null
+   ]
+  ],
+  [
+   [
+    "Equipe 4",
+    "Equipe 2"
+   ],
+   [
+    "Equipe 5",
+    "Equipe 7"
+   ],
+   [
+    "Equipe 6",
+    "Equipe 1"
+   ],
+   [
+    "Equipe 3",
+    null
+   ]
+  ],
+  [
+   [
+    "Equipe 1",
+    "Equipe 5"
+   ],
+   [
+    "Equipe 4",
+    "Equipe 3"
+   ],
+   [
+    "Equipe 6",
+    "Equipe 7"
+   ],
+   [
+    "Equipe 2",
+    null
+   ]
+  ],
+  [
+   [
+    "Equipe 2",
+    "Equipe 1"
+   ],
+   [
+    "Equipe 5",
+    "Equipe 4"
+   ],
+   [
+    "Equipe 7",
+    "Equipe 3"
+   ],
+   [
+    "Equipe 6",
+    null
+   ]
+  ],
+  [
+   [
+    "Equipe 3",
+    "Equipe 2"
+   ],
+   [
+    "Equipe 4",
+    "Equipe 7"
+   ],
+   [
+    "Equipe 5",
+    "Equipe 6"
+   ],
+   [
+    "Equipe 1",
+    null
+   ]
+  ]
+ ],
+ "equipes-6x2-r5-s0": [
+  [
+   [
+    "Equipe 1",
+    "Equipe 4"
+   ],
+   [
+    "Equipe 3",
+    "Equipe 6"
+   ],
+   [
+    "Equipe 5",
+    "Equipe 2"
+   ]
+  ],
+  [
+   [
+    "Equipe 2",
+    "Equipe 1"
+   ],
+   [
+    "Equipe 4",
+    "Equipe 3"
+   ],
+   [
+    "Equipe 6",
+    "Equipe 5"
+   ]
+  ],
+  [
+   [
+    "Equipe 1",
+    "Equipe 3"
+   ],
+   [
+    "Equipe 2",
+    "Equipe 6"
+   ],
+   [
+    "Equipe 5",
+    "Equipe 4"
+   ]
+  ],
+  [
+   [
+    "Equipe 3",
+    "Equipe 5"
+   ],
+   [
+    "Equipe 4",
+    "Equipe 2"
+   ],
+   [
+    "Equipe 6",
+    "Equipe 1"
+   ]
+  ],
+  [
+   [
+    "Equipe 1",
+    "Equipe 5"
+   ],
+   [
+    "Equipe 2",
+    "Equipe 3"
+   ],
+   [
+    "Equipe 4",
+    "Equipe 6"
+   ]
+  ]
+ ],
+ "equipes-6x2-r5-s1": [
+  [
+   [
+    "Equipe 1",
+    "Equipe 4"
+   ],
+   [
+    "Equipe 3",
+    "Equipe 6"
+   ],
+   [
+    "Equipe 5",
+    "Equipe 2"
+   ]
+  ],
+  [
+   [
+    "Equipe 1",
+    "Equipe 3"
+   ],
+   [
+    "Equipe 2",
+    "Equipe 6"
+   ],
+   [
+    "Equipe 4",
+    "Equipe 5"
+   ]
+  ],
+  [
+   [
+    "Equipe 3",
+    "Equipe 2"
+   ],
+   [
+    "Equipe 5",
+    "Equipe 1"
+   ],
+   [
+    "Equipe 6",
+    "Equipe 4"
+   ]
+  ],
+  [
+   [
+    "Equipe 2",
+    "Equipe 4"
+   ],
+   [
+    "Equipe 3",
+    "Equipe 5"
+   ],
+   [
+    "Equipe 6",
+    "Equipe 1"
+   ]
+  ],
+  [
+   [
+    "Equipe 1",
+    "Equipe 2"
+   ],
+   [
+    "Equipe 4",
+    "Equipe 3"
+   ],
+   [
+    "Equipe 5",
+    "Equipe 6"
+   ]
+  ]
+ ],
+ "equipes-6x2-r5-s2": [
+  [
+   [
+    "Equipe 1",
+    "Equipe 4"
+   ],
+   [
+    "Equipe 3",
+    "Equipe 6"
+   ],
+   [
+    "Equipe 5",
+    "Equipe 2"
+   ]
+  ],
+  [
+   [
+    "Equipe 2",
+    "Equipe 1"
+   ],
+   [
+    "Equipe 4",
+    "Equipe 3"
+   ],
+   [
+    "Equipe 6",
+    "Equipe 5"
+   ]
+  ],
+  [
+   [
+    "Equipe 1",
+    "Equipe 5"
+   ],
+   [
+    "Equipe 3",
+    "Equipe 2"
+   ],
+   [
+    "Equipe 4",
+    "Equipe 6"
+   ]
+  ],
+  [
+   [
+    "Equipe 2",
+    "Equipe 4"
+   ],
+   [
+    "Equipe 5",
+    "Equipe 3"
+   ],
+   [
+    "Equipe 6",
+    "Equipe 1"
+   ]
+  ],
+  [
+   [
+    "Equipe 1",
+    "Equipe 3"
+   ],
+   [
+    "Equipe 2",
+    "Equipe 6"
+   ],
+   [
+    "Equipe 4",
+    "Equipe 5"
+   ]
+  ]
+ ],
+ "equipes-6x2-r5-s3": [
+  [
+   [
+    "Equipe 1",
+    "Equipe 4"
+   ],
+   [
+    "Equipe 3",
+    "Equipe 6"
+   ],
+   [
+    "Equipe 5",
+    "Equipe 2"
+   ]
+  ],
+  [
+   [
+    "Equipe 2",
+    "Equipe 1"
+   ],
+   [
+    "Equipe 4",
+    "Equipe 3"
+   ],
+   [
+    "Equipe 6",
+    "Equipe 5"
+   ]
+  ],
+  [
+   [
+    "Equipe 1",
+    "Equipe 6"
+   ],
+   [
+    "Equipe 2",
+    "Equipe 4"
+   ],
+   [
+    "Equipe 3",
+    "Equipe 5"
+   ]
+  ],
+  [
+   [
+    "Equipe 3",
+    "Equipe 2"
+   ],
+   [
+    "Equipe 4",
+    "Equipe 6"
+   ],
+   [
+    "Equipe 5",
+    "Equipe 1"
+   ]
+  ],
+  [
+   [
+    "Equipe 1",
+    "Equipe 3"
+   ],
+   [
+    "Equipe 4",
+    "Equipe 5"
+   ],
+   [
+    "Equipe 6",
+    "Equipe 2"
+   ]
+  ]
+ ],
+ "equipes-6x2-r5-s4": [
+  [
+   [
+    "Equipe 1",
+    "Equipe 4"
+   ],
+   [
+    "Equipe 3",
+    "Equipe 6"
+   ],
+   [
+    "Equipe 5",
+    "Equipe 2"
+   ]
+  ],
+  [
+   [
+    "Equipe 2",
+    "Equipe 1"
+   ],
+   [
+    "Equipe 4",
+    "Equipe 3"
+   ],
+   [
+    "Equipe 6",
+    "Equipe 5"
+   ]
+  ],
+  [
+   [
+    "Equipe 1",
+    "Equipe 6"
+   ],
+   [
+    "Equipe 2",
+    "Equipe 4"
+   ],
+   [
+    "Equipe 3",
+    "Equipe 5"
+   ]
+  ]
+ ],
+ "equipes-8x2-r5-s0": [
+  [
+   [
+    "Equipe 1",
+    "Equipe 5"
+   ],
+   [
+    "Equipe 3",
+    "Equipe 7"
+   ],
+   [
+    "Equipe 6",
+    "Equipe 2"
+   ],
+   [
+    "Equipe 8",
+    "Equipe 4"
+   ]
+  ],
+  [
+   [
+    "Equipe 1",
+    "Equipe 8"
+   ],
+   [
+    "Equipe 2",
+    "Equipe 3"
+   ],
+   [
+    "Equipe 4",
+    "Equipe 5"
+   ],
+   [
+    "Equipe 7",
+    "Equipe 6"
+   ]
+  ],
+  [
+   [
+    "Equipe 3",
+    "Equipe 4"
+   ],
+   [
+    "Equipe 5",
+    "Equipe 2"
+   ],
+   [
+    "Equipe 6",
+    "Equipe 1"
+   ],
+   [
+    "Equipe 8",
+    "Equipe 7"
+   ]
+  ],
+  [
+   [
+    "Equipe 1",
+    "Equipe 3"
+   ],
+   [
+    "Equipe 2",
+    "Equipe 4"
+   ],
+   [
+    "Equipe 5",
+    "Equipe 7"
+   ],
+   [
+    "Equipe 6",
+    "Equipe 8"
+   ]
+  ]
+ ],
+ "equipes-8x2-r5-s1": [
+  [
+   [
+    "Equipe 1",
+    "Equipe 5"
+   ],
+   [
+    "Equipe 3",
+    "Equipe 7"
+   ],
+   [
+    "Equipe 6",
+    "Equipe 2"
+   ],
+   [
+    "Equipe 8",
+    "Equipe 4"
+   ]
+  ],
+  [
+   [
+    "Equipe 2",
+    "Equipe 8"
+   ],
+   [
+    "Equipe 4",
+    "Equipe 6"
+   ],
+   [
+    "Equipe 5",
+    "Equipe 3"
+   ],
+   [
+    "Equipe 7",
+    "Equipe 1"
+   ]
+  ],
+  [
+   [
+    "Equipe 1",
+    "Equipe 3"
+   ],
+   [
+    "Equipe 2",
+    "Equipe 7"
+   ],
+   [
+    "Equipe 4",
+    "Equipe 5"
+   ],
+   [
+    "Equipe 6",
+    "Equipe 8"
+   ]
+  ],
+  [
+   [
+    "Equipe 3",
+    "Equipe 2"
+   ],
+   [
+    "Equipe 5",
+    "Equipe 6"
+   ],
+   [
+    "Equipe 7",
+    "Equipe 4"
+   ],
+   [
+    "Equipe 8",
+    "Equipe 1"
+   ]
+  ],
+  [
+   [
+    "Equipe 1",
+    "Equipe 6"
+   ],
+   [
+    "Equipe 2",
+    "Equipe 4"
+   ],
+   [
+    "Equipe 3",
+    "Equipe 8"
+   ],
+   [
+    "Equipe 5",
+    "Equipe 7"
+   ]
+  ]
+ ],
+ "equipes-8x2-r5-s2": [
+  [
+   [
+    "Equipe 1",
+    "Equipe 5"
+   ],
+   [
+    "Equipe 3",
+    "Equipe 7"
+   ],
+   [
+    "Equipe 6",
+    "Equipe 2"
+   ],
+   [
+    "Equipe 8",
+    "Equipe 4"
+   ]
+  ],
+  [
+   [
+    "Equipe 1",
+    "Equipe 8"
+   ],
+   [
+    "Equipe 2",
+    "Equipe 4"
+   ],
+   [
+    "Equipe 5",
+    "Equipe 3"
+   ],
+   [
+    "Equipe 7",
+    "Equipe 6"
+   ]
+  ],
+  [
+   [
+    "Equipe 3",
+    "Equipe 2"
+   ],
+   [
+    "Equipe 4",
+    "Equipe 5"
+   ],
+   [
+    "Equipe 6",
+    "Equipe 1"
+   ],
+   [
+    "Equipe 8",
+    "Equipe 7"
+   ]
+  ],
+  [
+   [
+    "Equipe 2",
+    "Equipe 1"
+   ],
+   [
+    "Equipe 4",
+    "Equipe 3"
+   ],
+   [
+    "Equipe 5",
+    "Equipe 7"
+   ],
+   [
+    "Equipe 6",
+    "Equipe 8"
+   ]
+  ]
+ ],
+ "equipes-8x2-r5-s3": [
+  [
+   [
+    "Equipe 1",
+    "Equipe 5"
+   ],
+   [
+    "Equipe 3",
+    "Equipe 7"
+   ],
+   [
+    "Equipe 6",
+    "Equipe 2"
+   ],
+   [
+    "Equipe 8",
+    "Equipe 4"
+   ]
+  ],
+  [
+   [
+    "Equipe 1",
+    "Equipe 6"
+   ],
+   [
+    "Equipe 2",
+    "Equipe 5"
+   ],
+   [
+    "Equipe 3",
+    "Equipe 8"
+   ],
+   [
+    "Equipe 4",
+    "Equipe 7"
+   ]
+  ],
+  [
+   [
+    "Equipe 2",
+    "Equipe 3"
+   ],
+   [
+    "Equipe 5",
+    "Equipe 8"
+   ],
+   [
+    "Equipe 6",
+    "Equipe 4"
+   ],
+   [
+    "Equipe 7",
+    "Equipe 1"
+   ]
+  ],
+  [
+   [
+    "Equipe 3",
+    "Equipe 6"
+   ],
+   [
+    "Equipe 4",
+    "Equipe 1"
+   ],
+   [
+    "Equipe 5",
+    "Equipe 7"
+   ],
+   [
+    "Equipe 8",
+    "Equipe 2"
+   ]
+  ]
+ ],
+ "equipes-8x2-r5-s4": [
+  [
+   [
+    "Equipe 1",
+    "Equipe 5"
+   ],
+   [
+    "Equipe 3",
+    "Equipe 7"
+   ],
+   [
+    "Equipe 6",
+    "Equipe 2"
+   ],
+   [
+    "Equipe 8",
+    "Equipe 4"
+   ]
+  ],
+  [
+   [
+    "Equipe 2",
+    "Equipe 8"
+   ],
+   [
+    "Equipe 4",
+    "Equipe 6"
+   ],
+   [
+    "Equipe 5",
+    "Equipe 3"
+   ],
+   [
+    "Equipe 7",
+    "Equipe 1"
+   ]
+  ],
+  [
+   [
+    "Equipe 1",
+    "Equipe 6"
+   ],
+   [
+    "Equipe 2",
+    "Equipe 7"
+   ],
+   [
+    "Equipe 3",
+    "Equipe 8"
+   ],
+   [
+    "Equipe 4",
+    "Equipe 5"
+   ]
+  ],
+  [
+   [
+    "Equipe 3",
+    "Equipe 4"
+   ],
+   [
+    "Equipe 5",
+    "Equipe 2"
+   ],
+   [
+    "Equipe 6",
+    "Equipe 7"
+   ],
+   [
+    "Equipe 8",
+    "Equipe 1"
+   ]
+  ]
+ ],
+ "jogadores-9-r5-s0": [
+  [
+   [
+    "Jogador 1",
+    "Jogador 5"
+   ],
+   [
+    "Jogador 3",
+    "Jogador 7"
+   ],
+   [
+    "Jogador 6",
+    "Jogador 2"
+   ],
+   [
+    "Jogador 8",
+    "Jogador 4"
+   ],
+   [
+    "Jogador 9",
+    null
+   ]
+  ],
+  [
+   [
+    "Jogador 4",
+    "Jogador 2"
+   ],
+   [
+    "Jogador 5",
+    "Jogador 8"
+   ],
+   [
+    "Jogador 6",
+    "Jogador 1"
+   ],
+   [
+    "Jogador 9",
+    "Jogador 3"
+   ],
+   [
+    "Jogador 7",
+    null
+   ]
+  ],
+  [
+   [
+    "Jogador 1",
+    "Jogador 9"
+   ],
+   [
+    "Jogador 3",
+    "Jogador 8"
+   ],
+   [
+    "Jogador 4",
+    "Jogador 6"
+   ],
+   [
+    "Jogador 7",
+    "Jogador 5"
+   ],
+   [
+    "Jogador 2",
+    null
+   ]
+  ],
+  [
+   [
+    "Jogador 2",
+    "Jogador 7"
+   ],
+   [
+    "Jogador 5",
+    "Jogador 6"
+   ],
+   [
+    "Jogador 8",
+    "Jogador 1"
+   ],
+   [
+    "Jogador 9",
+    "Jogador 4"
+   ],
+   [
+    "Jogador 3",
+    null
+   ]
+  ],
+  [
+   [
+    "Jogador 1",
+    "Jogador 4"
+   ],
+   [
+    "Jogador 2",
+    "Jogador 5"
+   ],
+   [
+    "Jogador 6",
+    "Jogador 3"
+   ],
+   [
+    "Jogador 7",
+    "Jogador 9"
+   ],
+   [
+    "Jogador 8",
+    null
+   ]
+  ]
+ ],
+ "jogadores-9-r5-s1": [
+  [
+   [
+    "Jogador 1",
+    "Jogador 5"
+   ],
+   [
+    "Jogador 3",
+    "Jogador 7"
+   ],
+   [
+    "Jogador 6",
+    "Jogador 2"
+   ],
+   [
+    "Jogador 8",
+    "Jogador 4"
+   ],
+   [
+    "Jogador 9",
+    null
+   ]
+  ],
+  [
+   [
+    "Jogador 2",
+    "Jogador 5"
+   ],
+   [
+    "Jogador 4",
+    "Jogador 1"
+   ],
+   [
+    "Jogador 7",
+    "Jogador 8"
+   ],
+   [
+    "Jogador 9",
+    "Jogador 3"
+   ],
+   [
+    "Jogador 6",
+    null
+   ]
+  ],
+  [
+   [
+    "Jogador 2",
+    "Jogador 9"
+   ],
+   [
+    "Jogador 3",
+    "Jogador 4"
+   ],
+   [
+    "Jogador 5",
+    "Jogador 8"
+   ],
+   [
+    "Jogador 7",
+    "Jogador 6"
+   ],
+   [
+    "Jogador 1",
+    null
+   ]
+  ],
+  [
+   [
+    "Jogador 1",
+    "Jogador 7"
+   ],
+   [
+    "Jogador 4",
+    "Jogador 2"
+   ],
+   [
+    "Jogador 5",
+    "Jogador 9"
+   ],
+   [
+    "Jogador 6",
+    "Jogador 3"
+   ],
+   [
+    "Jogador 8",
+    null
+   ]
+  ],
+  [
+   [
+    "Jogador 2",
+    "Jogador 1"
+   ],
+   [
+    "Jogador 3",
+    "Jogador 5"
+   ],
+   [
+    "Jogador 8",
+    "Jogador 6"
+   ],
+   [
+    "Jogador 9",
+    "Jogador 4"
+   ],
+   [
+    "Jogador 7",
+    null
+   ]
+  ]
+ ],
+ "jogadores-9-r5-s2": [
+  [
+   [
+    "Jogador 1",
+    "Jogador 5"
+   ],
+   [
+    "Jogador 3",
+    "Jogador 7"
+   ],
+   [
+    "Jogador 6",
+    "Jogador 2"
+   ],
+   [
+    "Jogador 8",
+    "Jogador 4"
+   ],
+   [
+    "Jogador 9",
+    null
+   ]
+  ],
+  [
+   [
+    "Jogador 4",
+    "Jogador 2"
+   ],
+   [
+    "Jogador 5",
+    "Jogador 8"
+   ],
+   [
+    "Jogador 6",
+    "Jogador 1"
+   ],
+   [
+    "Jogador 9",
+    "Jogador 3"
+   ],
+   [
+    "Jogador 7",
+    null
+   ]
+  ],
+  [
+   [
+    "Jogador 1",
+    "Jogador 9"
+   ],
+   [
+    "Jogador 2",
+    "Jogador 7"
+   ],
+   [
+    "Jogador 3",
+    "Jogador 8"
+   ],
+   [
+    "Jogador 4",
+    "Jogador 6"
+   ],
+   [
+    "Jogador 5",
+    null
+   ]
+  ],
+  [
+   [
+    "Jogador 1",
+    "Jogador 4"
+   ],
+   [
+    "Jogador 6",
+    "Jogador 3"
+   ],
+   [
+    "Jogador 7",
+    "Jogador 5"
+   ],
+   [
+    "Jogador 8",
+    "Jogador 9"
+   ],
+   [
+    "Jogador 2",
+    null
+   ]
+  ],
+  [
+   [
+    "Jogador 2",
+    "Jogador 8"
+   ],
+   [
+    "Jogador 3",
+    "Jogador 1"
+   ],
+   [
+    "Jogador 5",
+    "Jogador 4"
+   ],
+   [
+    "Jogador 9",
+    "Jogador 7"
+   ],
+   [
+    "Jogador 6",
+    null
+   ]
+  ]
+ ],
+ "jogadores-9-r5-s3": [
+  [
+   [
+    "Jogador 1",
+    "Jogador 5"
+   ],
+   [
+    "Jogador 3",
+    "Jogador 7"
+   ],
+   [
+    "Jogador 6",
+    "Jogador 2"
+   ],
+   [
+    "Jogador 8",
+    "Jogador 4"
+   ],
+   [
+    "Jogador 9",
+    null
+   ]
+  ],
+  [
+   [
+    "Jogador 2",
+    "Jogador 5"
+   ],
+   [
+    "Jogador 4",
+    "Jogador 7"
+   ],
+   [
+    "Jogador 8",
+    "Jogador 3"
+   ],
+   [
+    "Jogador 9",
+    "Jogador 6"
+   ],
+   [
+    "Jogador 1",
+    null
+   ]
+  ],
+  [
+   [
+    "Jogador 1",
+    "Jogador 8"
+   ],
+   [
+    "Jogador 4",
+    "Jogador 2"
+   ],
+   [
+    "Jogador 5",
+    "Jogador 3"
+   ],
+   [
+    "Jogador 7",
+    "Jogador 9"
+   ],
+   [
+    "Jogador 6",
+    null
+   ]
+  ],
+  [
+   [
+    "Jogador 2",
+    "Jogador 7"
+   ],
+   [
+    "Jogador 3",
+    "Jogador 4"
+   ],
+   [
+    "Jogador 5",
+    "Jogador 6"
+   ],
+   [
+    "Jogador 9",
+    "Jogador 1"
+   ],
+   [
+    "Jogador 8",
+    null
+   ]
+  ],
+  [
+   [
+    "Jogador 3",
+    "Jogador 2"
+   ],
+   [
+    "Jogador 4",
+    "Jogador 9"
+   ],
+   [
+    "Jogador 6",
+    "Jogador 8"
+   ],
+   [
+    "Jogador 7",
+    "Jogador 1"
+   ],
+   [
+    "Jogador 5",
+    null
+   ]
+  ]
+ ],
+ "jogadores-10-r6-s0": [
+  [
+   [
+    "Jogador 1",
+    "Jogador 6"
+   ],
+   [
+    "Jogador 3",
+    "Jogador 8"
+   ],
+   [
+    "Jogador 5",
+    "Jogador 10"
+   ],
+   [
+    "Jogador 7",
+    "Jogador 2"
+   ],
+   [
+    "Jogador 9",
+    "Jogador 4"
+   ]
+  ],
+  [
+   [
+    "Jogador 10",
+    "Jogador 3"
+   ],
+   [
+    "Jogador 2",
+    "Jogador 8"
+   ],
+   [
+    "Jogador 4",
+    "Jogador 5"
+   ],
+   [
+    "Jogador 6",
+    "Jogador 9"
+   ],
+   [
+    "Jogador 7",
+    "Jogador 1"
+   ]
+  ],
+  [
+   [
+    "Jogador 1",
+    "Jogador 4"
+   ],
+   [
+    "Jogador 10",
+    "Jogador 7"
+   ],
+   [
+    "Jogador 3",
+    "Jogador 6"
+   ],
+   [
+    "Jogador 8",
+    "Jogador 5"
+   ],
+   [
+    "Jogador 9",
+    "Jogador 2"
+   ]
+  ],
+  [
+   [
+    "Jogador 2",
+    "Jogador 3"
+   ],
+   [
+    "Jogador 4",
+    "Jogador 10"
+   ],
+   [
+    "Jogador 5",
+    "Jogador 7"
+   ],
+   [
+    "Jogador 6",
+    "Jogador 8"
+   ],
+   [
+    "Jogador 9",
+    "Jogador 1"
+   ]
+  ],
+  [
+   [
+    "Jogador 1",
+    "Jogador 5"
+   ],
+   [
+    "Jogador 10",
+    "Jogador 6"
+   ],
+   [
+    "Jogador 2",
+    "Jogador 4"
+   ],
+   [
+    "Jogador 7",
+    "Jogador 3"
+   ],
+   [
+    "Jogador 8",
+    "Jogador 9"
+   ]
+  ],
+  [
+   [
+    "Jogador 3",
+    "Jogador 1"
+   ],
+   [
+    "Jogador 4",
+    "Jogador 7"
+   ],
+   [
+    "Jogador 5",
+    "Jogador 9"
+   ],
+   [
+    "Jogador 6",
+    "Jogador 2"
+   ],
+   [
+    "Jogador 8",
+    "Jogador 10"
+   ]
+  ]
+ ],
+ "jogadores-10-r6-s1": [
+  [
+   [
+    "Jogador 1",
+    "Jogador 6"
+   ],
+   [
+    "Jogador 3",
+    "Jogador 8"
+   ],
+   [
+    "Jogador 5",
+    "Jogador 10"
+   ],
+   [
+    "Jogador 7",
+    "Jogador 2"
+   ],
+   [
+    "Jogador 9",
+    "Jogador 4"
+   ]
+  ],
+  [
+   [
+    "Jogador 10",
+    "Jogador 1"
+   ],
+   [
+    "Jogador 2",
+    "Jogador 5"
+   ],
+   [
+    "Jogador 4",
+    "Jogador 7"
+   ],
+   [
+    "Jogador 6",
+    "Jogador 3"
+   ],
+   [
+    "Jogador 8",
+    "Jogador 9"
+   ]
+  ],
+  [
+   [
+    "Jogador 1",
+    "Jogador 4"
+   ],
+   [
+    "Jogador 3",
+    "Jogador 5"
+   ],
+   [
+    "Jogador 6",
+    "Jogador 2"
+   ],
+   [
+    "Jogador 7",
+    "Jogador 8"
+   ],
+   [
+    "Jogador 9",
+    "Jogador 10"
+   ]
+  ],
+  [
+   [
+    "Jogador 10",
+    "Jogador 7"
+   ],
+   [
+    "Jogador 2",
+    "Jogador 1"
+   ],
+   [
+    "Jogador 4",
+    "Jogador 6"
+   ],
+   [
+    "Jogador 5",
+    "Jogador 8"
+   ],
+   [
+    "Jogador 9",
+    "Jogador 3"
+   ]
+  ],
+  [
+   [
+    "Jogador 1",
+    "Jogador 7"
+   ],
+   [
+    "Jogador 3",
+    "Jogador 2"
+   ],
+   [
+    "Jogador 5",
+    "Jogador 4"
+   ],
+   [
+    "Jogador 6",
+    "Jogador 9"
+   ],
+   [
+    "Jogador 8",
+    "Jogador 10"
+   ]
+  ],
+  [
+   [
+    "Jogador 2",
+    "Jogador 8"
+   ],
+   [
+    "Jogador 4",
+    "Jogador 10"
+   ],
+   [
+    "Jogador 6",
+    "Jogador 5"
+   ],
+   [
+    "Jogador 7",
+    "Jogador 3"
+   ],
+   [
+    "Jogador 9",
+    "Jogador 1"
+   ]
+  ]
+ ],
+ "jogadores-10-r6-s2": [
+  [
+   [
+    "Jogador 1",
+    "Jogador 6"
+   ],
+   [
+    "Jogador 3",
+    "Jogador 8"
+   ],
+   [
+    "Jogador 5",
+    "Jogador 10"
+   ],
+   [
+    "Jogador 7",
+    "Jogador 2"
+   ],
+   [
+    "Jogador 9",
+    "Jogador 4"
+   ]
+  ],
+  [
+   [
+    "Jogador 10",
+    "Jogador 3"
+   ],
+   [
+    "Jogador 2",
+    "Jogador 8"
+   ],
+   [
+    "Jogador 4",
+    "Jogador 5"
+   ],
+   [
+    "Jogador 6",
+    "Jogador 9"
+   ],
+   [
+    "Jogador 7",
+    "Jogador 1"
+   ]
+  ],
+  [
+   [
+    "Jogador 1",
+    "Jogador 3"
+   ],
+   [
+    "Jogador 10",
+    "Jogador 7"
+   ],
+   [
+    "Jogador 6",
+    "Jogador 2"
+   ],
+   [
+    "Jogador 8",
+    "Jogador 4"
+   ],
+   [
+    "Jogador 9",
+    "Jogador 5"
+   ]
+  ],
+  [
+   [
+    "Jogador 3",
+    "Jogador 6"
+   ],
+   [
+    "Jogador 4",
+    "Jogador 2"
+   ],
+   [
+    "Jogador 5",
+    "Jogador 1"
+   ],
+   [
+    "Jogador 8",
+    "Jogador 7"
+   ],
+   [
+    "Jogador 9",
+    "Jogador 10"
+   ]
+  ],
+  [
+   [
+    "Jogador 1",
+    "Jogador 8"
+   ],
+   [
+    "Jogador 10",
+    "Jogador 4"
+   ],
+   [
+    "Jogador 2",
+    "Jogador 3"
+   ],
+   [
+    "Jogador 6",
+    "Jogador 5"
+   ],
+   [
+    "Jogador 7",
+    "Jogador 9"
+   ]
+  ],
+  [
+   [
+    "Jogador 1",
+    "Jogador 10"
+   ],
+   [
+    "Jogador 2",
+    "Jogador 9"
+   ],
+   [
+    "Jogador 3",
+    "Jogador 5"
+   ],
+   [
+    "Jogador 4",
+    "Jogador 7"
+   ],
+   [
+    "Jogador 8",
+    "Jogador 6"
+   ]
+  ]
+ ],
+ "jogadores-10-r6-s3": [
+  [
+   [
+    "Jogador 1",
+    "Jogador 6"
+   ],
+   [
+    "Jogador 3",
+    "Jogador 8"
+   ],
+   [
+    "Jogador 5",
+    "Jogador 10"
+   ],
+   [
+    "Jogador 7",
+    "Jogador 2"
+   ],
+   [
+    "Jogador 9",
+    "Jogador 4"
+   ]
+  ],
+  [
+   [
+    "Jogador 10",
+    "Jogador 7"
+   ],
+   [
+    "Jogador 2",
+    "Jogador 6"
+   ],
+   [
+    "Jogador 3",
+    "Jogador 5"
+   ],
+   [
+    "Jogador 4",
+    "Jogador 8"
+   ],
+   [
+    "Jogador 9",
+    "Jogador 1"
+   ]
+  ],
+  [
+   [
+    "Jogador 2",
+    "Jogador 10"
+   ],
+   [
+    "Jogador 5",
+    "Jogador 1"
+   ],
+   [
+    "Jogador 6",
+    "Jogador 4"
+   ],
+   [
+    "Jogador 7",
+    "Jogador 3"
+   ],
+   [
+    "Jogador 8",
+    "Jogador 9"
+   ]
+  ],
+  [
+   [
+    "Jogador 1",
+    "Jogador 8"
+   ],
+   [
+    "Jogador 4",
+    "Jogador 10"
+   ],
+   [
+    "Jogador 5",
+    "Jogador 2"
+   ],
+   [
+    "Jogador 6",
+    "Jogador 7"
+   ],
+   [
+    "Jogador 9",
+    "Jogador 3"
+   ]
+  ],
+  [
+   [
+    "Jogador 10",
+    "Jogador 9"
+   ],
+   [
+    "Jogador 3",
+    "Jogador 2"
+   ],
+   [
+    "Jogador 4",
+    "Jogador 5"
+   ],
+   [
+    "Jogador 7",
+    "Jogador 1"
+   ],
+   [
+    "Jogador 8",
+    "Jogador 6"
+   ]
+  ],
+  [
+   [
+    "Jogador 1",
+    "Jogador 3"
+   ],
+   [
+    "Jogador 2",
+    "Jogador 4"
+   ],
+   [
+    "Jogador 6",
+    "Jogador 10"
+   ],
+   [
+    "Jogador 8",
+    "Jogador 7"
+   ],
+   [
+    "Jogador 9",
+    "Jogador 5"
+   ]
+  ]
+ ],
+ "jogadores-13-r6-s0": [
+  [
+   [
+    "Jogador 1",
+    "Jogador 7"
+   ],
+   [
+    "Jogador 10",
+    "Jogador 4"
+   ],
+   [
+    "Jogador 12",
+    "Jogador 6"
+   ],
+   [
+    "Jogador 3",
+    "Jogador 9"
+   ],
+   [
+    "Jogador 5",
+    "Jogador 11"
+   ],
+   [
+    "Jogador 8",
+    "Jogador 2"
+   ],
+   [
+    "Jogador 13",
+    null
+   ]
+  ],
+  [
+   [
+    "Jogador 11",
+    "Jogador 1"
+   ],
+   [
+    "Jogador 12",
+    "Jogador 3"
+   ],
+   [
+    "Jogador 13",
+    "Jogador 8"
+   ],
+   [
+    "Jogador 2",
+    "Jogador 7"
+   ],
+   [
+    "Jogador 4",
+    "Jogador 5"
+   ],
+   [
+    "Jogador 6",
+    "Jogador 10"
+   ],
+   [
+    "Jogador 9",
+    null
+   ]
+  ],
+  [
+   [
+    "Jogador 11",
+    "Jogador 13"
+   ],
+   [
+    "Jogador 3",
+    "Jogador 4"
+   ],
+   [
+    "Jogador 5",
+    "Jogador 2"
+   ],
+   [
+    "Jogador 7",
+    "Jogador 10"
+   ],
+   [
+    "Jogador 8",
+    "Jogador 12"
+   ],
+   [
+    "Jogador 9",
+    "Jogador 1"
+   ],
+   [
+    "Jogador 6",
+    null
+   ]
+  ],
+  [
+   [
+    "Jogador 1",
+    "Jogador 2"
+   ],
+   [
+    "Jogador 10",
+    "Jogador 13"
+   ],
+   [
+    "Jogador 4",
+    "Jogador 12"
+   ],
+   [
+    "Jogador 7",
+    "Jogador 6"
+   ],
+   [
+    "Jogador 8",
+    "Jogador 3"
+   ],
+   [
+    "Jogador 9",
+    "Jogador 11"
+   ],
+   [
+    "Jogador 5",
+    null
+   ]
+  ],
+  [
+   [
+    "Jogador 1",
+    "Jogador 5"
+   ],
+   [
+    "Jogador 12",
+    "Jogador 10"
+   ],
+   [
+    "Jogador 13",
+    "Jogador 9"
+   ],
+   [
+    "Jogador 3",
+    "Jogador 11"
+   ],
+   [
+    "Jogador 4",
+    "Jogador 7"
+   ],
+   [
+    "Jogador 6",
+    "Jogador 8"
+   ],
+   [
+    "Jogador 2",
+    null
+   ]
+  ],
+  [
+   [
+    "Jogador 10",
+    "Jogador 3"
+   ],
+   [
+    "Jogador 11",
+    "Jogador 7"
+   ],
+   [
+    "Jogador 13",
+    "Jogador 12"
+   ],
+   [
+    "Jogador 2",
+    "Jogador 4"
+   ],
+   [
+    "Jogador 5",
+    "Jogador 9"
+   ],
+   [
+    "Jogador 6",
+    "Jogador 1"
+   ],
+   [
+    "Jogador 8",
+    null
+   ]
+  ]
+ ],
+ "jogadores-13-r6-s1": [
+  [
+   [
+    "Jogador 1",
+    "Jogador 7"
+   ],
+   [
+    "Jogador 10",
+    "Jogador 4"
+   ],
+   [
+    "Jogador 12",
+    "Jogador 6"
+   ],
+   [
+    "Jogador 3",
+    "Jogador 9"
+   ],
+   [
+    "Jogador 5",
+    "Jogador 11"
+   ],
+   [
+    "Jogador 8",
+    "Jogador 2"
+   ],
+   [
+    "Jogador 13",
+    null
+   ]
+  ],
+  [
+   [
+    "Jogador 12",
+    "Jogador 3"
+   ],
+   [
+    "Jogador 13",
+    "Jogador 5"
+   ],
+   [
+    "Jogador 2",
+    "Jogador 7"
+   ],
+   [
+    "Jogador 4",
+    "Jogador 6"
+   ],
+   [
+    "Jogador 8",
+    "Jogador 10"
+   ],
+   [
+    "Jogador 9",
+    "Jogador 1"
+   ],
+   [
+    "Jogador 11",
+    null
+   ]
+  ],
+  [
+   [
+    "Jogador 10",
+    "Jogador 12"
+   ],
+   [
+    "Jogador 11",
+    "Jogador 9"
+   ],
+   [
+    "Jogador 2",
+    "Jogador 13"
+   ],
+   [
+    "Jogador 3",
+    "Jogador 5"
+   ],
+   [
+    "Jogador 6",
+    "Jogador 8"
+   ],
+   [
+    "Jogador 7",
+    "Jogador 4"
+   ],
+   [
+    "Jogador 1",
+    null
+   ]
+  ],
+  [
+   [
+    "Jogador 11",
+    "Jogador 10"
+   ],
+   [
+    "Jogador 13",
+    "Jogador 12"
+   ],
+   [
+    "Jogador 3",
+    "Jogador 2"
+   ],
+   [
+    "Jogador 5",
+    "Jogador 1"
+   ],
+   [
+    "Jogador 7",
+    "Jogador 8"
+   ],
+   [
+    "Jogador 9",
+    "Jogador 6"
+   ],
+   [
+    "Jogador 4",
+    null
+   ]
+  ],
+  [
+   [
+    "Jogador 1",
+    "Jogador 10"
+   ],
+   [
+    "Jogador 12",
+    "Jogador 2"
+   ],
+   [
+    "Jogador 13",
+    "Jogador 3"
+   ],
+   [
+    "Jogador 4",
+    "Jogador 5"
+   ],
+   [
+    "Jogador 8",
+    "Jogador 11"
+   ],
+   [
+    "Jogador 9",
+    "Jogador 7"
+   ],
+   [
+    "Jogador 6",
+    null
+   ]
+  ],
+  [
+   [
+    "Jogador 1",
+    "Jogador 4"
+   ],
+   [
+    "Jogador 11",
+    "Jogador 3"
+   ],
+   [
+    "Jogador 12",
+    "Jogador 8"
+   ],
+   [
+    "Jogador 2",
+    "Jogador 9"
+   ],
+   [
+    "Jogador 5",
+    "Jogador 7"
+   ],
+   [
+    "Jogador 6",
+    "Jogador 13"
+   ],
+   [
+    "Jogador 10",
+    null
+   ]
+  ]
+ ],
+ "jogadores-13-r6-s2": [
+  [
+   [
+    "Jogador 1",
+    "Jogador 7"
+   ],
+   [
+    "Jogador 10",
+    "Jogador 4"
+   ],
+   [
+    "Jogador 12",
+    "Jogador 6"
+   ],
+   [
+    "Jogador 3",
+    "Jogador 9"
+   ],
+   [
+    "Jogador 5",
+    "Jogador 11"
+   ],
+   [
+    "Jogador 8",
+    "Jogador 2"
+   ],
+   [
+    "Jogador 13",
+    null
+   ]
+  ],
+  [
+   [
+    "Jogador 11",
+    "Jogador 3"
+   ],
+   [
+    "Jogador 13",
+    "Jogador 10"
+   ],
+   [
+    "Jogador 2",
+    "Jogador 7"
+   ],
+   [
+    "Jogador 4",
+    "Jogador 6"
+   ],
+   [
+    "Jogador 5",
+    "Jogador 12"
+   ],
+   [
+    "Jogador 8",
+    "Jogador 1"
+   ],
+   [
+    "Jogador 9",
+    null
+   ]
+  ],
+  [
+   [
+    "Jogador 1",
+    "Jogador 10"
+   ],
+   [
+    "Jogador 12",
+    "Jogador 4"
+   ],
+   [
+    "Jogador 3",
+    "Jogador 8"
+   ],
+   [
+    "Jogador 6",
+    "Jogador 5"
+   ],
+   [
+    "Jogador 7",
+    "Jogador 11"
+   ],
+   [
+    "Jogador 9",
+    "Jogador 13"
+   ],
+   [
+    "Jogador 2",
+    null
+   ]
+  ],
+  [
+   [
+    "Jogador 10",
+    "Jogador 9"
+   ],
+   [
+    "Jogador 11",
+    "Jogador 4"
+   ],
+   [
+    "Jogador 13",
+    "Jogador 2"
+   ],
+   [
+    "Jogador 3",
+    "Jogador 1"
+   ],
+   [
+    "Jogador 6",
+    "Jogador 8"
+   ],
+   [
+    "Jogador 7",
+    "Jogador 5"
+   ],
+   [
+    "Jogador 12",
+    null
+   ]
+  ],
+  [
+   [
+    "Jogador 1",
+    "Jogador 6"
+   ],
+   [
+    "Jogador 10",
+    "Jogador 11"
+   ],
+   [
+    "Jogador 2",
+    "Jogador 12"
+   ],
+   [
+    "Jogador 4",
+    "Jogador 3"
+   ],
+   [
+    "Jogador 5",
+    "Jogador 9"
+   ],
+   [
+    "Jogador 8",
+    "Jogador 13"
+   ],
+   [
+    "Jogador 7",
+    null
+   ]
+  ],
+  [
+   [
+    "Jogador 11",
+    "Jogador 12"
+   ],
+   [
+    "Jogador 2",
+    "Jogador 3"
+   ],
+   [
+    "Jogador 4",
+    "Jogador 1"
+   ],
+   [
+    "Jogador 6",
+    "Jogador 13"
+   ],
+   [
+    "Jogador 8",
+    "Jogador 10"
+   ],
+   [
+    "Jogador 9",
+    "Jogador 7"
+   ],
+   [
+    "Jogador 5",
+    null
+   ]
+  ]
+ ]
+}
