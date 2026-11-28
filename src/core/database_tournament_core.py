@@ -78,6 +78,25 @@ def _as_ints(*valores: Any) -> tuple[int, ...]:
     """Inteiros, com vazio/None virando 0 (ratings e contagens do jogador)."""
     return tuple(int(v or 0) for v in valores)
 
+DUPLICATE_RESET_TOURNAMENT_COLUMNS: frozenset[str] = frozenset(
+    {"id", "created_at", "start_date", "end_date", "status", "parent_tournament_id"}
+)
+"""Colunas de ``tournaments`` que são da edição e recomeçam ao duplicar (RG2-17)."""
+
+DUPLICATE_RESET_SETTINGS_COLUMNS: frozenset[str] = frozenset(
+    {
+        "tournament_id",
+        "updated_at",
+        "archived",  # a cópia nasce visível na lista
+        "fide_event_id",  # a nova edição não vai à FIDE com o ID da antiga
+        "chess_results_url",
+        "cutoff_date",
+        "initial_color",  # o RGS-14 sorteia de novo
+    }
+)
+"""Colunas de ``tournament_settings`` que recomeçam ao duplicar (RG2-17). O resto é copiado."""
+
+
 class TournamentCoreMixin(_DatabaseInfra):
     def create_tournament(
         self,
@@ -190,92 +209,49 @@ class TournamentCoreMixin(_DatabaseInfra):
             if not source:
                 raise ValueError("Torneio de origem não encontrado.")
 
+            # RG2-17: cópia por lista de EXCLUSÃO. A lista de inclusão escrita à
+            # mão não acompanhou ORG-01..04 e perdia ajustes; coluna nova agora
+            # entra na cópia sem ninguém lembrar.
+            copiar = [
+                coluna for coluna in self._table_columns(connection, "tournaments")
+                if coluna not in DUPLICATE_RESET_TOURNAMENT_COLUMNS and coluna != "name"
+            ]
+            colunas = ["name", "status", "created_at", *copiar]
+            valores = [new_name.strip(), "draft", self.now(), *(source[coluna] for coluna in copiar)]
             cursor = connection.execute(
-                """
-                INSERT INTO tournaments (
-                    club_id, class_id, competition_type, name, location, start_date, end_date, system, rounds_count,
-                    time_control, bye_points, status, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?)
-                """,
-                (
-                    source["club_id"],
-                    source["class_id"],
-                    source["competition_type"],
-                    new_name.strip(),
-                    source["location"],
-                    source["start_date"],
-                    source["end_date"],
-                    source["system"],
-                    source["rounds_count"],
-                    source["time_control"],
-                    source["bye_points"],
-                    self.now(),
-                ),
+                f"INSERT INTO tournaments ({', '.join(colunas)}) VALUES ({', '.join('?' for _ in colunas)})",
+                valores,
             )
             new_tournament_id = int(cursor.lastrowid)
             self._ensure_tournament_settings(connection, source_tournament_id)
             self._ensure_tournament_settings(connection, new_tournament_id)
+            ajustes = [
+                coluna for coluna in self._table_columns(connection, "tournament_settings")
+                if coluna not in DUPLICATE_RESET_SETTINGS_COLUMNS
+            ]
             connection.execute(
-                """
+                f"""
                 UPDATE tournament_settings
-                SET
-                    fide_event_id = src.fide_event_id,
-                    organizer = src.organizer,
-                    website = src.website,
-                    contact_email = src.contact_email,
-                    director = src.director,
-                    chief_arbiter = src.chief_arbiter,
-                    arbiters = src.arbiters,
-                    federation = src.federation,
-                    state = src.state,
-                    categories = src.categories,
-                    cutoff_date = src.cutoff_date,
-                    comments = src.comments,
-                    prizes = src.prizes,
-                    initial_order = src.initial_order,
-                    tournament_type = src.tournament_type,
-                    tournament_profile = src.tournament_profile,
-                    free_mode = src.free_mode,
-                    allow_public_registration = src.allow_public_registration,
-                    allow_player_result_edit = src.allow_player_result_edit,
-                    allow_dangerous_changes = src.allow_dangerous_changes,
-                    disable_bye = src.disable_bye,
-                    late_entry_points = src.late_entry_points,
-                    accelerated_system = src.accelerated_system,
-                    hide_standings = src.hide_standings,
-                    calculate_performance = src.calculate_performance,
-                    tiebreak_sequence = src.tiebreak_sequence,
-                    prize_policy = src.prize_policy,
-                    prize_tax_percent = src.prize_tax_percent,
-                    pairing_method = src.pairing_method,
-                    pairing_system = src.pairing_system,
-                    acceleration_method = src.acceleration_method,
-                    hide_color_names = src.hide_color_names,
-                    show_opponents_in_standings = src.show_opponents_in_standings,
-                    team_boards_count = src.team_boards_count,
-                    team_match_win_points = src.team_match_win_points,
-                    team_match_draw_points = src.team_match_draw_points,
-                    team_match_loss_points = src.team_match_loss_points,
-                    team_pairing_method = src.team_pairing_method,
-                    team_standing_primary = src.team_standing_primary,
-                    team_standing_secondary = src.team_standing_secondary,
-                    team_tiebreak_sequence = src.team_tiebreak_sequence,
-                    team_fixed_board_order = src.team_fixed_board_order,
-                    team_board_order_policy = src.team_board_order_policy,
-                    team_reserve_policy = src.team_reserve_policy,
-                    team_lineup_deadline = src.team_lineup_deadline,
-                    team_rating_tolerance = src.team_rating_tolerance,
-                    team_max_substitutions = src.team_max_substitutions,
-                    rating_fee_fide = src.rating_fee_fide,
-                    rating_fee_cbx = src.rating_fee_cbx,
-                    rating_fee_lbx = src.rating_fee_lbx,
-                    archived = src.archived,
-                    updated_at = ?
+                SET {", ".join(f"{coluna} = src.{coluna}" for coluna in ajustes)}, updated_at = ?
                 FROM tournament_settings AS src
                 WHERE tournament_settings.tournament_id = ?
                   AND src.tournament_id = ?
                 """,
                 (self.now(), new_tournament_id, source_tournament_id),
+            )
+            categorias = [
+                coluna for coluna in self._table_columns(connection, "tournament_categories")
+                if coluna not in {"id", "tournament_id", "created_at"}
+            ]
+            connection.execute(
+                f"""
+                INSERT INTO tournament_categories (tournament_id, created_at, {", ".join(categorias)})
+                SELECT ?, ?, {", ".join(categorias)}
+                FROM tournament_categories
+                WHERE tournament_id = ?
+                ORDER BY position, id
+                """,
+                (new_tournament_id, self.now(), source_tournament_id),
             )
             schedules = connection.execute(
                 """
@@ -366,6 +342,10 @@ class TournamentCoreMixin(_DatabaseInfra):
                 ],
             )
             return new_tournament_id
+
+    @staticmethod
+    def _table_columns(connection: sqlite3.Connection, table: str) -> list[str]:
+        return [str(row[1]) for row in connection.execute(f"PRAGMA table_info({table})")]
 
     def delete_tournament(self, tournament_id: int) -> None:
         with self.connect() as connection:
