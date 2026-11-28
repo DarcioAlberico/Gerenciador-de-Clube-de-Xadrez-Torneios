@@ -16,6 +16,7 @@ from unittest import mock
 import pytest
 
 from src.core.database import Database
+from src.services.constants import AppError
 from src.services.pairing.gacrux_tiebreak_engine import GacruxTiebreakEngine
 from src.services.pairing.gacrux_tiebreak_map import (
     POINTS_CODE,
@@ -577,7 +578,10 @@ class TestGacruxRoundRobin(unittest.TestCase):
         with mock.patch(
             "src.services.pairing.gacrux_tiebreak_engine.subprocess.run", side_effect=fake_run
         ):
-            GacruxTiebreakEngine(self.db).compute(self.tournament_id, ["buchholz"])
+            # A resposta vazia é recusada desde o RG2-06 (ela punha quem faltava
+            # em 1º); aqui só interessa a linha de comando que chegou ao motor.
+            with self.assertRaises(AppError):
+                GacruxTiebreakEngine(self.db).compute(self.tournament_id, ["buchholz"])
         return captured["cmd"]
 
     def test_round_robin_passes_predetermined_flag(self):

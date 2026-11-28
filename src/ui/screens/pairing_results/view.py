@@ -374,7 +374,9 @@ class PairingResultsMixin:
         self.pairing_tree.bind("<KP_Subtract>", lambda event: self._quick_save_result("1/2-1/2"))
         self.pairing_tree.bind("<BackSpace>", lambda event: self._quick_save_result(""))
         self.pairing_tree.bind("<Delete>", lambda event: self._quick_save_result(""))
-        self.pairing_tree.bind("<Return>", lambda event: self._save_selected_result())
+        # "break" (RG2-02): sem ele o Enter sobe até o atalho da tela, que grava
+        # de novo — já na mesa seguinte, para onde o primeiro salvamento andou.
+        self.pairing_tree.bind("<Return>", self._save_selected_result_from_tree)
         # W.O. por tecla (RGS-21): as letras do painel, com a mesma confirmação
         # que nomeia mesa e jogadores. Só na tabela — numa caixa de texto a
         # letra e letra.
@@ -747,6 +749,10 @@ class PairingResultsMixin:
         if not self._pairing_shortcuts_active():
             return None
         return self._quick_save_result(result)
+
+    def _save_selected_result_from_tree(self, _event: Any = None) -> str:
+        self._save_selected_result()
+        return "break"
 
     def _save_selected_result_from_screen(self, _event: Any = None) -> str | None:
         if not self._pairing_shortcuts_active():

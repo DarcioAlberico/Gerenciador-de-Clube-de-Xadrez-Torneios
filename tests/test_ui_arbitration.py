@@ -299,12 +299,14 @@ class ControladorTest(unittest.TestCase):
         controlador, db, servico = self.controlador_com_servico()
         controlador.add_bye(1, state.RequestedByeForm(3, 2, "H", "", is_team=False))
         controlador.add_bye(1, state.RequestedByeForm(3, 2, "H", "", is_team=True))
-        controlador.delete_bye(8, is_team=True)
+        controlador.delete_bye(1, 8, is_team=True)
+        # RG2-05: excluir o bye individual também passa pelo serviço.
+        controlador.delete_bye(1, 9, is_team=False, reason="engano")
         self.assertEqual(
             ["add_requested_team_bye", "delete_requested_team_bye"],
             db.nomes_chamados(),
         )
-        self.assertEqual(["request_bye"], servico.nomes_chamados())
+        self.assertEqual(["request_bye", "cancel_requested_bye"], servico.nomes_chamados())
 
     def test_proibicao_de_equipe_usa_a_tabela_de_equipes(self) -> None:
         controlador, db = self.controlador()

@@ -203,12 +203,15 @@ class RegistryView:
             titulo, mensagem = self.page.confirm_texts()
             if not self.host._confirm_action(titulo, mensagem, danger=True):
                 return
+            motivo = self.page.deletion_reason(self.host)
+            if motivo is None:  # cancelou o motivo
+                return
             # Retrato tirado ANTES da exclusão: é o que o Desfazer recria (F2.4).
             # Estes são registros-folha (ninguém depende deles), então o id novo
             # diferir do original não muda nada para quem olha a tela.
             retrato = self.page.snapshot(record_id)
             self.host._delete_with_undo(
-                lambda: self.page.delete(record_id),
+                lambda: self.page.delete(record_id, motivo),
                 (lambda: self.page.restore(retrato)) if retrato else None,
                 self.page.removed_message(),
                 self.refresh,

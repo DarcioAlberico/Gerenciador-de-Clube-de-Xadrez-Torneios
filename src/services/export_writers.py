@@ -18,6 +18,7 @@ from urllib.request import Request, urlopen
 
 from src.core.database import BASE_DIR, DEFAULT_CERTIFICATE_TEMPLATES, Database
 from src.services.access_export import access_driver_available, write_accdb, write_csv_bundle
+from src.services.spreadsheet_safety import csv_row, looks_like_formula
 from src.services.constants import *
 from src.services.fide_norms import build_norm_report
 from src.services.fide_rating import build_fide_report_rows
@@ -41,6 +42,14 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+
+
+def _formulas_as_text(sheet: Any) -> None:
+    """Célula de texto que parece fórmula fica texto, com o texto intacto (RG2-20)."""
+    for row in sheet.iter_rows():
+        for cell in row:
+            if looks_like_formula(cell.value):
+                cell.data_type = "s"
 
 class ReportWritersMixin:
     @staticmethod
@@ -102,8 +111,8 @@ class ReportWritersMixin:
     def _write_csv(path: Path, headers: list[str], rows: list[list[Any]]) -> None:
         with path.open("w", newline="", encoding="utf-8-sig") as file:
             writer = csv.writer(file, delimiter=";")
-            writer.writerow(headers)
-            writer.writerows(rows)
+            writer.writerow(csv_row(headers))
+            writer.writerows(csv_row(row) for row in rows)
 
     @staticmethod
     def _write_multi_csv(
@@ -115,9 +124,9 @@ class ReportWritersMixin:
             for index, (title, headers, rows) in enumerate(sections):
                 if index:
                     writer.writerow([])
-                writer.writerow([title])
-                writer.writerow(headers)
-                writer.writerows(rows)
+                writer.writerow(csv_row([title]))
+                writer.writerow(csv_row(headers))
+                writer.writerows(csv_row(row) for row in rows)
 
     @staticmethod
     def _write_xlsx(
@@ -142,6 +151,7 @@ class ReportWritersMixin:
             cell.font = Font(bold=True)
         for row in rows:
             sheet.append(row)
+        _formulas_as_text(sheet)
         for column_cells in sheet.columns:
             length = max(len(str(cell.value or "")) for cell in column_cells)
             sheet.column_dimensions[column_cells[0].column_letter].width = min(max(length + 2, 10), 40)
@@ -176,6 +186,7 @@ class ReportWritersMixin:
                 cell.font = Font(bold=True)
             for row in rows:
                 sheet.append(row)
+            _formulas_as_text(sheet)
             for column_cells in sheet.columns:
                 length = max(len(str(cell.value or "")) for cell in column_cells)
                 sheet.column_dimensions[column_cells[0].column_letter].width = min(max(length + 2, 10), 42)

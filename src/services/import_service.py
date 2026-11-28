@@ -19,6 +19,7 @@ from urllib.request import Request, urlopen
 from src.core.database import BASE_DIR, DEFAULT_CERTIFICATE_TEMPLATES, Database
 from src.services.access_export import access_driver_available, write_accdb, write_csv_bundle
 from src.services.constants import *
+from src.services.spreadsheet_safety import unguard_csv_cell
 from src.services.fide_norms import build_norm_report
 from src.services.fide_rating import build_fide_report_rows
 from src.services.list_layouts import STANDINGS_COLUMNS, resolve_column_specs, resolve_columns
@@ -790,7 +791,12 @@ class ImportService:
         if not reader.fieldnames:
             raise AppError("CSV sem cabeçalho.")
         headers = [str(name) for name in reader.fieldnames]
-        rows = [(line_number, dict(row)) for line_number, row in enumerate(reader, start=2)]
+        # RG2-20: o CSV exportado pelo Albericus protege fórmula com "'"; aqui
+        # ele sai, e o texto volta igual ao que foi exportado.
+        rows = [
+            (line_number, {chave: unguard_csv_cell(valor) for chave, valor in row.items()})
+            for line_number, row in enumerate(reader, start=2)
+        ]
         return {"headers": headers, "rows": rows}
 
     def _tabular_from_url(self, url: str) -> dict[str, Any]:
@@ -860,6 +866,7 @@ class ImportService:
             cbx_map = {str(m.get("cbx_id")).strip(): m["id"] for m in all_members if m.get("cbx_id")}
 
             for line_number, row in enumerate(reader, start=2):
+                row = {chave: unguard_csv_cell(valor) for chave, valor in row.items()}
                 player_id_csv = self._pick(row, "fide_id", "fide", "id_fide", "idnumber", "id", "cbx_id", "cbx", "id_cbx")
                 if not player_id_csv:
                     errors.append(f"Linha {line_number}: ID (FIDE/CBX) não encontrado.")
@@ -1071,15 +1078,24 @@ class ImportService:
     @staticmethod
     def _csv_dialect(sample: str) -> Any:
         try:
-            return csv.Sniffer().sniff(sample, delimiters=",;")
+            detectado = csv.Sniffer().sniff(sample, delimiters=",;")
         except csv.Error:
-            first_line = sample.splitlines()[0] if sample.splitlines() else ""
-            if first_line.count(";") > first_line.count(","):
-                class SemicolonDialect(csv.excel):
-                    delimiter = ";"
+            detectado = None
+        if detectado is not None:
+            # Do Sniffer, só o separador (RG2-20): com duas células protegidas
+            # lado a lado ("'=1+1;'+55…") ele elegia "'" como aspas e partia o
+            # texto. Excel, Google Sheets e o exportador usam aspas duplas.
+            class DetectedDialect(csv.excel):
+                delimiter = detectado.delimiter
 
-                return SemicolonDialect
-            return csv.get_dialect("excel")
+            return DetectedDialect
+        first_line = sample.splitlines()[0] if sample.splitlines() else ""
+        if first_line.count(";") > first_line.count(","):
+            class SemicolonDialect(csv.excel):
+                delimiter = ";"
+
+            return SemicolonDialect
+        return csv.get_dialect("excel")
 
     @staticmethod
     def _registration_duplicate_key(payload: dict[str, Any]) -> tuple[str, str]:

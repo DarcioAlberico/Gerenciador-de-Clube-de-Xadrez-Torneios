@@ -4,6 +4,7 @@ import os
 import tempfile
 import json
 import logging
+import math
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -54,6 +55,61 @@ class TiebreakJob:
         digest = hashlib.sha256(self.trf)
         digest.update(repr((self.args, self.plan, self.cid_to_id)).encode("utf-8"))
         return digest.hexdigest()
+
+
+
+def _is_number(value: Any) -> bool:
+    """Número finito, inclusive em texto: o Gacrux escreve ``"1.0"`` no JSON."""
+    if isinstance(value, bool) or value is None:
+        return False
+    try:
+        return math.isfinite(float(value))
+    except (TypeError, ValueError):
+        return False
+
+
+def response_problems(competitors: Any, job: TiebreakJob) -> list[str]:
+    """O que impede a resposta do motor de valer como desempate (RG2-06).
+
+    Um competidor por número do TRF pedido, nenhum a mais; rank inteiro
+    positivo; ``tiebreakScore`` com uma coluna por critério do plano, todas
+    numéricas. Antes, competidor sem número era descartado calado, valor
+    ilegível virava ``0.0`` e ``{"tiebreakResult": {}}`` passava como sucesso —
+    e quem faltava ia ao 1º lugar. Lista vazia: a resposta confere.
+    """
+    if not isinstance(competitors, list):
+        return ["a lista de competidores não veio"]
+    pedidos = {cid for cid, _id in job.cid_to_id}
+    colunas = len(job.plan.code_order)
+    problems: list[str] = []
+    vistos: set[int] = set()
+    for competitor in competitors:
+        try:
+            cid = int(competitor.get("cid"))
+        except (AttributeError, TypeError, ValueError):
+            problems.append(f"competidor sem número: {competitor!r}"[:200])
+            continue
+        if cid not in pedidos:
+            problems.append(f"competidor {cid} não estava no arquivo")
+            continue
+        if cid in vistos:
+            problems.append(f"competidor {cid} veio duas vezes")
+        vistos.add(cid)
+        rank = competitor.get("rank")
+        if not _is_number(rank) or float(rank) < 1 or float(rank) != int(float(rank)):
+            problems.append(f"competidor {cid} sem colocação ({rank!r})")
+        scores = competitor.get("tiebreakScore")
+        if not isinstance(scores, list) or len(scores) != colunas:
+            problems.append(f"competidor {cid}: esperava {colunas} critérios, veio {scores!r}"[:200])
+            continue
+        for value in scores:
+            if not _is_number(value):
+                problems.append(f"competidor {cid}: valor de desempate ilegível {value!r}")
+                break
+    faltam = sorted(pedidos - vistos)
+    if faltam:
+        problems.append(f"faltam {len(faltam)} competidor(es): {faltam[:10]}")
+    return problems
 
 
 class GacruxTiebreakEngine:
@@ -241,14 +297,19 @@ class GacruxTiebreakEngine:
     def run(self, job: TiebreakJob) -> dict[int, dict[str, Any]]:
         """Roda o motor sobre ``job`` e devolve os desempates por id."""
         data = self._run_tiebreakchecker(job)
-        by_cid = parse_competitors(data.get("tiebreakResult", {}).get("competitors", []), job.plan)
+        competitors = (data.get("tiebreakResult") or {}).get("competitors") or []
+        problems = response_problems(competitors, job)
+        if problems:
+            for item in problems:
+                logger.warning("Resposta do desempate Gacrux recusada: %s", item)
+            raise AppError(
+                "A resposta do motor FIDE (Gacrux) não confere com o pedido:\n"
+                + "\n".join(f"- {item}" for item in problems[:5])
+            )
+        by_cid = parse_competitors(competitors, job.plan)
 
         id_by_cid = dict(job.cid_to_id)
-        out: dict[int, dict[str, Any]] = {}
-        for cid, payload in by_cid.items():
-            entity_id = id_by_cid.get(cid)
-            if entity_id is not None:
-                out[entity_id] = payload
+        out = {id_by_cid[cid]: payload for cid, payload in by_cid.items()}
         logger.debug("Desempates Gacrux por id: %s", out)
         return out
 

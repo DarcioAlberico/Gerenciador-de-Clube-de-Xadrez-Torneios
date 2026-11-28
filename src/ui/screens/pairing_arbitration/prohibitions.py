@@ -128,7 +128,7 @@ class ProhibitionsPage(TournamentRegistryPage):
     def snapshot(self, record_id: int) -> dict[str, Any] | None:
         return self.controller.find_prohibition(self.tournament_id, record_id, self.is_team)
 
-    def delete(self, record_id: int) -> None:
+    def delete(self, record_id: int, reason: str = "") -> None:
         self.controller.delete_prohibition(record_id, self.is_team)
 
     def restore(self, record: dict[str, Any]) -> None:

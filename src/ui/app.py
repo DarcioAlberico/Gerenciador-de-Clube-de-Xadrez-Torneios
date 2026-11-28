@@ -195,7 +195,8 @@ class AlbericusApp(
 
     def _on_closing(self) -> None:
         try:
-            self.security_service.create_backup("auto_shutdown")
+            # RG2-44: fluxo do sistema; o árbitro também sai com backup.
+            self.security_service.shutdown_backup()
         except Exception as exc:
             logger.error("Erro ao gerar backup no fechamento: %s", exc)
         if self._scheduled_dispatch_job is not None:

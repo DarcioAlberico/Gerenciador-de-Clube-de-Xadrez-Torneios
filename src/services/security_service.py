@@ -254,7 +254,19 @@ class SecurityService:
         )
 
     def create_backup(self, reason: str = "manual") -> dict[str, Any]:
+        """Backup pedido pelo usuário: exige ``settings_write``."""
         self.require_permission("settings_write")
+        return self._backup_with_retention(reason)
+
+    def shutdown_backup(self) -> Path:
+        """Backup do fechamento do programa — fluxo do sistema, sem permissão (RG2-44).
+
+        Passava por ``create_backup``, que exige ``settings_write``; o árbitro
+        não tem, e quem fechava o programa como árbitro saía sem backup.
+        """
+        return Path(self._backup_with_retention("auto_shutdown")["path"])
+
+    def _backup_with_retention(self, reason: str) -> dict[str, Any]:
         path = self.db.backup(reason)
         deleted = self.enforce_backup_retention()
 

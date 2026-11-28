@@ -1742,7 +1742,10 @@ class UiLayoutSmokeTest(unittest.TestCase):
         tree.selection_set(linhas[0])
 
         acoes = self._capture_toast_actions()
-        with mock.patch("src.ui.components.dialogs.confirm_dialog", return_value=True):
+        # RG2-05: remover bye solicitado pede o motivo (fica na auditoria).
+        with mock.patch("src.ui.components.dialogs.confirm_dialog", return_value=True), mock.patch(
+            "src.ui.screens.pairing_arbitration.byes.reason_dialog", return_value="engano"
+        ):
             self._click_button("Remover selecionado")
         self.app.update()
 

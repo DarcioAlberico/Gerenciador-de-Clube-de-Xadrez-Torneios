@@ -674,6 +674,38 @@ def dutch_team_bracket_pairing(
     return [], group
 
 
+def team_round_violations(
+    matches: list[dict[str, Any]],
+    played_pairs: set[frozenset[int]],
+    bye_team_ids: set[int],
+    names: dict[int, str] | None = None,
+) -> list[str]:
+    """O que a rodada de equipes fere dos critérios absolutos (FIDE C.04.1).
+
+    Confronto já jogado (ou proibido, que chega no mesmo conjunto) e PAB para
+    quem já recebeu um. É a guarda do RG2-07a: o motor de equipes trata a
+    repetição como custo e escolhe o bye antes de testar o resto, então a
+    rodada é conferida depois de pronta. Lista vazia: a rodada vale.
+    """
+    nome = (names or {}).get
+    problemas: list[str] = []
+    for match in matches:
+        brancas = match.get("white_team_id")
+        pretas = match.get("black_team_id")
+        if match.get("is_bye") or not pretas:
+            if brancas is not None and int(brancas) in bye_team_ids:
+                problemas.append(
+                    f"{nome(int(brancas)) or f'Equipe {brancas}'} receberia um segundo bye (PAB)"
+                )
+            continue
+        if frozenset((int(brancas), int(pretas))) in played_pairs:
+            problemas.append(
+                f"{nome(int(brancas)) or f'Equipe {brancas}'} × "
+                f"{nome(int(pretas)) or f'Equipe {pretas}'} já se enfrentaram"
+            )
+    return problemas
+
+
 def swiss_team_matches(
     teams: list[dict[str, Any]],
     rosters: dict[int, dict[int, int]],

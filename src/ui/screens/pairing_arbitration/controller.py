@@ -235,11 +235,14 @@ class ArbitrationController:
     ) -> dict[str, Any] | None:
         return self._by_id(self.list_byes(tournament_id, is_team), bye_id)
 
-    def delete_bye(self, bye_id: int, is_team: bool) -> None:
+    def delete_bye(self, tournament_id: int, bye_id: int, is_team: bool, reason: str = "") -> None:
         if is_team:
+            # Equipes não têm política de bye (ver `_add_bye`): exclusão direta.
             self.db.delete_requested_team_bye(int(bye_id))
         else:
-            self.db.delete_requested_bye(int(bye_id))
+            # RG2-05: a regra (rodada já gerada recusa; motivo; auditoria) mora
+            # no serviço — a tela apagava direto e o saldo zerava.
+            self.pairing_service.cancel_requested_bye(int(tournament_id), int(bye_id), reason)
 
     def restore_bye(self, tournament_id: int, record: dict[str, Any], is_team: bool) -> None:
         chave = "team_id" if is_team else "player_id"

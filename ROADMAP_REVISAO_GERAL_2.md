@@ -176,7 +176,8 @@ RG2-32 (falhas silenciosas, forma fixa da justificativa), RG2-40 (concorrência)
 | Fase | Estado |
 |---|---|
 | −1 | **feita** em 2026-11-27 (D7 aprovada pelo dono), branch `fix/rgs-fase0-exe` — ver abaixo |
-| 0–6 | não iniciadas |
+| 0 | **código feito** em 2026-11-27, branch `fix/rg2-fase0-hotfix` — falta a revisão da nota pelo árbitro (F0.9) e o `.exe` — ver abaixo |
+| 1–6 | não iniciadas |
 
 ### Fase −1 (2026-11-27)
 
@@ -194,3 +195,19 @@ Seis commits montados com índice temporário, sem tocar a árvore de trabalho; 
 **`.exe` do commit `docs(rg2)`:** `build.bat` verde; `Albericus.exe --self-test` = 0, 5 de 5 passos. Rodada mais lenta pelo Gacrux: **1,37 s** com a máquina livre (1,71 s com a suíte rodando junto). A RGS mediu ≈ 0,55 s antes do RGS-16, que acrescentou a verificação holandesa — hoje são duas chamadas de subprocesso por rodada, ≈ 0,7 s cada. O corte da D1 da RGS ("onedir se passar de 1 s por chamada") ainda não foi atingido, mas a folga é pequena: reavaliar onefile × onedir se a verificação crescer. O executável anterior (11/11) foi guardado antes do build.
 
 **Achados no caminho:** (1) a lista CBX `.xls` está versionada como **texto** (o `autocrlf` mexe nos bytes dela) — ficou fora do `.gitattributes` e entra no RG2-41; (2) o gate de acentos antigo tinha um falso positivo ("Grava" × "gravá-lo"), corrigido no gate novo — por isso as linhas com "gravá" vão no commit `fix(rgs)`, não no de acentos.
+
+### Fase 0 (2026-11-27)
+
+Um commit por item, teste vermelho antes de cada correção. Nota de release para o árbitro: `NOTA_RELEASE_RG2_FASE0.md`.
+
+| Passo | Item | Entrega | Prova | Desvio da spec |
+|---|---|---|---|---|
+| F0.1 | RG2-02 | O `<Return>` da tabela devolve `"break"` | 4 testes de janela; varredura gera na tabela toda sequência que a tela também liga | — |
+| F0.2 | RG2-03 | O tick espera com diálogo aberto ou foco em campo; devolve seleção (por `pairing_id`), rascunho da busca e foco só a quem o tinha | 5 testes de janela; os 22 arquivos do painel passam | "atualiza em N s" foi para o RG2-36 |
+| F0.3 | RG2-06 | `response_problems` confere a resposta do Gacrux; `unranked_last_rank` para jogadores **e equipes**; seção "Entram na rodada N" só na tela | 13 testes; suítes com o Gacrux real verdes | O TRF do cenário `late.py` **não** fica igual byte a byte: muda a coluna de colocação das duas linhas que estavam erradas (jogadores e células iguais) |
+| F0.4 | RG2-07a | Guarda C.04.1 na **geração** (a prévia continua mostrando o alerta); evento `team_pairing_refused` | Sementes 0/2/5/7 sem repetição gravada; 3 × 4 termina em erro claro | Não há ajuste manual de confronto de equipes para oferecer: fica para o 07b. A semente 7 passou as 6 rodadas sem repetir no banco do teste |
+| F0.5 | RG2-05 | `cancel_requested_bye` no serviço; a tela pede o motivo | 5 testes; `test_ui_arbitration.py` | Bye de equipe segue direto (não há política de bye de equipe) |
+| F0.6 | RG2-01 + 44 | Retenção só do nome que `backup` escreve, nunca o banco vivo; cota 3 para os retratos de segurança; `st_mtime_ns` + contador; pasta do banco recusada ao salvar; `shutdown_backup` sem permissão | 8 testes | — |
+| F0.7 | RG2-31 | A importação substitui o retrato anterior **da mesma fonte**, na mesma transação; `VACUUM` quando sai ≥ 10 mil linhas | 2 testes (reimportar 20 mil linhas não dobra o arquivo) | Guarda **1** retrato por fonte, não 2: as consultas só leem o mais recente, e 2 dobrariam o banco na próxima importação da FIDE. O banco real hoje tem 1 retrato de cada fonte (FIDE 549 mil, LBX 63 mil, CBX 3 mil): o ganho aparece a partir da próxima importação, não cai à metade agora |
+| F0.8 | RG2-20 | `spreadsheet_safety`: XLSX `data_type='s'`; CSV com `'`; os importadores retiram | 6 testes | Achado no caminho: o `csv.Sniffer` elegia `'` como aspas com duas células protegidas lado a lado; o importador agora usa do Sniffer só o separador |
+| F0.9 | — | `NOTA_RELEASE_RG2_FASE0.md` | — | Falta a revisão do árbitro |

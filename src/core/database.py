@@ -4,6 +4,7 @@ import base64
 import ctypes
 import logging
 import os
+import re
 import shutil
 import sqlite3
 import sys
@@ -378,6 +379,14 @@ DB_PATH = default_db_path()
 LEGACY_DATA_DIR = BASE_DIR / "data"
 LEGACY_DB_PATH = LEGACY_DATA_DIR / "albericus.db"
 LEGACY_BACKUP_DIR = BASE_DIR / "backups"
+
+# Retratos de segurança (RG2-01): ficam fora da cota comum da retenção, com uma
+# cota própria. São o caminho de volta de uma migração, de uma restauração e
+# da normalização de datas — os únicos que ninguém recria depois.
+SAFETY_BACKUP_REASONS = frozenset(
+    {"before_schema_migration", "before_restore", "before_normalizar_datas"}
+)
+SAFETY_BACKUP_KEEP = 3
 LEGACY_EXPORTS_DIR = BASE_DIR / "exports"
 LEGACY_LOGS_DIR = BASE_DIR / "logs"
 
@@ -1122,10 +1131,31 @@ class Database(
         )
         return backup_path
 
+    def _own_backup_name(self) -> re.Pattern[str]:
+        """O nome que ``backup`` escreve: ``{stem}_{motivo}_{AAAAMMDD_HHMMSS}[_n]{sufixo}``."""
+        return re.compile(
+            rf"^{re.escape(self.db_path.stem)}_(?P<reason>[a-z0-9_]+?)_(?P<stamp>\d{{8}}_\d{{6}})"
+            rf"(?:_(?P<counter>\d+))?{re.escape(self.db_path.suffix)}$",
+            re.IGNORECASE,
+        )
+
     def list_backups(self) -> list[dict[str, Any]]:
+        """Os backups do Albericus nesta pasta, do mais novo ao mais antigo (RG2-01).
+
+        Só o nome que ``backup`` escreve, e nunca o banco vivo: com a pasta de
+        backups apontada para a pasta do banco, qualquer ``.db`` dali entrava
+        na lista — e a retenção apagava o banco de trabalho. A ordem é por
+        ``st_mtime_ns`` (a de texto tinha resolução de segundo) e, no empate,
+        pelo carimbo e pelo contador do nome: o último criado vem primeiro.
+        """
         self.backup_dir.mkdir(parents=True, exist_ok=True)
+        padrao = self._own_backup_name()
+        vivo = self.db_path.resolve()
         backups = []
         for path in self.backup_dir.glob(f"*{self.db_path.suffix}"):
+            achado = padrao.match(path.name)
+            if achado is None or not path.is_file() or path.resolve() == vivo:
+                continue
             stat = path.stat()
             backups.append(
                 {
@@ -1133,17 +1163,36 @@ class Database(
                     "path": str(path),
                     "size_bytes": stat.st_size,
                     "modified_at": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
+                    "reason": achado.group("reason").lower(),
+                    "_order": (
+                        stat.st_mtime_ns,
+                        achado.group("stamp"),
+                        int(achado.group("counter") or 1),
+                    ),
                 }
             )
-        return sorted(backups, key=lambda item: str(item["modified_at"]), reverse=True)
+        backups.sort(key=lambda item: item["_order"], reverse=True)
+        for item in backups:
+            del item["_order"]
+        return backups
 
     def prune_backups(self, keep_count: int) -> list[Path]:
+        """Aplica a retenção: ``keep_count`` comuns e ``SAFETY_BACKUP_KEEP`` de segurança.
+
+        Os retratos de segurança (antes de migração, de restauração e da
+        normalização de datas) têm cota própria: um torneio de 9 rodadas gera
+        mais de 18 backups comuns, e o único retrato pré-migração sumia no
+        primeiro dia (RG2-01).
+        """
         keep = max(1, int(keep_count or 1))
-        backups = self.list_backups()
+        comuns: list[dict[str, Any]] = []
+        seguranca: list[dict[str, Any]] = []
+        for backup in self.list_backups():
+            (seguranca if backup["reason"] in SAFETY_BACKUP_REASONS else comuns).append(backup)
         deleted: list[Path] = []
-        for backup in backups[keep:]:
+        for backup in comuns[keep:] + seguranca[SAFETY_BACKUP_KEEP:]:
             path = Path(str(backup["path"]))
-            if path.exists() and path.is_file() and path.suffix.lower() == self.db_path.suffix.lower():
+            if path.exists() and path.is_file() and path.resolve() != self.db_path.resolve():
                 path.unlink()
                 deleted.append(path)
         return deleted
@@ -1333,6 +1382,14 @@ class Database(
             "arbitration_inline_tables_limit",
             "free_mode_notice_hidden",
         }
+        pasta = str(settings.get("backup_dir") or "").strip()
+        if pasta and Path(pasta).resolve() == self.db_path.parent.resolve():
+            # RG2-01: na pasta do banco, backup e banco de trabalho se misturam
+            # — e foi assim que a retenção chegou a apagar o banco vivo.
+            raise ValueError(
+                "A pasta de backups não pode ser a mesma pasta do banco de dados. "
+                "Escolha outra pasta (por exemplo, uma subpasta \"backups\")."
+            )
         secret_keys = {"smtp_password", "ftp_password"}
         now = self.now()
         rows = [
