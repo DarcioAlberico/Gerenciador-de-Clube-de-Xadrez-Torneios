@@ -9,7 +9,6 @@ import re
 import secrets
 import shutil
 import sqlite3
-import unicodedata
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any, Mapping, TYPE_CHECKING
@@ -25,7 +24,7 @@ from src.services.federation_exporters.trf16_records import (
     tournament_type_text as _trf16_tournament_type_text,
 )
 from src.services.fide_norms import build_norm_report
-from src.domain.fide_player import effective_federation, fide_rating, seed_rating
+from src.domain.fide_player import effective_federation, fide_ascii, fide_rating, seed_rating, trf_sex
 from src.services.fide_rating import build_fide_report_rows
 from src.services.norms.report import norm_rating
 from src.services.list_layouts import STANDINGS_COLUMNS, resolve_column_specs, resolve_columns
@@ -565,9 +564,7 @@ class FederationReportsMixin:
 
     @staticmethod
     def _trf_clean(value: Any, width: int | None = None) -> str:
-        text = unicodedata.normalize("NFKD", str(value or ""))
-        text = "".join(char for char in text if not unicodedata.combining(char))
-        text = " ".join(text.replace("\r", " ").replace("\n", " ").split())
+        text = fide_ascii(value or "")
         if width is not None:
             return text[:width].ljust(width)
         return text
@@ -864,7 +861,7 @@ class FederationReportsMixin:
         player_id = int(player["id"])
         start_rank = player_id_to_start_rank[player_id]
         standing = standings_by_player.get(player_id, {})
-        sex = self._trf_clean(str(player.get("sex") or "")[:1].lower(), 1)
+        sex = trf_sex(player.get("sex")) or " "
         title = self._trf_clean(str(player.get("title") or "").upper(), 3)
         name = self._trf_clean(player_pairing_name(player), 33)
         # Sem rating FIDE a coluna fica vazia: o rating do clube aqui seria lido
