@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING, Any, Callable, Mapping, Sequence
 
 from src.core.database import Database
 from src.core.database_tournament_core import default_tiebreak_engine
+from src.domain.numbers import setting_number
+from src.services.transactions import atomic
 from src.services.constants import (
     ACCELERATION_METHODS as _ACCELERATION_METHODS,
     AppError,
@@ -819,6 +821,7 @@ class PairingService:
     # Registro disciplinar (ARB-03)
     # ------------------------------------------------------------------ #
 
+    @atomic
     def register_incident(
         self,
         tournament_id: int,
@@ -932,6 +935,7 @@ class PairingService:
     # Participação: retirada e reentrada (ARB-05)
     # ------------------------------------------------------------------ #
 
+    @atomic
     def set_player_participation(
         self,
         tournament_id: int,
@@ -984,6 +988,31 @@ class PairingService:
         )
         return rodada
 
+    @atomic
+    def set_players_participation(
+        self,
+        tournament_id: int,
+        player_ids: list[int],
+        status: str,
+        *,
+        skip_withdrawn: bool = False,
+    ) -> dict[str, int]:
+        """Muda a participação de vários jogadores numa transação só (RG2-25).
+
+        "Todos presentes" parava no primeiro desistente e deixava metade
+        aplicada. Com ``skip_withdrawn``, quem desistiu fica como está e entra
+        na contagem; sem ele, a recusa de um desfaz todos.
+        """
+        changed = skipped = 0
+        for player_id in player_ids:
+            player = self.db.get_player(int(player_id))
+            if skip_withdrawn and player and str(player.get("player_status") or "") == "withdrawn":
+                skipped += 1
+                continue
+            self.set_player_participation(tournament_id, int(player_id), status)
+            changed += 1
+        return {"changed": changed, "skipped_withdrawn": skipped}
+
     def participation_history(
         self,
         tournament_id: int,
@@ -1022,6 +1051,7 @@ class PairingService:
     # Byes solicitados (ARB-04)
     # ------------------------------------------------------------------ #
 
+    @atomic
     def request_bye(
         self,
         tournament_id: int,
@@ -1081,6 +1111,7 @@ class PairingService:
         )
         return bye_id
 
+    @atomic
     def cancel_requested_bye(self, tournament_id: int, bye_id: int, reason: str) -> None:
         """Exclui um bye solicitado com regra e rastro (RG2-05).
 
@@ -1393,6 +1424,7 @@ class PairingService:
             "starting_points": plano.starting_points,
         }
 
+    @atomic
     def postpone_pairing(self, tournament_id: int, pairing_id: int, note: str = "") -> None:
         """Marca a mesa como adiada, com o combinado como nota (ARB-02)."""
         pairing = self.db.get_pairing(int(pairing_id))
@@ -1413,6 +1445,7 @@ class PairingService:
             after={"postponed": 1, "postponed_note": limpa},
         )
 
+    @atomic
     def resume_pairing(self, tournament_id: int, pairing_id: int) -> None:
         """Desfaz o adiamento da mesa (ARB-02)."""
         pairing = self.db.get_pairing(int(pairing_id))
@@ -1626,47 +1659,53 @@ class PairingService:
             engine_version=self.PAIRING_ENGINE_VERSION,
         )
         self.db.backup_before("generate_round", tournament_id=tournament_id)
-        round_id = self.db.create_round_with_pairings(
-            tournament_id,
-            next_number,
-            pairings,
-            pairing_engine_version=self.PAIRING_ENGINE_VERSION,
-            ruleset_version=self.RULESET_VERSION,
-        )
-        self._save_pairing_snapshot(
-            tournament_id, next_number, "output",
-            {"round_number": next_number, "pairings": pairings},
-            pairing_system=pairing_system,
-            engine_version=self.PAIRING_ENGINE_VERSION,
-            round_id=round_id,
-        )
-        self.db.create_audit_event(
-            action="round_generated",
-            tournament_id=tournament_id,
-            round_id=round_id,
-            entity_type="round",
-            entity_id=round_id,
-            after={"round_number": next_number, "pairings_count": len(pairings)},
-            metadata={
-                "pairing_engine_version": self.PAIRING_ENGINE_VERSION,
-                "ruleset_version": self.RULESET_VERSION,
-            },
-        )
-        if plan.get("engine_fallback") is not None:
+        # RG2-25: rodada, retratos do motor, auditoria, marca do motor reserva e status
+        # do torneio entram juntos. O backup fica antes, e o motor já rodou: a
+        # transação (BEGIN IMMEDIATE) não segura a escrita durante o cálculo.
+        with self.db.transaction():
+            round_id = self.db.create_round_with_pairings(
+                tournament_id,
+                next_number,
+                pairings,
+                pairing_engine_version=self.PAIRING_ENGINE_VERSION,
+                ruleset_version=self.RULESET_VERSION,
+            )
+            self._save_pairing_snapshot(
+                tournament_id, next_number, "output",
+                {"round_number": next_number, "pairings": pairings},
+                pairing_system=pairing_system,
+                engine_version=self.PAIRING_ENGINE_VERSION,
+                round_id=round_id,
+            )
             self.db.create_audit_event(
-                action="pairing_engine_fallback",
+                action="round_generated",
                 tournament_id=tournament_id,
                 round_id=round_id,
                 entity_type="round",
                 entity_id=round_id,
-                reason=f"Motor reserva escolhido pelo árbitro: {plan['engine_fallback'].refusal}.",
-                metadata={"round_number": next_number, "details": plan["engine_fallback"].details},
+                after={"round_number": next_number, "pairings_count": len(pairings)},
+                metadata={
+                    "pairing_engine_version": self.PAIRING_ENGINE_VERSION,
+                    "ruleset_version": self.RULESET_VERSION,
+                },
             )
-        if plan.get("engine") == "reserve":
-            self._record_reserve_engine_round(tournament_id, round_id, next_number)
-        check = self._verify_generated_round(tournament_id, round_id, next_number, settings, plan)
+            if plan.get("engine_fallback") is not None:
+                self.db.create_audit_event(
+                    action="pairing_engine_fallback",
+                    tournament_id=tournament_id,
+                    round_id=round_id,
+                    entity_type="round",
+                    entity_id=round_id,
+                    reason=f"Motor reserva escolhido pelo árbitro: {plan['engine_fallback'].refusal}.",
+                    metadata={"round_number": next_number, "details": plan["engine_fallback"].details},
+                )
+            if plan.get("engine") == "reserve":
+                self._record_reserve_engine_round(tournament_id, round_id, next_number)
+            generated = self._finalize_generated_round(tournament_id, tournament, next_number, round_id)
         logger.info("Rodada %s gerada para o torneio %s", next_number, tournament_id)
-        generated = self._finalize_generated_round(tournament_id, tournament, next_number, round_id)
+        # A conferência contra o holandês roda o pareamento de novo (segundos):
+        # fica fora da transação e só registra o que achou (RGS-16).
+        check = self._verify_generated_round(tournament_id, round_id, next_number, settings, plan)
         if check is not None:
             generated["pairing_check"] = check.as_dict()
         return generated
@@ -2609,8 +2648,8 @@ class PairingService:
             int(tournament.get("rounds_count") or 0),
             round_number,
             primary_score=str(settings.get("team_standing_primary") or "match_points"),
-            win_points=float(settings.get("team_match_win_points", 2.0) or 2.0),
-            draw_points=float(settings.get("team_match_draw_points", 1.0) or 1.0),
+            win_points=setting_number(settings, "team_match_win_points", 2.0),
+            draw_points=setting_number(settings, "team_match_draw_points", 1.0),
             loss_points=float(settings.get("team_match_loss_points", 0.0) or 0.0),
         )
         pareadas = {int(team["id"]) for team in to_pair}
@@ -2902,68 +2941,77 @@ class PairingService:
         return self._individual_round_dashboard_metrics(int(round_id))
 
     def close_round(self, tournament_id: int, round_id: int) -> None:
+        """Fecha a rodada — individual ou por equipes, pelo mesmo caminho (RGS-11, RG2-08).
+
+        Guarda "já fechada", conferência, backup e uma transação só com status,
+        retrato, auditoria e status do torneio. O por equipes só injeta o seu
+        passo: conferir os tabuleiros e gravar o resumo de cada confronto.
+        """
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
             raise AppError("Selecione um torneio válido.")
-        if tournament.get("competition_type") == "team":
-            self._close_team_round(tournament_id, round_id, tournament)
-            return
-
         round_data = self.db.get_round(round_id)
         if not round_data or int(round_data["tournament_id"]) != int(tournament_id):
             raise AppError("Rodada não encontrada para o torneio selecionado.")
         if str(round_data.get("status") or "") == "closed":
             # RGS-11: o segundo clique não gera outro backup, outro retrato nem
-            # outro `round_closed`. Reabrir/corrigir tem caminho próprio.
+            # outro evento de fechamento. Reabrir/corrigir tem caminho próprio.
             logger.info("Rodada %s ja estava fechada; nada a fazer", round_id)
             return
 
-        pairings = self.db.get_pairings_for_round(round_id)
-        pending = [
-            pairing
-            for pairing in pairings
-            if not pairing["result"] or pairing["result"] not in FINAL_RESULTS
-        ]
-        if pending:
-            # Mesa adiada primeiro, com recado próprio (ARB-02): mandar o árbitro
-            # "preencher todos os resultados" quando ele SABE que aquela mesa esta
-            # em aberto e o manda procurar o que ele mesmo combinou.
-            adiadas = self.db.list_postponed_pairings(round_id)
-            if adiadas:
-                raise AppError(_postponed_blocking_message(adiadas))
-            raise AppError("Preencha todos os resultados antes de fechar a rodada.")
+        team = tournament.get("competition_type") == "team"
+        if team:
+            summaries = self._team_close_summaries(tournament_id, round_id)
+        else:
+            self._check_individual_round_complete(round_id)
+            summaries = []
 
         blocking_issues = self._blocking_arbitration_issues_for_round(tournament_id, round_id)
         if blocking_issues:
             raise AppError(_blocking_issues_message(blocking_issues))
 
-        backup_path = self.db.backup_before("close_round", tournament_id=tournament_id, round_id=round_id)
+        reason = "close_team_round" if team else "close_round"
+        backup_path = self.db.backup_before(reason, tournament_id=tournament_id, round_id=round_id)
         logger.info("Backup criado antes de fechar rodada %s: %s", round_id, backup_path)
 
+        round_number = int(round_data["number"])
         # RGS-11: status, retrato, componentes, auditoria e status do torneio
         # entram juntos. O status vem primeiro DENTRO da transação porque a
         # classificação só conta rodada fechada; quem é fora só vê a rodada
         # fechada quando o retrato já existe.
         with self.db.transaction():
+            for summary in summaries:
+                self.db.update_team_match_summary(
+                    int(summary["team_match_id"]),
+                    str(summary["result"]),
+                    float(summary["white_match_points"]),
+                    float(summary["black_match_points"]),
+                    float(summary["white_game_points"]),
+                    float(summary["black_game_points"]),
+                )
             self.db.close_round(round_id)
-            # RGS-10: o mesmo corte da reconciliação, para que o retrato do
-            # fechamento e o reconciliado digam a mesma coisa sobre a rodada N
-            # (ajuste lançado para rodada futura, inscrito durante a rodada).
-            standings = self._standings(tournament_id, up_to_round=int(round_data["number"]))
+            if team:
+                standings = self._team_standings(tournament_id)
+            else:
+                # RGS-10: o mesmo corte da reconciliação, para que o retrato do
+                # fechamento e o reconciliado digam a mesma coisa sobre a rodada N
+                # (ajuste lançado para rodada futura, inscrito durante a rodada).
+                standings = self._standings(tournament_id, up_to_round=round_number)
             self.db.create_standings_snapshot(
                 tournament_id=tournament_id,
                 round_id=round_id,
-                round_number=int(round_data["number"]),
+                round_number=round_number,
                 standings=standings,
             )
-            self._persist_tiebreak_components(
-                tournament_id=tournament_id,
-                round_id=round_id,
-                round_number=int(round_data["number"]),
-                standings=standings,
-            )
+            if not team:
+                self._persist_tiebreak_components(
+                    tournament_id=tournament_id,
+                    round_id=round_id,
+                    round_number=round_number,
+                    standings=standings,
+                )
             self.db.create_audit_event(
-                action="round_closed",
+                action="team_round_closed" if team else "round_closed",
                 tournament_id=tournament_id,
                 round_id=round_id,
                 entity_type="round",
@@ -2978,6 +3026,22 @@ class PairingService:
             else:
                 self.db.update_tournament_status(tournament_id, "running")
         logger.info("Rodada %s fechada no torneio %s", round_id, tournament_id)
+
+    def _check_individual_round_complete(self, round_id: int) -> None:
+        pairings = self.db.get_pairings_for_round(round_id)
+        pending = [
+            pairing
+            for pairing in pairings
+            if not pairing["result"] or pairing["result"] not in FINAL_RESULTS
+        ]
+        if pending:
+            # Mesa adiada primeiro, com recado próprio (ARB-02): mandar o árbitro
+            # "preencher todos os resultados" quando ele SABE que aquela mesa esta
+            # em aberto e o manda procurar o que ele mesmo combinou.
+            adiadas = self.db.list_postponed_pairings(round_id)
+            if adiadas:
+                raise AppError(_postponed_blocking_message(adiadas))
+            raise AppError("Preencha todos os resultados antes de fechar a rodada.")
 
     def _update_team_board_result(
         self,
@@ -3518,16 +3582,9 @@ class PairingService:
             )
         return True
 
-    def _close_team_round(
-        self,
-        tournament_id: int,
-        round_id: int,
-        tournament: dict[str, Any],
-    ) -> None:
-        round_data = self.db.get_round(round_id)
-        if not round_data or int(round_data["tournament_id"]) != int(tournament_id):
-            raise AppError("Rodada não encontrada para o torneio selecionado.")
-
+    def _team_close_summaries(self, tournament_id: int, round_id: int) -> list[dict[str, Any]]:
+        """O passo de equipes do fechamento: confere os tabuleiros e calcula o resumo
+        de cada confronto. Só lê; quem grava é ``close_round``, na transação."""
         matches = self.db.list_team_matches_for_round(round_id)
         if not matches:
             raise AppError("A rodada não possui confrontos por equipes.")
@@ -3540,9 +3597,9 @@ class PairingService:
                 summaries.append(
                     _team_bye_summary(
                         match,
-                        win_points=float(settings.get("team_match_win_points", 2.0) or 2.0),
+                        win_points=setting_number(settings, "team_match_win_points", 2.0),
                         boards_count=int(settings.get("team_boards_count", 4) or 4),
-                        draw_points=float(settings.get("team_match_draw_points", 1.0) or 1.0),
+                        draw_points=setting_number(settings, "team_match_draw_points", 1.0),
                         loss_points=float(settings.get("team_match_loss_points", 0.0) or 0.0),
                     )
                 )
@@ -3576,56 +3633,15 @@ class PairingService:
                     white_team_player_ids,
                     black_team_player_ids,
                     RESULT_POINTS,
-                    win_points=float(settings.get("team_match_win_points", 2.0) or 2.0),
+                    win_points=setting_number(settings, "team_match_win_points", 2.0),
                     loss_points=float(settings.get("team_match_loss_points", 0.0) or 0.0),
-                    draw_points=float(settings.get("team_match_draw_points", 1.0) or 1.0),
+                    draw_points=setting_number(settings, "team_match_draw_points", 1.0),
                 )
             )
 
         if pending:
             raise AppError("Preencha todos os resultados dos tabuleiros antes de fechar a rodada.")
-
-        blocking_issues = self._blocking_arbitration_issues_for_round(tournament_id, round_id)
-        if blocking_issues:
-            raise AppError(_blocking_issues_message(blocking_issues))
-
-        backup_path = self.db.backup_before("close_team_round", tournament_id=tournament_id, round_id=round_id)
-        logger.info("Backup criado antes de fechar rodada por equipes %s: %s", round_id, backup_path)
-
-        for summary in summaries:
-            self.db.update_team_match_summary(
-                int(summary["team_match_id"]),
-                str(summary["result"]),
-                float(summary["white_match_points"]),
-                float(summary["black_match_points"]),
-                float(summary["white_game_points"]),
-                float(summary["black_game_points"]),
-            )
-
-        self.db.close_round(round_id)
-        standings = self._team_standings(tournament_id)
-        self.db.create_standings_snapshot(
-            tournament_id=tournament_id,
-            round_id=round_id,
-            round_number=int(round_data["number"]),
-            standings=standings,
-        )
-        self.db.create_audit_event(
-            action="team_round_closed",
-            tournament_id=tournament_id,
-            round_id=round_id,
-            entity_type="round",
-            entity_id=round_id,
-            before={"status": round_data.get("status", "")},
-            after={"status": "closed", "standings_count": len(standings)},
-        )
-        logger.info("Rodada por equipes %s fechada no torneio %s", round_id, tournament_id)
-
-        latest = self.db.get_latest_round(tournament_id)
-        if latest and int(latest["number"]) >= int(tournament["rounds_count"]):
-            self.db.update_tournament_status(tournament_id, "finished")
-        else:
-            self.db.update_tournament_status(tournament_id, "running")
+        return summaries
 
     def _round_results_to_delete(self, round_id: int) -> list[dict[str, Any]]:
         """Resultados que a exclusão da rodada apagaria (RGS-34).
@@ -3818,8 +3834,7 @@ class PairingService:
         player = self.db.get_player(player_id)
         if not player or int(player["tournament_id"]) != int(tournament_id):
             raise AppError("Jogador não encontrado para o torneio selecionado.")
-        pairings_count = self.db.count_player_pairings(player_id)
-        if pairings_count:
+        if self.db.count_player_participation(player_id):
             raise AppError(
                 "Não é possível excluir jogador que já aparece em rodada. "
                 "Use \"Retirar do torneio…\" (Desistente) para preservar o histórico."
@@ -4000,6 +4015,7 @@ class PairingService:
             },
         )
 
+    @atomic
     def swap_team_board_colors(self, tournament_id: int, round_id: int, team_board_id: int) -> None:
         round_data = self.db.get_round(round_id)
         if not round_data or int(round_data["tournament_id"]) != int(tournament_id):
@@ -4034,6 +4050,7 @@ class PairingService:
         )
         logger.info("Cores trocadas no tabuleiro por equipes %s", team_board_id)
 
+    @atomic
     def adjust_team_board_player(
         self,
         tournament_id: int,
@@ -4870,6 +4887,7 @@ class PairingService:
         """Criterios de desempate de mata-mata oferecidos ao arbitro (PAR-03)."""
         return dict(_KNOCKOUT_CRITERIA)
 
+    @atomic
     def register_knockout_advancement(
         self,
         tournament_id: int,

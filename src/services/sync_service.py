@@ -8,6 +8,7 @@ from urllib.request import Request, urlopen
 
 from src.core.database import Database
 from src.services.constants import AppError, FINAL_RESULTS
+from src.services.transactions import atomic
 
 DEVICE_ROLES = {"assistant", "desktop", "viewer"}
 
@@ -16,6 +17,7 @@ class SyncService:
     def __init__(self, db: Database) -> None:
         self.db = db
 
+    @atomic
     def register_device(
         self,
         name: str,
@@ -50,6 +52,7 @@ class SyncService:
     def list_devices(self) -> list[dict[str, Any]]:
         return self.db.list_devices()
 
+    @atomic
     def revoke_device(self, device_id: str) -> None:
         device_id = device_id.strip()
         if not any(item["device_id"] == device_id for item in self.db.list_devices()):

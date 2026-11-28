@@ -260,6 +260,7 @@
   "initial_call.select_first": "Selecione um ou mais jogadores na chamada inicial.",
   "initial_call.summary": "Presentes: {presentes} | Ausentes: {ausentes} | Total: {total}",
   "initial_call.title": "Chamada inicial antes da primeira rodada",
+  "initial_call.withdrawn_skipped": "Desistentes continuam fora da chamada: {quantidade}. Para trazer um de volta, use \"Reintegrar\" na lista de jogadores.",
   "initial_call.yes": "Sim",
   "late_entry.confirm": "Inscrever",
   "late_entry.done": "{nome} inscrito: entra na rodada {rodada} com {pontos} ponto(s).",

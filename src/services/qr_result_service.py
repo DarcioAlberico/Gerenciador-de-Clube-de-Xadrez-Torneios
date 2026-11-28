@@ -9,6 +9,7 @@ from urllib.parse import urlencode
 
 from src.core.database import Database
 from src.services.constants import AppError, FINAL_RESULTS, UNRATED_RESULTS
+from src.services.transactions import atomic
 
 
 class QRResultService:
@@ -18,6 +19,7 @@ class QRResultService:
         self.db = db
         self.pairing_service = pairing_service
 
+    @atomic
     def result_url_for_pairing(
         self,
         tournament_id: int,
@@ -59,6 +61,7 @@ class QRResultService:
         )
         return self._token_payload(token_row, token, base_url)
 
+    @atomic
     def result_urls_for_pairings(
         self,
         tournament_id: int,
@@ -107,6 +110,7 @@ class QRResultService:
             for token in created
         }
 
+    @atomic
     def submit_result(self, token: str, result: str, submitter: str = "") -> dict[str, Any]:
         # Resultado por DECISÃO DO ÁRBITRO (`W`/`D`/`L`, ARB-02) não entra por
         # aqui: quem o lança e quem decidiu. O QR e para o que os jogadores
@@ -144,6 +148,7 @@ class QRResultService:
     def pending_submissions(self, tournament_id: int) -> list[dict[str, Any]]:
         return self.db.list_result_submissions(tournament_id=tournament_id, status="submitted")
 
+    @atomic
     def approve_submission(self, submission_id: int, reviewer: str = "", reason: str = "") -> None:
         submission = self._pending_submission(submission_id)
         if submission.get("round_status") == "closed":
@@ -173,6 +178,7 @@ class QRResultService:
             after={"status": "approved", "result": submission["submitted_result"], "reviewer": reviewer},
         )
 
+    @atomic
     def reject_submission(self, submission_id: int, reviewer: str = "", reason: str = "") -> None:
         submission = self._pending_submission(submission_id)
         self.db.update_result_submission_status(submission_id, "rejected", reviewer=reviewer, reason=reason)

@@ -177,7 +177,8 @@ RG2-32 (falhas silenciosas, forma fixa da justificativa), RG2-40 (concorrência)
 |---|---|
 | −1 | **feita** em 2026-11-27 (D7 aprovada pelo dono), branch `fix/rgs-fase0-exe` — ver abaixo |
 | 0 | **código feito** em 2026-11-27, branch `fix/rg2-fase0-hotfix` — falta a revisão da nota pelo árbitro (F0.9) e o `.exe` — ver abaixo |
-| 1–6 | não iniciadas |
+| 1 | **código feito** em 2026-11-28, branch `fix/rg2-fase1` (empilhada na Fase 0) — D3 decidida pelo dono; suíte completa verde (2 testes da v59 ajustados para não fixar a versão final), gate estático verde, `.exe` com `--self-test` = 0 — ver abaixo |
+| 2–6 | não iniciadas |
 
 ### Fase −1 (2026-11-27)
 
@@ -211,3 +212,22 @@ Um commit por item, teste vermelho antes de cada correção. Nota de release par
 | F0.7 | RG2-31 | A importação substitui o retrato anterior **da mesma fonte**, na mesma transação; `VACUUM` quando sai ≥ 10 mil linhas | 2 testes (reimportar 20 mil linhas não dobra o arquivo) | Guarda **1** retrato por fonte, não 2: as consultas só leem o mais recente, e 2 dobrariam o banco na próxima importação da FIDE. O banco real hoje tem 1 retrato de cada fonte (FIDE 549 mil, LBX 63 mil, CBX 3 mil): o ganho aparece a partir da próxima importação, não cai à metade agora |
 | F0.8 | RG2-20 | `spreadsheet_safety`: XLSX `data_type='s'`; CSV com `'`; os importadores retiram | 6 testes | Achado no caminho: o `csv.Sniffer` elegia `'` como aspas com duas células protegidas lado a lado; o importador agora usa do Sniffer só o separador |
 | F0.9 | — | `NOTA_RELEASE_RG2_FASE0.md` | — | Falta a revisão do árbitro |
+
+### Fase 1 (2026-11-28)
+
+Um commit por item, teste vermelho antes de cada correção; cada commit foi testado sozinho (índice isolado). **D3** decidida pelo dono em 2026-11-28: recalcular com confirmação e auditoria; recusar com certificado emitido ou torneio encerrado.
+
+| Passo | Item | Entrega | Prova | Desvio da spec |
+|---|---|---|---|---|
+| F1.1 | RG2-46 + 14 + 27 + 10 | `src/domain/numbers.py` (`parse_decimal_br`, `parse_decimal`, `parse_rating`, `parse_points`, `setting_number`) e `src/services/numeric_fields.py` (a única tradução para `AppError`); dinheiro, rating importado, bye, entrada tardia, pontos de equipe, taxas, imposto, opacidade e nota passam por eles; a divisão de torneio numa transação, copiando rapid/blitz/partidas | 19 testes do leitor, 17 de serviço, varredura (nada de `float(str(x).replace(",", "."))` em `src/services` nem `.get("…points…") or <número ≠ 0>` em `src`) | Ponto seguido de 1 ou 2 dígitos ("1.5", "1500.0") é **decimal**, não erro: não pode ser milhar, e é como a tela devolve o valor gravado para editar. "1.5000" segue recusado. Lista oficial: célula ilegível segue 0 (500 mil linhas não param por uma) |
+| F1.2 | RG2-08 | `close_round` é um método só; o passo de equipes injetado (`_team_close_summaries`) | Duplo fechamento → 1 evento, 1 backup, 1 retrato; falha no retrato → rodada `generated` | — |
+| F1.3 | RG2-09 | `count_player_participation`: `pairings`, `team_boards`, `team_lineup_boards`, `team_substitution_events` | Jogador de tabuleiro jogado → recusa e o tabuleiro mantém o jogador | — |
+| F1.4 | RG2-25 | `@atomic` (`src/services/transactions.py`); varredura por AST dos métodos públicos com ≥ 2 gravações; geração individual numa transação; `set_players_participation`; "Todos presentes" pula desistentes e diz quantos | Varredura achou 26: 24 com `@atomic`, a geração com transação no trecho das gravações, `sync_pending` isento (rede entre gravações; lista que só encolhe) | A conferência contra o holandês fica **fora** da transação da geração: roda o pareamento de novo, e `BEGIN IMMEDIATE` seguraria a escrita. Gravação por auxiliar privado não é vista pela varredura |
+| F1.5 | RG2-26 | `APP_SETTING_KEYS`; chave desconhecida levanta `ValueError` | Perfil de mapeamento e link do formulário voltam depois de salvos | — |
+| F1.6 | RG2-28 | `backup_before("delete_tournament")`, registro global `tournament_deleted` com nome e contagens; confirmação diz jogadores e rodadas fechadas | Backup e registro global existem; falha no backup não exclui | Operador do registro global fica para o RG2-43 |
+| F1.7 | RG2-17 | Cópia por lista de exclusão (PRAGMA) em `tournaments` e `tournament_settings`, com as categorias; `test_dup_check_tmp.py` → `test_tournament_duplicate.py` | Teste compara todas as colunas menos a lista de exclusão | — |
+| F1.8 | RG2-15 | `refresh_player_categories` na mesma gravação do edital, da data de referência e do início; inscrição do cadastro não repassa categoria calculada; gancho da D3 (`TIPO_RECALCULO_CATEGORIAS`, evento `player_categories_recalculated`) | Ana → "Sub-11; Feminino"; Bia do cadastro → "Sub-13"; com rodada fechada pede confirmação; certificado ou encerrado recusam; retratos iguais | Regravar o **mesmo** edital não pede nada (a tela salva tudo a cada vez) |
+| F1.9 | RG2-47 | Migração v60 `members.sex`; serviço, CSV, formulário e inscrição | Inscrita do cadastro entra em "Feminino"; cópia do banco real v55 → v60 com `integrity_check` ok e 0 violações de FK | — |
+| F1.10 | RG2-34 | `update_member(member_id, **changes)` parcial | Desativar e depois editar o telefone preservam Lichess, ratings online e o motivo de saída | — |
+
+**Achado fora da spec:** "Importar lista de rating" na tela de membros nunca atualiza ninguém — `members` não tem `fide_id`/`cbx_id`, o mapa sai vazio — e lê "1.850" como 1. Candidato a item próprio.

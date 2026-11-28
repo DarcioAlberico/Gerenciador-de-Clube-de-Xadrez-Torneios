@@ -14,6 +14,8 @@ from typing import Any, Mapping, TYPE_CHECKING
 from src.domain.dates import is_iso_date
 from src.core.database import BASE_DIR, DEFAULT_CERTIFICATE_TEMPLATES, Database
 from src.services.constants import *
+from src.services.numeric_fields import decimal_field
+from src.services.transactions import atomic
 
 if TYPE_CHECKING:
     from src.services.club_service import ClubService
@@ -47,6 +49,7 @@ class TrainingService:
         logger.info("Aula/treino criado: %s", saved_id)
         return saved_id
 
+    @atomic
     def record_attendance(self, session_id: int, rows: list[dict[str, Any]]) -> dict[str, int]:
         session = self.db.get_training_session(session_id)
         if not session:
@@ -392,10 +395,7 @@ class ExerciseService:
         if score_value in (None, ""):
             score = {"correct": 1.0, "partial": 0.5}.get(result, 0.0)
         else:
-            try:
-                score = float(str(score_value).replace(",", "."))
-            except ValueError as exc:
-                raise AppError("Pontuação da tentativa inválida.") from exc
+            score = decimal_field(score_value, "Pontuação da tentativa inválida.", vazio=0.0)
         if score < 0 or score > 1:
             raise AppError("Pontuação da tentativa deve ficar entre 0 e 1.")
 

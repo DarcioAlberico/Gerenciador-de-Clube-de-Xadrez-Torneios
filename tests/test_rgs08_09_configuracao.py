@@ -189,6 +189,10 @@ class _ConfiguracaoBase(CoreServiceTestCase):
             self.tournament_id,
             [{"kind": "overall", "label": "Campeão", "rank_from": 1, "rank_to": 1, "amount": 100}],
         )
+        # O edital já é o que a tela manda de volta: salvar o mesmo edital não
+        # pede a confirmação de recálculo de categorias (RG2-15, D3) — o assunto
+        # destes testes é agenda e mudança estrutural.
+        self.db.replace_tournament_categories(self.tournament_id, self._categorias())
 
     def _com_rodada_fechada(self) -> None:
         self._create_players(4)

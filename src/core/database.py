@@ -408,6 +408,51 @@ def _copy_database(source_path: Path | str, target_path: Path | str) -> None:
         source.close()
 
 
+APP_SETTING_KEYS: frozenset[str] = frozenset({
+    "appearance_mode",
+    "color_theme",
+    "accent_preset",
+    "bg_preset",
+    "frame_bg_preset",
+    "curated_theme",
+    "default_export_dir",
+    "backup_dir",
+    "cloud_sync_dir",
+    "operator_name",
+    "operator_role",
+    "backup_retention_count",
+    "ui_scale_percent",
+    "local_result_server_url",
+    "sync_server_url",
+    "sync_enabled",
+    "local_device_id",
+    "device_integrations_enabled",
+    "notifications_enabled",
+    "live_portal_notice",
+    "live_portal_mode",
+    "smtp_server",
+    "smtp_port",
+    "smtp_user",
+    "smtp_password",
+    "ftp_host",
+    "ftp_port",
+    "ftp_user",
+    "ftp_password",
+    "ftp_remote_dir",
+    "ftp_use_tls",
+    "ftp_passive",
+    "foreign_rating_federations",
+    "arbitration_auto_refresh_enabled",
+    "arbitration_refresh_interval_seconds",
+    "arbitration_inline_tables_limit",
+    "free_mode_notice_hidden",
+    "import_mapping_profiles",
+    "registration_form_prefill_base",
+    "registration_form_tournament_entry",
+})
+"""As chaves de ``app_settings`` que o programa grava (RG2-26). Chave nova entra aqui."""
+
+
 class Database(
     CertificateMixin,
     MemberMixin,
@@ -423,7 +468,7 @@ class Database(
     RefereesMixin,
     UiPrefsMixin,
 ):
-    SCHEMA_VERSION = 59
+    SCHEMA_VERSION = 60
 
     def __init__(
         self,
@@ -1343,45 +1388,11 @@ class Database(
             kernel32.LocalFree(out_blob.pbData)
 
     def save_app_settings(self, settings: dict[str, Any]) -> None:
-        allowed_keys = {
-            "appearance_mode",
-            "color_theme",
-            "accent_preset",
-            "bg_preset",
-            "frame_bg_preset",
-            "curated_theme",
-            "default_export_dir",
-            "backup_dir",
-            "cloud_sync_dir",
-            "operator_name",
-            "operator_role",
-            "backup_retention_count",
-            "ui_scale_percent",
-            "local_result_server_url",
-            "sync_server_url",
-            "sync_enabled",
-            "local_device_id",
-            "device_integrations_enabled",
-            "notifications_enabled",
-            "live_portal_notice",
-            "live_portal_mode",
-            "smtp_server",
-            "smtp_port",
-            "smtp_user",
-            "smtp_password",
-            "ftp_host",
-            "ftp_port",
-            "ftp_user",
-            "ftp_password",
-            "ftp_remote_dir",
-            "ftp_use_tls",
-            "ftp_passive",
-            "foreign_rating_federations",
-            "arbitration_auto_refresh_enabled",
-            "arbitration_refresh_interval_seconds",
-            "arbitration_inline_tables_limit",
-            "free_mode_notice_hidden",
-        }
+        desconhecidas = sorted(set(settings) - APP_SETTING_KEYS)
+        if desconhecidas:
+            # RG2-26: chave fora da lista era descartada calada — o perfil de
+            # importação "salvava" e sumia. É erro de programação: aparece no teste.
+            raise ValueError(f"Configuração desconhecida: {', '.join(desconhecidas)}.")
         pasta = str(settings.get("backup_dir") or "").strip()
         if pasta and Path(pasta).resolve() == self.db_path.parent.resolve():
             # RG2-01: na pasta do banco, backup e banco de trabalho se misturam
@@ -1395,7 +1406,6 @@ class Database(
         rows = [
             (key, self._protect_secret(str(value)) if key in secret_keys else str(value), now)
             for key, value in settings.items()
-            if key in allowed_keys
         ]
         if not rows:
             return

@@ -17,6 +17,8 @@ from src.core.database import BASE_DIR, DEFAULT_CERTIFICATE_TEMPLATES, Database
 from src.core.database_tournament_core import default_pairing_system
 from src.domain.dates import Data, DateError, normalize_date, parse_date
 from src.services.constants import *
+from src.domain.numbers import BYE_POINTS, setting_number
+from src.services.numeric_fields import decimal_field, money_field, points_field
 from src.services.pairing import (
     acceleration_spec,
     parse_player_tiebreak_sequence,
@@ -38,9 +40,11 @@ from src.services.tournament_configuration import (
     TIPO_MUDANCA_ESTRUTURAL,
     TIPO_MUDANCAS_PERIGOSAS,
     TIPO_MOTOR_RESERVA,
+    TIPO_RECALCULO_CATEGORIAS,
     Confirmacao,
     PerfilTorneio,
     agenda_perdida,
+    confirmacao_recalculo_categorias,
     confirmacoes_pendentes,
     escolhe_motor_reserva,
     liga_mudancas_perigosas,
@@ -158,7 +162,7 @@ class TournamentService:
         return self.db.list_tournament_categories(tournament_id)
 
     def replace_categories(
-        self, tournament_id: int, categories: list[dict[str, Any]]
+        self, tournament_id: int, categories: list[dict[str, Any]], *, confirmed: bool = False
     ) -> None:
         """Regrava as categorias do torneio, normalizadas (ORG-01).
 
@@ -170,8 +174,72 @@ class TournamentService:
         if not tournament:
             raise AppError("Selecione um torneio válido.")
         limpos = self._validated_categories(categories)
-        self.db.replace_tournament_categories(tournament_id, limpos)
+        confirmacoes = self._category_change_confirmations(
+            tournament_id, self._categories_changed(tournament_id, limpos)
+        )
+        if confirmacoes and not confirmed:
+            raise AppError("\n\n".join(item.mensagem for item in confirmacoes))
+        with self.db.transaction():
+            # A categoria dos inscritos é recalculada na mesma transação (RG2-15).
+            self.db.replace_tournament_categories(tournament_id, limpos)
+            if confirmacoes:
+                self._audit_category_recalculation(tournament_id)
         logger.info("Categorias do torneio %s regravadas (%d)", tournament_id, len(limpos))
+
+    def plan_category_change(self, tournament_id: int, categories: list[dict[str, Any]]) -> list[Confirmacao]:
+        """O que regravar o edital pede ao árbitro (RG2-15, D3). Recusa o que não tem confirmação."""
+        limpos = self._validated_categories(categories)
+        return self._category_change_confirmations(tournament_id, self._categories_changed(tournament_id, limpos))
+
+    def _categories_changed(self, tournament_id: int, limpos: list[dict[str, Any]]) -> bool:
+        return self._validated_categories(self.db.list_tournament_categories(tournament_id)) != limpos
+
+    def _category_dates_changed(self, tournament_id: int, preparo: "_PerfilPreparado") -> bool:
+        """A data de referência ou o início do torneio mudaram — e com eles a idade de todos."""
+        tournament = self.db.get_tournament(tournament_id) or {}
+        settings = self.db.get_tournament_settings(tournament_id) or {}
+        return (
+            str(preparo.ajustes.get("category_reference_date") or "") != str(settings.get("category_reference_date") or "")
+            or str(preparo.torneio.get("start_date") or "") != str(tournament.get("start_date") or "")
+        )
+
+    def _category_change_confirmations(self, tournament_id: int, changes: bool) -> list[Confirmacao]:
+        """O gancho da D3 (RG2-15): recalcular categoria depois de rodada fechada.
+
+        Sem mudança, nada. Torneio encerrado ou com certificado emitido: recusa —
+        recalcular mudaria quem já recebeu. Com rodada fechada: pede confirmação
+        (e a gravação audita). Antes da 1ª rodada fechada: recalcula direto.
+        """
+        if not changes:
+            return []
+        tournament = self.db.get_tournament(tournament_id) or {}
+        if str(tournament.get("status") or "") == "finished":
+            raise AppError(
+                "O torneio está encerrado: mudar as categorias ou as datas que as definem agora "
+                "mudaria a classificação por categoria e a premiação já fechadas."
+            )
+        if self.db.count_tournament_certificates(tournament_id):
+            raise AppError(
+                "Já há certificado emitido deste torneio: mudar as categorias ou as datas que as "
+                "definem agora mudaria a categoria de quem já recebeu. Revogue os certificados antes."
+            )
+        fechadas = sum(1 for item in self.db.list_rounds(tournament_id) if str(item.get("status") or "") == "closed")
+        return [confirmacao_recalculo_categorias(fechadas)] if fechadas else []
+
+    def _audit_category_recalculation(self, tournament_id: int) -> None:
+        """Chamar DENTRO da transação que regravou edital ou datas."""
+        rounds = self.db.list_rounds(tournament_id)
+        self.db.create_audit_event(
+            action="player_categories_recalculated",
+            tournament_id=int(tournament_id),
+            entity_type="tournament",
+            entity_id=int(tournament_id),
+            reason="Edital ou datas mudaram depois de rodada fechada (D3); retratos ficam com a categoria da época.",
+            after={
+                "players": len(self.db.list_players(tournament_id, active_only=False)),
+                "closed_rounds": sum(1 for item in rounds if str(item.get("status") or "") == "closed"),
+            },
+        )
 
     @staticmethod
     def _validated_categories(categories: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -203,12 +271,37 @@ class TournamentService:
             )
         return limpos
 
-    def delete_tournament(self, tournament_id: int) -> None:
+    def deletion_summary(self, tournament_id: int) -> dict[str, Any]:
+        """O que a exclusão apaga, para a confirmação dizer (RG2-28)."""
         tournament = self.db.get_tournament(tournament_id)
         if not tournament:
             raise AppError("Selecione um torneio válido para excluir.")
-        self.db.delete_tournament(tournament_id)
-        logger.info("Torneio excluido: %s", tournament_id)
+        rounds = self.db.list_rounds(tournament_id)
+        return {
+            "name": str(tournament["name"]),
+            "players": len(self.db.list_players(tournament_id, active_only=False)),
+            "rounds": len(rounds),
+            "closed_rounds": sum(1 for item in rounds if str(item.get("status") or "") == "closed"),
+        }
+
+    def delete_tournament(self, tournament_id: int) -> None:
+        """Exclui o torneio com backup antes e registro na auditoria global (RG2-28).
+
+        A auditoria do torneio (``audit_events``) some com ele, por ``ON DELETE
+        CASCADE``; o rastro fica em ``audit_logs``. Sem backup, não exclui.
+        """
+        resumo = self.deletion_summary(tournament_id)
+        backup_path = self.db.backup_before("delete_tournament", tournament_id=tournament_id)
+        with self.db.transaction():
+            self.db.create_audit_log(
+                action="tournament_deleted",
+                entity_type="tournament",
+                entity_id=int(tournament_id),
+                description=f"Torneio excluído: {resumo['name']}",
+                metadata_json=json.dumps({**resumo, "backup": str(backup_path)}, ensure_ascii=False, sort_keys=True),
+            )
+            self.db.delete_tournament(tournament_id)
+        logger.info("Torneio excluido: %s (backup %s)", tournament_id, backup_path)
 
     def save_profile(
         self,
@@ -229,7 +322,10 @@ class TournamentService:
         preparo = self._prepare_profile(
             tournament_id, PerfilTorneio(tournament_data, settings_data, schedule)
         )
-        confirmadas = {TIPO_MUDANCAS_PERIGOSAS, TIPO_MOTOR_RESERVA}
+        recalculo = self._category_change_confirmations(
+            tournament_id, self._category_dates_changed(tournament_id, preparo)
+        )
+        confirmadas = {TIPO_MUDANCAS_PERIGOSAS, TIPO_MOTOR_RESERVA, TIPO_RECALCULO_CATEGORIAS}
         if confirm_schedule_loss:
             confirmadas.add(TIPO_AGENDA_PERDIDA)
         if str(structural_change_reason or "").strip():
@@ -237,6 +333,8 @@ class TournamentService:
         self._require_confirmations(preparo.confirmacoes, confirmadas, structural_change_reason)
         with self.db.transaction():
             self._write_profile(tournament_id, preparo, structural_change_reason)
+            if recalculo:
+                self._audit_category_recalculation(tournament_id)
         logger.info("Configuracoes do torneio %s atualizadas", tournament_id)
 
     def plan_configuration(
@@ -255,8 +353,12 @@ class TournamentService:
         branco.
         """
         preparo = self._prepare_profile(tournament_id, perfil)
-        self._prepare_extras(premios, categorias, colunas)
-        return list(preparo.confirmacoes)
+        _premios, categorias_limpas, _colunas = self._prepare_extras(premios, categorias, colunas)
+        return list(preparo.confirmacoes) + self._category_change_confirmations(
+            tournament_id,
+            self._categories_changed(tournament_id, categorias_limpas)
+            or self._category_dates_changed(tournament_id, preparo),
+        )
 
     def save_tournament_configuration(
         self,
@@ -281,14 +383,22 @@ class TournamentService:
         premios_limpos, categorias_limpas, colunas_limpas = self._prepare_extras(
             premios, categorias, colunas
         )
-        self._require_confirmations(preparo.confirmacoes, set(confirmadas), motivo)
+        recalculo = self._category_change_confirmations(
+            tournament_id,
+            self._categories_changed(tournament_id, categorias_limpas)
+            or self._category_dates_changed(tournament_id, preparo),
+        )
+        self._require_confirmations((*preparo.confirmacoes, *recalculo), set(confirmadas), motivo)
 
         self.db.backup_before("tournament_configuration", tournament_id)
         with self.db.transaction():
             self._write_profile(tournament_id, preparo, motivo)
             self.db.replace_tournament_prizes(tournament_id, premios_limpos)
+            # A categoria dos inscritos é recalculada aqui dentro (RG2-15).
             self.db.replace_tournament_categories(tournament_id, categorias_limpas)
             self.db.save_report_layout(tournament_id, "standings", colunas_limpas)
+            if recalculo:
+                self._audit_category_recalculation(tournament_id)
         logger.info("Configuracoes completas do torneio %s salvas", tournament_id)
 
     # -- "Avançado": mudanças perigosas gravando sozinha (RGS-20) ------------ #
@@ -570,53 +680,58 @@ class TournamentService:
 
         child_ids: list[int] = []
         index = 0
-        for group_index in range(groups):
-            size = base_size + (1 if group_index < remainder else 0)
-            chunk = ordered[index:index + size]
-            index += size
-            label = chr(ord("A") + group_index)
-            child_id = self.db.create_tournament(
-                name=f"{tournament['name']} - {label}",
-                club_id=tournament.get("club_id"),
-                location=str(tournament.get("location") or ""),
-                rounds_count=int(tournament.get("rounds_count") or 5),
-                time_control=str(tournament.get("time_control") or ""),
-                start_date=str(tournament.get("start_date") or ""),
-                end_date=str(tournament.get("end_date") or ""),
-                bye_points=float(tournament.get("bye_points") or 1.0),
-                class_id=tournament.get("class_id"),
-                competition_type="individual",
-            )
-            self.db.set_tournament_parent(child_id, tournament_id)
-            self.db.save_tournament_settings(child_id, source_settings)
-            self.db.save_round_schedule(child_id, source_schedule)
-            if source_prizes:
-                self.db.replace_tournament_prizes(child_id, source_prizes)
-            if source_standings_layout:
-                self.db.save_report_layout(child_id, "standings", source_standings_layout)
-            for player in chunk:
-                self.db.create_player(
-                    tournament_id=child_id,
-                    name=str(player.get("name") or ""),
-                    surname=str(player.get("surname") or ""),
-                    given_name=str(player.get("given_name") or ""),
-                    title=str(player.get("title") or ""),
-                    sex=str(player.get("sex") or ""),
-                    club=str(player.get("club") or ""),
-                    rating=int(player.get("rating") or 0),
-                    national_rating=int(player.get("national_rating") or 0),
-                    international_rating=int(player.get("international_rating") or 0),
-                    category=str(player.get("category") or ""),
-                    federation_id=str(player.get("federation_id") or ""),
-                    fide_id=str(player.get("fide_id") or ""),
-                    cbx_id=str(player.get("cbx_id") or ""),
-                    lbx_id=str(player.get("lbx_id") or ""),
-                    birth_date=str(player.get("birth_date") or ""),
-                    member_id=player.get("member_id"),
-                    player_status=str(player.get("player_status") or "active"),
-                    starting_points=float(player.get("starting_points") or 0.0),
+        # RG2-10: ~8 gravações por grupo; uma falha no grupo B não deixa o A pela metade.
+        with self.db.transaction():
+            for group_index in range(groups):
+                size = base_size + (1 if group_index < remainder else 0)
+                chunk = ordered[index:index + size]
+                index += size
+                label = chr(ord("A") + group_index)
+                child_id = self.db.create_tournament(
+                    name=f"{tournament['name']} - {label}",
+                    club_id=tournament.get("club_id"),
+                    location=str(tournament.get("location") or ""),
+                    rounds_count=int(tournament.get("rounds_count") or 5),
+                    time_control=str(tournament.get("time_control") or ""),
+                    start_date=str(tournament.get("start_date") or ""),
+                    end_date=str(tournament.get("end_date") or ""),
+                    bye_points=setting_number(tournament, "bye_points", 1.0),
+                    class_id=tournament.get("class_id"),
+                    competition_type="individual",
                 )
-            child_ids.append(child_id)
+                self.db.set_tournament_parent(child_id, tournament_id)
+                self.db.save_tournament_settings(child_id, source_settings)
+                self.db.save_round_schedule(child_id, source_schedule)
+                if source_prizes:
+                    self.db.replace_tournament_prizes(child_id, source_prizes)
+                if source_standings_layout:
+                    self.db.save_report_layout(child_id, "standings", source_standings_layout)
+                for player in chunk:
+                    self.db.create_player(
+                        tournament_id=child_id,
+                        name=str(player.get("name") or ""),
+                        surname=str(player.get("surname") or ""),
+                        given_name=str(player.get("given_name") or ""),
+                        title=str(player.get("title") or ""),
+                        sex=str(player.get("sex") or ""),
+                        club=str(player.get("club") or ""),
+                        rating=int(player.get("rating") or 0),
+                        national_rating=int(player.get("national_rating") or 0),
+                        international_rating=int(player.get("international_rating") or 0),
+                        category=str(player.get("category") or ""),
+                        federation_id=str(player.get("federation_id") or ""),
+                        fide_id=str(player.get("fide_id") or ""),
+                        cbx_id=str(player.get("cbx_id") or ""),
+                        lbx_id=str(player.get("lbx_id") or ""),
+                        birth_date=str(player.get("birth_date") or ""),
+                        member_id=player.get("member_id"),
+                        player_status=str(player.get("player_status") or "active"),
+                        starting_points=float(player.get("starting_points") or 0.0),
+                        rapid_rating=int(player.get("rapid_rating") or 0),
+                        blitz_rating=int(player.get("blitz_rating") or 0),
+                        games_played=int(player.get("games_played") or 0),
+                    )
+                child_ids.append(child_id)
 
         logger.info("Torneio %s dividido em %s grupos: %s", tournament_id, groups, child_ids)
         return child_ids
@@ -673,12 +788,7 @@ class TournamentService:
         if rounds_count < 1:
             raise AppError("O torneio precisa ter pelo menos uma rodada.")
 
-        try:
-            bye_points = float(str(data.get("bye_points") or "0").replace(",", "."))
-        except ValueError as exc:
-            raise AppError("Pontuação do bye inválida.") from exc
-        if bye_points < 0:
-            raise AppError("Pontuação do bye não pode ser negativa.")
+        bye_points = points_field(data.get("bye_points"), "Pontuação do bye inválida.", BYE_POINTS, vazio=0.0)
 
         start_date = self._normalize_optional_date(data.get("start_date", ""), "Data inicial inválida.")
         end_date = self._normalize_optional_date(data.get("end_date", ""), "Data final inválida.")
@@ -817,10 +927,9 @@ class TournamentService:
             ):
                 raise AppError("Método de aceleração inválido.")
 
-        try:
-            late_entry_points = float(str(data.get("late_entry_points") or "0").replace(",", "."))
-        except ValueError as exc:
-            raise AppError("Pontos por adesão tardia inválidos.") from exc
+        late_entry_points = points_field(
+            data.get("late_entry_points"), "Pontos por adesão tardia inválidos.", BYE_POINTS, vazio=0.0
+        )
         try:
             team_boards_count = int(data.get("team_boards_count") or 4)
         except ValueError as exc:
@@ -854,16 +963,9 @@ class TournamentService:
         }
         team_points: dict[str, float] = {}
         for field, message in team_point_fields.items():
-            raw_value = data.get(field)
-            if raw_value in (None, ""):
-                raw_value = team_point_defaults[field]
-            try:
-                value = float(str(raw_value).replace(",", "."))
-            except ValueError as exc:
-                raise AppError(message) from exc
-            if value < 0:
-                raise AppError(message)
-            team_points[field] = value
+            team_points[field] = points_field(
+                data.get(field), message, None, vazio=float(team_point_defaults[field])
+            )
 
         rating_fees: dict[str, float] = {}
         for field, label in (
@@ -871,10 +973,7 @@ class TournamentService:
             ("rating_fee_cbx", "CBX"),
             ("rating_fee_lbx", "LBX"),
         ):
-            try:
-                value = float(str(data.get(field) or "0").replace(",", "."))
-            except ValueError as exc:
-                raise AppError(f"Taxa de rating {label} inválida.") from exc
+            value = money_field(data.get(field), f"Taxa de rating {label} inválida.")
             if value < 0:
                 raise AppError(f"Taxa de rating {label} não pode ser negativa.")
             rating_fees[field] = value
@@ -916,10 +1015,7 @@ class TournamentService:
         prize_policy = str(data.get("prize_policy", "best_only")).strip() or "best_only"
         if prize_policy not in PRIZE_POLICIES:
             raise AppError("Política de premiação inválida.")
-        try:
-            prize_tax_percent = float(str(data.get("prize_tax_percent") or "0").replace(",", "."))
-        except ValueError as exc:
-            raise AppError("Imposto de premiação inválido.") from exc
+        prize_tax_percent = decimal_field(data.get("prize_tax_percent"), "Imposto de premiação inválido.", vazio=0.0)
         if not 0.0 <= prize_tax_percent <= 100.0:
             raise AppError("Imposto de premiação deve estar entre 0 e 100%.")
 

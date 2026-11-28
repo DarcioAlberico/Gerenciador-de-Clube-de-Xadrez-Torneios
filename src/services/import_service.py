@@ -20,12 +20,14 @@ from src.core.database import BASE_DIR, DEFAULT_CERTIFICATE_TEMPLATES, Database
 from src.services.access_export import access_driver_available, write_accdb, write_csv_bundle
 from src.services.constants import *
 from src.services.spreadsheet_safety import unguard_csv_cell
+from src.services.numeric_fields import rating_cell
 from src.services.fide_norms import build_norm_report
 from src.services.fide_rating import build_fide_report_rows
 from src.services.list_layouts import STANDINGS_COLUMNS, resolve_column_specs, resolve_columns
 from src.services.prizes import PRIZE_KINDS, PRIZE_POLICIES, allocate_prizes
 from src.domain.dates import DataInvalida, parse_date, storage_text
 from src.services.trf_import import TrfDateError, build_trf_rounds, parse_trf
+from src.services.transactions import atomic
 
 if TYPE_CHECKING:
     from src.services.club_service import ClubService
@@ -534,12 +536,7 @@ class ImportService:
         if not name:
             errors.append("nome vazio")
 
-        rating_text = self._pick(row, "rating", "elo", "rtg")
-        try:
-            rating = int(float(rating_text)) if rating_text else 0
-        except ValueError:
-            rating = 0
-            errors.append("rating inválido")
+        rating = self._rating(row, errors, "rating", "rating", "elo", "rtg")
 
         club_id, club_error = self._resolve_club_id(
             self._pick(row, "club_id", "id_clube", "id escola", "id_escola"),
@@ -571,6 +568,7 @@ class ImportService:
         payload = {
             "name": name,
             "surname": surname,
+            "sex": self._pick(row, "sex", "sexo", "genero", "gênero"),
             "club_id": club_id,
             "class_id": class_id,
             "learning_level_id": learning_level_id,
@@ -588,11 +586,11 @@ class ImportService:
             "notes": self._pick(row, "notes", "observacoes", "observações"),
             "lichess_username": self._pick(row, "lichess", "lichess_username", "usuario lichess"),
             "chesscom_username": self._pick(row, "chesscom", "chesscom_username", "usuario chess.com"),
-            "online_blitz_rating": self._parse_optional_int(
-                self._pick(row, "online_blitz_rating", "blitz online", "rating blitz")
+            "online_blitz_rating": self._rating(
+                row, errors, "rating blitz online", "online_blitz_rating", "blitz online", "rating blitz"
             ),
-            "online_rapid_rating": self._parse_optional_int(
-                self._pick(row, "online_rapid_rating", "rapid online", "rating rapid")
+            "online_rapid_rating": self._rating(
+                row, errors, "rating rápido online", "online_rapid_rating", "rapid online", "rating rapid"
             ),
         }
         return payload, errors
@@ -733,20 +731,20 @@ class ImportService:
                 errors.append(f"Linha {line_number}: {birth_error}.")
                 continue
 
-            national_rating = self._parse_optional_int(
-                self._pick(row, "national_rating", "rating_nacional", "elo_nacional", "cbx_rating")
+            erros_da_linha: list[str] = []
+            national_rating = self._rating(
+                row, erros_da_linha, "rating nacional",
+                "national_rating", "rating_nacional", "elo_nacional", "cbx_rating",
             )
-            international_rating = self._parse_optional_int(
-                self._pick(row, "international_rating", "rating_internacional", "elo_fide", "fide_rating")
+            international_rating = self._rating(
+                row, erros_da_linha, "rating internacional",
+                "international_rating", "rating_internacional", "elo_fide", "fide_rating",
             )
-            rating_text = self._pick(row, "rating", "elo", "rtg")
-            if rating_text:
-                try:
-                    rating = int(float(rating_text))
-                except ValueError:
-                    errors.append(f"Linha {line_number}: rating inválido.")
-                    continue
-            else:
+            rating = self._rating(row, erros_da_linha, "rating", "rating", "elo", "rtg")
+            if erros_da_linha:
+                errors.extend(f"Linha {line_number}: {erro}." for erro in erros_da_linha)
+                continue
+            if not self._pick(row, "rating", "elo", "rtg"):
                 rating = max(national_rating, international_rating)
 
             self.db.create_player(
@@ -847,6 +845,7 @@ class ImportService:
             pass  # pandas ausente ou valor não escalar: a célula segue como veio
         return value
 
+    @atomic
     def import_rating_list_csv(self, file_path: str | Path, rating_type: str = "fide") -> dict[str, Any]:
         """Importa um CSV de ratings FIDE ou CBX e atualiza os membros do clube correspondentes."""
         path = Path(file_path)
@@ -1021,34 +1020,19 @@ class ImportService:
         if not name:
             return {"name": "", "payload": {}, "errors": ["nome vazio"]}
 
-        national_rating = self._parse_optional_int(
-            self._pick(
-                row,
-                "national_rating",
-                "rating nacional",
-                "rating_nacional",
-                "elo nacional",
-                "elo_nacional",
-                "cbx_rating",
-            )
+        national_rating = self._rating(
+            row, errors, "rating nacional",
+            "national_rating", "rating nacional", "rating_nacional", "elo nacional", "elo_nacional", "cbx_rating",
         )
-        international_rating = self._parse_optional_int(
-            self._pick(
-                row,
-                "international_rating",
-                "rating internacional",
-                "rating_internacional",
-                "elo fide",
-                "elo_fide",
-                "fide_rating",
-            )
+        international_rating = self._rating(
+            row, errors, "rating internacional",
+            "international_rating", "rating internacional", "rating_internacional", "elo fide", "elo_fide",
+            "fide_rating",
         )
-        rating_text = self._pick(row, "rating", "rating principal", "elo", "rtg")
-        try:
-            rating = int(float(rating_text)) if rating_text else max(national_rating, international_rating)
-        except ValueError:
-            rating = 0
-            errors.append("rating inválido")
+        rating_keys = ("rating", "rating principal", "elo", "rtg")
+        rating = self._rating(row, errors, "rating", *rating_keys)
+        if not self._pick(row, *rating_keys):
+            rating = max(national_rating, international_rating)
 
         birth_date, birth_error = self._pick_date(
             row, "birth_date", "nascimento", "data nascimento", "data de nascimento", label="data de nascimento"
@@ -1168,11 +1152,9 @@ class ImportService:
         decomposed = unicodedata.normalize("NFKD", value.strip().casefold())
         return "".join(character for character in decomposed if not unicodedata.combining(character))
 
-    @staticmethod
-    def _parse_optional_int(value: str) -> int:
-        if not value:
-            return 0
-        try:
-            return int(float(value))
-        except ValueError:
-            return 0
+    def _rating(self, row: dict[str, Any], errors: list[str], rotulo: str, *keys: str) -> int:
+        """Rating da célula (RG2-14): vazio é 0; inválido vai para ``errors``, nunca vira 0 calado."""
+        rating, erro = rating_cell(self._pick(row, *keys), rotulo)
+        if erro:
+            errors.append(erro)
+        return rating

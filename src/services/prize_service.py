@@ -12,6 +12,7 @@ from typing import Any
 
 from src.core.database import Database
 from src.services.constants import AppError
+from src.services.numeric_fields import money_field
 from src.services.prizes import PRIZE_KINDS, allocate_prizes
 
 
@@ -66,10 +67,7 @@ class PrizeService:
             raise AppError("Faixa de colocação do prêmio inválida.") from exc
         if rank_from < 1 or rank_to < rank_from:
             raise AppError("Faixa de colocação do prêmio inválida.")
-        try:
-            amount = float(str(prize.get("amount") or "0").replace(",", "."))
-        except (TypeError, ValueError) as exc:
-            raise AppError("Valor do prêmio inválido.") from exc
+        amount = money_field(prize.get("amount"), "Valor do prêmio inválido.")
         if amount < 0:
             raise AppError("Valor do prêmio não pode ser negativo.")
         return {

@@ -15,6 +15,8 @@ from typing import Any, Mapping, TYPE_CHECKING
 from src.domain.dates import Data, parse_date
 from src.core.database import BASE_DIR, DEFAULT_CERTIFICATE_TEMPLATES, Database
 from src.services.constants import *
+from src.services.categories import normalized_sex
+from src.services.transactions import atomic
 
 if TYPE_CHECKING:
     from src.services.club_service import ClubService
@@ -138,6 +140,7 @@ class MemberService:
     def __init__(self, db: Database) -> None:
         self.db = db
 
+    @atomic
     def create_member(self, data: dict[str, Any]) -> int:
         payload = self._validated_payload(data)
         class_id = payload.pop("class_id", None)
@@ -147,6 +150,7 @@ class MemberService:
         logger.info("Membro criado: %s", member_id)
         return member_id
 
+    @atomic
     def update_member(self, member_id: int, data: dict[str, Any]) -> None:
         if not self.db.get_member(member_id):
             raise AppError("Membro não encontrado.")
@@ -170,24 +174,10 @@ class MemberService:
         if not member:
             raise AppError("Membro não encontrado.")
         
+        # RG2-34: só o que a desativação muda; o resto do cadastro fica.
         self.db.update_member(
-            member_id=member_id,
-            name=member["name"],
-            surname=member["surname"],
-            club_id=member["club_id"],
-            learning_level_id=member["learning_level_id"],
-            city=member["city"],
-            phone=member["phone"],
-            email=member["email"],
-            document=member["document"],
-            birth_date=member["birth_date"],
-            rating=member["rating"],
-            category=member["category"],
-            member_type=member["member_type"],
+            member_id,
             status="inactive",
-            guardian_name=member["guardian_name"],
-            guardian_phone=member["guardian_phone"],
-            notes=member["notes"],
             departure_date=date,
             departure_reason=reason,
             transfer_notes=notes,
@@ -258,6 +248,7 @@ class MemberService:
             return TOURNAMENT_SCOPES["club"]
         return TOURNAMENT_SCOPES["standalone"]
 
+    @atomic
     def register_active_members_in_tournament(
         self,
         tournament_id: int,
@@ -471,9 +462,15 @@ class MemberService:
         except ValueError:
             online_rapid_rating = 0
 
+        sexo_digitado = str(data.get("sex") or "").strip()
+        sex = normalized_sex(sexo_digitado)
+        if sexo_digitado and not sex:
+            raise AppError("Sexo do membro inválido: use F ou M (ou deixe vazio).")
+
         return {
             "name": name,
             "surname": str(data.get("surname", "")),
+            "sex": sex,
             "club_id": club_id,
             "learning_level_id": learning_level_id or None,
             "city": str(data.get("city", "")),

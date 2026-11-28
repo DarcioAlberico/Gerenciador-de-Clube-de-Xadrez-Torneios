@@ -293,9 +293,16 @@ class TournamentListView:
         try:
             tournament_id = self._require_selection("excluir")
             nome = self.controller.display_name(tournament_id)
+            resumo = self.controller.deletion_summary(tournament_id)
+            fechadas = int(resumo["closed_rounds"])
+            jogadas = (
+                f"{fechadas} rodada fechada" if fechadas == 1 else f"{fechadas} rodadas fechadas"
+            )
             if not self.host._confirm_action(
                 "Excluir torneio",
-                f"Excluir o torneio '{nome}' e todos os jogadores/rodadas vinculados?",
+                f"Excluir o torneio '{nome}' ({resumo['players']} jogador(es), {jogadas}) "
+                "e todos os jogadores/rodadas vinculados?\n\n"
+                "Um backup do banco é feito antes, e a exclusão fica na auditoria.",
                 danger=True,
             ):
                 return

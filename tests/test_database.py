@@ -93,7 +93,8 @@ class TestDatabaseSchema(DatabaseTestCase):
         # sorteada uma vez e usada igual pela prévia, pela geração e pelo Gacrux.
         # v58 (EQ-01/E6, RGS-30): TPN, semente e rodada de entrada da equipe.
         # v59: textos semeados (níveis e modelos de certificado) com acento.
-        self.assertEqual(Database.SCHEMA_VERSION, 59)
+        # v60: sexo no cadastro de membro (RG2-47).
+        self.assertEqual(Database.SCHEMA_VERSION, 60)
 
     def test_core_tables_exist(self) -> None:
         with self.db.connect() as conn:

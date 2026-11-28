@@ -19,8 +19,9 @@ close_round
 club_summary
 connect
 copy_backup_to_cloud
-count_player_pairings
+count_player_participation
 count_team_matches
+count_tournament_certificates
 create_audit_event
 create_audit_log
 create_certificate_issuances
@@ -209,6 +210,7 @@ member_attendance_summary
 now
 prune_backups
 record_internal_rating_update
+refresh_player_categories
 register_device
 remove_player_from_team
 remove_tournament_referee
@@ -251,8 +253,8 @@ set_tournament_parent
 standings_snapshot_reconcile_state
 supersede_standings_snapshot
 swap_pairing_colors
-swap_team_pairing_numbers
 swap_team_board_colors
+swap_team_pairing_numbers
 transaction
 unlink_guardian_from_member
 update_certificate_template

@@ -42,6 +42,9 @@ class _DatabaseInfra:
         @staticmethod
         def rows_to_dicts(rows: Iterable[sqlite3.Row]) -> list[dict[str, Any]]: ...
 
+        @staticmethod
+        def _table_columns(connection: sqlite3.Connection, table_name: str) -> set[str]: ...
+
         # Config/base que permanece na fachada Database e e usada por mixins:
         def get_app_settings(self) -> dict[str, Any]: ...
 

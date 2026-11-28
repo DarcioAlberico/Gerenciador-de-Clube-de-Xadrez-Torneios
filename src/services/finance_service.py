@@ -15,6 +15,7 @@ from typing import Any, Mapping, TYPE_CHECKING
 from src.domain.dates import Data, is_iso_date, parse_date
 from src.core.database import BASE_DIR, DEFAULT_CERTIFICATE_TEMPLATES, Database
 from src.services.constants import *
+from src.services.numeric_fields import money_field
 
 if TYPE_CHECKING:
     from src.services.club_service import ClubService
@@ -466,10 +467,7 @@ class FinanceService:
 
     @staticmethod
     def _parse_amount(value: Any, message: str) -> float:
-        try:
-            return round(float(str(value or "0").replace(",", ".")), 2)
-        except ValueError as exc:
-            raise AppError(message) from exc
+        return money_field(value, message)
 
     @staticmethod
     def _validate_optional_date(value: str, message: str) -> None:

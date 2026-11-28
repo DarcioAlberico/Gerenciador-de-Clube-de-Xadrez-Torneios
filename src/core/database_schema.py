@@ -64,6 +64,7 @@ CREATE TABLE IF NOT EXISTS members (
     email TEXT DEFAULT '',
     document TEXT DEFAULT '',
     birth_date TEXT DEFAULT '',
+    sex TEXT NOT NULL DEFAULT '',
     rating INTEGER NOT NULL DEFAULT 0,
     category TEXT DEFAULT '',
     age_category TEXT DEFAULT '',

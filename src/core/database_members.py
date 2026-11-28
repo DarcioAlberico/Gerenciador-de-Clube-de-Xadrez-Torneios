@@ -8,8 +8,41 @@ from __future__ import annotations
 
 from typing import Any
 
+from src.services.categories import normalized_sex
+
 from ._database_base import _DatabaseInfra
-from .categories import competition_category_payload
+from .categories import AUTO_CATEGORY_VALUES, competition_category_payload
+
+
+def _texto(valor: Any) -> str:
+    return str(valor or "").strip()
+
+
+def _inteiro(valor: Any) -> int:
+    return int(valor or 0)
+
+
+def _id_opcional(valor: Any) -> int | None:
+    return int(valor) if valor not in (None, "", 0) else None
+
+
+MEMBER_UPDATE_COLUMNS: dict[str, Any] = {
+    "club_id": lambda valor: int(valor or 1),
+    "learning_level_id": _id_opcional,
+    "name": _texto, "surname": _texto, "city": _texto, "phone": _texto, "email": _texto,
+    "document": _texto, "birth_date": _texto, "rating": _inteiro, "category": _texto,
+    "member_type": _texto, "status": _texto, "guardian_name": _texto, "guardian_phone": _texto,
+    "notes": _texto, "lichess_username": _texto, "chesscom_username": _texto,
+    "online_blitz_rating": _inteiro, "online_rapid_rating": _inteiro,
+    "departure_date": _texto, "departure_reason": _texto, "transfer_notes": _texto,
+    "sex": normalized_sex,
+}
+"""Colunas que ``update_member`` aceita e como cada uma é normalizada (RG2-34)."""
+
+MEMBER_CATEGORY_INPUTS = frozenset({"birth_date", "rating", "category", "city", "member_type", "club_id"})
+"""Mudou uma destas, a categoria do membro é recalculada."""
+
+MEMBER_CATEGORY_COLUMNS = ("category", "age_category", "rating_category", "prize_tags")
 
 
 class MemberMixin(_DatabaseInfra):
@@ -99,6 +132,7 @@ class MemberMixin(_DatabaseInfra):
         chesscom_username: str = "",
         online_blitz_rating: int = 0,
         online_rapid_rating: int = 0,
+        sex: str = "",
     ) -> int:
         club = self.get_club(int(club_id or 1))
         category_payload = competition_category_payload(
@@ -118,8 +152,9 @@ class MemberMixin(_DatabaseInfra):
                     club_id, learning_level_id, name, surname, city, phone, email, document, birth_date, rating,
                     category, age_category, rating_category, prize_tags,
                     member_type, status, guardian_name, guardian_phone,
-                    notes, lichess_username, chesscom_username, online_blitz_rating, online_rapid_rating, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    notes, lichess_username, chesscom_username, online_blitz_rating, online_rapid_rating, sex,
+                    created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     int(club_id or 1),
@@ -145,90 +180,50 @@ class MemberMixin(_DatabaseInfra):
                     chesscom_username.strip(),
                     int(online_blitz_rating or 0),
                     int(online_rapid_rating or 0),
+                    normalized_sex(sex),
                     now,
                     now,
                 ),
             )
             return int(cursor.lastrowid)
 
-    def update_member(
-        self,
-        member_id: int,
-        name: str,
-        surname: str = "",
-        club_id: int = 1,
-        learning_level_id: int | None = None,
-        city: str = "",
-        phone: str = "",
-        email: str = "",
-        document: str = "",
-        birth_date: str = "",
-        rating: int = 0,
-        category: str = "",
-        member_type: str = "socio",
-        status: str = "active",
-        guardian_name: str = "",
-        guardian_phone: str = "",
-        notes: str = "",
-        departure_date: str = "",
-        departure_reason: str = "",
-        transfer_notes: str = "",
-        lichess_username: str = "",
-        chesscom_username: str = "",
-        online_blitz_rating: int = 0,
-        online_rapid_rating: int = 0,
-    ) -> None:
-        club = self.get_club(int(club_id or 1))
-        category_payload = competition_category_payload(
-            birth_date=birth_date,
-            rating=rating,
-            category=category,
-            city=city,
-            member_type=member_type,
-            tournament_club_city=club.get("city", "") if club else "",
-            tournament_club_name=club.get("name", "") if club else "",
-        )
+    def update_member(self, member_id: int, **changes: Any) -> None:
+        """UPDATE parcial de membro: só as colunas em ``changes`` (RG2-34).
+
+        Regravar todas as colunas fazia o que o chamador não mandava voltar ao
+        padrão: desativar apagava Lichess/Chess.com e ratings online; editar o
+        telefone apagava o motivo de saída. Coluna desconhecida é erro de
+        programação (``ValueError``). Quando muda algo de que a categoria
+        depende, ela é recalculada sobre o membro inteiro (gravado + mudanças).
+        """
+        desconhecidas = sorted(set(changes) - set(MEMBER_UPDATE_COLUMNS))
+        if desconhecidas:
+            raise ValueError(f"Coluna de membro desconhecida: {', '.join(desconhecidas)}.")
+        atual = self.get_member(member_id)
+        if not atual:
+            return
+        valores = {chave: MEMBER_UPDATE_COLUMNS[chave](valor) for chave, valor in changes.items()}
+        if set(valores) & MEMBER_CATEGORY_INPUTS:
+            membro = {**atual, **valores}
+            club = self.get_club(int(membro.get("club_id") or 1))
+            categoria = competition_category_payload(
+                birth_date=str(membro.get("birth_date") or ""),
+                rating=int(membro.get("rating") or 0),
+                category=str(membro.get("category") or ""),
+                city=str(membro.get("city") or ""),
+                member_type=str(membro.get("member_type") or ""),
+                tournament_club_city=club.get("city", "") if club else "",
+                tournament_club_name=club.get("name", "") if club else "",
+            )
+            valores.update({chave: categoria[chave] for chave in MEMBER_CATEGORY_COLUMNS})
+        if not valores:
+            return
+        valores["updated_at"] = self.now()
+        colunas = list(valores)
         with self.connect() as connection:
             connection.execute(
-                """
-                UPDATE members
-                SET club_id = ?, learning_level_id = ?, name = ?, surname = ?, city = ?, phone = ?, email = ?, document = ?,
-                    birth_date = ?, rating = ?, category = ?, age_category = ?,
-                    rating_category = ?, prize_tags = ?, member_type = ?,
-                    status = ?, guardian_name = ?, guardian_phone = ?,
-                    notes = ?, lichess_username = ?, chesscom_username = ?, online_blitz_rating = ?, online_rapid_rating = ?, departure_date = ?, departure_reason = ?, transfer_notes = ?, updated_at = ?
-                WHERE id = ?
-                """,
-                (
-                    int(club_id or 1),
-                    learning_level_id,
-                    name.strip(),
-                    surname.strip(),
-                    city.strip(),
-                    phone.strip(),
-                    email.strip(),
-                    document.strip(),
-                    birth_date.strip(),
-                    int(rating or 0),
-                    category_payload["category"],
-                    category_payload["age_category"],
-                    category_payload["rating_category"],
-                    category_payload["prize_tags"],
-                    member_type.strip(),
-                    status.strip(),
-                    guardian_name.strip(),
-                    guardian_phone.strip(),
-                    notes.strip(),
-                    lichess_username.strip(),
-                    chesscom_username.strip(),
-                    int(online_blitz_rating or 0),
-                    int(online_rapid_rating or 0),
-                    departure_date.strip(),
-                    departure_reason.strip(),
-                    transfer_notes.strip(),
-                    self.now(),
-                    member_id,
-                ),
+                f"UPDATE members SET {', '.join(f'{coluna} = ?' for coluna in colunas)} WHERE id = ?",
+                [*(valores[coluna] for coluna in colunas), member_id],
             )
 
     def get_member(self, member_id: int) -> dict[str, Any] | None:
@@ -533,9 +528,12 @@ class MemberMixin(_DatabaseInfra):
             name=tournament_name,
             club=club_name,
             rating=int(member["rating"] or 0),
-            category=member["category"],
+            # RG2-15: a categoria do cadastro foi calculada no ano corrente, com
+            # as faixas padrão; no torneio vale o edital. Só a manual vai junto.
+            category="" if str(member.get("category") or "") in AUTO_CATEGORY_VALUES else str(member["category"] or ""),
             birth_date=member["birth_date"],
             member_id=member_id,
             surname=surname,
             given_name=given_name,
+            sex=str(member.get("sex") or ""),
         )
