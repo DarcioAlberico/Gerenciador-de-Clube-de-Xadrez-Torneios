@@ -841,9 +841,14 @@ class PairingResultsMixin:
         (EQ-02.4) → W.O. do confronto inteiro. Outro erro segue o caminho
         normal (``False``).
         """
+        from src.services.pairing.round_search import NoLegalPairingError
         from src.services.pairing.team_swiss import TeamWithoutPlayersError
         from src.ui.components.dialogs import confirm_dialog
 
+        if isinstance(error, NoLegalPairingError):
+            # RG2-07b: o motor único não achou pareamento legal — mesma saída
+            # do Gacrux sem pareamento legal (RG2-22).
+            return self._offer_end_without_legal_pairing(tournament_id, error)
         if not isinstance(error, TeamWithoutPlayersError):
             return self._offer_reserve_engine(tournament_id, error)
         if confirm_dialog(

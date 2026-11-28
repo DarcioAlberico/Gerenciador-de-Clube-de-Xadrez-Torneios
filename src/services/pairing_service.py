@@ -2782,8 +2782,9 @@ class PairingService:
         """Guarda do RG2-07a: rodada que fere a C.04.1 não é gravada.
 
         O motor de equipes repetia confronto quando havia pareamento sem
-        repetição (o redesenho é o RG2-07b). Até lá, a rodada pronta é
-        conferida; se repete confronto ou dá um segundo PAB, o caso vai à
+        repetição. Desde o RG2-07b o motor único proíbe a repetição e o 2º PAB
+        (busca exata, ``round_search.legal_round``); a guarda fica como rede de
+        segurança: se mesmo assim a rodada pronta fere a C.04.1, o caso vai à
         auditoria e a geração para com o motivo — melhor nenhuma rodada do que
         uma ilegal gravada em silêncio.
         """
@@ -2806,8 +2807,7 @@ class PairingService:
             "(C.04.1: duas equipes não se enfrentam duas vezes, e nenhuma recebe dois byes):\n"
             + "\n".join(f"- {item}" for item in problemas)
             + "\n\nA rodada não foi gerada, e o caso ficou registrado na auditoria. "
-            "O motor de equipes ainda não encontra sozinho a alternativa sem repetição; "
-            "confira os confrontos anteriores e as proibições de pareamento antes de tentar de novo."
+            "Confira os confrontos anteriores e as proibições de pareamento antes de tentar de novo."
         )
 
     def _team_float_histories(self, tournament_id: int) -> dict[int, list[str]]:

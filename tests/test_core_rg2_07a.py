@@ -1,12 +1,16 @@
 """RG2-07a — guarda depois do pareamento suíço por equipes.
 
-O motor de equipes trata "não repetir confronto" como custo, não como regra, e
-escolhe o bye antes de testar se o resto pareia (o redesenho é o RG2-07b). Até
-lá, a guarda recusa a rodada que repete confronto ou dá um segundo PAB
-(FIDE C.04.1, critérios absolutos), em vez de gravá-la.
+O motor de equipes tratava "não repetir confronto" como custo, não como regra,
+e escolhia o bye antes de testar se o resto pareia. A guarda recusa a rodada
+que repete confronto ou dá um segundo PAB (FIDE C.04.1, critérios absolutos),
+em vez de gravá-la.
+
+Desde o RG2-07b o motor único proíbe a repetição e acha a alternativa
+(``tests/test_rg2_07b_motor_unico.py``); a guarda fica como rede de segurança,
+e aqui é provada com um motor que devolve uma rodada ilegal de propósito.
 
 As sementes 0, 2, 5 e 7 são as do estresse da revisão (7 equipes × 6 rodadas):
-nelas o motor repetia confronto.
+nelas o motor antigo repetia confronto.
 """
 from __future__ import annotations
 
@@ -80,23 +84,41 @@ def _passou_sem_repetir(teste: CoreServiceTestCase, semente: int) -> tuple[int, 
 
 class GuardaNoServicoTest(CoreServiceTestCase):
     def test_sementes_que_repetiam_nao_gravam_repeticao(self) -> None:
-        recusas = []
         for semente in (0, 2, 5, 7):
             with self.subTest(semente=semente):
                 _tid, gravadas, recusa = _passou_sem_repetir(self, semente)
                 self.assertEqual([], gravadas)
                 if recusa:
                     self.assertIn("C.04.1", recusa)
-                    recusas.append(semente)
-        # Sem a guarda, estas sementes gravavam a repetição: ela tem de ter agido.
-        self.assertTrue(recusas, "nenhuma semente chegou à guarda")
 
     def test_recusa_fica_na_auditoria_e_a_rodada_nao_e_criada(self) -> None:
-        tid, _gravadas, recusa = _passou_sem_repetir(self, 0)
-        self.assertTrue(recusa)
+        """Um motor que devolve a rodada anterior (repetição) para na guarda."""
+        from unittest import mock
+
+        tid, _equipes = self._create_team_tournament(teams_count=4, boards_count=2)
+        rodada = self.service.generate_next_round(tid)
+        anterior = [dict(m) for m in self.db.list_team_matches_for_round(int(rodada["id"]))]
+        for confronto in anterior:
+            for tabuleiro in self.db.list_team_boards(int(confronto["id"])):
+                self.service.update_result(tid, int(tabuleiro["id"]), "1-0")
+        self.service.close_round(tid, int(rodada["id"]))
+        repetida = [
+            {
+                "match_number": m["match_number"],
+                "white_team_id": m["white_team_id"],
+                "black_team_id": m["black_team_id"],
+                "is_bye": 0,
+                "boards": [],
+            }
+            for m in anterior
+        ]
+        with mock.patch("src.services.pairing_service._swiss_team_matches", return_value=repetida):
+            with self.assertRaisesRegex(AppError, "C.04.1"):
+                self.service.generate_next_round(tid)
         eventos = self.db.list_audit_events(tid, action="team_pairing_refused", limit=10)
         self.assertEqual(1, len(eventos))
         rodadas = self.db.list_rounds(tid)
+        self.assertEqual(1, len(rodadas))
         self.assertTrue(all(str(r.get("status")) == "closed" for r in rodadas))
 
     def test_tres_equipes_quatro_rodadas_termina_em_erro_claro(self) -> None:

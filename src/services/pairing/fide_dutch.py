@@ -9,6 +9,7 @@ from src.services.constants import AppError
 from src.services.pairing.constraints import (
     INITIAL_COLOR,
     choose_bye_player,
+    player_pair_cost,
     choose_colors,
     color_hard_violation,
     greedy_player_pairs,
@@ -19,7 +20,7 @@ from src.services.pairing.constraints import (
     rank_by_player_id,
     seeding_key,
 )
-from src.services.pairing.round_search import bracket_pairing, score_group_pairs, search_bracket
+from src.services.pairing.round_search import bracket_pairing, enforce_absolute, score_group_pairs, search_bracket
 
 
 def _initial_order_key(player: dict[str, Any], settings: dict[str, Any] | None) -> tuple[Any, ...]:
@@ -866,6 +867,8 @@ def swiss_pairings(
     pairings: list[dict[str, Any]] = []
     board = 1
 
+    field = list(pending)
+    bye_player: dict[str, Any] | None = None
     if len(pending) % 2 == 1:
         bye_player = choose_bye_player_with_pairing_quality(
             pending,
@@ -882,15 +885,6 @@ def swiss_pairings(
             topscorers=topscorers,
         )
         pending.remove(bye_player)
-        pairings.append(
-            {
-                "board_number": 9999,
-                "white_player_id": bye_player["id"],
-                "black_player_id": None,
-                "result": "BYE",
-                "is_bye": 1,
-            }
-        )
 
     pair_kwargs = {
         "repeat_pairing_penalty": repeat_pairing_penalty,
@@ -1064,6 +1058,45 @@ def swiss_pairings(
             )
             if rematched_pairs and rematched_quality < current_quality:
                 player_pairs = rematched_pairs
+
+    # RG2-07b: confronto repetido ou 2º PAB que as buscas acima deixaram passar
+    # vão à busca exata do motor único, com o bye como nó; sem pareamento legal,
+    # a rodada é recusada em vez de repetir.
+    bye_order = {
+        int(player["id"]): index
+        for index, player in enumerate(
+            sorted(
+                field,
+                key=lambda player: (
+                    float(standings.get(player["id"], {}).get("points", 0.0) or 0.0),
+                    int(player["rating"] or 0),
+                    str(player.get("name") or "").casefold(),
+                ),
+            )
+        )
+    }
+    player_pairs, bye_player = enforce_absolute(
+        player_pairs,
+        bye_player,
+        field,
+        played_pairs,
+        bye_player_ids,
+        pair_cost=player_pair_cost(standings, histories, float_histories, played_pairs, ranks, **pair_kwargs),
+        bye_cost=lambda player: float(standings.get(player["id"], {}).get("points", 0.0) or 0.0)
+        * score_diff_penalty
+        + bye_order[int(player["id"])],
+        competitor_label="os jogadores",
+    )
+    if bye_player is not None:
+        pairings.append(
+            {
+                "board_number": 9999,
+                "white_player_id": bye_player["id"],
+                "black_player_id": None,
+                "result": "BYE",
+                "is_bye": 1,
+            }
+        )
 
     player_pairs = sorted(
         player_pairs,

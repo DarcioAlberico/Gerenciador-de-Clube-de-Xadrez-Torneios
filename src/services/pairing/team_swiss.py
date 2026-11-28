@@ -7,7 +7,9 @@ from typing import Any
 from src.domain.numbers import setting_number
 from src.services.constants import AppError
 from src.services.pairing.constraints import (
+    COLOR_HARD_VIOLATION_PENALTY,
     choose_team_bye,
+    color_hard_violation,
     choose_team_colors,
     team_pair_penalty,
     team_pairing_order_key,
@@ -15,6 +17,7 @@ from src.services.pairing.constraints import (
 from src.services.pairing.fide_dutch import colors_admissible
 from src.services.pairing.round_search import (
     bracket_pairing,
+    enforce_absolute,
     greedy_pairs,
     optimal_pairs,
     score_group_pairs,
@@ -645,6 +648,39 @@ def swiss_team_matches(
         order_key=order_key,
         bracket=lambda group: bracket_pairing(group, played_pairs, admissible=admissible, solve=solve),
         leftover=solve,
+    )
+
+    # RG2-07b: confronto repetido, 2º PAB ou três cores iguais seguidas que a
+    # heurística deixou passar vão à busca exata, com o bye como nó.
+    def hard_colors(team: dict[str, Any], opponent: dict[str, Any]) -> int:
+        white_id, black_id = colors(team, opponent)
+        return color_hard_violation(white_id, "W", histories) + color_hard_violation(black_id, "B", histories)
+
+    bye_order = {
+        int(team["id"]): index
+        for index, team in enumerate(
+            sorted(
+                teams,
+                key=lambda team: (
+                    score_of(team),
+                    float(standings.get(int(team["id"]), {}).get("game_points", 0.0) or 0.0),
+                    seed_ratings.get(int(team["id"]), 0),
+                    str(team["name"]).casefold(),
+                ),
+            )
+        )
+    }
+    team_pairs, bye_team = enforce_absolute(
+        team_pairs,
+        bye_team,
+        sorted(teams, key=order_key),
+        played_pairs,
+        bye_team_ids,
+        pair_cost=lambda team, opponent: cost(team, opponent)
+        + COLOR_HARD_VIOLATION_PENALTY * hard_colors(team, opponent),
+        bye_cost=lambda team: score_of(team) * score_diff_penalty + bye_order[int(team["id"])],
+        competitor_label="as equipes",
+        hard_count=hard_colors,
     )
 
     team_pairs = sorted(
