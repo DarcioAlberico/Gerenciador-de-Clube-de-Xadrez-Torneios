@@ -46,6 +46,9 @@ PRIZE_POLICIES = {
 PRIZE_TIE_SPLITS = {
     "equal": "Dividir por igual entre empatados",
     "hort": "Sistema Hort (50% da posição + 50% do bolo)",
+    # RG2-33: o edital que diz "o desempate decide" — cada empatado recebe o
+    # prêmio da própria posição na ordem do desempate.
+    "tiebreak": "Desempate decide (cada um recebe o da própria posição)",
 }
 
 AUTO_KINDS = {"overall", "category"}
@@ -165,6 +168,26 @@ def _split(pooled: float, band: list[float], size: int, tie_split: str) -> list[
     return [pooled / size] * size
 
 
+def _tied_group(ranked: Sequence[Mapping[str, Any]], index: int, tie_split: str) -> tuple[int, int]:
+    """O grupo empatado em pontos em volta de ``index``.
+
+    Quem já ganhou nesta disputa nunca está empatado com quem vem depois dele
+    ainda sem prêmio: os dois estavam na fila quando o primeiro ganhou, e o
+    empate os teria posto no mesmo grupo. Por isso o grupo não precisa pular
+    ninguém. Com "desempate decide" não há grupo: a ordem da classificação já
+    é a do desempate, e cada um fica com a própria posição.
+    """
+    first = last = index
+    if tie_split == "tiebreak":
+        return first, last
+    points = _points(ranked[index])
+    while first > 0 and _points(ranked[first - 1]) == points:
+        first -= 1
+    while last + 1 < len(ranked) and _points(ranked[last + 1]) == points:
+        last += 1
+    return first, last
+
+
 def _distribute(
     competitions: dict[str, dict[int, _Unit]],
     ordered: Sequence[Mapping[str, Any]],
@@ -186,7 +209,6 @@ def _distribute(
     )
     result.announced += sum(unit.amount for unit in queue)
     holder: dict[int, str] = {}
-    won_here: dict[str, set[int]] = {key: set() for key in competitions}
     consumed: set[tuple[str, int]] = set()
     for unit in queue:
         if (unit.key, unit.position) in consumed:
@@ -201,16 +223,7 @@ def _distribute(
             consumed.add((unit.key, unit.position))
             result.undistributed.append(unit)
             continue
-        first, last = index, index
-        points = _points(ranked[index])
-        while (
-            first > 0
-            and _points(ranked[first - 1]) == points
-            and int(ranked[first - 1]["player_id"]) not in won_here[unit.key]
-        ):
-            first -= 1
-        while last + 1 < len(ranked) and _points(ranked[last + 1]) == points:
-            last += 1
+        first, last = _tied_group(ranked, index, tie_split)
         group = ranked[first:last + 1]
         units = competitions[unit.key]
         # As posições do grupo ainda estão livres: a disputa é percorrida de
@@ -222,7 +235,6 @@ def _distribute(
         for offset, (player, share) in enumerate(zip(group, _split(sum(band), band, len(group), tie_split))):
             pid = int(player["player_id"])
             holder[pid] = unit.key
-            won_here[unit.key].add(pid)
             by_kind = result.shares.setdefault(pid, {})
             by_kind[unit.kind] = by_kind.get(unit.kind, 0.0) + share
             result.awards.setdefault(pid, []).append(

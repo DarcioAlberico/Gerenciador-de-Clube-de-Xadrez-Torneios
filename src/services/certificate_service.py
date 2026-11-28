@@ -301,6 +301,12 @@ class CertificateService:
         use_category_ranking = by_category or certificate_type == "category_award"
         selected_ids = {int(player_id) for player_id in player_ids} if player_ids is not None else None
         category_filter = str(category or "").strip()
+        if certificate_type == "category_award" and any(
+            str(prize.get("kind")) == "category" for prize in self.db.list_tournament_prizes(tournament_id)
+        ):
+            return self._award_recipients(
+                tournament, standings, selected_ids, category_filter, top_limit
+            )
         category_positions = self._category_positions(standings)
         recipients = []
         for standing in standings:
@@ -321,6 +327,46 @@ class CertificateService:
         if not recipients:
             raise AppError("Nenhum jogador encontrado para os filtros selecionados.")
         return recipients
+
+    def _award_recipients(
+        self,
+        tournament: dict[str, Any],
+        standings: list[dict[str, Any]],
+        selected_ids: set[int] | None,
+        category_filter: str,
+        top_limit: int,
+    ) -> list[dict[str, Any]]:
+        """Diploma de categoria de quem RECEBEU o prêmio da categoria (RG2-33).
+
+        Lê a mesma alocação da premiação (RG2-16): respeita "excluir
+        desistentes", a trava de um prêmio por jogador e o rateio. Um diploma
+        por prêmio recebido, com a categoria e a posição do prêmio.
+        """
+        from src.services.prize_service import PrizeService  # lazy: evita ciclo de importação
+
+        allocation = PrizeService(self.db).allocation_for(int(tournament["id"]), standings)
+        by_id = {int(item["player_id"]): item for item in standings}
+        recipients = []
+        for row in allocation["allocations"]:
+            for award in row["awards"]:
+                if award["kind"] != "category":
+                    continue
+                if selected_ids is not None and int(row["player_id"]) not in selected_ids:
+                    continue
+                if category_filter and award["category"] != category_filter:
+                    continue
+                if top_limit and int(award["position"]) > top_limit:
+                    continue
+                recipient = self._recipient_payload(tournament, by_id[int(row["player_id"])], {})
+                recipient.update(
+                    category=award["category"],
+                    category_position=int(award["position"]),
+                    category_position_label=self._ordinal_label(award["position"]),
+                )
+                recipients.append(recipient)
+        if not recipients:
+            raise AppError("Nenhum jogador recebeu prêmio de categoria com os filtros selecionados.")
+        return sorted(recipients, key=lambda item: (item["category"].casefold(), item["category_position"]))
 
     def tournament_categories(self, tournament_id: int) -> list[str]:
         tournament = self._individual_tournament(tournament_id)

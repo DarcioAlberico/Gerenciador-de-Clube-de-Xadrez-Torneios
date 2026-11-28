@@ -73,6 +73,7 @@ class AlocacaoSequencialTest(unittest.TestCase):
             [(u["kind"], u["category"], u["position"], u["amount"]) for u in resultado["undistributed"]],
         )
         self.assertEqual(250.0, resultado["total_announced"])
+        self.assertEqual(0, resultado["excluded_withdrawn"])
         self.assertEqual(50.0, resultado["total_undistributed"])
         self.assertEqual(250.0, resultado["total_gross"] + resultado["total_undistributed"])
 
@@ -137,11 +138,17 @@ class BordasDaAlocacaoTest(unittest.TestCase):
         classificacao = [_linha(1, 1, 5, "Adulto"), _linha(2, 2, 5, "Adulto"), _linha(3, 3, 5, "Adulto")]
         resultado = allocate_prizes(classificacao, [_premio("overall", 100)], policy="best_only", tax_percent=10)
         self.assertEqual([33.33] * 3, [item["gross"] for item in resultado["allocations"]])
+        self.assertEqual([33.33] * 3, [item["overall"] for item in resultado["allocations"]])
         self.assertEqual([30.0] * 3, [item["net"] for item in resultado["allocations"]])
         self.assertEqual([33.33], [award["amount"] for award in resultado["allocations"][0]["awards"]])
         self.assertEqual(99.99, resultado["total_gross"])
         self.assertEqual(89.99, resultado["total_net"])
         self.assertEqual(10.0, resultado["total_tax"])
+
+    def test_tres_empatados_na_categoria_dividem_em_centavos(self) -> None:
+        classificacao = [_linha(1, 1, 5, "Sub-12"), _linha(2, 2, 5, "Sub-12"), _linha(3, 3, 5, "Sub-12")]
+        resultado = allocate_prizes(classificacao, [_premio("category", 100, "Sub-12")], policy="best_only")
+        self.assertEqual([33.33] * 3, [item["category_prize"] for item in resultado["allocations"]])
 
     def test_so_o_2o_premio_com_empate_no_topo_divide_entre_os_dois(self) -> None:
         classificacao = [_linha(1, 1, 5, "Adulto"), _linha(2, 2, 5, "Adulto"), _linha(3, 3, 4, "Adulto")]

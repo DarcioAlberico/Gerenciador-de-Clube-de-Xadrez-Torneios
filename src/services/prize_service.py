@@ -126,19 +126,25 @@ class PrizeService:
             raise AppError("Selecione um torneio válido.")
         if tournament.get("competition_type") == "team":
             raise AppError("Distribuição de prêmios disponível apenas para torneios individuais.")
-        settings = self.db.get_tournament_settings(tournament_id) or {}
-        prizes = self.db.list_tournament_prizes(tournament_id)
         pairing_service = __import__(
             "src.services.pairing_service", fromlist=["PairingService"]
         ).PairingService(self.db)
-        standings = pairing_service.standings(tournament_id)
-        allocation = allocate_prizes(
+        allocation = self.allocation_for(tournament_id, pairing_service.standings(tournament_id))
+        allocation["tournament"] = tournament
+        return allocation
+
+    def allocation_for(self, tournament_id: int, standings: list[dict[str, Any]]) -> dict[str, Any]:
+        """A premiação do torneio sobre esta classificação — a única conta.
+
+        O relatório de premiação e o diploma por categoria (RG2-33) leem daqui:
+        o diploma "1º Feminino" sai para quem recebeu o prêmio Feminino.
+        """
+        settings = self.db.get_tournament_settings(tournament_id) or {}
+        return allocate_prizes(
             standings,
-            prizes,
+            self.db.list_tournament_prizes(tournament_id),
             policy=str(settings.get("prize_policy") or "best_only"),
             tax_percent=float(settings.get("prize_tax_percent") or 0.0),
             tie_split=str(settings.get("prize_tie_split") or "equal"),
             exclude_withdrawn=bool(settings.get("prize_exclude_withdrawn")),
         )
-        allocation["tournament"] = tournament
-        return allocation
