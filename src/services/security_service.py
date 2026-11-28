@@ -12,11 +12,13 @@ import sqlite3
 import unicodedata
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
+from time import monotonic
 from typing import Any, Mapping, TYPE_CHECKING
 
 from src.domain.dates import is_iso_date
 from src.core.database import BASE_DIR, DEFAULT_CERTIFICATE_TEMPLATES, Database
 from src.core.operator import SYSTEM_ACTOR, Operator
+from src.config.permissions import ROLE_PERMISSIONS
 from src.services.permissions import has_permission, require_permission
 from src.services.constants import *
 
@@ -42,6 +44,9 @@ class SecurityService:
 
     def __init__(self, db: Database) -> None:
         self.db = db
+        # usuário → (erros seguidos, quando foi o último). Na memória: a espera
+        # é contra quem está na frente da tela agora (RG2-37).
+        self._login_failures: dict[str, tuple[int, float]] = {}
 
     @property
     def _current_user(self) -> dict[str, str] | None:
@@ -59,17 +64,36 @@ class SecurityService:
             else Operator(user_id=int(user.get("id") or 0), name=str(user["username"]), role=str(user["role"]))
         )
 
+    # Erros seguidos antes da primeira espera, e o teto da espera (RG2-37).
+    _LOGIN_FREE_FAILURES = 3
+    _LOGIN_MAX_WAIT_SECONDS = 300
+
     def login(self, username: str, password_raw: str) -> bool:
+        """Entra com a senha **como foi digitada** (sem ``strip``, RG2-37).
+
+        Depois de 3 erros seguidos o mesmo usuário espera 5 s, depois 10, 20…
+        até 5 min — sem travar a tela: o login só devolve ``False`` e
+        ``login_wait_seconds`` diz quanto falta. Todo erro vai para a auditoria
+        (sem a senha). Senha vazia no banco (primeiro acesso) nunca entra.
+        """
+        if self.login_wait_seconds(username):
+            self.audit("login_failed", description=f"Login de {username} recusado: aguardando após erros seguidos.")
+            return False
         with self.db.connect() as conn:
             cursor = conn.execute("SELECT id, username, role, password_hash FROM users WHERE username = ?", (username,))
             row = cursor.fetchone()
-            if not row or not self._verify_password(password_raw, str(row["password_hash"] or "")):
+            stored = str(row["password_hash"] or "") if row else ""
+            if not row or not stored or not self._verify_password(password_raw, stored):
+                falhas = self._login_failures.get(username, (0, 0.0))[0] + 1
+                self._login_failures[username] = (falhas, monotonic())
+                self.audit("login_failed", description=f"Falha de login para {username} ({falhas} seguida(s)).")
                 return False
-            if self._needs_password_rehash(str(row["password_hash"] or "")):
+            if self._needs_password_rehash(stored):
                 conn.execute(
                     "UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?",
                     (self._hash_password(password_raw), self.db.now(), row["id"]),
                 )
+            self._login_failures.pop(username, None)
             self._current_user = {
                 "id": str(row["id"]),
                 "username": row["username"],
@@ -77,6 +101,60 @@ class SecurityService:
             }
         self.audit("login", description=f"Usuário {username} fez login.")
         return True
+
+    def login_wait_seconds(self, username: str) -> int:
+        """Quantos segundos o usuário ainda espera antes de tentar de novo (0 = pode)."""
+        falhas, ultima = self._login_failures.get(username, (0, 0.0))
+        if falhas < self._LOGIN_FREE_FAILURES:
+            return 0
+        janela = min(5 * 2 ** (falhas - self._LOGIN_FREE_FAILURES), self._LOGIN_MAX_WAIT_SECONDS)
+        return max(0, math.ceil(janela - (monotonic() - ultima)))
+
+    def needs_first_password(self) -> bool:
+        """Há usuário sem senha — o administrador de um banco novo (RG2-37)."""
+        with self.db.connect() as conn:
+            return bool(conn.execute("SELECT COUNT(*) FROM users WHERE password_hash = ''").fetchone()[0])
+
+    def set_first_password(self, username: str, password_raw: str) -> None:
+        """Define a senha do primeiro acesso. Só vale para usuário ainda sem senha.
+
+        Sem permissão: é o fluxo que vem antes do primeiro login. O que o
+        protege é só aceitar quem ainda não tem senha.
+        """
+        if not password_raw:
+            raise AppError("Informe a senha.")
+        with self.db.connect() as conn:
+            row = conn.execute("SELECT id, password_hash FROM users WHERE username = ?", (username,)).fetchone()
+            if not row:
+                raise AppError("Usuário não encontrado.")
+            if str(row["password_hash"] or ""):
+                raise AppError("A senha deste usuário já foi definida. Use \"Trocar senha\".")
+            conn.execute(
+                "UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?",
+                (self._hash_password(password_raw), self.db.now(), row["id"]),
+            )
+        self.audit("first_password_set", entity_id=int(row["id"]), description=f"Senha do primeiro acesso definida para {username}.")
+
+    def change_password(self, username: str, current_raw: str, new_raw: str) -> None:
+        """Troca a própria senha na tela de login: confere a atual primeiro."""
+        if not new_raw:
+            raise AppError("Informe a nova senha.")
+        if self.login_wait_seconds(username):
+            raise AppError(f"Aguarde {self.login_wait_seconds(username)} s para tentar de novo.")
+        with self.db.connect() as conn:
+            row = conn.execute("SELECT id, password_hash FROM users WHERE username = ?", (username,)).fetchone()
+            stored = str(row["password_hash"] or "") if row else ""
+            if not row or not stored or not self._verify_password(current_raw, stored):
+                falhas = self._login_failures.get(username, (0, 0.0))[0] + 1
+                self._login_failures[username] = (falhas, monotonic())
+                self.audit("login_failed", description=f"Troca de senha recusada para {username} (senha atual).")
+                raise AppError("Usuário ou senha atual não conferem.")
+            conn.execute(
+                "UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?",
+                (self._hash_password(new_raw), self.db.now(), row["id"]),
+            )
+        self._login_failures.pop(username, None)
+        self.audit("password_updated", entity_id=int(row["id"]), description=f"Senha trocada por {username}.")
 
     def list_users(self) -> list[dict[str, Any]]:
         with self.db.connect() as conn:
@@ -89,6 +167,8 @@ class SecurityService:
             raise AppError("Informe o nome de usuário.")
         if not password_raw:
             raise AppError("Informe a senha.")
+        if role not in ROLE_PERMISSIONS:
+            raise AppError(f"Papel desconhecido: {role}. Use um de: {', '.join(ROLE_PERMISSIONS)}.")
         pw_hash = self._hash_password(password_raw)
         now = self.db.now()
         try:
@@ -176,6 +256,8 @@ class SecurityService:
 
     @classmethod
     def _verify_password(cls, password_raw: str, stored_hash: str) -> bool:
+        if not stored_hash:
+            return False  # primeiro acesso: senha ainda não definida (RG2-37)
         parts = stored_hash.split("$")
         if len(parts) == 4 and parts[0] == cls._PASSWORD_ALGORITHM:
             try:

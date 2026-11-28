@@ -785,21 +785,18 @@ class LegacyMigrations:
             """,
             (now, now),
         )
-        # Verifica se já existe algum admin. Se não houver, insere o padrão.
+        # Sem administrador, cria um SEM SENHA (RG2-37): senha vazia não entra,
+        # e a tela de login pede para defini-la no primeiro acesso. Antes nascia
+        # admin/admin, sem troca obrigatória. Banco que já passou por aqui fica
+        # com a senha que tem — marcar agora trancaria o dono fora.
         cursor = connection.execute("SELECT COUNT(*) FROM users WHERE role = 'admin'")
         if cursor.fetchone()[0] == 0:
-            import hashlib
-            import os
-            iterations = 210_000
-            salt = os.urandom(16)
-            digest = hashlib.pbkdf2_hmac("sha256", b"admin", salt, iterations)
-            pw_hash = f"pbkdf2_sha256${iterations}${salt.hex()}${digest.hex()}"
             connection.execute(
                 """
                 INSERT INTO users (username, password_hash, role, created_at, updated_at)
-                VALUES (?, ?, 'admin', ?, ?)
+                VALUES ('admin', '', 'admin', ?, ?)
                 """,
-                ("admin", pw_hash, now, now)
+                (now, now),
             )
     def _ensure_training_pedagogical_schema(self, connection: sqlite3.Connection) -> None:
         training_columns = self.db._table_columns(connection, "training_sessions")
