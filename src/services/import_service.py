@@ -27,6 +27,7 @@ from src.services.list_layouts import STANDINGS_COLUMNS, resolve_column_specs, r
 from src.services.prizes import PRIZE_KINDS, PRIZE_POLICIES, allocate_prizes
 from src.domain.dates import DataInvalida, parse_date, storage_text
 from src.services.trf_import import TrfDateError, build_trf_rounds, parse_trf
+from src.services.transactions import atomic
 
 if TYPE_CHECKING:
     from src.services.club_service import ClubService
@@ -843,6 +844,7 @@ class ImportService:
             pass  # pandas ausente ou valor não escalar: a célula segue como veio
         return value
 
+    @atomic
     def import_rating_list_csv(self, file_path: str | Path, rating_type: str = "fide") -> dict[str, Any]:
         """Importa um CSV de ratings FIDE ou CBX e atualiza os membros do clube correspondentes."""
         path = Path(file_path)

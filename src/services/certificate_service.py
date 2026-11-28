@@ -26,6 +26,7 @@ from src.services.list_layouts import STANDINGS_COLUMNS, resolve_column_specs, r
 from src.services.prizes import PRIZE_KINDS, PRIZE_POLICIES, allocate_prizes
 from src.services.trf_import import build_trf_rounds, parse_trf
 from src.services.numeric_fields import decimal_field
+from src.services.transactions import atomic
 
 if TYPE_CHECKING:
     from src.services.club_service import ClubService
@@ -124,6 +125,7 @@ class CertificateService:
             raise AppError("Já existe um modelo de diploma com este nome.") from exc
         logger.info("Modelo de diploma atualizado: %s", template_id)
 
+    @atomic
     def seed_gallery(self, count: int = 50) -> dict[str, int]:
         """Cria a galeria de modelos prontos no banco (idempotente por nome).
 

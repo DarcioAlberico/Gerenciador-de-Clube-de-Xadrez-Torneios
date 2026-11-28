@@ -20,6 +20,7 @@ from src.services.chess_results import (
     parse_entries_csv,
 )
 from src.services.constants import AppError
+from src.services.transactions import atomic
 
 if TYPE_CHECKING:
     from src.services.export_service import ExportService
@@ -55,6 +56,7 @@ class ChessResultsService:
             "warnings": list(warnings or []),
         }
 
+    @atomic
     def import_entries(self, tournament_id: int, file_path: str | Path) -> dict[str, Any]:
         """Importa inscrições/lista publicada do Chess-Results (CSV) como jogadores."""
         if not self.db.get_tournament(tournament_id):

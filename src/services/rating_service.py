@@ -26,6 +26,7 @@ from src.services.fide_norms import build_norm_report
 from src.services.fide_rating import build_fide_report_rows
 from src.services.foreign_rating_lists import map_row, normalize_federation_code, seed_federations
 from src.services.pairing.constraints import select_rating_for_order
+from src.services.transactions import atomic
 
 if TYPE_CHECKING:
     from src.services.club_service import ClubService
@@ -570,6 +571,7 @@ class OfficialRatingService:
             "unmatched": unmatched,
         }
 
+    @atomic
     def apply_tournament_player_updates(
         self,
         tournament_id: int,

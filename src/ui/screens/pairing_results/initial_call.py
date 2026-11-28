@@ -207,7 +207,7 @@ class InitialCallSection:
             self.row_map[item] for item in self.tree.selection() if item in self.row_map
         ]
 
-    def set_status(self, player_ids: list[int], status: str) -> None:
+    def set_status(self, player_ids: list[int], status: str, *, skip_withdrawn: bool = False) -> None:
         try:
             self.host.require_permission("tournament_write")
             if self.locked():
@@ -216,12 +216,18 @@ class InitialCallSection:
                 raise AppError(t("initial_call.select_first"))
             # Pelo SERVIÇO (ARB-05): a chamada inicial e onde a ausência da
             # rodada 1 nasce, e ela precisa entrar no histórico como qualquer
-            # outra — senão a ata não sabe quem faltou desde o começo.
-            for player_id in player_ids:
-                self.host.pairing_service.set_player_participation(
-                    int(self.host.current_tournament_id), int(player_id), status
-                )
+            # outra — senão a ata não sabe quem faltou desde o começo. Numa
+            # transação só (RG2-25): ou muda todos, ou nenhum.
+            resultado = self.host.pairing_service.set_players_participation(
+                int(self.host.current_tournament_id),
+                [int(player_id) for player_id in player_ids],
+                status,
+                skip_withdrawn=skip_withdrawn,
+            )
             self.reload()
+            pulados = int(resultado.get("skipped_withdrawn") or 0)
+            if pulados:
+                self.host._show_info(t("initial_call.withdrawn_skipped", quantidade=pulados))
         except Exception as exc:
             self.host._show_error(exc)
 
@@ -229,7 +235,9 @@ class InitialCallSection:
         self.set_status(self.selected_ids(), status)
 
     def mark_all_present(self) -> None:
-        self.set_status(list(self.row_map.values()), "active")
+        # Desistente não volta por "Todos presentes" (RG2-25): fica como está e
+        # o recado diz quantos.
+        self.set_status(list(self.row_map.values()), "active", skip_withdrawn=True)
 
     def toggle_selected(self) -> str:
         try:
