@@ -1,7 +1,5 @@
 from __future__ import annotations
-import csv
 import html
-import io
 import json
 import logging
 import math
@@ -20,6 +18,7 @@ from src.core.database import BASE_DIR, DEFAULT_CERTIFICATE_TEMPLATES, Database
 from src.services.constants import *
 from src.services.export_service import ImportService
 from src.services.numeric_fields import rating_cell
+from src.services.text_files import csv_records, download_text, read_text_file
 from src.services.fide_list import parse_rating_list as parse_fide_rating_list
 from src.services import friendly_mode
 from src.services.fide_norms import build_norm_report
@@ -47,6 +46,7 @@ logger = logging.getLogger(__name__)
 
 class OfficialRatingService:
     SOURCES = {"FIDE", "CBX", "LBX"}
+    USER_AGENT = "Albericus Chess Club Manager"
     LBX_LIST_URLS = {
         "standard": "https://lbx.org.br/LBXstandard.php",
         "rapid": "https://lbx.org.br/LBXrapid.php",
@@ -71,22 +71,16 @@ class OfficialRatingService:
         errors: list[str] = []
         payloads: list[dict[str, Any]] = []
 
-        with path.open("r", encoding="utf-8-sig", newline="") as file:
-            sample = file.read(4096)
-            file.seek(0)
-            reader = csv.DictReader(file, dialect=ImportService._csv_dialect(sample))
-            if not reader.fieldnames:
-                raise AppError("CSV sem cabeçalho.")
-
-            for line_number, row in enumerate(reader, start=2):
-                payload = self._official_payload(row, source)
-                if not payload["name"]:
-                    errors.append(f"Linha {line_number}: nome vazio.")
-                    continue
-                if not payload["external_id"]:
-                    errors.append(f"Linha {line_number}: ID {source} vazio.")
-                    continue
-                payloads.append(payload)
+        _headers, records = csv_records(read_text_file(path))
+        for line_number, row in records:
+            payload = self._official_payload(row, source)
+            if not payload["name"]:
+                errors.append(f"Linha {line_number}: nome vazio.")
+                continue
+            if not payload["external_id"]:
+                errors.append(f"Linha {line_number}: ID {source} vazio.")
+                continue
+            payloads.append(payload)
 
         if payloads:
             snapshot_id = self.db.create_official_rating_snapshot_with_players(
@@ -142,19 +136,11 @@ class OfficialRatingService:
         }
 
     def _download_lbx_list(self, url: str) -> tuple[list[dict[str, Any]], list[str]]:
-        request = urllib.request.Request(url, headers={"User-Agent": "Albericus Chess Club Manager"})
-        try:
-            with urllib.request.urlopen(request, timeout=30) as response:
-                content = response.read().decode("utf-8-sig", errors="replace")
-        except (OSError, urllib.error.URLError) as exc:
-            raise AppError(f"Não foi possível baixar a lista LBX: {exc}") from exc
-
+        content = download_text(url, timeout=30, label="a lista LBX", user_agent=self.USER_AGENT)
         errors: list[str] = []
         payloads: list[dict[str, Any]] = []
-        reader = csv.DictReader(io.StringIO(content), dialect=ImportService._csv_dialect(content[:4096]))
-        if not reader.fieldnames:
-            raise AppError("Lista LBX sem cabeçalho.")
-        for line_number, row in enumerate(reader, start=2):
+        _headers, records = csv_records(content, "Lista LBX")
+        for line_number, row in records:
             payload = self._official_payload(row, "LBX")
             if not payload["name"] or not payload["external_id"]:
                 errors.append(f"Linha {line_number}: jogador LBX incompleto.")
@@ -447,14 +433,9 @@ class OfficialRatingService:
         url = str(info.get("url") or "").strip()
         if not url:
             raise AppError(f"A federação {fed} não tem URL de lista cadastrada. Importe por arquivo.")
-        request = urllib.request.Request(url, headers={"User-Agent": "Albericus Chess Club Manager"})
-        try:
-            with urllib.request.urlopen(request, timeout=30) as response:
-                content = response.read().decode("utf-8-sig", errors="replace")
-        except (OSError, urllib.error.URLError) as exc:
-            raise AppError(f"Não foi possível baixar a lista {fed}: {exc}") from exc
-        reader = csv.DictReader(io.StringIO(content), dialect=ImportService._csv_dialect(content[:4096]))
-        rows = [dict(row) for row in reader] if reader.fieldnames else []
+        content = download_text(url, timeout=30, label=f"a lista {fed}", user_agent=self.USER_AGENT)
+        _headers, records = csv_records(content, f"Lista {fed}")
+        rows = [dict(row) for _line, row in records]
         payloads, errors = self._map_foreign_rows(rows, fed, mapping)
         snapshot_id = None
         if payloads:
@@ -490,13 +471,8 @@ class OfficialRatingService:
         """Lê CSV/XLS/XLSX em uma lista de dicts (cabeçalhos originais)."""
         suffix = path.suffix.lower()
         if suffix == ".csv":
-            with path.open("r", encoding="utf-8-sig", newline="") as handle:
-                sample = handle.read(4096)
-                handle.seek(0)
-                reader = csv.DictReader(handle, dialect=ImportService._csv_dialect(sample))
-                if not reader.fieldnames:
-                    raise AppError("CSV sem cabeçalho.")
-                return [dict(row) for row in reader]
+            _headers, records = csv_records(read_text_file(path))
+            return [dict(row) for _line, row in records]
         if suffix == ".xlsx":
             import openpyxl
 

@@ -33,10 +33,18 @@ from src.services.trf_layout import (
     field as _slice,
 )
 
-__all__ = ["BYE_RESULTS", "TrfDateError", "build_trf_rounds", "parse_trf"]
+__all__ = ["BYE_RESULTS", "TrfDateError", "TrfError", "build_trf_rounds", "parse_trf"]
 
 
-class TrfDateError(ValueError):
+class TrfError(ValueError):
+    """Linha do TRF que não dá para importar sem inventar dado (RG2-13).
+
+    Rank inicial ilegível virava ``len(players)+1`` e colidia com outro; rank
+    repetido sobrescrevia o primeiro. Agora a importação para e diz a linha.
+    """
+
+
+class TrfDateError(TrfError):
     """Data que o arquivo traz e o calendário não tem (RGS-07).
 
     `2026.02.30` virava `2026-02-30` no banco. Agora a importação para e diz
@@ -78,15 +86,82 @@ def _split_name(raw_name: str) -> tuple[str, str, str]:
 
 
 def _parse_round_cells(line: str) -> list[dict[str, str]]:
+    """Células da linha 001 até a última preenchida (RG2-13).
+
+    Célula em branco no meio é "não pareado nesta rodada" (o entrante tardio
+    tem a R1 em branco) e fica na lista, na posição da rodada; a leitura parava
+    nela e o jogador perdia todas as rodadas seguintes. Só as brancas do fim
+    saem — são preenchimento da linha, não rodadas.
+    """
     cells: list[dict[str, str]] = []
     for block in _cell_blocks(line):
         opponent = block[_CELL_OPPONENT[0]:_CELL_OPPONENT[1]].strip()
         color = block[_CELL_COLOR:_CELL_COLOR + 1].strip()
         result = block[_CELL_RESULT:_CELL_RESULT + 1].strip()
-        if not opponent and not color and not result:
-            break
         cells.append({"opponent_rank": opponent, "color": color, "result": result})
+    while cells and not any(cells[-1].values()):
+        cells.pop()
     return cells
+
+
+def _start_rank(line: str, numero: int, vistos: dict[int, int]) -> int:
+    """Rank inicial da linha 001; ilegível ou repetido levanta ``TrfError``."""
+    bruto = _slice(line, _START_RANK)
+    if not bruto.isdigit() or int(bruto) <= 0:
+        raise TrfError(
+            f"TRF linha {numero}, colunas {_START_RANK[0] + 1}-{_START_RANK[1]}: "
+            f"rank inicial ilegível \"{bruto}\"."
+        )
+    rank = int(bruto)
+    if rank in vistos:
+        raise TrfError(f"TRF linha {numero}: o rank {rank} já aparece na linha {vistos[rank]}.")
+    vistos[rank] = numero
+    return rank
+
+
+def _declared_rounds(rest: str) -> int:
+    """Total de rodadas do 142 (TRF25) ou do XXR (TRF16); 0 quando ilegível."""
+    texto = rest.strip()
+    return int(texto) if texto.isdigit() else 0
+
+
+def _consistency_warnings(players: Sequence[Mapping[str, Any]]) -> list[str]:
+    """O que o arquivo traz e a importação não consegue honrar, dito por linha.
+
+    Antes isso sumia calado: o jogo com adversário que não existe, o jogo que
+    só um dos lados registra e a letra de resultado desconhecida.
+    """
+    by_rank = {int(player["start_rank"]): player for player in players}
+    avisos: list[str] = []
+    for player in players:
+        quem = f"{player['name']} (rank {player['start_rank']}, linha {player['line']})"
+        for indice, cell in enumerate(player["rounds"], start=1):
+            bruto = str(cell.get("opponent_rank") or "")
+            letra = str(cell.get("result") or "")
+            if bruto and not bruto.isdigit():
+                avisos.append(f"{quem}, rodada {indice}: adversário ilegível \"{bruto}\" — a rodada não entra.")
+                continue
+            adversario_rank = int(bruto or 0)
+            if adversario_rank <= 0:
+                if letra and not _trf_bye_result(letra):
+                    avisos.append(f"{quem}, rodada {indice}: resultado \"{letra}\" desconhecido — a rodada não entra.")
+                continue
+            adversario = by_rank.get(adversario_rank)
+            if adversario is None:
+                avisos.append(
+                    f"{quem}, rodada {indice}: aponta para o rank {adversario_rank}, "
+                    "que não está no arquivo — o jogo não entra."
+                )
+                continue
+            volta = adversario["rounds"][indice - 1] if len(adversario["rounds"]) >= indice else {}
+            if str(volta.get("opponent_rank") or "").lstrip("0") != str(player["start_rank"]):
+                avisos.append(
+                    f"{quem}, rodada {indice}: joga com o rank {adversario_rank}, mas a linha "
+                    f"{adversario['line']} ({adversario['name']}) não aponta de volta — confira o jogo."
+                )
+            if letra and not _decode_game(str(cell.get("color") or ""), letra):
+                avisos.append(f"{quem}, rodada {indice}: resultado \"{letra}\" desconhecido — a mesa entra sem resultado.")
+    return avisos
 
 
 def _parse_round_dates(line: str, numero: int) -> list[str]:
@@ -121,12 +196,18 @@ def _parse_team_line(line: str, code: str) -> dict[str, Any] | None:
 
 
 def parse_trf(content: str) -> dict[str, Any]:
-    """Lê um TRF e devolve cabeçalho + jogadores (com células de rodada brutas)."""
+    """Lê um TRF e devolve cabeçalho + jogadores (com células de rodada brutas).
+
+    ``warnings`` traz, por linha, o que a importação não vai conseguir honrar
+    (RG2-13); rank ilegível ou repetido levanta ``TrfError``.
+    """
     header: dict[str, str] = {}
     players: list[dict[str, Any]] = []
     deputies: list[str] = []
     round_dates: list[str] = []
     teams: list[dict[str, Any]] = []
+    declared_rounds = 0
+    vistos: dict[int, int] = {}
 
     for numero, raw_line in enumerate(content.splitlines(), start=1):
         line = raw_line.rstrip("\r\n")
@@ -152,6 +233,8 @@ def parse_trf(content: str) -> dict[str, Any]:
             header["time_control"] = rest
         elif code == "132":
             round_dates = _parse_round_dates(line, numero)
+        elif code in ("142", "XXR"):
+            declared_rounds = _declared_rounds(rest)
         elif code in ("013", "310"):
             equipe = _parse_team_line(line, code)
             if equipe:
@@ -163,12 +246,10 @@ def parse_trf(content: str) -> dict[str, Any]:
                 rating = int(_slice(line, _RATING) or 0)
             except ValueError:
                 rating = 0
-            try:
-                start_rank = int(_slice(line, _START_RANK) or 0)
-            except ValueError:
-                start_rank = len(players) + 1
+            start_rank = _start_rank(line, numero, vistos)
             players.append(
                 {
+                    "line": numero,
                     "start_rank": start_rank,
                     "name": display,
                     "surname": surname,
@@ -192,6 +273,9 @@ def parse_trf(content: str) -> dict[str, Any]:
 
     players.sort(key=lambda item: item["start_rank"])
     rounds_count = max((len(player["rounds"]) for player in players), default=0)
+    # O total do torneio vem do 142/XXR quando o arquivo o declara: num torneio
+    # em andamento (D8), as células só contam as rodadas já pareadas.
+    total = max(declared_rounds, rounds_count) if declared_rounds else max(rounds_count, len(round_dates))
     return {
         "name": header.get("name", "").strip(),
         "location": header.get("location", ""),
@@ -199,8 +283,9 @@ def parse_trf(content: str) -> dict[str, Any]:
         "start_date": header.get("start_date", ""),
         "end_date": header.get("end_date", ""),
         "time_control": header.get("time_control", ""),
-        "rounds_count": max(rounds_count, len(round_dates)),
+        "rounds_count": total,
         "players": players,
+        "warnings": _consistency_warnings(players),
         # Tudo abaixo era LIDO e jogado fora (FED-04): o arquivo trazia árbitro,
         # calendário e equipes, e a importação criava um torneio sem nada disso.
         "chief_arbiter": header.get("chief_arbiter", ""),

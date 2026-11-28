@@ -951,49 +951,6 @@ class ClubMembersMixin:
         learning_level_filter.configure(command=lambda _value: load_members())
         club_option.configure(command=on_club_option_change)
 
-        def import_ratings() -> None:
-            file_path = filedialog.askopenfilename(
-                title="Importar lista de Rating",
-                initialdir=str(self._default_export_dir()),
-                filetypes=[("CSV", "*.csv"), ("Todos os arquivos", "*.*")],
-            )
-            if not file_path:
-                return
-
-            dialog = Dialog(self, "Tipo de Rating", size=(360, 180))
-            ctk.CTkLabel(
-                dialog,
-                text="Selecione o tipo de rating do arquivo CSV:",
-                wraplength=300,
-                justify="left",
-            ).grid(row=0, column=0, padx=SPACE_LG, pady=(SPACE_LG, SPACE_SM), sticky="w")
-
-            def do_import(rating_type: str) -> None:
-                dialog.close()
-                try:
-                    result = self.import_service.import_rating_list_csv(file_path, rating_type)
-                    msg = (
-                        f"Importação de rating ({rating_type.upper()}) concluída.\n"
-                        f"Membros atualizados: {result['updated']}\n"
-                        f"Linhas ignoradas: {result['skipped']}\n"
-                        f"Erros encontrados: {len(result['errors'])}"
-                    )
-                    self._show_info(msg)
-                    if result['errors']:
-                        logger.warning("Erros na importacao de rating: %s", result['errors'])
-                    load_members()
-                except Exception as exc:
-                    self._show_error(exc)
-
-
-            actions_bar(
-                dialog,
-                row=1,
-                primary=("FIDE", lambda: do_import("fide")),
-                secondary=[("CBX", lambda: do_import("cbx"))],
-                close_text="Cancelar",
-            )
-
         def import_members() -> None:
             try:
                 file_path = filedialog.askopenfilename(
@@ -1064,7 +1021,6 @@ class ClubMembersMixin:
             ("Exportar evolução", export_evolution),
             ("Modelo CSV/Excel", export_member_import_template),
             ("Importar CSV/Excel", import_members),
-            ("Importar Ratings", import_ratings),
             ("Limpar", clear_form),
         ]
         self._grid_form_buttons(form, buttons, option_row + 10)

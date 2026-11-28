@@ -179,7 +179,7 @@ class PlayerImportTest(CoreServiceTestCase):
                 return None
 
             @staticmethod
-            def read() -> bytes:
+            def read(_limite: int = -1) -> bytes:
                 return csv_content
 
         requested_urls: list[str] = []
@@ -190,7 +190,7 @@ class PlayerImportTest(CoreServiceTestCase):
             return FakeResponse()
 
         source_url = "https://docs.google.com/spreadsheets/d/abc123/edit#gid=987"
-        with mock.patch("src.services.import_service.urlopen", side_effect=fake_urlopen):
+        with mock.patch("src.services.text_files.urlopen", side_effect=fake_urlopen):
             preview = self.import_service.preview_online_registrations(self.tournament_id, source_url)
             result = self.import_service.import_online_registrations(self.tournament_id, source_url)
 
@@ -384,7 +384,7 @@ class PlayerImportTest(CoreServiceTestCase):
             def __exit__(self, *_args: object) -> None:
                 return None
 
-            def read(self) -> bytes:
+            def read(self, _limite: int = -1) -> bytes:
                 return self.content
 
         def fake_urlopen(request: object, timeout: int = 0) -> FakeResponse:
@@ -393,7 +393,7 @@ class PlayerImportTest(CoreServiceTestCase):
             row = f"350004;Reis, Paulo F Jatoba de Oliveira;BRA;;29;Salvador (BA);1973-01-01;{rating};350004;{rating};FM;;;30;\n"
             return FakeResponse(header + row)
 
-        with mock.patch("src.services.rating_service.urllib.request.urlopen", side_effect=fake_urlopen):
+        with mock.patch("src.services.text_files.urlopen", side_effect=fake_urlopen):
             result = self.official_rating_service.import_lbx_lists_from_url()
         update_result = self.official_rating_service.update_tournament_players(self.tournament_id)
         player = self.db.get_player(player_id)
